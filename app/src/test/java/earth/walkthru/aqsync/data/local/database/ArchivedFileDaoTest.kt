@@ -90,7 +90,10 @@ class ArchivedFileDaoTest {
     fun `the timeline query reads indexed rows only, the same test as onTimeline`() = runBlocking {
         fun spanned(name: String, indexedAt: Long?, indexError: String? = null) =
             file("a", name, indexedAt = indexedAt, indexError = indexError, lastUtcNs = 200, utcRows = 3).copy(firstUtcNs = 100, purpose = "telemetry")
-        val rows = listOf(spanned("ok.parquet", 5), spanned("reopened.parquet", null), spanned("failed.parquet", 5, "bad"))
+        // A NULL start with a real end stays out, for real UTC rows and for an estimated span alike.
+        val noStart = spanned("nostart.parquet", 5).copy(firstUtcNs = null)
+        val noEstStart = file("a", "noeststart.parquet", indexedAt = 5, utcRows = 0).copy(estFirstUtcNs = null, estLastUtcNs = 200, purpose = "telemetry")
+        val rows = listOf(spanned("ok.parquet", 5), spanned("reopened.parquet", null), spanned("failed.parquet", 5, "bad"), noStart, noEstStart)
         rows.forEach { dao.upsert(it) }
 
         assertEquals(listOf("ok.parquet"), dao.withUtcBetween("a", 0, 1000).map { it.name })

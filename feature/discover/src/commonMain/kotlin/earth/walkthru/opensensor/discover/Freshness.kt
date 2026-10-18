@@ -1,6 +1,7 @@
 package earth.walkthru.opensensor.discover
 
 import earth.walkthru.aqsync.publicfeed.CellFreshness
+import earth.walkthru.aqsync.publicfeed.CellRow
 import kotlinx.datetime.LocalDate
 
 /** How fresh a value reads in the sheet. */
@@ -30,3 +31,21 @@ internal fun freshnessOf(updated: Long?, reference: Long, asOf: LocalDate?, stal
 
 /** The partition date when the feed on screen is daily, else null. */
 internal val DiscoverUiState.dailyAsOf: LocalDate? get() = dataDate?.takeIf { daily }
+
+/**
+ * The newest update of the property on screen across the cells in view, each dated by that
+ * property's own update. Cells without the property do not count. With no property, the newest row.
+ */
+internal val DiscoverUiState.newestShownUpdateEpochMs: Long?
+    get() {
+        val p = property ?: return newestUpdateEpochMs
+        return rows.filter { it.mean(p.id) != null }.maxOfOrNull { it.updatedEpochMs(p.id) }
+    }
+
+/** The map caption under the count of areas in view. It never goes stale, it names the newest value. */
+internal fun DiscoverUiState.inViewFreshness(reference: Long): Freshness? =
+    freshnessOf(newestShownUpdateEpochMs, reference, dailyAsOf, staleShown = false)
+
+/** The Detailed sheet's freshness of [row], dated by the shown property's own update. */
+internal fun DiscoverUiState.cellFreshness(row: CellRow, reference: Long): Freshness? =
+    freshnessOf(row.updatedEpochMs(property?.id), reference, dailyAsOf)

@@ -71,6 +71,14 @@ class HistoryPresentationTest {
     }
 
     @Test
+    fun aStationWithNoTimedReadingRanksBelowEvenTheLowestRealEnd() {
+        // A sentinel low end would tie with a real one and fall back to the name order.
+        val lowest = file("a", "a", dated = true, lastUtcNs = Long.MIN_VALUE)
+        val untimed = file("b", "b", dated = false)
+        assertEquals(listOf("b", "a"), archiveStations(listOf(lowest, untimed)))
+    }
+
+    @Test
     fun simpleOffersCorrectedPm25OnlyAndDetailedOffersCorrectedThenRaw() {
         val both = listOf(Metrics.PM25_CORRECTED, Metrics.PM25, Metrics.AMBIENT_TEMP)
         assertEquals(listOf(Metrics.PM25_CORRECTED, Metrics.AMBIENT_TEMP), pickerMetrics(both, DetailLevel.SIMPLE))

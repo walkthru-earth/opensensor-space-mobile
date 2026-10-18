@@ -486,6 +486,21 @@ class DiscoverControllerTest {
 
     @Test
     fun aWindowResultOfTheOldPartitionIsDroppedWhileTheNewViewportLoads() = runTest {
+        // 9 Oct is asked for, its viewport read is held, and the 8 Oct window read lands meanwhile.
+        oldWindowResultIsDropped(FeedPartition("2026-10-09", 0))
+    }
+
+    @Test
+    fun aWindowResultOfTheOldGenerationIsDroppedWhileTheRepublishLoads() = runTest {
+        // Only the generation changes. A guard on the date and hour alone would let the old value land.
+        oldWindowResultIsDropped(FeedPartition("2026-10-08", 0, generation = "g2"))
+    }
+
+    /**
+     * The 24 hour read of cell A on 8 Oct is held, then [next] is published and its viewport read held.
+     * The old read lands meanwhile. Its job is not cancelled yet, so only the result guard keeps it out.
+     */
+    private fun TestScope.oldWindowResultIsDropped(next: FeedPartition) {
         val live = liveFeed()
         val c = controller(FakeFeed(), live)
         c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
@@ -496,17 +511,15 @@ class DiscoverControllerTest {
         live.gates[cellA] = slow
         c.selectCell(H3Index.toHex(cellA))
         settle()
-        // 9 Oct is asked for, its viewport read is held, and the 8 Oct window read lands meanwhile.
-        // Its job is not cancelled yet, so only the result guard keeps it out.
         val viewport = CompletableDeferred<Unit>()
         live.viewportGate = viewport
-        live.partition = FeedPartition("2026-10-09", 0)
-        live.published[live.partition] = 50.0
+        live.partition = next
+        live.published[next] = 50.0
         pan(c)
         settle()
         slow.complete(Unit)
         settle()
-        assertNull(c.state.value.selectedWindows[FeedWindow.DAY], "an 8 Oct value landed after 9 Oct was chosen")
+        assertNull(c.state.value.selectedWindows[FeedWindow.DAY], "an old value landed after $next was chosen")
         viewport.complete(Unit)
         settle()
         assertEquals(80.0, c.state.value.selectedWindows[FeedWindow.DAY]?.mean("pm25"))

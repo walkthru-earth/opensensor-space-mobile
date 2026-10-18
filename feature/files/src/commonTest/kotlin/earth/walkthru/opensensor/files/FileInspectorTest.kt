@@ -13,7 +13,9 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -175,5 +177,23 @@ class FileInspectorTest {
         finals[ArchiveKey("s", name)] = bytes
         controller.page(40)
         assertEquals(40L, assertIs<RowsState.Shown>(controller.rows.value).page.from)
+    }
+
+    @Test
+    fun aNewPageShowsLoadingUntilItIsReadNeverTheOldPage() = runTest {
+        val io = StandardTestDispatcher(testScheduler)
+        val controller = FileMetricsController(CoroutineScope(backgroundScope.coroutineContext + io), Store(mapOf(ArchiveKey("s", name) to bytes)), io)
+        controller.load("s", name)
+        runCurrent()
+        assertIs<FileMetricsState.Loaded>(controller.state.value)
+        controller.page(0)
+        assertEquals(RowsState.Loading, controller.rows.value)
+        runCurrent()
+        assertEquals(0L, assertIs<RowsState.Shown>(controller.rows.value).page.from)
+        // Rows 0 until 50 are not left on screen as if they were the next page.
+        controller.page(100)
+        assertEquals(RowsState.Loading, controller.rows.value)
+        runCurrent()
+        assertEquals(100L, assertIs<RowsState.Shown>(controller.rows.value).page.from)
     }
 }

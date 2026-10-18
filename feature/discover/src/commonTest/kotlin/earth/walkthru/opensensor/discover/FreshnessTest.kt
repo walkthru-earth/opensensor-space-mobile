@@ -1,5 +1,8 @@
 package earth.walkthru.opensensor.discover
 
+import earth.walkthru.aqsync.publicfeed.CellRow
+import earth.walkthru.aqsync.publicfeed.CellStat
+import earth.walkthru.aqsync.publicfeed.FeedProperty
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,5 +31,34 @@ class FreshnessTest {
     @Test
     fun noUpdateHasNoFreshness() {
         assertNull(freshnessOf(null, 0L, null))
+    }
+
+    private val endOf = { d: Int -> LocalDate(2026, 10, d + 1).toEpochDays() * 86_400_000L }
+    private val pm25 = FeedProperty("pm25", "PM2.5", "µg/m³", "Air")
+    private val stat = CellStat(3, 12.0, null, null)
+
+    /** A daily cell updated on 8 Oct, its PM2.5 dated by [pmDay] when set, measuring PM2.5 when [measured]. */
+    private fun row(cell: Long, pmDay: Int?, measured: Boolean = true) = CellRow(
+        cell,
+        devices = 3,
+        updatedEpochMs = endOf(8),
+        stats = if (measured) mapOf("pm25" to stat) else mapOf("no2" to stat),
+        updatedByProperty = pmDay?.let { mapOf("pm25" to endOf(it)) }.orEmpty(),
+    )
+
+    private fun daily(rows: List<CellRow>) = DiscoverUiState(daily = true, dataDate = LocalDate(2026, 10, 8), property = pm25, rows = rows, newestUpdateEpochMs = endOf(8))
+
+    @Test
+    fun theDetailedSheetDatesTheCellByTheShownPropertysOwnDay() {
+        // The cell has something from 8 Oct, but its PM2.5 is from 5 Oct.
+        val cell = row(1L, pmDay = 5)
+        assertEquals(Freshness.DataTo(LocalDate(2026, 10, 5)), daily(listOf(cell)).cellFreshness(cell, endOf(8)))
+    }
+
+    @Test
+    fun theMapCaptionNamesTheNewestDayOfTheShownProperty() {
+        // Other properties run to 8 Oct, PM2.5 only to 6 Oct, and a cell without PM2.5 does not count.
+        val s = daily(listOf(row(1L, pmDay = 5), row(2L, pmDay = 6), row(3L, pmDay = null, measured = false)))
+        assertEquals(Freshness.DataTo(LocalDate(2026, 10, 6)), s.inViewFreshness(endOf(8)))
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -183,6 +184,26 @@ class BandColumnChartFontScaleTest {
         val oneLine = guide.layout.lineCount == 1 && guide.layout.layoutInput.text.text == ar.labels(DetailLevel.DETAILED).first()
         assertTrue(!oneLine, "the full label fits on one line, the case no longer tests wrapping")
         assertTrue(guide.rect.right <= drawn.canvas.right + 0.5f && guide.rect.left >= drawn.plot.left - 0.5f, "${guide.rect} leaves the plot ${drawn.plot}")
+    }
+
+    @Test
+    fun aGuidelineLabelTooWideForOneLineIsDrawnInFullOnTwo() = runComposeUiTest {
+        // The plot is narrower than the full label on one line but wider than each half, so the full
+        // label wraps to two lines. The short fallback is never needed.
+        val texts = listOf("WHO 24 h guideline", "24 h")
+        var fitted: TextLayoutResult? = null
+        var oneLineWidth = 0
+        setContent {
+            val measurer = rememberTextMeasurer()
+            val style = chartTextStyle(Color.Black, AXIS_LABEL_SP)
+            oneLineWidth = measurer.measure(texts.first(), style, maxLines = 1).size.width
+            fitted = fitGuideLabel(measurer, texts, style, width = oneLineWidth * 0.7f, height = 10_000f)
+        }
+        waitForIdle()
+        val label = checkNotNull(fitted) { "no label fits" }
+        assertEquals(texts.first(), label.layoutInput.text.text, "the short fallback was chosen over the wrapped full label")
+        assertEquals(2, label.lineCount)
+        assertTrue(label.size.width <= oneLineWidth * 0.7f, "the wrapped label is ${label.size.width} px wide")
     }
 
     @Test
