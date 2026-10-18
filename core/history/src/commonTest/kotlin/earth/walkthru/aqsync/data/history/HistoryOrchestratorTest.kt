@@ -79,7 +79,10 @@ class HistoryOrchestratorTest {
         override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
             rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
         override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
-        override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
+
+        /** How many times a time estimate or other caller listed the stations. */
+        var stationReads = 0
+        override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct().also { stationReads++ }
     }
 
     private val store = Store()
@@ -212,6 +215,59 @@ class HistoryOrchestratorTest {
     }
 
     @Test
+    fun theStartAndRetryBackfillsWaitForADeriveInFlight() = runTest {
+        waiting("a")
+        index.failUpdates = 1
+        val history = orchestrator()
+        val inDerive = CompletableDeferred<Unit>()
+        var endDerive = CompletableDeferred<Unit>()
+        val held = launch { history.derivePass { inDerive.complete(Unit); endDerive.await() } }
+        inDerive.await()
+
+        val life = launch { history.run { history.derivePass { } } }
+        runCurrent()
+        assertEquals(1, index.failUpdates, "the start backfill waits for the derive in flight")
+        endDerive.complete(Unit)
+        held.join()
+        runCurrent()
+        assertEquals(0, index.failUpdates)
+        assertTrue(index.rows.value.single().awaitsIndex)
+
+        // A derive holds the pass when the retry falls due, so the retry backfill waits for it.
+        endDerive = CompletableDeferred()
+        val again = CompletableDeferred<Unit>()
+        val heldAgain = launch { history.derivePass { again.complete(Unit); endDerive.await() } }
+        again.await()
+        advanceTimeBy(HistoryOrchestrator.RETRY_DELAYS.first() + 1.seconds)
+        runCurrent()
+        assertTrue(index.rows.value.single().awaitsIndex, "the retry backfill waits for the derive in flight")
+        endDerive.complete(Unit)
+        heldAgain.join()
+        runCurrent()
+        assertFalse(index.rows.value.single().awaitsIndex)
+        life.cancel()
+    }
+
+    @Test
+    fun retriesGiveUpAfterTheLastBackoff() = runTest {
+        waiting("a")
+        index.failUpdates = Int.MAX_VALUE
+        val derives = ArrayList<Int>()
+        val history = orchestrator()
+        val life = launch { history.run { history.derivePass { derives += index.rows.value.count { it.isIndexed } } } }
+        runCurrent()
+        advanceTimeBy(HistoryOrchestrator.RETRY_DELAYS.reduce { a, b -> a + b } + 1.seconds)
+        runCurrent()
+        assertEquals(1 + HistoryOrchestrator.RETRY_DELAYS.size, derives.size, "one start pass and one per backoff")
+
+        advanceTimeBy((24 * 3600).seconds)
+        runCurrent()
+        assertEquals(1 + HistoryOrchestrator.RETRY_DELAYS.size, derives.size, "no retry after the last backoff")
+        assertTrue(index.rows.value.single().awaitsIndex, "the record waits for the next index change")
+        life.cancel()
+    }
+
+    @Test
     fun timeEstimatesWaitForADeriveInFlight() = runTest {
         waiting("a")
         val history = orchestrator()
@@ -228,6 +284,25 @@ class HistoryOrchestratorTest {
         derive.join()
         estimate.join()
         assertTrue(estimated)
+    }
+
+    @Test
+    fun aClockReceiptFollowUpEstimatesOnlyInsideAPassThenDerives() = runTest {
+        waiting("a")
+        val history = orchestrator()
+        val inDerive = CompletableDeferred<Unit>()
+        val endDerive = CompletableDeferred<Unit>()
+        val derive = launch { history.derivePass { inDerive.complete(Unit); endDerive.await() } }
+        inDerive.await()
+
+        val events = ArrayList<String>()
+        val followUp = launch { history.afterClockReceipt { history.derivePass { events += "derive after ${index.stationReads} estimate" } } }
+        runCurrent()
+        assertEquals(0, index.stationReads, "the estimates wait for the derive that reads them")
+        endDerive.complete(Unit)
+        derive.join()
+        followUp.join()
+        assertEquals(listOf("derive after 1 estimate"), events)
     }
 
     @Test

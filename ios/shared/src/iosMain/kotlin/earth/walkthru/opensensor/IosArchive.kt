@@ -117,8 +117,13 @@ internal object IosArchive {
      */
     val coordinator: DeviceCoordinator by lazy { DeviceCoordinator(pruned) }
 
-    /** The shared order of the History passes (#100), the backfill then [rebuildDerived]. */
-    private val history by lazy { HistoryOrchestrator(repair, index, log = ::println) }
+    /**
+     * The shared order of the History passes (#100), the backfill then [rebuildDerived]. It owns the
+     * index repair, so no backfill or time estimate here runs outside a pass.
+     */
+    private val history by lazy {
+        HistoryOrchestrator(ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, coordinator = coordinator), index, log = ::println)
+    }
 
     /**
      * The shared History start (#125). The janitor and the feed block quota first, then the backfill,
@@ -239,7 +244,6 @@ internal object IosArchive {
     private val derivedAtomic by lazy { IosAtomicFiles("$base/${AtomicFiles.TEMP_DIR}") }
     private val tierStore by lazy { IosFileTierStore(cachesDirectory(), derivedAtomic) }
     private val derived by lazy { IosDailyDerivedStore(cachesDirectory(), derivedAtomic, tierStore) }
-    private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, coordinator = coordinator) }
     private val janitor by lazy {
         StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, coordinator = coordinator)
     }
@@ -259,11 +263,7 @@ internal object IosArchive {
      * here, never under the sync lease that recorded the anchor. A first sync starts downloading at once.
      */
     private val anchorFollowUp by lazy {
-        CoalescedWork(scope, "clock anchor estimate") {
-            // A pass of its own, so the estimates never change under a derive or a backfill.
-            history.estimateTimes()
-            rebuildDerived(emptyList())
-        }
+        CoalescedWork(scope, "clock anchor estimate") { history.afterClockReceipt { rebuildDerived(emptyList()) } }
     }
 
     /** Called under the SYNC or COMMAND lease. Only the anchor is saved there, the rest follows later. */

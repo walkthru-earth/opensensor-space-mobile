@@ -1346,8 +1346,15 @@ class DeviceLinkOwner @Inject constructor(
                 return true
             }
             val info = (session.link.state.value as? LinkState.Ready)?.info?.info
-            if (info?.station != null && info.boot != null) {
-                historyDeriver.recordClockAnchor(info.station!!, info.boot!!, r.epochNanos, r.monotonicMicros)
+            val station = info?.station
+            val boot = info?.boot
+            if (station != null && boot != null) {
+                historyDeriver.persistClockAnchor(station, boot, r.epochNanos, r.monotonicMicros)
+                // The re-dating derive waits for any History pass in flight, so it runs off the link (#125).
+                scope.launch {
+                    suspendRunCatching { historyDeriver.deriveStation(station) }
+                        .onFailure { Log.w(TAG, "derive after clock receipt failed (${it::class.simpleName})") }
+                }
             }
             recordDiagnostic("clock", "SET_TIME accepted at epoch ${r.epochSeconds}")
             if (!quiet) _events.emit(DeviceEvent.Info(DeviceMessage.ClockSet))

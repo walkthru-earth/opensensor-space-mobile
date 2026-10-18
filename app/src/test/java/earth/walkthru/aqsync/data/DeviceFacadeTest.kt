@@ -435,6 +435,22 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `a slow re-dating derive after a clock receipt never holds the link`() = harnessTest { h ->
+        h.clockEpochOffset = 1_789_581_931_987L
+        val gate = CompletableDeferred<Unit>()
+        h.stationDeriveGate = gate
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        // The derive waits behind a History pass, yet the connection lists and a collection completes.
+        h.until { h.repo.plan.value != null }
+        assertEquals(listOf(h.device.station), h.stationDerives)
+        h.repo.syncAll()
+        h.until { h.archived.rows.size == h.device.files.size && h.repo.collectionState.value is CollectionState.Done && !h.repo.busy.value }
+        assertFalse(gate.isCompleted)
+        gate.complete(Unit)
+        h.test.runCurrent()
+    }
+
+    @Test
     fun `a refused automatic clock still lists original files`() = harnessTest { h ->
         // Virtual epoch zero is deliberately refused by the firmware-compatible fake.
         h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
@@ -1240,6 +1256,10 @@ class DeviceFacadeTest {
 
         /** When set, each post-sync derive waits for it, as a derive behind a slow backfill does. */
         var deriveGate: CompletableDeferred<Unit>? = null
+        val stationDerives = mutableListOf<String>()
+
+        /** When set, each re-dating derive after a clock receipt waits for it, as one behind a History pass does. */
+        var stationDeriveGate: CompletableDeferred<Unit>? = null
         val owner: DeviceLinkOwner
         val repo: DeviceFacade
         var refuseProcess = false
@@ -1263,7 +1283,10 @@ class DeviceFacadeTest {
                         deriveGate?.await()
                         return deriveStale()
                     }
-                    override suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) = persistClockAnchor(station, boot, utcNs, monotonicUs)
+                    override suspend fun deriveStation(station: String) {
+                        stationDerives += station
+                        stationDeriveGate?.await()
+                    }
                     override suspend fun persistClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
                         assertEquals(device.station, station)
                         assertEquals(device.bootId, boot)

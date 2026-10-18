@@ -403,8 +403,9 @@ class HistoryDeriverTest {
             // A derive in flight reads the estimate columns for its source sets.
             val other = launch(Dispatchers.Default) { passes.derivePass { inPass.complete(Unit); endPass.await() } }
             inPass.await()
-            val receipt = launch(Dispatchers.Default) { deriver.recordClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!) }
-            assertNull("the receipt waits for the pass in flight", withTimeoutOrNull(2_000) { receipt.join() })
+            deriver.persistClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
+            val receipt = launch(Dispatchers.Default) { deriver.deriveStation(station) }
+            assertNull("the re-dating waits for the pass in flight", withTimeoutOrNull(2_000) { receipt.join() })
             assertNull("no estimate is written beside the derive", files.rows.single().estLastUtcNs)
             endPass.complete(Unit)
             other.join()
@@ -437,7 +438,8 @@ class HistoryDeriverTest {
             val before = files.rows.single()
             assertEquals(0, deriver.deriveStale().daysChecked)
             val utcNs = 1_788_912_000_123_456_000L // midnight + submillisecond fraction
-            deriver.recordClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
+            deriver.persistClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
+            deriver.deriveStation(station)
             assertEquals(2, days.rows.size)
             assertEquals(64L, days.rows.sumOf { it.rows.toLong() })
             assertTrue(raw.readBytes().contentEquals(original))
@@ -488,7 +490,8 @@ class HistoryDeriverTest {
             files.upsert(indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw))
             val indexed = files.forStation(station).single()
             // An estimated file has no UTC rows, the shape the migration reopens.
-            deriver.recordClockAnchor(station, indexed.bootId!!, 1_788_912_000_123_456_000L, indexed.lastMonoUs!!)
+            deriver.persistClockAnchor(station, indexed.bootId!!, 1_788_912_000_123_456_000L, indexed.lastMonoUs!!)
+            deriver.deriveStation(station)
             val before = days.forStation(station).map { it.epochDay }.toSet()
             assertEquals(2, before.size)
             val bucketDays = buckets.observeDayCount(station).first()

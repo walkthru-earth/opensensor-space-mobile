@@ -19,7 +19,8 @@ import kotlin.time.Duration.Companion.seconds
  *   through [derivePass], which waits for a backfill in flight, and a backfill waits for a derive in
  *   flight. After each backfill [run] derives once, so History catches up with what it indexed.
  * - **Time estimates.** [estimateTimes] rewrites the estimated spans a derive reads, so it is a pass
- *   too. A derive that wants fresh estimates calls [ArchiveIndexRepair.estimateTimes] inside its pass.
+ *   too. A derive that wants fresh estimates calls [ArchiveIndexRepair.estimateTimes] inside its pass,
+ *   and a clock receipt follow-up runs [afterClockReceipt].
  * - **Retry.** A backfill that leaves a record waiting for its index, because the index threw, runs
  *   again after each of [retryDelays], then waits for the next index change.
  * - **Held days.** A derive that still runs while a record waits for its index keeps that record's
@@ -58,20 +59,37 @@ class HistoryOrchestrator(
     suspend fun estimateTimes(): Int = passes.withLock { repair.estimateTimes() }
 
     /**
+     * The follow-up to a saved clock receipt. The time estimates as one pass, so they never change
+     * under a derive or a backfill, then [derive], which takes [derivePass] itself.
+     */
+    suspend fun afterClockReceipt(derive: suspend () -> Unit) {
+        estimateTimes()
+        derive()
+    }
+
+    /**
      * The life of History in this process. A backfill, then [deriveAll], and again a backfill then
      * [deriveAll] whenever a record waits for its index, until cancelled. [deriveAll] takes
      * [derivePass] itself. [HistoryStartup.start] calls it once per process.
      */
     suspend fun run(deriveAll: suspend () -> Unit) {
-        settle(deriveAll)
+        // The first emission is the start pass, so a record still waiting after the retries is not
+        // retried again until the index changes.
+        var started = false
         try {
-            index.observeNeverIndexed().conflate().collect { waiting -> if (waiting) settle(deriveAll) }
+            index.observeNeverIndexed().conflate().collect { waiting ->
+                if (waiting || !started) {
+                    started = true
+                    settle(deriveAll)
+                }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             // The index flow failed. The next process start repairs again.
             log("index repair stopped: ${e::class.simpleName}")
         }
+        if (!started) settle(deriveAll)
     }
 
     /**

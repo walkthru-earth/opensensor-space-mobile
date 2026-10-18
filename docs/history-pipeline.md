@@ -52,11 +52,13 @@ flowchart LR
   back-fill `run` derives once, and again whenever a record waits for its index.
 - **Retry.** A back-fill that leaves a record waiting, because the index threw, runs again with the
   derive after 30 s, 1, 2, 4 and 8 min (`RETRY_DELAYS`), then waits for the next index change. The
+  first index emission is the start pass, so a record still waiting is not retried twice. The
   index flow emits only when waiting changes, so without the retry it would wait for the next start.
 - **Time estimates.** `estimateTimes` rewrites the estimated spans a derive reads for its source sets
-  and signatures, so it runs only inside a pass. A derive pass re-dates first, iOS's clock receipt
-  follow-up calls `HistoryOrchestrator.estimateTimes`, and Android's `recordClockAnchor` saves the
-  anchor and runs one `deriveStale` pass for the station.
+  and signatures, so it runs only inside a pass. A derive pass re-dates first. iOS's clock receipt
+  follow-up calls `HistoryOrchestrator.afterClockReceipt`, which estimates as one pass and then
+  derives. Android's SET_TIME saves the receipt on the link, then starts `deriveStation` off it, so a
+  pass in flight never holds the link.
 - **Every derive is a pass.** Android's `HistoryDeriver.deriveStale` and `ensureDailyFiles` and iOS's
   `IosArchive.rebuildDerived` each run inside one `derivePass`, which is not reentrant. iOS builds
   `rebuildDerived` with `derivePassOf`, so its derive body has no entry point outside a pass. The iOS
