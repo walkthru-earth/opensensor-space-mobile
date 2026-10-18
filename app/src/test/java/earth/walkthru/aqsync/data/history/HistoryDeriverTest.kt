@@ -3,17 +3,19 @@ package earth.walkthru.aqsync.data.history
 import android.content.ContextWrapper
 import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import earth.walkthru.aqsync.data.archive.RoomArchiveIndex
 import earth.walkthru.aqsync.data.archive.toRecord
 import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.local.database.AppDatabase
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
+import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.DerivedDay
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.writerSql
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.DerivedQuota
@@ -23,16 +25,20 @@ import earth.walkthru.aqsync.storage.QuotaEnforcer
 import earth.walkthru.aqsync.storage.StorageClass
 import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -53,9 +59,9 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/day=2026-09-17/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -101,15 +107,54 @@ class HistoryDeriverTest {
     }
 
     @Test
+    fun `every derive entry point waits for a History pass in flight`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-derive-pass").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val files = InMemoryFiles()
+            val days = InMemoryDays()
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val passes = indexer.passes(files)
+            val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, DerivedStore(tmp), indexer, derivedQuota(tmp), passes)
+            val name = "station=$station/day=2026-09-17/raw.parquet"
+            val raw = archive.fileFor(station, name).apply {
+                parentFile!!.mkdirs()
+                writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
+            }
+            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            val entries = listOf<Pair<String, suspend () -> Unit>>(
+                "deriveStale" to { deriver.deriveStale() },
+                "deriveAfterSync" to { deriver.deriveAfterSync(0) },
+                "ensureDailyFiles" to { deriver.ensureDailyFiles() },
+            )
+            for ((entry, derive) in entries) {
+                val inPass = CompletableDeferred<Unit>()
+                val endPass = CompletableDeferred<Unit>()
+                // A backfill or another derive holds the pass.
+                val other = launch(Dispatchers.Default) { passes.derivePass { inPass.complete(Unit); endPass.await() } }
+                inPass.await()
+                val waiting = launch(Dispatchers.Default) { derive() }
+                assertNull("$entry waits for the pass in flight", withTimeoutOrNull(2_000) { waiting.join() })
+                endPass.complete(Unit)
+                other.join()
+                waiting.join()
+            }
+            assertEquals(1, days.rows.size)
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `derived reads require a matching receipt and keep opened bytes across replacement`() = runBlocking {
         val tmp = java.nio.file.Files.createTempDirectory("aq-derived-read").toFile()
         try {
             val archive = FileArchive(tmp)
             val files = InMemoryFiles()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
-            val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, store, indexer, derivedQuota(tmp))
+            val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/day=2026-09-17/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -168,9 +213,9 @@ class HistoryDeriverTest {
                 val files = InMemoryFiles()
                 val buckets = InMemoryBuckets()
                 val days = InMemoryDays()
-                val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+                val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
                 val store = DerivedStore(tmp, atomic)
-                val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+                val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
                 val name = "station=$station/day=2026-09-17/raw.parquet"
                 val raw = archive.fileFor(station, name).apply {
                     parentFile!!.mkdirs()
@@ -200,10 +245,10 @@ class HistoryDeriverTest {
         val files = InMemoryFiles()
         val buckets = InMemoryBuckets()
         val days = InMemoryDays()
-        val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+        val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
         val store = DerivedStore(tmp)
         val quota = derivedQuota(tmp)
-        val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota)
+        val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota, indexer.passes(files))
 
         fun put(name: String, resource: String, crc: Long) {
             archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
@@ -296,10 +341,10 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
             var backfills = 0
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp)) { backfills++ }
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files)) { backfills++ }
 
             fun put(name: String, resource: String, crc: Long, syncedAt: Long) {
                 archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
@@ -343,10 +388,10 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
             val quota = derivedQuota(tmp)
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota)
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota, indexer.passes(files))
             val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -364,7 +409,7 @@ class HistoryDeriverTest {
             assertEquals(0L, files.rows.single().utcRows)
             assertEquals(utcNs, files.rows.single().estLastUtcNs)
             assertEquals(0, deriver.deriveStale().daysRebuilt)
-            val restarted = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val restarted = HistoryIndexer(archive, files, DeviceCoordinator())
             assertEquals(0, restarted.estimateTimes())
             assertEquals(utcNs, files.rows.single().estLastUtcNs)
             for (day in days.rows) {
@@ -397,9 +442,9 @@ class HistoryDeriverTest {
             val files = db.archivedFileDao()
             val days = db.derivedDayDao()
             val buckets = db.metricBucketDao()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -457,9 +502,9 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/unsynced/boot=00000000000000000000000000000000/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -472,7 +517,7 @@ class HistoryDeriverTest {
 
             // Restart reads the exact durable acknowledgement, while the older archive row and
             // derived caches stay untouched until a cancellable pass explicitly reconciles them.
-            val restarted = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val restarted = HistoryIndexer(archive, files, DeviceCoordinator())
             val anchor = restarted.clockAnchors.anchors(station).single()
             assertEquals(before.bootId, anchor.boot)
             assertEquals(utcNs, anchor.utcNs)
@@ -551,4 +596,7 @@ class HistoryDeriverTest {
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override suspend fun stations() = rows.map { it.station }.distinct()
     }
+
+    /** The shared pass order over this test's index, as the app wires it. */
+    private fun HistoryIndexer.passes(files: ArchivedFileDao) = HistoryOrchestrator(repair, RoomArchiveIndex(files))
 }

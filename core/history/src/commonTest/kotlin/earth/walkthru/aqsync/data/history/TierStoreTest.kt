@@ -84,6 +84,8 @@ class TierStoreTest {
         override suspend fun retain(station: String, days: Set<Long>) {
             saved.keys.removeAll { it.first == station && it.second !in days }
         }
+        override suspend fun savedDays(station: String): Set<Long> = saved.keys.filter { it.first == station }.mapTo(HashSet()) { it.second }
+        override suspend fun loadSaved(station: String, epochDay: Long): SavedDay? = saved[station to epochDay]?.let(TierCodec::decodeSaved)
     }
 
     private val sample: DayTiers = mapOf(
@@ -191,6 +193,36 @@ class TierStoreTest {
         val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore)
         assertEquals(saved.size, restarted.observeDays(station).first().count)
         assertEquals(0, restarted.decodedDays)
+    }
+
+    @Test
+    fun aDayAWaitingRecordHoldsStaysVisibleInHistoryUntilItIndexesAgain() = runTest {
+        val (store, index, station) = archive()
+        val tierStore = MemoryTierStore()
+        val tiers = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val span = tiers.observeDays(station).first()
+        val buckets = tiers.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
+        val metrics = tiers.observeMetricsWithData(station).first()
+        assertTrue(span.count > 0)
+        assertTrue(buckets.isNotEmpty())
+        val record = index.rows.value.single()
+
+        // A backfill reopened the record. Its days stay in History as they were, on Android and iOS alike.
+        index.rows.value = listOf(record.copy(indexedAtEpochMs = null))
+        assertEquals(span, tiers.observeDays(station).first())
+        assertEquals(buckets, tiers.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first())
+        assertEquals(metrics, tiers.observeMetricsWithData(station).first())
+
+        // A record with no span holds every day, and a new process shows them from the store alone.
+        index.rows.value = listOf(record.copy(indexedAtEpochMs = null, utcRows = 0, firstUtcNs = null, lastUtcNs = null))
+        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        assertEquals(span, restarted.observeDays(station).first())
+        assertEquals(buckets, restarted.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first())
+        assertEquals(0, restarted.decodedDays)
+
+        // Once nothing holds them, days without sources leave History.
+        index.rows.value = emptyList()
+        assertEquals(0, restarted.observeDays(station).first().count)
     }
 
     @Test

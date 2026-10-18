@@ -47,6 +47,21 @@ class IosFileTierStoreTest {
     }
 
     @Test
+    fun savedDaysListOneStationAndLoadSavedKeepsTheirSignature() = runTest {
+        val store = IosFileTierStore(root, atomic)
+        store.save("s1", day, "sig", sample)
+        store.save("s1", day + 3, "later", sample)
+        store.save("s2", day + 1, "other", sample)
+        val restarted = IosFileTierStore(root, atomic)
+        assertEquals(setOf(day, day + 3), restarted.savedDays("s1"))
+        val saved = restarted.loadSaved("s1", day + 3)!!
+        assertEquals("later", saved.signature)
+        assertEquals(sample, saved.tiers)
+        assertNull(restarted.loadSaved("s1", day + 1))
+        assertEquals(emptySet(), restarted.savedDays("none"))
+    }
+
+    @Test
     fun aTruncatedOrPurgedTierFileIsACacheMiss() = runTest {
         val store = IosFileTierStore(root, atomic)
         store.save("s1", day, "sig", sample)

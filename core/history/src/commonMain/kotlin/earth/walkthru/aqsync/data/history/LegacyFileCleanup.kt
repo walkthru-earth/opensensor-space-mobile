@@ -7,8 +7,7 @@ import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
-import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.storage.StorageClass
 import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
@@ -48,14 +47,16 @@ data class UtcDayRange(val fromEpochDay: Long, val toEpochDay: Long) {
 /**
  * Removes device files in the old layout ([UtcColumns.isLegacyLayout]) from the phone archive, from
  * Settings › Storage. Phone only. Nothing is sent to a device and its card is never touched. Each
- * removed file leaves a [PrunedFile] in [pruned], so a later sync skips it while the device still
- * lists it at the same size. Clearing [pruned] lets the next sync download those files again.
+ * removed file leaves a [PrunedFile] in the coordinator's [DeviceCoordinator.pruned], so a later sync
+ * skips it while the device still lists it at the same size. Clearing them lets the next sync download
+ * those files again.
  *
  * [plan] is the dry run, it reads each footer and changes nothing. [remove] works through a plan one
- * file at a time under its [WriterLeases] lease, so a sync of the same file waits. It checks the file
- * is still old, then under the station's [ArchiveMutationGate] re-reads the live record, writes the
- * [PrunedFile], removes the index record and deletes the final file. Repair, sync and the janitor take
- * the same gate, so none of them writes the record back in between. A crash between the record and
+ * file at a time under the coordinator's writer lease of that file, so a sync of the same file waits,
+ * and once it runs the engine finds the tombstone before `OPEN` and skips the file. It checks the file
+ * is still old, then under the station gate re-reads the live record, writes the [PrunedFile], removes
+ * the index record and deletes the final file. Repair, sync and the janitor take the same gate, so
+ * none of them writes the record back in between. A crash between the record and
  * the file leaves a final file without a record, which the startup janitor adopts again, so the
  * archive never holds a record for a missing file. A delete that fails puts the record back and
  * drops the [PrunedFile].
@@ -71,16 +72,16 @@ class LegacyFileCleanup(
     private val index: ArchiveIndex,
     private val roots: StorageRoots,
     private val tree: StorageTree,
-    private val leases: WriterLeases,
-    /** The archive's shared gate, also taken by sync, repair and the janitor. */
-    private val gate: ArchiveMutationGate,
-    private val pruned: PrunedFiles,
+    /** The archive's one coordinator, shared with sync, repair and the janitor. */
+    private val coordinator: DeviceCoordinator,
     private val io: CoroutineDispatcher,
     /** Rebuilds the derived days of the removed files, per station. */
     private val afterRemoval: suspend (Map<String, Set<Long>>) -> Unit = {},
     private val log: (String) -> Unit = {},
     private val nowEpochMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
+    private val pruned: PrunedFiles get() = coordinator.pruned
+
     /** Old layout files the dry run found. [skipped] counts files whose footer could not be read, which are kept. */
     data class Plan(val keys: List<ArchiveKey>, val bytes: Long, val stations: Int, val skipped: Int) {
         val files: Int get() = keys.size
@@ -136,7 +137,7 @@ class LegacyFileCleanup(
         try {
             for (key in plan.keys) {
                 currentCoroutineContext().ensureActive()
-                report = when (val outcome = leases.withLease(key) { removeOne(key, unreadable, removed) }) {
+                report = when (val outcome = coordinator.withWriter(key) { removeOne(key, unreadable, removed) }) {
                     is Outcome.Removed -> report.copy(removed = report.removed + 1, bytes = report.bytes + outcome.record.bytes)
                     Outcome.Kept -> report.copy(kept = report.kept + 1)
                     Outcome.Failed -> report.copy(failed = report.failed + 1)
@@ -178,7 +179,7 @@ class LegacyFileCleanup(
         val checked = index.get(key) ?: return Outcome.Kept
         if (isLegacy(key, unreadable) != true) return Outcome.Kept
         val path = finalPath(key) ?: return Outcome.Kept
-        return withContext(NonCancellable) { gate.withStation(key.station) { drop(key, checked, path, removed) } }
+        return withContext(NonCancellable) { coordinator.withStation(key.station) { drop(key, checked, path, removed) } }
     }
 
     /** Under the gate. The live record must still be the [checked] file, else the file is kept. */

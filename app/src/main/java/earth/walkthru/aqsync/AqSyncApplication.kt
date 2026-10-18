@@ -2,23 +2,19 @@ package earth.walkthru.aqsync
 
 import android.app.Application
 import android.content.ComponentCallbacks2
-import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.background.SyncTriggers
 import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.data.history.HistoryDeriver
-import earth.walkthru.aqsync.data.history.HistoryIndexer
+import earth.walkthru.aqsync.data.history.HistoryOrchestrator
 import earth.walkthru.aqsync.data.local.security.LanTokenMigration
-import earth.walkthru.aqsync.data.storage.StorageJanitorWorker
 import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.storage.MemoryPressure
 import earth.walkthru.aqsync.storage.RetentionPolicy
 import earth.walkthru.opensensor.discover.MapCache
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,7 +47,7 @@ class AqSyncApplication :
     lateinit var lanTokenMigration: LanTokenMigration
 
     @Inject
-    lateinit var historyIndexer: HistoryIndexer
+    lateinit var historyOrchestrator: HistoryOrchestrator
 
     @Inject
     lateinit var historyDeriver: HistoryDeriver
@@ -78,24 +74,16 @@ class AqSyncApplication :
                 withContext(Dispatchers.Main) { MapCache.configure(cacheDir.absolutePath, stored) }
             }
         }
-        // Sweep temps and stale partials and index orphan finals once per process (#60).
-        StorageJanitorWorker.enqueue(WorkManager.getInstance(this))
         appScope.launch {
             suspendRunCatching { lanTokenMigration.migratePlaintextTokens() }
             autoSyncScheduler.start(appScope)
             syncTriggers.register(appScope)
         }
-        // Repair old indexes and derived days once per process. Screen navigation only observes
-        // Room; interactive and worker syncs already derive after newly archived files arrive.
+        // The shared History order (#100). Sweep temps and stale partials and adopt orphan finals
+        // (#60), backfill old indexes, then derive, and again whenever a record waits for its index.
+        // Screen navigation only observes Room; syncs derive after newly archived files arrive.
         appScope.launch(Dispatchers.IO) {
-            runCatching { historyIndexer.backfillAll() }.onFailure {
-                if (it is CancellationException) throw it
-                Log.w(TAG, "history index repair failed", it)
-            }
-            runCatching { historyDeriver.deriveStale() }.onFailure {
-                if (it is CancellationException) throw it
-                Log.w(TAG, "history derive repair failed", it)
-            }
+            historyOrchestrator.run { historyDeriver.deriveStale() }
         }
     }
 
@@ -111,8 +99,6 @@ class AqSyncApplication :
     }
 
     internal companion object {
-        private const val TAG = "AqSyncApplication"
-
         /**
          * Hidden or cached levels, and the running levels a foreground app gets while the device runs
          * low (API 33 and older), mapped to the shared signal. Other levels ask for nothing.

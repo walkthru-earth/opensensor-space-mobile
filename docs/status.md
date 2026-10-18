@@ -13,8 +13,8 @@ the owner's approval. Host tests, the iOS simulator build and `verify` only. No 
   for all dates or a UTC date range, then one confirmation removes them from the phone. Files without
   a UTC column, current MICROS files and unreadable files stay.
 - Shared `LegacyFileCleanup` in `:core:history`. It may run while a sync runs. Per file under its
-  writer lease and the station's `ArchiveMutationGate`, which sync, index repair and the janitor
-  share. It reads the live record again, writes a `PrunedFiles` record, removes the index record,
+  writer lease and the station gate of the shared `DeviceCoordinator`, which sync, index repair and
+  the janitor share. It reads the live record again, writes a `PrunedFiles` record, removes the index record,
   then the final file below the Durable archive root. A failed delete restores the record, drops
   the removed mark and counts as failed, and the startup janitor adopts a file left by a crash or a
   failed restore. Each file's steps finish under `NonCancellable`, and derived days rebuild after, also

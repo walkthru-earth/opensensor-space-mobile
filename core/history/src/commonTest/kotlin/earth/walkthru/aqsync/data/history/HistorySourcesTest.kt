@@ -209,7 +209,7 @@ class HistorySourcesTest {
         val store = Store()
         val index = Index()
         val repair = ArchiveIndexRepair(store, index, nowEpochMs = { 42L })
-        backgroundScope.launch { repair.repairWhenWaiting() }
+        backgroundScope.launch { HistoryOrchestrator(repair, index).run {} }
         val late = putDuringRepair(store, index)
         val first = record("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         store.files[first.key] = board

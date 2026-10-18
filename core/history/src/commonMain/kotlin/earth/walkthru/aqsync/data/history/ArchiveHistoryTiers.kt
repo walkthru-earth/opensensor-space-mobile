@@ -38,6 +38,9 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * new process or an evicted day reads its tiers without decoding Parquet (#63). Only a day missing
  * from both is decoded, one [DayPass] over its files. Nothing is written to the archive.
  *
+ * A day that lost every source while a record waits for its index keeps its saved tiers in History
+ * until the record indexes again, the shared rule of [StationDays.kept] that Android's derive follows.
+ *
  * With a [shareScope] the three observers of one station share one upstream, so the index is mapped
  * and the days are checked once per change instead of once per collector.
  */
@@ -88,7 +91,7 @@ class ArchiveHistoryTiers(
                     if (day * DAY_S >= toS || (day + 1) * DAY_S <= fromS) {
                         emptyList()
                     } else {
-                        loadDay(station, day, state.sources.days.getValue(day), state.sources.anchors, summary.signature)
+                        loadDay(station, day, state.sources.days[day], state.sources.anchors, summary.signature)
                             .buckets[tier]?.get(metricId).orEmpty().filter { it.startEpochS in fromS until toS }
                     }
                 }.sortedBy { it.startEpochS }
@@ -148,11 +151,18 @@ class ArchiveHistoryTiers(
             val out = HashMap<Long, Summary>()
             for ((day, files) in sources.days) {
                 val sig = signature(files)
-                val buckets = loadDay(station, day, files, sources.anchors, sig).buckets[Resolution.DAY].orEmpty()
-                out[day] = Summary(sig, buckets.isNotEmpty(), buckets.filterValues { list -> list.any { it.validRows > 0 } }.keys.toSet())
+                out[day] = summary(sig, loadDay(station, day, files, sources.anchors, sig))
             }
-            // Days that lost every source drop out of the cache and the store too, unless a waiting record holds them.
-            cache.removeAll { it.first == station && it.second !in sources.days }
+            // A day that lost every source while a waiting record holds it shows its saved tiers (StationDays.kept).
+            val kept = if (sources.held == StationDays.Held.NONE) emptySet() else StationDays.kept(tierStore.savedDays(station), sources.days.keys, sources.held)
+            for (day in kept) {
+                val saved = tierStore.loadSaved(station, day) ?: continue
+                val tiers = Day(saved.signature, saved.tiers)
+                cache[station to day] = tiers
+                out[day] = summary(saved.signature, tiers)
+            }
+            // Other days that lost every source drop out of the cache and the store too.
+            cache.removeAll { it.first == station && it.second !in sources.days && it.second !in out }
             if (!sources.held.all) tierStore.retain(station, sources.days.keys + sources.held.days)
             Station(sources, out)
         }
@@ -160,14 +170,24 @@ class ArchiveHistoryTiers(
         return built
     }
 
-    /** Called under [mutex], keeps the only full-day references in the budgeted LRU. */
-    private suspend fun loadDay(station: String, day: Long, files: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>, sig: String): Day {
+    private fun summary(sig: String, day: Day): Summary {
+        val buckets = day.buckets[Resolution.DAY].orEmpty()
+        return Summary(sig, buckets.isNotEmpty(), buckets.filterValues { list -> list.any { it.validRows > 0 } }.keys.toSet())
+    }
+
+    /**
+     * Called under [mutex], keeps the only full-day references in the budgeted LRU. A held day without
+     * [files] reads only its saved tiers, and is empty when the store lost them meanwhile.
+     */
+    private suspend fun loadDay(station: String, day: Long, files: List<ArchiveRecord>?, anchors: Map<String, TimeEstimate.Anchor>, sig: String): Day {
         val key = station to day
         val cached = cache[key]
         if (cached?.signature == sig) return cached
         val saved = tierStore.load(station, day, sig)
         val built = if (saved != null) {
             Day(sig, saved)
+        } else if (files == null) {
+            return Day(sig, emptyMap(), cacheable = false)
         } else {
             buildDay(station, day, files, anchors, sig).also {
                 if (it.cacheable) tierStore.save(station, day, sig, it.buckets)

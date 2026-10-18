@@ -14,8 +14,6 @@ import earth.walkthru.aqsync.storage.DerivedQuota
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -46,7 +44,8 @@ fun interface DeriveBackfill {
  * exactly its day, and an unchanged day costs one string comparison.
  *
  * Pure caches: dropping both tables and running [deriveStale] again gives the same rows. Nothing here
- * writes to the archive.
+ * writes to the archive. Passes come from several places (start, post-sync, worker, Settings, export),
+ * and each runs through [HistoryOrchestrator.derivePass], one at a time and never beside a backfill.
  */
 @Singleton
 class HistoryDeriver @Inject constructor(
@@ -57,15 +56,14 @@ class HistoryDeriver @Inject constructor(
     private val store: DerivedStore,
     private val indexer: HistoryIndexer,
     private val quota: DerivedQuota,
+    /** Runs every pass of this class as one shared History pass, after any backfill in flight. */
+    private val orchestrator: HistoryOrchestrator,
     private val backfill: DeriveBackfill = DeriveBackfill {},
 ) : HistoryRefresher {
     /** [daysDeferred] counts stale days a post-sync pass left to [DeriveBackfill]. */
     data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long, val daysDeferred: Int = 0)
 
     private val dailyBuilder = DailyDerivedBuilder(store) { station, name -> archive.fileFor(station, name) }
-
-    /** Passes are triggered from several places (screens, post-sync, worker); run one at a time so they never duplicate work. */
-    private val mutex = Mutex()
 
     /** Which station-days a set of indexed files touches, by real UTC or by the estimated span (§4.6). */
     fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> = StationDays.of(files.map { it.toRecord() })
@@ -98,7 +96,7 @@ class HistoryDeriver @Inject constructor(
         return result
     }
 
-    suspend fun deriveStale(stations: Collection<String>? = null, touchedSinceEpochMs: Long? = null): Result = mutex.withLock {
+    suspend fun deriveStale(stations: Collection<String>? = null, touchedSinceEpochMs: Long? = null): Result = orchestrator.derivePass {
         withContext(Dispatchers.IO) {
             var checked = 0
             var rebuilt = 0
@@ -135,11 +133,11 @@ class HistoryDeriver @Inject constructor(
                     rebuilt++
                     rows += built
                 }
-                // Days that no longer have any source (files deleted) lose their tiers too, unless a file
-                // still waiting for its index may place itself there (StationDays.held, #87).
+                // Days that no longer have any source (files deleted) lose their tiers too. A day a file
+                // still waiting for its index holds stays in History, the shared rule of StationDays.kept.
                 val held = StationDays.held(byStation[station].orEmpty().map { it.toRecord() })
-                for (stale in known.keys - days) {
-                    if (stale in held) continue
+                val kept = StationDays.kept(known.keys, days, held)
+                for (stale in known.keys - days - kept) {
                     bucketDao.replaceDay(station, stale * 86_400, emptyList())
                     dayDao.delete(station, stale)
                     store.dayFile(station, stale).delete()
@@ -161,7 +159,7 @@ class HistoryDeriver @Inject constructor(
      * enforced here, so the export sees every day, the next derive pass or janitor run trims it again.
      * Returns how many files it rebuilt.
      */
-    suspend fun ensureDailyFiles(station: String? = null): Int = mutex.withLock {
+    suspend fun ensureDailyFiles(station: String? = null): Int = orchestrator.derivePass {
         withContext(Dispatchers.IO) {
             var rebuilt = 0
             val stations = if (station != null) listOf(station) else dayDao.stations()

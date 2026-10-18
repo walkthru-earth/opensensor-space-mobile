@@ -68,6 +68,15 @@ object StationDays {
         return if (days.isEmpty()) Held.NONE else Held(false, days)
     }
 
+    /**
+     * The one held day rule of both phones. Of the [derived] days of a station, those no indexed source
+     * touches now ([sourced]) but a waiting record [held] keep what was derived for them, on disk and
+     * in History, until the record indexes again. A held day that still has sources is rebuilt from
+     * them like any other day, so it is not in this set.
+     */
+    fun kept(derived: Set<Long>, sourced: Set<Long>, held: Held): Set<Long> =
+        derived.filterTo(HashSet()) { it !in sourced && it in held }
+
     /** The days [held] keeps, every day when [all] is true. */
     data class Held(val all: Boolean, val days: Set<Long>) {
         operator fun contains(day: Long): Boolean = all || day in days

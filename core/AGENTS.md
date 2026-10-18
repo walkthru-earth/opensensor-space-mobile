@@ -13,7 +13,7 @@ records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `Storag
 `StorageBudget`, `StorageTree`, `RetentionPolicy` with the derived `QuotaEnforcer`, and
 `MemoryPressure` with `ByteBudgetLru` for memory caches that trim on the OS signal (#61). Every file
 writer goes through `AtomicFiles`, and the `StorageJanitor` (in `sync/`, it needs the archive ports)
-sweeps Scratch at start, enforces the derived quota and never deletes Durable data. Only the user's old format cleanup in Settings (`LegacyFileCleanup`, `:core:history`) removes archive files, phone only, and leaves a `PrunedFiles` record so sync skips them until Download again. Every archive index write takes the station's `ArchiveMutationGate` (`:core:sync`), lease first then gate, readers never. `ParquetFile` and
+sweeps Scratch at start, enforces the derived quota and never deletes Durable data. Only the user's old format cleanup in Settings (`LegacyFileCleanup`, `:core:history`) removes archive files, phone only, and leaves a `PrunedFiles` record so sync skips them until Download again. One `DeviceCoordinator` (`:core:sync`) per archive owns station admission, writer leases, station gates and tombstones. Every archive index write takes its station gate, lease first then gate, readers never. `HistoryOrchestrator` (`:core:history`) owns the janitor, back-fill and derive order on both phones. `ParquetFile` and
 `ByteReader` are `AutoCloseable`, open them with `use`. `sync/` holds the link session, the sync
 engine and, in `collection/`, the per-device `CollectionController` ([sync guide](../docs/sync-engine.md)). Android adopts the controller
 through `DeviceFacade`; iOS uses `IosLink` and `SensorSync` for link and engine adoption,

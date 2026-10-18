@@ -10,9 +10,8 @@ import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.Sha256
 import earth.walkthru.aqsync.data.protocol.toHex
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.ArchiveRecordIndexer
-import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.sync.nowEpochMs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -49,13 +48,15 @@ class StorageJanitor(
     private val log: (String) -> Unit = {},
     /** Evicts derived day files over the quota. Null skips the quota step. */
     private val quota: DerivedQuota? = null,
-    /** The [SyncEngine][earth.walkthru.aqsync.data.sync.SyncEngine] leases, so a stale partial is never swept while a resume writes it. */
-    private val leases: WriterLeases = WriterLeases(),
-    /** The archive's shared gate, taken around each adopted record's insert. */
-    private val gate: ArchiveMutationGate = ArchiveMutationGate(),
-    /** Removed file records. An adopted file is on the phone again, so its record goes. */
-    private val pruned: PrunedFiles = PrunedFiles.None,
+    /**
+     * The archive's one coordinator, shared with the sync engine. Its writer lease keeps a partial a
+     * resume writes from being swept, its station gate covers each adopted record's insert, and an
+     * adopted file is on the phone again, so its tombstone goes.
+     */
+    private val coordinator: DeviceCoordinator = DeviceCoordinator(),
 ) {
+    private val pruned: PrunedFiles get() = coordinator.pruned
+
     data class Report(
         val tempsSwept: Int = 0,
         val exportsSwept: Int = 0,
@@ -161,7 +162,7 @@ class StorageJanitor(
         val key = runCatching {
             ArchiveKey(download.substringBefore('/'), download.substringAfter('/').removeSuffix(ArchiveLayout.PARTIAL_SUFFIX))
         }.getOrNull()
-        if (key == null) block() else leases.withLease(key) { block() }
+        if (key == null) block() else coordinator.withWriter(key) { block() }
     }
 
     private suspend fun sweepLegacyDerived() {
@@ -185,7 +186,7 @@ class StorageJanitor(
             val indexed = index.observeStation(station).first().mapTo(HashSet()) { it.name }
             for (key in keys) {
                 if (key.name in indexed) continue
-                step { leases.withLease(key) { adopt(key) } }
+                step { coordinator.withWriter(key) { adopt(key) } }
             }
         }
     }
@@ -224,7 +225,7 @@ class StorageJanitor(
             sourceDevice = ADOPTED_SOURCE,
         )
         val indexed = indexer.indexed(record)
-        val adopted = gate.withStation(key.station) {
+        val adopted = coordinator.withStation(key.station) {
             val inserted = store.exists(key) && index.putIfAbsent(indexed)
             if (inserted) forgetRemoved(key)
             inserted

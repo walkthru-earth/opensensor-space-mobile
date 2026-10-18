@@ -8,9 +8,9 @@ import kotlinx.coroutines.sync.withLock
 /**
  * One writer per archive identity (station, name), waiters included. Different files transfer
  * together. A slot lives only while someone holds or waits for it, so a cancelled waiter never leaves
- * a lease behind. One instance per archive: share it between every [SyncEngine] that writes there.
+ * a lease behind. Only [DeviceCoordinator] makes one, so every writer of an archive shares it.
  */
-class WriterLeases {
+internal class WriterLeases {
     private class Slot(val mutex: Mutex = Mutex(), var users: Int = 0)
 
     private val lock = SyncLock()

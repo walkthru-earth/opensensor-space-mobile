@@ -38,6 +38,7 @@ enum class FileProblem {
             is FileOutcome.Mismatch -> CHECK_FAILED
             is FileOutcome.DeviceError -> REFUSED
             is FileOutcome.Failed -> if (outcome.storage) STORAGE else FAILED
+            is FileOutcome.Removed -> null
         }
     }
 }
@@ -89,8 +90,9 @@ data class CollectionSummary(
  * does not fit throws [InsufficientSpaceException] and opens nothing. A file that fails to store checks the
  * room again, and when it ran out the run ends the same way, keeping the partial for resume.
  *
- * A file the user removed from this phone in Settings ([pruned]) is skipped while the device still
- * lists it at the same size. A whole listing that no longer has the name forgets the record, so a
+ * A file the user removed from this phone in Settings (the coordinator's [DeviceCoordinator.pruned])
+ * is skipped while the device still lists it at the same size, and the engine checks again under the
+ * file's writer lease, so a removal that lands after this plan still wins. A whole listing that no longer has the name forgets the record, so a
  * later file under that name downloads. The collector never asks the device to delete, rename or
  * rewrite a file.
  */
@@ -104,8 +106,11 @@ class ArchiveCollector(
     private val archivedIdentities: suspend (String) -> List<ArchivedIdentity> = { station ->
         index.observeStation(station).first().map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
     },
-    private val pruned: PrunedFiles = PrunedFiles.None,
 ) {
+    /** The engine's coordinator, the one owner of this archive's admission, locks and tombstones. */
+    val coordinator: DeviceCoordinator get() = engine.coordinator
+    private val pruned: PrunedFiles get() = engine.coordinator.pruned
+
     suspend fun collect(
         session: DeviceSession,
         station: String,

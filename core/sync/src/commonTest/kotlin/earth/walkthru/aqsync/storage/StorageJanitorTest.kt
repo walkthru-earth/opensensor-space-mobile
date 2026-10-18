@@ -7,9 +7,9 @@ import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.sha256Hex
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.MemoryArchiveIndex
 import earth.walkthru.aqsync.data.sync.MemoryArchiveStore
-import earth.walkthru.aqsync.data.sync.WriterLeases
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
@@ -75,7 +75,7 @@ class StorageJanitorTest {
         store: MemoryArchiveStore,
         index: MemoryArchiveIndex,
         scheduler: kotlinx.coroutines.test.TestCoroutineScheduler,
-        leases: WriterLeases = WriterLeases(),
+        coordinator: DeviceCoordinator? = null,
         quota: DerivedQuota? = null,
         pruned: PrunedFiles = PrunedFiles.None,
     ) =
@@ -87,9 +87,8 @@ class StorageJanitorTest {
             io = StandardTestDispatcher(scheduler),
             knownStations = { listOf(known) },
             clock = { now },
-            leases = leases,
+            coordinator = coordinator ?: DeviceCoordinator(pruned),
             quota = quota,
-            pruned = pruned,
         )
 
     @Test
@@ -165,12 +164,12 @@ class StorageJanitorTest {
         val meta = "$base/${ArchiveLayout.partialMetaPath(key)}"
         tree.file(partial, now - StorageJanitor.STALE_PARTIAL_AGE_MS)
         tree.file(meta, now - StorageJanitor.STALE_PARTIAL_AGE_MS)
-        val leases = WriterLeases()
+        val coordinator = DeviceCoordinator()
         val opened = CompletableDeferred<Unit>()
         val reopen = CompletableDeferred<Unit>()
         // A resume that took the lease before the sweep, and rewrites its meta while the sweep waits.
         launch {
-            leases.withLease(key) {
+            coordinator.withWriter(key) {
                 opened.complete(Unit)
                 reopen.await()
                 tree.file(meta, now)
@@ -178,7 +177,7 @@ class StorageJanitorTest {
         }
         opened.await()
 
-        val sweep = async { janitor(tree, MemoryArchiveStore(), MemoryArchiveIndex(), testScheduler, leases).run() }
+        val sweep = async { janitor(tree, MemoryArchiveStore(), MemoryArchiveIndex(), testScheduler, coordinator).run() }
         testScheduler.advanceUntilIdle()
         // The first listing saw a stale download, and the sweep now waits for the lease.
         assertTrue(tree.deleted.isEmpty())
@@ -197,12 +196,12 @@ class StorageJanitorTest {
         val index = MemoryArchiveIndex()
         val key = ArchiveKey(known, "year=2026/month=10/day=04/data.parquet")
         store.files[ArchiveLayout.finalPath(key)] = parquet
-        val leases = WriterLeases()
+        val coordinator = DeviceCoordinator()
         val held = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         // The old file cleanup holds the lease, drops the record and deletes the file while the janitor waits.
         launch {
-            leases.withLease(key) {
+            coordinator.withWriter(key) {
                 held.complete(Unit)
                 release.await()
                 store.files.remove(ArchiveLayout.finalPath(key))
@@ -210,7 +209,7 @@ class StorageJanitorTest {
         }
         held.await()
 
-        val sweep = async { janitor(FakeTree(), store, index, testScheduler, leases).run() }
+        val sweep = async { janitor(FakeTree(), store, index, testScheduler, coordinator).run() }
         testScheduler.advanceUntilIdle()
         assertFalse(sweep.isCompleted)
         release.complete(Unit)
@@ -220,7 +219,7 @@ class StorageJanitorTest {
         assertEquals(0, report.unverifiable)
         assertEquals(0, report.failures)
         assertNull(index.get(key))
-        assertEquals(0, leases.activeCount())
+        assertEquals(0, coordinator.activeWriters())
     }
 
     @Test

@@ -142,7 +142,7 @@ filled mid-run ends the run with its partial kept. Android uses `AndroidStorageB
 
 ## Concurrent archive safety (2026-09-29)
 
-The shared `WriterLeases` in `SyncEngine` (`core/sync`) guards OPEN through CLOSE, including partial resume,
+The writer lease of the archive's one `DeviceCoordinator` (`core/sync`) guards OPEN through CLOSE in `SyncEngine`, including partial resume,
 verification, immutable commit and Room indexing. Other devices with different file identities can
 transfer concurrently. A second writer for the same identity waits cancellably and then rechecks
 any committed destination against the current OPENED size/CRC/PAR1 and recorded SHA-256.
@@ -152,9 +152,9 @@ replaced. `commit` also refuses an existing destination with `AlreadyCommitted` 
 #60). The engine then adopts the existing file through the same size, CRC, `PAR1` and SHA-256
 check, so a final that appears between the plan and the commit is never replaced. A crash between
 the commit and the index record is repaired by `StorageJanitor` at the next start.
-Every archive index write also takes the station's `ArchiveMutationGate` (`core/sync`), after the
-lease when there is one. Sync, `ArchiveIndexRepair`, the janitor and `LegacyFileCleanup` share one
-gate per archive, so the cleanup's live record check, record removal and file delete never interleave
+Every archive index write also takes the coordinator's station gate, after the lease when there is
+one. Sync, `ArchiveIndexRepair`, the janitor and `LegacyFileCleanup` share one coordinator per
+archive, made once by Hilt on Android and by `IosArchive` on iOS, so the cleanup's live record check, record removal and file delete never interleave
 with a row written back for the same station. Readers never take it. Host coverage: `ConcurrentArchiveTest`;
 physical concurrent transfers remain unverified.
 

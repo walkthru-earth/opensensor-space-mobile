@@ -70,9 +70,11 @@ class SyncEngine(
     /** `windowRetryBackoffMs × attempt` between re-reads of a lost window. Tests shorten it. */
     private val windowRetryBackoffMs: Long = WINDOW_RETRY_BACKOFF_MS,
     private val clock: () -> Long = ::nowEpochMs,
-    private val leases: WriterLeases = WriterLeases(),
-    /** Shared with every archive writer, so an index row is never written for a file cleanup just removed. */
-    private val gate: ArchiveMutationGate = ArchiveMutationGate(),
+    /**
+     * The archive's one [DeviceCoordinator], shared with every writer there: its writer lease per file,
+     * its station gate around each index write, and its tombstones of files the user removed.
+     */
+    val coordinator: DeviceCoordinator = DeviceCoordinator(),
     /** One line per file this phone failed to store, file name and error class and message only. */
     private val log: (String) -> Unit = {},
     /** Where partial files are written, one file at a time. Tests pass their virtual-time dispatcher. */
@@ -106,7 +108,22 @@ class SyncEngine(
         if (!ArchiveLayout.isArchiveName(name)) return FileOutcome.Failed(name, "refusing unsafe name").also(onSettled)
         // An unsafe station is a caller bug (the device identity was validated), so it throws.
         val key = ArchiveKey(station, name)
-        return leases.withLease(key) { downloadLocked(session, key, sourceDevice, expectedBytes, maxRead, onSettled, onProgress) }
+        return coordinator.withWriter(key) {
+            // The old file cleanup writes its tombstone under this same lease. A run planned before the
+            // user removed the file finds it here and opens nothing, the planner's REMOVED rule again.
+            val removed = try {
+                index.get(key) == null && coordinator.removedByUser(key, expectedBytes)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return@withWriter FileOutcome.Failed(name, "storage ${e::class.simpleName}", storage = true).also(onSettled)
+            }
+            if (removed) {
+                FileOutcome.Removed(name).also(onSettled)
+            } else {
+                downloadLocked(session, key, sourceDevice, expectedBytes, maxRead, onSettled, onProgress)
+            }
+        }
     }
 
     private suspend fun downloadLocked(
@@ -255,7 +272,7 @@ class SyncEngine(
             // A file the reader refuses keeps its record with `indexError`. The archive copy is untouched.
             storage {
                 val indexed = indexer.indexed(record)
-                gate.withStation(key.station) { index.put(indexed) }
+                coordinator.withStation(key.station) { index.put(indexed) }
             }
             return FileOutcome.Synced(name, opened.size, sha256)
         }
@@ -361,7 +378,7 @@ class SyncEngine(
         )
         // The footer is read before the gate, as on the commit path, so the gate is held only for the row.
         val indexed = if (index.get(key) == null) indexer.indexed(fresh) else null
-        val conflict = gate.withStation(key.station) {
+        val conflict = coordinator.withStation(key.station) {
             val row = index.get(key)
             // An older iOS receipt holds size and CRC only. Its empty fingerprint is filled, never compared.
             val knownSha = row?.sha256?.takeIf { it.isNotEmpty() }

@@ -260,14 +260,14 @@ checks the destination and runs `ATOMIC_MOVE`. iOS uses `renamex_np(RENAME_EXCL)
 flushed with `F_FULLFSYNC` on iOS (fsync only when the volume does not support it) and the parent
 directory is synced on both platforms. Clock receipts are written once with `createNoReplace`.
 
-`StorageJanitor` runs once per process, Android through the unique `storage-janitor` WorkManager job,
-iOS from `IosArchive.startIndexRepair`. It also finds final files without an index record (a crash
+`StorageJanitor` runs once per process as the first step of the shared `HistoryOrchestrator.run`,
+before the back-fill, from `AqSyncApplication` on Android and `IosArchive.startIndexRepair` on iOS. It also finds final files without an index record (a crash
 between commit and record), checks size, CRC-32, SHA-256 and `PAR1`, and indexes them with
 `sourceDevice = "adopted"` through `ArchiveIndex.putIfAbsent` (Room `INSERT OR IGNORE`, iOS
 `createNoReplace` receipt), so a record the engine writes meanwhile is never replaced. A final that
 fails `PAR1` stays in place, counted as unverifiable. A stale partial is re-listed before it is
 deleted, since opening a partial rewrites its meta. The 30 day sweep re-lists under the station's
-`WriterLeases` lease, the one the sync engine holds while it writes that file, so a resume that
+`DeviceCoordinator` writer lease, the one the sync engine holds while it writes that file, so a resume that
 starts during the sweep keeps its partial. The log line has counts only. `StorageBudget` reports free bytes per class for the free-space gate of #55.
 
 ### Quotas and memory pressure (#61)
@@ -289,8 +289,8 @@ a day and in the janitor. The feed `BlockCache` (#94) reads its quota at every w
 (Android `getCacheQuotaBytes`). The quota is 0 while the volume has under 256 MiB free for
 Rebuildable data, so the cache gives its files back under storage pressure, and the OS may purge the
 directory at any time. It evicts the least recently used block first, before each write, so it never
-holds more than the quota. It applies the quota again once at process start, Android in the
-`storage-janitor` job and iOS after the startup sweep. The map cap is set once per process through MapLibre
+holds more than the quota. It applies the quota again once at process start, right after the
+startup sweep in `HistoryOrchestrator.run`, on both phones. The map cap is set once per process through MapLibre
 `MapRuntimeOptions.maximumCacheSizeBytes`, before the first map. Settings shows the bytes per class
 and clears the History cache, which also empties the feed block cache, or the map cache. Sensor files have no clear button.
 

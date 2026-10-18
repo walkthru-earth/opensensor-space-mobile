@@ -23,12 +23,39 @@ flowchart LR
   CO --> UI["BandColumnChart · DayRing · CalendarHeatmap · NowCard · FileChartCard"]
 ```
 
-**When it runs:** index at sync time (same upsert as the row) + one process-start back-fill (`backfill`,
-batches of 100, never-indexed rows first, failures retried once per pass); `estimateTimes()` at the
-start of every derive pass; `deriveStale()` once at process start, after every interactive sync
-(repository `finally`), and inside `SyncWorker` when files arrived. Opening Files/History only
-observes Room. A day costs milliseconds; no separate `DeriveWorker`. `HistoryDeriver` and
-`HistoryIndexer` each serialize their passes with a `Mutex`.
+**When it runs:** index at sync time (same upsert as the row), then the shared start order below
+(back-fill in batches of 100, never-indexed rows first, failures retried once per pass),
+`estimateTimes()` at the start of every derive pass, and `deriveStale()` at process start, after every
+interactive sync (repository `finally`), inside `SyncWorker` when files arrived, and in `DeriveWorker`
+for the days a post-sync pass deferred. Opening Files/History only observes Room. A day costs
+milliseconds.
+
+### Pass order (`HistoryOrchestrator`, `:core:history`)
+
+Both phones run the same order (#100). `HistoryOrchestrator.run` is called once per process, from
+`AqSyncApplication` on Android and `IosArchive.startIndexRepair` on iOS.
+
+```mermaid
+flowchart LR
+  J["storage janitor<br/>+ feed block quota"] --> B["backfill<br/>ArchiveIndexRepair"]
+  B --> D["derive pass<br/>platform derive"]
+  W{"a record waits<br/>for its index"} --> B
+  D --> W
+```
+
+- **Janitor first.** The startup sweep runs before the first back-fill, so an orphan final it adopts
+  is indexed in the same start. A failed sweep is logged, the start goes on.
+- **Backfill, then derive.** `backfill` and `derivePass` share one lock, so a back-fill and a derive
+  never overlap. A derive asked during a back-fill waits and then sees the indexed records. After each
+  back-fill `run` derives once, and again whenever a record waits for its index.
+- **Every derive is a pass.** Android's `HistoryDeriver.deriveStale` and `ensureDailyFiles` and iOS's
+  `IosArchive.rebuildDerived` each run inside one `derivePass`, which is not reentrant. iOS builds
+  `rebuildDerived` with `derivePassOf`, so its derive body has no entry point outside a pass. The iOS
+  History reader's own refresh of one station takes only the derived lock, so History stays visible
+  during a back-fill.
+- **Held days.** A day a waiting record holds stays in History, see below.
+- **Prune.** The old file cleanup writes its tombstone under the `DeviceCoordinator` writer lease,
+  then its rebuild of the emptied stations is a derive pass like any other.
 
 ## Index (`ParquetIndexer` → `archived_file`, Room v4)
 
@@ -137,7 +164,9 @@ source is kept while a row of that station awaits its index and may place itself
 holds every day of its station, and a row with an index error holds nothing. Android's
 `HistoryDeriver`, iOS's `IosDailyDerivedStore` and the tier store retain in `ArchiveHistoryTiers` all
 use this rule, so a derive pass that runs before the back-fill never deletes a day the back-fill is
-about to fill again. Healthy log
+about to fill again. `StationDays.kept` is the one rule for what History shows on those days, so both
+phones agree. A day that lost every source while a record holds it keeps what was derived for it,
+in Room on Android and from its saved tier file on iOS, until the record indexes again. Healthy log
 line after a sync: `HistoryDeriver: derived 0 of N station-days (nothing changed)` (debug level).
 
 ## Time for rows logged before the clock (`TimeEstimate`, Room v6)
@@ -241,7 +270,7 @@ the user pages back, and opens on the last local day with readings.
 | Tiers | Room `metric_bucket` (`RoomHistoryTiers`) | persisted signature-gated sidecars from the shared day pass (`ArchiveHistoryTiers`) |
 | Current station | the known device's station | the archived station with the latest reading |
 | Chips | the device's authenticated station epochs | every archived station, oldest latest reading first |
-| Index repair | `HistoryIndexer.backfillAll` once per process from `AqSyncApplication`, and after each sync | `ArchiveIndexRepair.repairWhenWaiting` from `IosArchive.startIndexRepair`, at launch and whenever a receipt waits for its index. Changes during a pass are conflated, and passes repeat until no record is waiting |
+| Index repair | `HistoryOrchestrator.run` from `AqSyncApplication`. The engine indexes each file in the same upsert, so a record waits only after a migration reopens it | `HistoryOrchestrator.run` from `IosArchive.startIndexRepair`. The engine adds receipts without index columns, so a back-fill follows each new file. On both phones changes during a pass are conflated, and passes repeat until no record is waiting |
 | Header | device section tabs and the link chip | a back arrow, opened from the History button on My devices |
 
 Repair writes only its own columns. It merges the index and estimate columns onto the latest

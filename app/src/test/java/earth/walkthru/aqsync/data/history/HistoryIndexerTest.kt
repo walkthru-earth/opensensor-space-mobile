@@ -2,7 +2,7 @@ package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -23,7 +23,7 @@ class HistoryIndexerTest {
         val tmp = File.createTempFile("aq-archive", "").apply { delete(); mkdirs(); deleteOnExit() }
         val archive = FileArchive(tmp)
         val dao = InMemoryDao()
-        val indexer = HistoryIndexer(archive, dao, ArchiveMutationGate())
+        val indexer = HistoryIndexer(archive, dao, DeviceCoordinator())
         val station = "53315f5f-cb85-4d8d-b623-d56266084189"
         val good = "station=$station/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet"
         val bogus = "station=$station/year=2026/month=09/day=08/data_bogus.parquet"
@@ -59,7 +59,7 @@ class HistoryIndexerTest {
             val payload = bytes("device/v2-lz4-4rows-dated.parquet")
             val file = archive.fileFor("new-station", name).apply { parentFile!!.mkdirs(); writeBytes(payload) }
             val row = ArchivedFile(station = "new-station", name = name, bytes = payload.size.toLong(), crc32 = 1, sha256 = "saved", syncedAtEpochMs = 1, sourceDevice = "same-device")
-            val indexed = HistoryIndexer(archive, InMemoryDao(), ArchiveMutationGate()).indexed(row, file)
+            val indexed = HistoryIndexer(archive, InMemoryDao(), DeviceCoordinator()).indexed(row, file)
             assertFalse(indexed.isIndexed)
             assertTrue(indexed.indexError!!.contains("old-station"))
             org.junit.Assert.assertArrayEquals(payload, file.readBytes())
@@ -88,7 +88,7 @@ class HistoryIndexerTest {
                 firstMonoUs = 3_000_000, lastMonoUs = 4_000_000,
             )
 
-            HistoryIndexer(archive, dao, ArchiveMutationGate()).backfillAll()
+            HistoryIndexer(archive, dao, DeviceCoordinator()).backfillAll()
 
             val estimated = dao.rows.first { it.name == "unsynced.parquet" }
             assertEquals(8_000_000_000L, estimated.estFirstUtcNs)

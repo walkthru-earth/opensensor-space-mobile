@@ -15,8 +15,7 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType.TimeUnit
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
-import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.storage.StorageEntry
 import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
@@ -178,7 +177,7 @@ class LegacyFileCleanupTest {
         val tree: Tree,
         val cleanup: LegacyFileCleanup,
         val rebuilt: MutableList<Map<String, Set<Long>>>,
-        val gate: ArchiveMutationGate,
+        val coordinator: DeviceCoordinator,
         val pruned: Pruned,
     )
 
@@ -201,14 +200,19 @@ class LegacyFileCleanupTest {
         }
         val tree = Tree(store, root)
         val rebuilt = mutableListOf<Map<String, Set<Long>>>()
-        val gate = ArchiveMutationGate()
         val pruned = Pruned()
+        val coordinator = DeviceCoordinator(pruned)
         val cleanup = LegacyFileCleanup(
-            store, index, roots, tree, WriterLeases(), gate, pruned, Dispatchers.Unconfined,
+            store,
+            index,
+            roots,
+            tree,
+            coordinator,
+            Dispatchers.Unconfined,
             afterRemoval = afterRemoval ?: { rebuilt += it },
             nowEpochMs = { 42 },
         )
-        return Setup(store, index, tree, cleanup, rebuilt, gate, pruned)
+        return Setup(store, index, tree, cleanup, rebuilt, coordinator, pruned)
     }
 
     @Test
@@ -320,7 +324,7 @@ class LegacyFileCleanupTest {
         val release = CompletableDeferred<Unit>()
         // Another writer holds the gate after the cleanup read the records, and changes both meanwhile.
         val writer = launch {
-            s.gate.withStation(station) {
+            s.coordinator.withStation(station) {
                 held.complete(Unit)
                 release.await()
                 s.index.put(a.copy(crc32 = 2))
@@ -339,11 +343,39 @@ class LegacyFileCleanupTest {
     }
 
     @Test
+    fun theCleanupWaitsForTheWriterLeaseOfARunningDownloadBeforeItWritesTheTombstone() = runTest {
+        val a = record(name(1, 1), nanos, day * dayNs)
+        val s = setup(files = arrayOf(a to nanos))
+        val plan = s.cleanup.plan()
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        // A download of the same file holds its writer lease.
+        val download = launch {
+            s.coordinator.withWriter(a.key) {
+                held.complete(Unit)
+                release.await()
+            }
+        }
+        held.await()
+        val cleaning = launch { assertEquals(1, s.cleanup.remove(plan).removed) }
+        testScheduler.runCurrent()
+        // No tombstone, no dropped record and no deleted file while the download holds the lease.
+        assertTrue(s.pruned.files.value.isEmpty())
+        assertNotNull(s.index.get(a.key))
+        assertTrue(s.tree.deleted.isEmpty())
+        release.complete(Unit)
+        download.join()
+        cleaning.join()
+        assertEquals(listOf(a.key), s.pruned.files.value.map { it.key })
+        assertTrue(s.store.files.isEmpty())
+    }
+
+    @Test
     fun repairAndCleanupTakeTurnsSoNoRecordComesBackForADeletedFile() = runTest {
         val a = record(name(1, 1), nanos, day * dayNs).copy(indexedAtEpochMs = null)
         val s = setup(files = arrayOf(a to nanos))
         val plan = s.cleanup.plan()
-        val repair = ArchiveIndexRepair(s.store, s.index, io = Dispatchers.Unconfined, gate = s.gate)
+        val repair = ArchiveIndexRepair(s.store, s.index, io = Dispatchers.Unconfined, coordinator = s.coordinator)
         val inside = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         s.index.duringUpdate = {
@@ -398,7 +430,7 @@ class LegacyFileCleanupTest {
         val index = Index().apply { rows.value = listOf(a) }
         val tree = Tree(store, root)
         val noArchive = StorageRoots(mapOf(StorageRole.Derived to "/data/app/cache/derived/v1"))
-        val cleanup = LegacyFileCleanup(store, index, noArchive, tree, WriterLeases(), ArchiveMutationGate(), Pruned(), Dispatchers.Unconfined)
+        val cleanup = LegacyFileCleanup(store, index, noArchive, tree, DeviceCoordinator(Pruned()), Dispatchers.Unconfined)
         assertEquals(LegacyFileCleanup.Report(kept = 1), cleanup.remove(cleanup.plan()))
         assertNotNull(index.get(a.key))
         assertTrue(tree.deleted.isEmpty())
