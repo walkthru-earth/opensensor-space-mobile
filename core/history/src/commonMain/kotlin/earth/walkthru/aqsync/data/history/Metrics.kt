@@ -13,7 +13,7 @@ import earth.walkthru.aqsync.airquality.WhoStep
  *
  * Column names follow the firmware's field dictionary (`telemetry_fields.inc`); a metric whose column
  * is absent from a file simply produces no values for it (v1 files lack the four v2 columns, and the
- * SHT20 ambient columns are null on the current board), so the registry can be ahead of the hardware.
+ * SHT20 ambient columns are null on CoreS3), so the registry can be ahead of the hardware.
  */
 enum class MetricKind { PARTICLE_MASS, PARTICLE_COUNT, TEMPERATURE, HUMIDITY, GAS, POWER, OTHER }
 
@@ -110,7 +110,7 @@ object Metrics {
     val PARTICLES_GT25 = MetricSpec("n25", "particles_gt25_per_01l", "Particles > 2.5 µm", "per 0.1 L", MetricKind.PARTICLE_COUNT, PMS_VALID, null, chartable = false, settleSeconds = PMS_SETTLE_S)
     val BOARD_TEMP = MetricSpec("board_c", "imu_temperature_c", "Board temperature", "°C", MetricKind.TEMPERATURE, null, null)
 
-    /** Null on the current board (SHT20 address collision); listed so the day the sensor works, History does too. */
+    /** Null on CoreS3 (SHT20 address collision), written by the Waveshare PMS5003T. A null RH leaves PM2.5 raw. */
     val AMBIENT_TEMP = MetricSpec("ambient_c", "ambient_temperature_c", "Temperature", "°C", MetricKind.TEMPERATURE, null, null)
     val HUMIDITY = MetricSpec("rh", "relative_humidity_percent", "Humidity", "%", MetricKind.HUMIDITY, null, null, axisFloor = 100f)
     val BATTERY = MetricSpec("battery", "battery_percent", "Battery", "%", MetricKind.POWER, null, null, chartable = false, axisFloor = 100f)

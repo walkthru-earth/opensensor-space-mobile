@@ -257,7 +257,7 @@ internal fun FreshnessLabel(receivedAtEpochMs: Long?, color: Color = MaterialThe
 }
 
 /**
- * The hero of Today: the primary metric right now as a peacock, a big number, the mood in words and
+ * The hero of Today: PM2.5 right now, corrected when the live RH is valid and raw otherwise, as a peacock, a big number, the mood in words and
  * one line of advice. The sensor's own state comes before any number. Colour is never the only
  * carrier, the mood is also a word and a character expression.
  */

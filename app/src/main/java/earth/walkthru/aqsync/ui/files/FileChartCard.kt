@@ -33,7 +33,6 @@ import earth.walkthru.aqsync.data.history.FileSummary
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.MetricSpec
-import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.FloatingControl
@@ -82,7 +81,7 @@ fun FileChartCard(
             }
             if (state == null) return@Column
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Metrics.chartable.forEach { m ->
+                state.metrics.forEach { m ->
                     FilterChip(
                         selected = state.metric.id == m.id,
                         onClick = { onMetric(m) },

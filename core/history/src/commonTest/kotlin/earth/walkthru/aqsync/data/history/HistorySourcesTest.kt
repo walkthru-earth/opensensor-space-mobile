@@ -264,7 +264,7 @@ class HistorySourcesTest {
         assertEquals(expected, week.mean!!, 1e-3f)
         assertTrue(Metrics.PM25_CORRECTED.id in tiers.observeMetricsWithData(station).first())
 
-        // The board file has no RH, so it has no corrected PM2.5 at all and the cards show raw.
+        // A real CoreS3 file. Its RH column is all null, so it has no corrected PM2.5 at all and the cards show raw.
         val (boardStore, boardIndex) = archive("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         val boardTiers = ArchiveHistoryTiers(boardStore, boardIndex)
         val none = HistorySeriesReader(boardStore, boardIndex, boardTiers)

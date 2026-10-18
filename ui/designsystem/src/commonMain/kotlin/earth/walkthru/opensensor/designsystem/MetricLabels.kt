@@ -25,4 +25,7 @@ fun pm25CorrectionInfo(): String = stringResource(Res.string.pm25_correction_inf
 
 /** A metric's display label. The PM2.5 views say whether they are raw or corrected. */
 @Composable
-fun metricLabel(metric: MetricSpec): String = metric.basis?.let { pm25Label(it) } ?: metric.label
+fun metricLabel(metric: MetricSpec): String = metricLabelRes(metric)?.let { stringResource(it) } ?: metric.label
+
+/** The app label that replaces a metric's registry label, set for the two PM2.5 views and null otherwise. */
+fun metricLabelRes(metric: MetricSpec): StringResource? = metric.basis?.let(::pm25LabelRes)

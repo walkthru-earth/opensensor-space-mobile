@@ -114,7 +114,7 @@ class TierStoreTest {
     @Test
     fun tiersSavedByAnOlderVersionAreRebuilt() = runTest {
         // Version 3 added the EPA corrected PM2.5 metric (#92). Saved days must rebuild to gain it.
-        assertTrue(TierCodec.VERSION >= 3, "the corrected PM2.5 tier needs codec version 3")
+        assertEquals(3, TierCodec.VERSION)
         val (store, index, station) = archive()
         val tierStore = MemoryTierStore()
         ArchiveHistoryTiers(store, index, tierStore = tierStore).observeDays(station).first()

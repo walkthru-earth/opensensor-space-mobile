@@ -33,6 +33,7 @@ class EpaPm25CorrectionTest {
             Triple(100.0, 0.0, 84.35),
             Triple(100.0, 50.0, 80.04),
             Triple(100.0, 100.0, 75.73),
+            Triple(205.0, 50.0, 162.57), // just below the 210 breakpoint, still the middle segment
             Triple(235.0, 0.0, 202.1975), // blend zone 210 to 260, t = 0.5
             Triple(235.0, 50.0, 200.04245),
             Triple(235.0, 100.0, 197.8875),

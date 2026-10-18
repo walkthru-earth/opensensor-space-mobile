@@ -82,6 +82,8 @@ data class FilesUiState(
 @Immutable
 data class FileChartState(
     val metric: MetricSpec,
+    /** The chips offered, from [fileChartMetrics]. */
+    val metrics: List<MetricSpec> = Metrics.chartable,
     /** Every telemetry file of the station, oldest first (timed by first row, then untimed by name). */
     val total: Int,
     /** Index of the first column shown into the full list. */
@@ -96,8 +98,25 @@ data class FileChartState(
 /** Ties an asynchronous chart read to both its storage owner and the exact archive snapshot. */
 internal data class FileSummaryRequest(val station: String, val files: List<ArchivedFile>)
 
+/**
+ * #92. The metrics the Files chart offers, the same rule as History. Corrected PM2.5 comes first and
+ * is the default. Once the files are read and none has a humidity reading, corrected is dropped and raw
+ * leads. Simple never offers raw next to corrected, Detailed always does.
+ */
+internal fun fileChartMetrics(summaries: List<FileSummary>, detailed: Boolean): List<MetricSpec> {
+    val corrected = summaries.isEmpty() || summaries.any { (it.agg(Metrics.PM25_CORRECTED)?.n ?: 0) > 0 }
+    return Metrics.chartable.filter { m ->
+        when (m) {
+            Metrics.PM25_CORRECTED -> corrected
+            Metrics.PM25 -> detailed || !corrected
+            else -> true
+        }
+    }
+}
+
 internal fun fileChartState(
-    metric: MetricSpec,
+    choice: MetricSpec?,
+    detailed: Boolean,
     offset: Int?,
     request: FileSummaryRequest?,
     result: ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>,
@@ -105,8 +124,11 @@ internal fun fileChartState(
     val list = result.forQuery(request).orEmpty()
     val lastPageStart = maxOf(0, list.size - FilesViewModel.FILE_CHART_PAGE)
     val start = (offset ?: lastPageStart).coerceIn(0, lastPageStart)
+    val metrics = fileChartMetrics(list, detailed)
     return FileChartState(
-        metric = metric,
+        // A choice the level no longer offers (raw after switching to Simple) falls back to the default.
+        metric = choice?.takeIf { it in metrics } ?: metrics.first(),
+        metrics = metrics,
         total = list.size,
         offset = start,
         page = list.drop(start).take(FilesViewModel.FILE_CHART_PAGE),
@@ -161,7 +183,9 @@ class FilesViewModel @AssistedInject constructor(
     val events: Flow<ScreenMessage> = repository.events.map(ScreenMessage::Device)
 
     private val fileChartOn = MutableStateFlow(false)
-    private val fileChartMetric = MutableStateFlow(Metrics.primary)
+
+    /** The chip the user picked, null until then so the chart opens on the default of [fileChartMetrics]. */
+    private val fileChartMetric = MutableStateFlow<MetricSpec?>(null)
 
     /** Null = the latest page; otherwise the offset the user paged to. */
     private val fileChartOffset = MutableStateFlow<Int?>(null)
@@ -189,8 +213,14 @@ class FilesViewModel @AssistedInject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(null, null))
 
-    private val fileChart: Flow<FileChartState?> = combine(fileChartOn, fileChartMetric, fileChartOffset, fileSummaryRequest, fileSummaries) { on, metric, offset, request, result ->
-        if (on) fileChartState(metric, offset, request, result) else null
+    private val fileChart: Flow<FileChartState?> = combine(
+        fileChartOn,
+        combine(fileChartMetric, settings.detailLevel) { metric, level -> metric to level.detailed },
+        fileChartOffset,
+        fileSummaryRequest,
+        fileSummaries,
+    ) { on, (metric, detailed), offset, request, result ->
+        if (on) fileChartState(metric, detailed, offset, request, result) else null
     }
 
     val uiState: StateFlow<FilesUiState> = combine(

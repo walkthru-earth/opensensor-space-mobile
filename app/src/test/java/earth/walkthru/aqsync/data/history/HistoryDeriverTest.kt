@@ -55,7 +55,7 @@ class HistoryDeriverTest {
     @Test
     fun `tiers and daily cache of the previous derive version rebuild without a source change`() = runBlocking {
         // Version 7 added the EPA corrected PM2.5 tier (#92). Installed days must rebuild to gain it.
-        assertTrue("the corrected PM2.5 tier needs derive version 7", HistoryDeriver.DERIVE_VERSION >= 7)
+        assertEquals(7, HistoryDeriver.DERIVE_VERSION)
         val tmp = java.nio.file.Files.createTempDirectory("aq-derive-upgrade").toFile()
         try {
             val archive = FileArchive(tmp)

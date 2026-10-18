@@ -101,7 +101,7 @@ the hardware.
 | `pm1` | `pm1_atmospheric_ug_m3` | `pms_status == 4` | – | ✓ envelope | 60 | 180 s |
 | `n03` / `n25` | `particles_gt03_per_01l` / `…gt25…` | `pms_status == 4` | – | ✗ | 10 | 180 s |
 | `board_c` | `imu_temperature_c` (**not** ambient) | – | – | ✓ | 10 | – |
-| `ambient_c` / `rh` | `ambient_temperature_c` / `relative_humidity_percent` | – | – | ✓ | 10 / 100 | – (SHT20 unresolved; yield nothing today) |
+| `ambient_c` / `rh` | `ambient_temperature_c` / `relative_humidity_percent` | – | – | ✓ | 10 / 100 | – (all null on CoreS3, SHT20 unresolved. Waveshare writes them from the PMS5003T) |
 | `battery` / `vbus` | `battery_percent` / `vbus_mv` | – | – | ✗ | 100 / 10 | – |
 
 PMS concentrations are **INT32** µg/m³ in the files; only IMU/temperature/humidity are FLOAT.
