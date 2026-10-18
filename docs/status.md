@@ -30,6 +30,7 @@ No phone run of these changes is recorded yet.
   live in `ui/designsystem` (#123).
 - To check on phones. A sync and History of each board after these changes, the corrected PM2.5
   default, the long read on a small MTU, and an export of selected records.
+- Auto-sync has never completed a 15 minute periodic cycle on a phone.
 
 ## 2026-10-16, remove old format files from the phone (code only)
 
@@ -515,7 +516,7 @@ Google Play services and may download its module at first use; manual entry need
 The optional real-archive test now finds the sibling `aq-parquet` checkout and
 decoded all 767 local Parquet files (67,442 rows) instead of silently skipping
 that corpus. The stdlib SQLite migration validator passes against v8/v9 exports.
-These are host checks; the dated ladder below retains the hardware baseline.
+These are host checks. Hardware results are in the dated entries below.
 
 The OnePlus 7 Pro (Android 16 / API 36) accepted the current debug APK in place
 with `adb install -r`, preserving app data. APK SHA-256:
@@ -654,7 +655,7 @@ The focused History presentation tests and `./gradlew --no-daemon verify` passed
   unrelated failures still surface. Covered by focused JVM tests; not yet exercised on a phone or
   across a real device-to-device transfer.
 - **2026-09-19** — **Post-sync `LIST` no longer dies with the link.** Seen on the phone after a completed sync: "LIST failed: link lost while waiting for a response" replaced the whole file list. Cause: the refresh was launched after `running = false`, i.e. after the foreground service let go of the uid, so the socket was killed under it (transport of that run not recorded — LAN + backgrounded phone fits; confirm with `adb logcat -s SyncEngine SyncFgs ConnectivityService` on the next run). The re-list now runs inside the protected run; `ManifestState` keeps the last listing through `Loading`/`Error` (`ManifestStateTest`), so the Files screen shows "Refresh failed: … — showing the last listing." instead of a blank list, and `plan` stays usable. Not yet on the phone.
-- **2026-09-18** (14:03 local) — app `678c1c0` (APK `3c454c74…`) installed on the OnePlus over Wi-Fi adb against firmware `-v6.3`; **first device-flagged wake measured** — see the ladder above and the firmware repo's [bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#board-1-advertising-payload-wakes-the-phone-firmware-v63-protocol-21). `setForeground` still refused (no companion association yet); Wi-Fi callback fires at every process start and is throttled as designed.
+- **2026-09-18** (14:03 local) — app `678c1c0` (APK `3c454c74…`) installed on the OnePlus over Wi-Fi adb against firmware `-v6.3`; **first device-flagged wake measured** — see the firmware repo's [bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#board-1-advertising-payload-wakes-the-phone-firmware-v63-protocol-21). `setForeground` still refused (no companion association yet); Wi-Fi callback fires at every process start and is throttled as designed.
 - **2026-09-18** (evening) — **Event-driven Auto-sync** ([background-sync.md](background-sync.md#triggers--starting-a-run-before-the-period-is-up)): Companion Device Manager "wake when nearby" (association dialog on the Device screen, `CompanionPresenceService`, `REQUEST_COMPANION_*` exemptions, Room v8 `companionAssociationId`), offloaded advertising-flag scan on the firmware's new protocol-2.1 service data (`Advertisement`, `AdvertFlagScan`), Wi-Fi-arrival LAN-only run (`SyncTriggers`), `SyncTrigger` on every one-time run. 151 tests, lint clean. **Not yet on the phone**; design and measurement list in `../aq-parquet/docs/shared/background-sync-triggers.md`.
 
 - **2026-09-18** (later) — Files list grouped by **local calendar day** (`FileGrouping`, zone-pinned tests): the headers were the SD card's UTC `day=` folder, so at UTC+3 every file after 21:00 local sat under tomorrow. Header subtitle names the UTC folder(s); each row shows its local start time. Installed on the OnePlus (commit `c6c27cd`), not yet recorded in bench-verified.

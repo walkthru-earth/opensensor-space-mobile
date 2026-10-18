@@ -190,7 +190,7 @@ class FileInspectorTest {
         assertEquals(RowsState.Loading, controller.rows.value)
         runCurrent()
         assertEquals(0L, assertIs<RowsState.Shown>(controller.rows.value).page.from)
-        // Rows 0 until 50 are not left on screen as if they were the next page.
+        // The first page, rows 0 until PAGE_ROWS, is not left on screen as if it were the next page.
         controller.page(100)
         assertEquals(RowsState.Loading, controller.rows.value)
         runCurrent()
