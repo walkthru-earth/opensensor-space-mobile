@@ -165,7 +165,7 @@ statistic matches the values, `TIMESTAMPTZ` read, range pruning, `time_bucket`).
 
 ## Device file layouts (`UtcColumns`)
 
-CoreS3 v6.12 (schema `cores3-telemetry-v5`, dictionary `cores3-telemetry-v4`) and Waveshare v2.6
+CoreS3 v6.12 and v6.13 (schema `cores3-telemetry-v5`, dictionary `-v4` and `-v5`) and Waveshare v2.6
 (schema and dictionary `waveshare-sim7670g-telemetry-v4`) write `event_time_utc_us` and
 `clock_anchor_utc_us` as `TIMESTAMP(MICROS, isAdjustedToUTC=true)`. Older files on the phone carry
 `event_time_utc_ns` and `clock_anchor_utc_ns` as `TIMESTAMP(NANOS, UTC)`, and the first CoreS3 files

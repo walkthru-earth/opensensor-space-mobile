@@ -108,13 +108,15 @@ Feature gates use `info.proto` / `info.fw`, never guesses.
 LIVE keys come from each board's field table and are parsed in any order. Unknown keys are ignored,
 a missing key is null, and the firmware omits non-finite values. `utc` is nanoseconds.
 `LiveProfiles.resolve` picks the interpretation from the `info.dict` digest only, so a newer schema
-string over the same dictionary keeps its profile. CoreS3 (dictionary
-`22291d3a…`) sends `imu_t`, the IMU die temperature, shown as board temperature. One v6.12 build
-under the same digest sends that temperature as `t`, so the app falls back to `t` when `imu_t` is missing.
+string over the same dictionary keeps its profile. CoreS3 v6.13 (dictionary `e5060fb7…`, whose
+digest covers the LIVE keys) and v6.12 (dictionary `22291d3a…`) send `imu_t`, the IMU die
+temperature, shown as board temperature. Both use the same CoreS3 profile, which leaves out `t` and
+`rh` because they are always null on CoreS3. One v6.12 build under `22291d3a…` sends that
+temperature as `t`, so the app falls back to `t` when `imu_t` is missing.
 Waveshare (dictionary `0a024b85…`, and v2.7 `67688d0f…` or its first build `d0d01294…`, which adds `bstate`, the battery health code) sends `t`, ambient air
 temperature, and `rh`. Older dictionaries keep a profile. CoreS3 v6.11 and earlier (`f35d7398…`,
 `20f85085…`) send the IMU temperature as `t`, still shown as board temperature, and older Waveshare
-dictionaries keep the ambient profile. An unknown digest gets no profile and Today shows no reading. LIVE is a snapshot, not archive data.
+dictionaries keep the ambient profile. An unknown digest gets no profile and Today says this app version cannot read live values from the sensor yet. `LiveKeyFixturesTest` holds every digest from aq-parquet `tools/fixtures/live_keys/`, so a new firmware digest copied there fails until it is mapped. LIVE is a snapshot, not archive data.
 
 `LOG_TAIL` may contain storage watchdog lines. They are informational. A storage stall resets the
 device after about 60 s, which ends the link. The existing `RetryPolicy` and the re-planned LIST of a

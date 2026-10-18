@@ -8,6 +8,7 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
 | Board | Firmware | Schema | Dictionary | Digest |
 | --- | --- | --- | --- | --- |
 | CoreS3 | `idf-cores3-parquet-v6.12` | `cores3-telemetry-v5` | `cores3-telemetry-v4` | `22291d3aab63365404394f30c1549fb18bde0699df9b2de863de70bb3f4edf65` |
+| CoreS3 | `idf-cores3-parquet-v6.13` (aq-parquet #31) | `cores3-telemetry-v5` | same | `e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b` |
 | Waveshare SIM7670G | `idf-waveshare-parquet-v2.6` | `waveshare-sim7670g-telemetry-v4` | same | `0a024b85c632f621c0e1223f1ecafe3a9c4524a1ec3c0d03d910d191aaee2f82` |
 | Waveshare SIM7670G | `idf-waveshare-parquet-v2.7` (aq-parquet #24) | `waveshare-sim7670g-telemetry-v5` | same | `67688d0fd2e86053c1c66b961a1446ad3c225ee71823e0fadb771b645c7183ff` |
 
