@@ -270,9 +270,22 @@ The rules for a new screen or component.
    `minimumInteractiveComponentSize()` and `sizeIn(minWidth = 48.dp, minHeight = 48.dp)`, and
    `FloatingIconButton`, `FloatingTextButton`, `PillButton`, `OutlinePillButton`, `BottomBarItem`,
    `SectionTabs` and `InfoButton` apply it directly.
-6. **Text scaling and wrapping.** `TypographyLimits` in `Typography.kt` sets multi-line caps
-   (`EyebrowMaxLines = 2`, `StatLabelMaxLines = 3`, `StatValueMaxLines = 2`, `TabLabelMaxLines = 2`,
-   `TickingMaxLines = 2`) so labels wrap instead of clipping at 200 percent font scale. `SectionCard`
+6. **Text scaling and wrapping.** No text breaks a line inside a word, in English or Arabic.
+   `brandTypography` gives every style `Hyphens.None`, `LineBreak.Paragraph` for body styles and
+   `LineBreak.Heading` for the rest. A short label (bottom bar tab, section tab, button, segment,
+   chip, eyebrow, legend word, caption, screen or station title) uses `FitText` in `FitText.kt`. It
+   keeps the user's size while the label fits on one line, then shrinks on one line no lower than its
+   own size at font scale 1.0 (`fontSize.value.dp` through the real density), then to
+   `FitTextLimits.FloorFraction` (85 percent) of that. Below the floor it wraps between words, up to
+   `LabelMaxLines` (2), because a 48 dp target is a minimum height and the control grows for a second
+   line. Only a single word too wide at the floor shrinks on, to `LastResortFraction` (70 percent). A
+   still cut label ends in an ellipsis and its semantics keep the full text. Body text and info sheet
+   paragraphs use `BodyText`, which keeps the user's full size and shrinks only when one word is wider
+   than the line. `SectionTabs` measures its labels at the floor and switches to
+   `PrimaryScrollableTabRow` when they do not all fit their equal slots, so a tab never wraps or
+   splits. `TypographyLimits` in `Typography.kt` sets the line caps of the remaining labels
+   (`EyebrowMaxLines = 2`, `StatLabelMaxLines = 3`, `StatValueMaxLines = 2`, `TickingMaxLines = 2`).
+   `SectionCard`
    and `StatLine` weight their primary text and cap value width so trailing buttons and values stay
    inside a 320 dp viewport. `MascotGuide` stacks the peacock above its text on narrow widths
    (`< 340.dp`) or at font scales `>= 1.5f`. `brandTypography` clamps display numeral sizes
@@ -322,8 +335,12 @@ The rules for a new screen or component.
 threshold-pinned luminance math, touch target tokens, non-linear and linear display scale clamping,
 spoken tick quantisation and reduce-motion helpers. `SemanticsTest` in `:ui:designsystem` `iosTest`
 renders the shared components on the iOS simulator and checks 48 dp touch bounds, 8 dp bottom bar
-spacing, headings, merged rows, 200 percent font scale multi-line wrapping, `InfoSheet` close action,
-switch rows, tab roles and live iOS reduce-motion notifications, and `BandColumnChartSemanticsTest` in
+spacing, headings, merged rows, 200 percent font scale fitting without split words, `InfoSheet` close
+action, switch rows, tab roles and live iOS reduce-motion notifications. `FitTextTest` in
+`:ui:designsystem` `commonTest` pins the size search and the mid-word check, and `FitTextLayoutTest`
+in `iosTest` renders bottom bar labels, section tabs, titles and body text at font scale 1.0, 2.0 and
+3.1, 280 and 360 dp, in English and in Arabic right to left. Bottom bar labels stay on one line at no
+less than their 1.0 size and body text breaks only between words. `BandColumnChartSemanticsTest` in
 `:feature:history` `iosTest` walks the bar chart node by node, and `SettingsRowSemanticsTest` in
 `:feature:settings` `iosTest` checks the merged Storage rows, their 48 dp height and the button
 names (`verifyIos`). Host tests cannot render
