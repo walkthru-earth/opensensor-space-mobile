@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.net
 
 import earth.walkthru.aqsync.data.history.parquet.ByteView
+import earth.walkthru.aqsync.data.history.parquet.ParquetBoundsException
 import earth.walkthru.aqsync.data.history.parquet.RangeSource
 import earth.walkthru.aqsync.data.history.parquet.SourceChangedException
 import earth.walkthru.aqsync.data.history.parquet.SourceId
@@ -65,8 +66,8 @@ class CachedRangeSource(
         if (!id.cacheable) return upstream.readRanges(ranges)
         for (r in ranges) {
             if (r.isEmpty()) continue
-            if (r.first < 0 || r.last >= id.size) throw IndexOutOfBoundsException("range $r outside a file of ${id.size} bytes")
-            if (r.last - r.first >= Int.MAX_VALUE) throw IndexOutOfBoundsException("range $r is longer than 2 GiB")
+            if (r.first < 0 || r.last >= id.size) throw ParquetBoundsException("range $r outside a file of ${id.size} bytes")
+            if (r.last - r.first >= Int.MAX_VALUE) throw ParquetBoundsException("range $r is longer than 2 GiB")
         }
         return read(id, ranges)
     }

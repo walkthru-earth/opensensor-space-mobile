@@ -50,7 +50,7 @@ flowchart LR
   subgraph shared["commonMain"]
     E[Sync engine<br/>plan, windows, retry, resume]
     V[Verify<br/>size, CRC-32, PAR1]
-    L[Archive layout<br/>Hive paths, partials, receipts]
+    L[Archive layout<br/>Hive paths, partials]
     P[Policies<br/>backoff, liveness, claims, budget]
   end
   subgraph ports["Ports (Kotlin interfaces)"]
@@ -92,9 +92,9 @@ flowchart LR
 3. **Ports are small and byte based.** `LinkDriver` writes request frames and feeds reply bytes through `FrameSink` to `LinkSession`. No hex strings,
    no JSON for binary data, no per-byte callbacks across the Swift boundary. Convert `ByteArray`
    to `NSData` once in `iosMain` with pinned memory.
-4. **One archive layout.** Hive paths, partial names and receipt format are defined once in
-   shared code and documented in [data-model.md](data-model.md). A layout change ships with a
-   migration for both platforms in the same change.
+4. **One archive layout.** Hive paths and partial names are defined once in shared code, and the
+   Room `archived_file` record is the "is synced" receipt on both phones. Both are documented in [data-model.md](data-model.md). A layout
+   change ships with a migration for both platforms in the same change.
 5. **Tests live in `commonTest`.** Shared tests run on the JVM or Android host in `verify` and on
    the iOS simulator in `verifyIos`. Each convention plugin gates its module, so a new module
    cannot be missed. A behaviour tested only in `jvmTest` or only in Swift is not shared

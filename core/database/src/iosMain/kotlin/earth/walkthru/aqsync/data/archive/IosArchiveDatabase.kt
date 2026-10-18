@@ -53,7 +53,7 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
         override fun observeAll(): Flow<List<ArchiveRecord>> = after { it.observeAll() }
         override fun observeStation(station: String): Flow<List<ArchiveRecord>> = after { it.observeStation(station) }
         override fun observeNeverIndexed(): Flow<Boolean> = after { it.observeNeverIndexed() }
-        override fun observeLatestTimed(): Flow<Map<String, Long>> = after { it.observeLatestTimed() }
+        override fun observeLatestTimed(): Flow<Map<String, Long?>> = after { it.observeLatestTimed() }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = room().get(key)
         override suspend fun put(record: ArchiveRecord) = room().put(record)
         override suspend fun putIfAbsent(record: ArchiveRecord): Boolean = room().putIfAbsent(record)

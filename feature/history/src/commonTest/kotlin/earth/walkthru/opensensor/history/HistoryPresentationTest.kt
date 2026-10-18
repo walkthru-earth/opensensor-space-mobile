@@ -32,6 +32,14 @@ class HistoryPresentationTest {
     }
 
     @Test
+    fun aStationWhoseTimedFilesHaveNoEndRanksBelowAnyRealEnd() {
+        val latest = mapOf<String, Long?>("noEnd" to null, "lowEnd" to Long.MIN_VALUE)
+        assertEquals("lowEnd", preferredHistoryStation("current", listOf("noEnd", "lowEnd", "current"), latest, null))
+        assertEquals("lowEnd", preferredHistoryStation("current", listOf("lowEnd", "noEnd", "current"), latest, null))
+        assertEquals("noEnd", preferredHistoryStation("current", listOf("noEnd", "current"), latest, null))
+    }
+
+    @Test
     fun retainedProducerCopiesAreSeparateFromUntimedAndPendingFiles() {
         val own = file("current", "current", dated = false)
         val retained = file("current", "earlier", dated = true)

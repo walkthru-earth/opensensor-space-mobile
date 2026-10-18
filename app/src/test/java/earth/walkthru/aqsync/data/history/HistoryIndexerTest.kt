@@ -122,7 +122,7 @@ class HistoryIndexerTest {
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.sortedBy { it.indexedAtEpochMs != null }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
         override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
-            rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs }
+            rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs }
         override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.isIndexed }
         override suspend fun stations() = rows.map { it.station }.distinct()
     }

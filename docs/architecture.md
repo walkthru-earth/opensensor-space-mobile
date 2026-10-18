@@ -212,7 +212,8 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
   agree with the IEEE check value and with each other.
 - `SafeName.isValid` mirrors the firmware `safe_parquet_name()` rule. It allows only
   `[0-9a-z._=/-]`, rejects `..`, `//` and a leading `/`, needs a name before `.parquet`, and caps the
-  name at 399 bytes, with a phone segment cap of 241 bytes for receipts. The shared
+  name at 399 bytes, with a phone segment cap of 241 bytes so a `.partial.meta` or an older iOS build's
+  `.verified.json` beside it still fits 255 bytes. The shared
   `SyncPlanner` uses it on both platforms.
 
 ## Rules that keep the modules honest

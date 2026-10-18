@@ -40,13 +40,14 @@ fun countHistoryFiles(files: List<ArchiveRecord>): HistoryFileCounts {
 /**
  * The station History opens on. An explicit chip choice wins. Otherwise [current], unless it has no
  * timed readings yet while another of [stations] has, then the one with the latest reading. [latest]
- * is [ArchiveIndex.latestTimedEnds], per station the end of its latest timed reading.
+ * is [ArchiveIndex.latestTimedEnds], per station the end of its latest timed reading, null when its
+ * timed files have no end, which ranks below any real end.
  */
-fun preferredHistoryStation(current: String?, stations: List<String>, latest: Map<String, Long>, selected: String?): String? {
+fun preferredHistoryStation(current: String?, stations: List<String>, latest: Map<String, Long?>, selected: String?): String? {
     if (selected != null && selected in stations) return selected
     if (current == null || current !in stations) return current
     if (current in latest) return current
-    return stations.filter { it in latest }.maxByOrNull { latest.getValue(it) } ?: current
+    return stations.filter { it in latest }.maxWithOrNull(compareBy(nullsFirst()) { latest[it] }) ?: current
 }
 
 /** End of the local calendar day containing the station's most recent archived reading. */

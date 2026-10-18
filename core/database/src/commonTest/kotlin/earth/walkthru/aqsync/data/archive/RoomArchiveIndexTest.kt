@@ -55,12 +55,28 @@ class RoomArchiveIndexTest {
         val pending = ArchiveRecord(station, "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device")
         index.put(pending)
         assertTrue(index.observeNeverIndexed().first())
-        assertEquals(emptyMap<String, Long>(), index.observeLatestTimed().first())
+        assertEquals(emptyMap<String, Long?>(), index.observeLatestTimed().first())
 
         index.update(pending.key) { it.copy(indexedAtEpochMs = 9L, utcRows = 3L, lastUtcNs = 42L) }
 
         assertFalse(index.observeNeverIndexed().first())
         assertEquals(mapOf(station to 42L), index.observeLatestTimed().first())
+    }
+
+    @Test
+    fun aTimedFileWithNoEndMatchesTheSharedRulesInSql() = runTest {
+        val station = "11111111-2222-3333-4444-555555555555"
+        val noEnd = ArchiveRecord(station, "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device", indexedAtEpochMs = 9L, utcRows = 3L, firstUtcNs = 100L)
+        index.put(noEnd)
+
+        assertEquals(mapOf<String, Long?>(station to null), index.observeLatestTimed().first())
+        assertEquals(emptyList(), index.timeline(station, Long.MIN_VALUE, Long.MAX_VALUE))
+        assertFalse(noEnd.onTimeline(Long.MIN_VALUE, Long.MAX_VALUE))
+
+        val lowEnd = noEnd.copy(name = "year=2026/month=10/day=02/data.parquet", firstUtcNs = Long.MIN_VALUE, lastUtcNs = Long.MIN_VALUE)
+        index.put(lowEnd)
+        assertEquals(mapOf<String, Long?>(station to Long.MIN_VALUE), index.observeLatestTimed().first())
+        assertEquals(listOf(lowEnd.name), index.timeline(station, Long.MIN_VALUE, Long.MIN_VALUE + 1).map { it.name })
     }
 
     @Test

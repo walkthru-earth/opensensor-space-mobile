@@ -31,8 +31,10 @@ import kotlinx.serialization.json.longOrNull
  *   marker written. A run cut short before the marker runs again and changes nothing it already moved.
  * - With the marker, the rows are durable, so [run] deletes every receipt and `pruned.v1` and touches
  *   neither port. A row or mark removed since the first pass stays removed. Once every old file is gone
- *   it writes [settled]. A run cut short, or a delete that failed, leaves [settled] unwritten, so the
- *   next launch deletes the rest and never imports again.
+ *   it writes [settled]. A run cut short, a delete that failed or an archive that could not be listed
+ *   leaves [settled] unwritten, so the next launch deletes the rest and never imports again.
+ * - A first pass that cannot list the archive copies nothing and writes no marker, so the next launch
+ *   tries the first pass again.
  * - With [settled], [run] does nothing, no walk and no checkpoint.
  */
 class LegacyReceiptImport(
@@ -67,8 +69,9 @@ class LegacyReceiptImport(
     }
 
     private suspend fun firstPass(index: ArchiveIndex, pruned: PrunedFiles, durable: suspend () -> Unit): Result {
+        val receipts = receipts() ?: return Result(0, 0)
         var records = 0
-        for ((key, path) in receipts()) {
+        for ((key, path) in receipts) {
             if (index.get(key) != null) continue
             val record = verified(key, path) ?: continue
             if (index.putIfAbsent(record)) records++
@@ -80,10 +83,11 @@ class LegacyReceiptImport(
         return Result(records, marks.size)
     }
 
-    /** Deletes every receipt and `pruned.v1`, then writes [settled] when none is left. */
+    /** Deletes every receipt and `pruned.v1`, then writes [settled] when none is left and the archive listed. */
     private fun deleteOldFiles() {
-        var left = 0
-        for ((_, path) in receipts()) if (!removeQuietly(path)) left++
+        val receipts = receipts()
+        var left = if (receipts == null) 1 else 0
+        for ((_, path) in receipts.orEmpty()) if (!removeQuietly(path)) left++
         if (IosFiles.kind(prunedRoot) == Kind.DIRECTORY) {
             if (!removeQuietly(prunedFile)) left++
             if (IosFiles.walk(prunedRoot).isEmpty()) removeQuietly(prunedRoot)
@@ -91,7 +95,8 @@ class LegacyReceiptImport(
         if (left == 0) atomic.writeAtomically(settled, byteArrayOf(), StorageClass.Durable)
     }
 
-    private fun receipts(): List<Pair<ArchiveKey, String>> = IosFiles.walk(finalRoot).mapNotNull { relative ->
+    /** Every receipt below the archive, or null when the archive exists but cannot be listed. */
+    private fun receipts(): List<Pair<ArchiveKey, String>>? = IosFiles.walkOrNull(finalRoot)?.mapNotNull { relative ->
         if (!relative.endsWith(ArchiveLayout.LEGACY_RECEIPT_SUFFIX)) return@mapNotNull null
         val station = relative.substringBefore('/', missingDelimiterValue = "")
         val name = relative.substringAfter('/').removeSuffix(ArchiveLayout.LEGACY_RECEIPT_SUFFIX)

@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.net
 
 import earth.walkthru.aqsync.data.history.parquet.ByteView
+import earth.walkthru.aqsync.data.history.parquet.ParquetBoundsException
 import earth.walkthru.aqsync.data.history.parquet.RangeSource
 import earth.walkthru.aqsync.data.history.parquet.SourceChangedException
 import earth.walkthru.aqsync.data.history.parquet.SourceId
@@ -107,7 +108,7 @@ class HttpRangeSource(
         val size = open().size
         for (r in ranges) {
             if (r.isEmpty()) continue
-            if (r.first < 0 || r.last >= size) throw IndexOutOfBoundsException("range $r outside ${redact(url)} of $size bytes")
+            if (r.first < 0 || r.last >= size) throw ParquetBoundsException("range $r outside ${redact(url)} of $size bytes")
             length(r)
         }
         return ranges.map { r ->
@@ -120,7 +121,7 @@ class HttpRangeSource(
         val response = send(header, length(range).toLong(), previous)
         if (response.status == 200) {
             acceptWhole(previous, response)
-            return checkNotNull(known).slice(range) ?: throw IndexOutOfBoundsException("range $range outside ${redact(url)}")
+            return checkNotNull(known).slice(range) ?: throw ParquetBoundsException("range $range outside ${redact(url)}")
         }
         val (first, last, total) = contentRange(response)
         val next = Known(total, response.etag ?: previous.etag, EMPTY)
@@ -214,7 +215,7 @@ class HttpRangeSource(
 
         private fun length(range: LongRange): Int {
             val length = range.last - range.first + 1
-            if (length > Int.MAX_VALUE) throw IndexOutOfBoundsException("range $range is longer than 2 GiB")
+            if (length > Int.MAX_VALUE) throw ParquetBoundsException("range $range is longer than 2 GiB")
             return length.toInt()
         }
     }

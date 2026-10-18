@@ -41,8 +41,9 @@ import kotlinx.coroutines.IO
  * - v10: `sensor_installation`, the phone's record of each sensor fitted to a station.
  * - v11: no schema change. Rows indexed with no UTC rows and no error are marked never indexed, so
  *   the `event_time_utc_us` reader indexes them again (`ArchiveRecord.INDEX_LAYOUT` 2).
- * - v12: `pruned_file`, the files the user removed from this phone in Settings, which sync skips until
- *   Download again clears them; `AutoMigration` (new table only).
+ * - v12: `pruned_file`, the files the user removed from this phone in Settings, which sync skips while
+ *   the device lists them at the same size. A whole LIST that no longer names one drops it, and Download
+ *   again clears them all; `AutoMigration` (new table only).
  */
 @ConstructedBy(AppDatabaseConstructor::class)
 @Database(

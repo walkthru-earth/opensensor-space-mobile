@@ -81,7 +81,7 @@ interface ArchiveIndex {
      * [latestTimedEnds] of every record, which History uses to pick the station it opens on. The
      * default reads every record. An adapter with a grouped query overrides it.
      */
-    fun observeLatestTimed(): Flow<Map<String, Long>> = observeAll().map(::latestTimedEnds)
+    fun observeLatestTimed(): Flow<Map<String, Long?>> = observeAll().map(::latestTimedEnds)
 
     suspend fun get(key: ArchiveKey): ArchiveRecord?
 
@@ -126,16 +126,21 @@ interface ArchiveIndex {
     companion object {
         /**
          * Per station, the latest real or estimated end among its indexed telemetry files that have a
-         * time ([ArchiveRecord.hasHistoryTime]). A station without one is absent, and a file with a time
-         * but no end counts as [Long.MIN_VALUE].
+         * time ([ArchiveRecord.hasHistoryTime]), as SQL `MAX` gives it. A station without such a file is
+         * absent. A station whose timed files have no end maps to null, never to a sentinel, so a real
+         * end at `Long.MIN_VALUE` stays a real end.
          */
-        fun latestTimedEnds(records: Iterable<ArchiveRecord>): Map<String, Long> {
-            val latest = LinkedHashMap<String, Long>()
+        fun latestTimedEnds(records: Iterable<ArchiveRecord>): Map<String, Long?> {
+            val latest = LinkedHashMap<String, Long?>()
             for (r in records) {
                 if (!r.hasHistoryTime) continue
-                val end = r.timelineLastNs ?: Long.MIN_VALUE
+                val end = r.timelineLastNs
                 val seen = latest[r.station]
-                if (seen == null || end > seen) latest[r.station] = end
+                latest[r.station] = when {
+                    seen == null -> end
+                    end == null -> seen
+                    else -> maxOf(seen, end)
+                }
             }
             return latest
         }

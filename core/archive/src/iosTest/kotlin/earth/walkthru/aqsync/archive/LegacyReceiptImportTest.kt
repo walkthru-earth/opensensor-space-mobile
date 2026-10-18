@@ -244,6 +244,35 @@ class LegacyReceiptImportTest {
     }
 
     @Test
+    fun anArchiveThatCannotBeListedLeavesEachPassForALaterLaunch() = runTest {
+        synced(1)
+        val index = InMemoryArchiveIndex()
+        fun mode(bits: Int) = check(NSFileManager.defaultManager.setAttributes(mapOf<Any?, Any?>(NSFilePosixPermissions to bits), finals, null))
+
+        mode(0)
+        try {
+            assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, MemoryPruned()))
+            assertEquals(IosFiles.Kind.ABSENT, kind(marker))
+        } finally {
+            mode(0b111_101_101)
+        }
+        assertEquals(LegacyReceiptImport.Result(1, 0), importer().run(index, MemoryPruned()))
+
+        mode(0)
+        try {
+            importer().run(index, MemoryPruned(), noCheckpoint)
+            assertEquals(IosFiles.Kind.ABSENT, kind(settled))
+        } finally {
+            mode(0b111_101_101)
+        }
+        assertEquals(IosFiles.Kind.FILE, kind(receipt(1)))
+
+        importer().run(index, MemoryPruned(), noCheckpoint)
+        assertEquals(emptyList(), legacyFiles())
+        assertEquals(IosFiles.Kind.FILE, kind(settled))
+    }
+
+    @Test
     fun aRunCutShortKeepsWhatTheIndexAlreadyHolds() = runTest {
         synced(1)
         val index = InMemoryArchiveIndex()
