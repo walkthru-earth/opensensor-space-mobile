@@ -9,7 +9,8 @@ import kotlin.test.assertTrue
 /**
  * Every digest and LIVE key set frozen in aq-parquet `tools/fixtures/live_keys/cores3.json` and
  * `waveshare.json`, copied as test data. When firmware ships a new digest, copy its builds here from
- * the fixture, and this test fails until [LiveProfiles.resolve] maps it.
+ * the fixture, and this test fails until [LiveProfiles.resolve] maps it to a reviewed profile. The
+ * weekly `live-key-drift` workflow fails while aq-parquet main has a digest missing here.
  */
 class LiveKeyFixturesTest {
     private data class FixtureBuild(val board: String, val digest: String, val firmware: String, val commit: String, val keys: Set<String>)
@@ -33,6 +34,7 @@ class LiveKeyFixturesTest {
         builds.forEach { build ->
             val label = "${build.firmware} ${build.commit} ${build.digest.take(8)}"
             val profile = assertNotNull(LiveProfiles.resolve(DeviceInfo(dict = build.digest)), "$label has no LIVE profile")
+            assertTrue(profile.reviewed, "$label has no reviewed LIVE profile")
             val expected = if (build.board == "cores3") build.keys - cores3AlwaysNull else build.keys
             assertTrue(profile.keys.containsAll(expected), "$label misses ${expected - profile.keys}")
             val source = if (build.board == "cores3") TemperatureSource.BOARD else TemperatureSource.AMBIENT

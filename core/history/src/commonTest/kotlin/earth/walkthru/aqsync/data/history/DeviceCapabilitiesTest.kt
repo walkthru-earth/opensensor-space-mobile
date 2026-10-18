@@ -8,7 +8,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DeviceCapabilitiesTest {
@@ -31,12 +30,17 @@ class DeviceCapabilitiesTest {
         assertFalse(caps.showsBatchEstimate(null))
     }
 
-    @Test fun unreviewedDictionaryKeepsSchemaFamilyButNoLiveProfile() {
-        val caps = DeviceCapabilities.from(waveshare.copy(dict = "0".repeat(64)))
-        assertNull(caps.liveProfile)
+    @Test fun unreviewedDictionaryKeepsSchemaFamilyAndReadsPinnedKeys() {
+        val live = LiveSample(pms = 4, pm25 = 7.0, t = 22.0, rh = 50.0, bstate = 2)
+        val caps = DeviceCapabilities.from(waveshare.copy(dict = "0".repeat(64)), live)
+        val profile = assertNotNull(caps.liveProfile)
+        assertFalse(profile.reviewed)
+        assertEquals(TemperatureSource.AMBIENT, profile.temperature)
         assertTrue(caps.sensorIdentity)
         assertFalse(caps.batchEstimate, "an unreviewed dictionary must not show the estimate")
-        assertFalse(caps.showsParticles(LiveSample(pms = 4)))
+        assertFalse(caps.showsBatchEstimate(1))
+        assertTrue(caps.showsParticles(live))
+        assertFalse(caps.showsParticles(LiveSample(pms = 0)))
     }
 
     @Test fun protocolV1IsNotConfigurable() {
