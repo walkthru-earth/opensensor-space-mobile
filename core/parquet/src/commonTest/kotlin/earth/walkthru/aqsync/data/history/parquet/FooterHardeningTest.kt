@@ -25,6 +25,9 @@ class FooterHardeningTest {
         var dictionaryPageOffset: Long? = null
         var offsetIndex: Pair<Long, Int>? = null
         var extra: ThriftCompactWriter.() -> Unit = {}
+
+        /** The column chunk bytes, 16 zero bytes when null. */
+        var pages: ByteArray? = null
     }
 
     private fun file(edit: Spec.() -> Unit = {}): ByteArray {
@@ -73,7 +76,7 @@ class FooterHardeningTest {
             s.extra(this)
             structEnd()
         }.toByteArray()
-        return MAGIC + ByteArray(16) + footer + le32(footer.size) + MAGIC
+        return MAGIC + (s.pages ?: ByteArray(16)) + footer + le32(footer.size) + MAGIC
     }
 
     private fun refused(bytes: ByteArray, expected: String) {
@@ -159,6 +162,64 @@ class FooterHardeningTest {
         assertEquals(0L, ColumnIndex.parse(ByteView(index(0))).nullCounts!![0])
         val e = assertFailsWith<ParquetFormatException> { ColumnIndex.parse(ByteView(index(-1))) }
         assertTrue(e.message, e.message!!.contains("nulls"))
+    }
+
+    @Test
+    fun `a null_pages list of a non bool type is refused`() {
+        fun index(elementType: Int) = ThriftCompactWriter().apply {
+            structBegin()
+            listBegin(1, elementType, 1)
+            // An i32 of 1 is the byte 0x02, which also reads as a false bool.
+            if (elementType == Type.I32) listI32(1) else listBool(false)
+            listBegin(2, Type.BINARY, 1)
+            listBinary(le64(1))
+            listBegin(3, Type.BINARY, 1)
+            listBinary(le64(2))
+            i32(4, 1)
+            structEnd()
+        }.toByteArray()
+        assertEquals(false, ColumnIndex.parse(ByteView(index(Type.BOOLEAN_FALSE))).nullPages[0])
+        val e = assertFailsWith<ParquetFormatException> { ColumnIndex.parse(ByteView(index(Type.I32))) }
+        assertTrue(e.message, e.message!!.contains("null_pages is not a bool list"))
+    }
+
+    /** One V2 data page of three PLAIN INT64 values 1, 2 and 3, with the given V2 header counts. */
+    private fun v2Page(numNulls: Int = 0, defLen: Int = 0, repLen: Int = 0): ByteArray {
+        val values = le64(1) + le64(2) + le64(3)
+        val header = ThriftCompactWriter().apply {
+            structBegin()
+            i32(1, 3)
+            i32(2, values.size)
+            i32(3, values.size)
+            struct(8) {
+                i32(1, 3)
+                i32(2, numNulls)
+                i32(3, 3)
+                i32(4, ParquetEncoding.PLAIN.code)
+                i32(5, defLen)
+                i32(6, repLen)
+                bool(7, false)
+            }
+            structEnd()
+        }.toByteArray()
+        return header + values
+    }
+
+    @Test
+    fun `negative counts in a V2 data page header are refused`() {
+        fun read(page: ByteArray): ColumnValues {
+            val bytes = file {
+                pages = page
+                compressed = page.size.toLong()
+                uncompressed = page.size.toLong()
+            }
+            return ParquetFile.wrap(bytes, "v2", testCodecs).readColumn("v")
+        }
+        assertEquals(listOf(1L, 2L, 3L), (read(v2Page()) as ColumnValues.Int64).values.toList())
+        for (page in listOf(v2Page(numNulls = -1), v2Page(defLen = -1), v2Page(repLen = -1))) {
+            val e = assertFailsWith<ParquetFormatException> { read(page) }
+            assertTrue(e.message, e.message!!.contains("negative page size"))
+        }
     }
 
     private val fixture = "parquet/discover/cells-24h-res7-pageindex.parquet"
