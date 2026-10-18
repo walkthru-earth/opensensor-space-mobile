@@ -10,6 +10,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.intl.Locale
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -27,13 +29,13 @@ const val TABULAR = "tnum"
 
 /**
  * Shared line and scale limits so system font scaling up to 200 percent wraps instead of clipping
- * headings, labels, and display numerals on 320 dp phones.
+ * headings, labels, and display numerals on 320 dp phones. Labels that fit to one line use
+ * [FitText] and [FitTextLimits].
  */
 object TypographyLimits {
     val EyebrowMaxLines: Int = 2
     val StatLabelMaxLines: Int = 3
     val StatValueMaxLines: Int = 2
-    val TabLabelMaxLines: Int = 2
     val TickingMaxLines: Int = 2
 
     /**
@@ -157,7 +159,12 @@ fun brandTypography(text: FontFamily, numbers: FontFamily, density: Density = De
             lineHeightStyle = TrimmedNumbers,
         )
     }
-    return Typography(
+
+    // Every style breaks only between words and never hyphenates. Sentences use the paragraph
+    // strategy, numbers, headings, titles and labels the heading one (FitText.kt).
+    fun TextStyle.words(heading: Boolean) =
+        copy(lineBreak = if (heading) LineBreak.Heading else LineBreak.Paragraph, hyphens = Hyphens.None)
+    val styles = Typography(
         displayLarge = number(FontWeight.ExtraBold, 84, 88, -2.0),
         displayMedium = number(FontWeight.Bold, 48, 54, -1.0),
         displaySmall = number(FontWeight.SemiBold, 32, 38, -0.5),
@@ -173,6 +180,23 @@ fun brandTypography(text: FontFamily, numbers: FontFamily, density: Density = De
         labelLarge = base.labelLarge.brand(FontWeight.Bold),
         labelMedium = base.labelMedium.brand(FontWeight.Bold),
         labelSmall = base.labelSmall.brand(FontWeight.Bold).copy(letterSpacing = 0.8.sp),
+    )
+    return styles.copy(
+        displayLarge = styles.displayLarge.words(heading = true),
+        displayMedium = styles.displayMedium.words(heading = true),
+        displaySmall = styles.displaySmall.words(heading = true),
+        headlineLarge = styles.headlineLarge.words(heading = true),
+        headlineMedium = styles.headlineMedium.words(heading = true),
+        headlineSmall = styles.headlineSmall.words(heading = true),
+        titleLarge = styles.titleLarge.words(heading = true),
+        titleMedium = styles.titleMedium.words(heading = true),
+        titleSmall = styles.titleSmall.words(heading = true),
+        bodyLarge = styles.bodyLarge.words(heading = false),
+        bodyMedium = styles.bodyMedium.words(heading = false),
+        bodySmall = styles.bodySmall.words(heading = false),
+        labelLarge = styles.labelLarge.words(heading = true),
+        labelMedium = styles.labelMedium.words(heading = true),
+        labelSmall = styles.labelSmall.words(heading = true),
     )
 }
 

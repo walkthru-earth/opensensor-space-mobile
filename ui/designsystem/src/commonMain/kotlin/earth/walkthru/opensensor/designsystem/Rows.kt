@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -31,10 +32,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,7 +62,7 @@ fun Eyebrow(
     heading: Boolean = false,
     maxLines: Int = TypographyLimits.EyebrowMaxLines,
 ) {
-    Text(
+    FitText(
         if (uppercase) text.uppercase() else text,
         style = MaterialTheme.typography.labelSmall,
         color = color,
@@ -68,7 +71,6 @@ fun Eyebrow(
             if (heading) heading()
         },
         maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
     )
 }
 
@@ -101,14 +103,13 @@ fun StatLine(label: String, value: String, modifier: Modifier = Modifier, valueC
                 maxLines = TypographyLimits.StatLabelMaxLines,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
+            FitText(
                 value,
                 style = MaterialTheme.typography.bodyMedium,
                 color = valueColor,
                 modifier = Modifier.widthIn(max = maxValueWidth),
                 textAlign = TextAlign.End,
                 maxLines = TypographyLimits.StatValueMaxLines,
-                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -124,8 +125,8 @@ fun BigValue(label: String, value: String, unit: String, modifier: Modifier = Mo
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.Bottom,
         ) {
-            Text(value, style = MaterialTheme.typography.displaySmall, modifier = Modifier.alignByBaseline())
-            Text(unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+            FitText(value, style = MaterialTheme.typography.displaySmall, modifier = Modifier.alignByBaseline(), maxLines = 1)
+            FitText(unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline(), maxLines = 1)
         }
     }
 }
@@ -139,7 +140,7 @@ fun TagChip(icon: ImageVector, text: String, container: Color, content: Color, m
     Surface(shape = FloatingControl.BadgeShape, color = container, contentColor = content, modifier = modifier) {
         Row(Modifier.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
-            Text(text, style = MaterialTheme.typography.labelSmall)
+            FitText(text, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f, fill = false))
         }
     }
 }
@@ -155,17 +156,34 @@ fun SectionTabs(
     onSelect: (Int) -> Unit,
     containerColor: Color = MaterialTheme.colorScheme.background,
 ) {
-    PrimaryTabRow(selectedTabIndex = selectedIndex, containerColor = containerColor) {
+    val tabs: @Composable () -> Unit = {
         labels.forEachIndexed { index, label ->
             Tab(
                 selected = index == selectedIndex,
                 onClick = { if (index != selectedIndex) onSelect(index) },
                 modifier = Modifier.touchTarget(),
-                text = { Text(label, maxLines = TypographyLimits.TabLabelMaxLines, overflow = TextOverflow.Ellipsis) },
+                text = { FitText(label, maxLines = 1) },
             )
         }
     }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Equal tabs while every label fits on one line at its floor size, otherwise the row
+        // scrolls so each label keeps the user's size and no word splits ("Histo / ry", #143).
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val style = MaterialTheme.typography.titleSmall
+        val slotPx = with(density) { (maxWidth / labels.size.coerceAtLeast(1) - TabTextPadding * 2).toPx() }
+        val fixed = remember(labels, style, slotPx, density) { measurer.allFitAtFloor(labels, style, slotPx, density) }
+        if (fixed) {
+            PrimaryTabRow(selectedTabIndex = selectedIndex, containerColor = containerColor, tabs = tabs)
+        } else {
+            PrimaryScrollableTabRow(selectedTabIndex = selectedIndex, containerColor = containerColor, edgePadding = 0.dp, tabs = tabs)
+        }
+    }
 }
+
+/** Material 3 `Tab` pads its text by 16 dp on each side. */
+private val TabTextPadding = 16.dp
 
 /** Wall-clock milliseconds since the epoch, the same clock on Android and iOS. */
 fun nowEpochMillis(): Long = Clock.System.now().toEpochMilliseconds()
@@ -214,12 +232,11 @@ fun TickingText(
     val now = rememberNowMillis()
     val anchor = remember { now }
     val spoken = text(quantiseSpokenMillis(now, anchor))
-    Text(
+    FitText(
         text(now),
         modifier = modifier.semantics { contentDescription = spoken },
         style = style,
         color = color,
         maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
     )
 }

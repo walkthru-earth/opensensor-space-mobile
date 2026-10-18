@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -132,17 +131,17 @@ fun MascotGuide(
             if (stackVertically) {
                 Column(horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Peacock(size = 80.dp, expression = expression)
-                    Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics())
-                    Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    BodyText(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics(), heading = true)
+                    BodyText(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Peacock(size = 96.dp, expression = expression)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics())
+                        BodyText(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics(), heading = true)
                         Spacer(Modifier.height(4.dp))
-                        Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        BodyText(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -160,7 +159,7 @@ fun WarningNote(text: String, modifier: Modifier = Modifier) {
     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium, modifier = modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(AppIcons.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.size(20.dp))
-            Text(text, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+            BodyText(text, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -168,7 +167,7 @@ fun WarningNote(text: String, modifier: Modifier = Modifier) {
 /** An informational strip inside a card. */
 @Composable
 fun InfoNote(text: String, modifier: Modifier = Modifier) {
-    Text(
+    BodyText(
         text,
         modifier = modifier.padding(top = 6.dp),
         style = MaterialTheme.typography.bodySmall,

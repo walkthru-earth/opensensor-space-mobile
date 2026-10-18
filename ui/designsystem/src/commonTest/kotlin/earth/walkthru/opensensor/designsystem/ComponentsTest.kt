@@ -173,7 +173,6 @@ class ComponentsTest {
         assertEquals(2, TypographyLimits.EyebrowMaxLines)
         assertEquals(3, TypographyLimits.StatLabelMaxLines)
         assertEquals(2, TypographyLimits.StatValueMaxLines)
-        assertEquals(2, TypographyLimits.TabLabelMaxLines)
         assertEquals(2, TypographyLimits.TickingMaxLines)
     }
 
