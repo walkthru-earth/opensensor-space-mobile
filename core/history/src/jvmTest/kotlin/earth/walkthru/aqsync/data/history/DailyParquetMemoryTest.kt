@@ -161,14 +161,14 @@ class DailyParquetMemoryTest {
     @Test
     fun aTenSecondDayHoldsAboutOneHourOfColumnsNotTheDay() {
         val (old, new) = report("10 s cadence", 90)
-        // Measured 5.4x to 5.5x apart over repeated runs. Holding the day again gives about 1x.
-        assertTrue("before ${old.peakBytes}, after ${new.peakBytes}", new.peakBytes * 4 < old.peakBytes)
+        // Measured 5.5x apart alone and 3.6x under a parallel build. Holding the day again gives about 1x.
+        assertTrue("before ${old.peakBytes}, after ${new.peakBytes}", new.peakBytes * 2 < old.peakBytes)
     }
 
     @Test
     fun aOneSecondDayHoldsAboutOneHourOfColumnsNotTheDay() {
         val (old, new) = report("1 s cadence", 900)
-        // Measured 3x to 4.6x apart, the hour of 1 s columns swings with GC. Holding the day again gives about 1x.
+        // Measured 2.9x to 4.6x apart, the hour of 1 s columns swings with GC. Holding the day again gives about 1x.
         assertTrue("before ${old.peakBytes}, after ${new.peakBytes}", new.peakBytes * 2 < old.peakBytes)
     }
 }
