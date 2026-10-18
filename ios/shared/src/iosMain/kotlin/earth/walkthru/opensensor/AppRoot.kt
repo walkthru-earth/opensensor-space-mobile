@@ -260,7 +260,7 @@ internal fun AppRoot(
                 entry<DeviceKey> { key ->
                     if (IosKnown.isPeripheral(key.address)) {
                         LeasePeripheral(leases, key.address)
-                        DeviceSettingsEntry(key.address, devices, configLinks, autoSync, onBack = { nav.popIfTop { it == key } })
+                        DeviceSettingsEntry(key.address, devices, configLinks, autoSync, requestBluetooth, onBack = { nav.popIfTop { it == key } })
                     } else {
                         LaunchedEffect(key) { nav.popIfTop { it == key } }
                     }
@@ -318,14 +318,23 @@ internal fun AppRoot(
 /**
  * Device settings of one Bluetooth sensor. Local network is asked for from the Sync over Wi-Fi card
  * by browsing for sensors, the iOS prompt. The sticker card scans with VisionKit where the hardware
- * has it (#21), asking for the camera on the Scan tap, and the sticker can always be typed.
+ * has it (#21), asking for the camera on the Scan tap, and the sticker can always be typed. Bluetooth
+ * is asked for from the Reconnect taps, as on Today.
  */
 @Composable
-private fun DeviceSettingsEntry(address: String, devices: DevicesBridge, links: DeviceConfigLinks, autoSync: AutoSyncSettings, onBack: () -> Unit) {
+private fun DeviceSettingsEntry(
+    address: String,
+    devices: DevicesBridge,
+    links: DeviceConfigLinks,
+    autoSync: AutoSyncSettings,
+    requestBluetooth: () -> Unit,
+    onBack: () -> Unit,
+) {
     val controller = viewModel(key = "device-settings-$address") { DeviceSettingsHolder(address, devices, links) }.controller
     val sticker = rememberIosStickerScan(links.scanSticker)
     val records by devices.known.collectAsState()
     val known = records.any { it.peripheral.equals(address, ignoreCase = true) }
+    val bluetooth = rememberIosBluetoothAccess(devices.state, requestBluetooth)
     DeviceConfigScreen(
         controller = controller,
         lanAccess = LanAccess(granted = !devices.state.lanAccessDenied, requestable = true),
@@ -340,6 +349,7 @@ private fun DeviceSettingsEntry(address: String, devices: DevicesBridge, links: 
         scan = sticker.scan,
         canScan = sticker.available,
         lead = if (known) ({ AutoSyncSwitch(autoSync, address) }) else null,
+        bluetooth = bluetooth,
     )
 }
 

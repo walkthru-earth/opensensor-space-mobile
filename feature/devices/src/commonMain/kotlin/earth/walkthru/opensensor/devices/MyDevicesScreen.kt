@@ -1,7 +1,6 @@
 package earth.walkthru.opensensor.devices
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,14 +8,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -24,13 +25,13 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,17 +39,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import earth.walkthru.aqsync.settings.DetailLevel
@@ -61,7 +56,6 @@ import earth.walkthru.opensensor.designsystem.InfoButton
 import earth.walkthru.opensensor.designsystem.InfoContent
 import earth.walkthru.opensensor.designsystem.MascotGuide
 import earth.walkthru.opensensor.designsystem.PeacockExpression
-import earth.walkthru.opensensor.designsystem.touchTarget
 import earth.walkthru.opensensor.devices.resources.Res
 import earth.walkthru.opensensor.devices.resources.devices_forget_bond_ios
 import earth.walkthru.opensensor.devices.resources.devices_on_wifi
@@ -131,15 +125,6 @@ fun MyDevicesScreen(
     var explicitScan by remember { mutableStateOf(false) }
     LaunchedEffect(state.scanning) { if (!state.scanning) explicitScan = false }
     val showStop = state.scanning && (onScanTap == null || explicitScan)
-    val listState = rememberLazyListState()
-    // Scan is compact while the list is scrolled and grows into its label at the top of the list,
-    // and while a scan the user started runs, so it covers as little of the rows as it can.
-    val atTop by remember { derivedStateOf { !listState.canScrollBackward } }
-    val scanExpanded = atTop || showStop
-    // The tallest the button has been at this font size. The list keeps that much room below its
-    // last row, so Collect from all and its info button always scroll clear of it (#146).
-    val density = LocalDensity.current
-    var scanHeight by remember(density) { mutableStateOf(0.dp) }
 
     LifecycleStartEffect(bluetooth.ready) {
         if (bluetooth.ready) onAction(DevicesAction.StartScan)
@@ -169,7 +154,9 @@ fun MyDevicesScreen(
                 },
             )
         },
-        floatingActionButton = {
+        // Scan floats at the end below the list, not over it. The list stops above it, so no row is
+        // ever under it, at rest or scrolled, at any font size (#146).
+        bottomBar = {
             val onClick = {
                 if (showStop) {
                     explicitScan = false
@@ -181,33 +168,31 @@ fun MyDevicesScreen(
                     bluetooth.run(onDeclined = start, action = start)
                 }
             }
-            val measured = Modifier.testTag(SCAN_BUTTON_TAG).onSizeChanged {
-                val height = with(density) { it.height.toDp() }
-                if (height > scanHeight) scanHeight = height
-            }
-            val label = stringResource(if (showStop) Res.string.scan_button_stop else Res.string.scan_button_scan)
-            if (scanExpanded) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(ScaffoldDefaults.contentWindowInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                    .padding(horizontal = 16.dp, vertical = FloatingControl.Margin),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
                 FloatingTextButton(
-                    text = label,
+                    text = stringResource(if (showStop) Res.string.scan_button_stop else Res.string.scan_button_scan),
                     onClick = onClick,
-                    modifier = measured,
+                    modifier = Modifier.testTag(SCAN_BUTTON_TAG),
                     primary = !showStop,
                     icon = { Icon(if (showStop) AppIcons.Stop else AppIcons.Radar, contentDescription = null) },
                 )
-            } else {
-                CompactScanButton(label, onClick, measured)
             }
         },
     ) { padding ->
         val list = state.list
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            state = listState,
+            modifier = Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding()),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
                 top = padding.calculateTopPadding() + 8.dp,
-                bottom = scanClearance(padding.calculateBottomPadding(), scanHeight),
+                bottom = 8.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -313,19 +298,8 @@ fun MyDevicesScreen(
     state.forget?.let { target -> ForgetDialog(target, platform.explainSystemBond, onAction) }
 }
 
-/** Test tag of the floating Scan button, expanded or compact. */
+/** Test tag of the Scan button. */
 internal const val SCAN_BUTTON_TAG = "devices-scan"
-
-/** The gap Material 3's Scaffold keeps between the floating action button and the content bottom. */
-private val ScaffoldFabSpacing = 16.dp
-
-/**
- * The list's bottom padding. The last row stops [FloatingControl.Margin] above the floating Scan
- * button, whose measured [scanHeight] grows with the font size. Before the first measure it assumes
- * the smallest the button can be, one touch target.
- */
-internal fun scanClearance(scaffoldBottom: Dp, scanHeight: Dp): Dp =
-    scaffoldBottom + ScaffoldFabSpacing + maxOf(scanHeight, FloatingControl.Size) + FloatingControl.Margin
 
 /**
  * Opens a station from My devices. It never asks for Bluetooth, so a Deny is never asked again on
@@ -335,30 +309,6 @@ internal fun scanClearance(scaffoldBottom: Dp, scanHeight: Dp): Dp =
  */
 internal fun openStation(id: String, name: String?, bluetooth: RuntimeAccess, onAction: (DevicesAction) -> Unit) {
     onAction(DevicesAction.Open(id, name, connect = bluetooth.ready))
-}
-
-/**
- * Scan folded to its icon while the list is scrolled, the same curved card and Signal blue as the
- * labelled button, one accessibility element named by [label].
- */
-@Composable
-private fun CompactScanButton(label: String, onClick: () -> Unit, modifier: Modifier) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier
-            .touchTarget(FloatingControl.Size, FloatingControl.Size)
-            .semantics {
-                contentDescription = label
-                role = Role.Button
-            },
-        shape = FloatingControl.Shape,
-        color = FloatingControl.Selected,
-        contentColor = FloatingControl.OnSelected,
-        shadowElevation = 3.dp,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline),
-    ) {
-        Box(contentAlignment = Alignment.Center) { Icon(AppIcons.Radar, contentDescription = null) }
-    }
 }
 
 @Composable
