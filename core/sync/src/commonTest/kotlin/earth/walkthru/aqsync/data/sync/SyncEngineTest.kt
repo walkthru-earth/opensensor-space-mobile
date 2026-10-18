@@ -9,6 +9,7 @@ import earth.walkthru.aqsync.data.protocol.FrameType
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.link.LinkEvent
 import earth.walkthru.aqsync.link.LinkTimeoutException
+import earth.walkthru.aqsync.link.TimeoutPhase
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -213,16 +214,58 @@ class SyncEngineTest {
         assertContentEquals(fake.files[long].bytes, finalBytes(fake.station, fake.files[long].name))
     }
 
+    /** The partial bytes on disk for [name], or null when there is none. */
+    private fun partialBytes(station: String, name: String): ByteArray? = store.files[ArchiveLayout.partialPath(ArchiveKey(station, name))]
+
     @Test
     fun aReadThatKeepsTimingOutEndsTheAttemptAtTheFloorAndKeepsThePartial() = runTest {
         val d = device(backgroundScope)
         val fake = d.first
-        fake.stallRead = { true }
+        val file = fake.files[0]
+        // READ 1 lands the first window, every READ after it stalls before its first frame.
+        fake.stallRead = { k -> k >= 2 }
 
-        assertFailsWith<LinkTimeoutException> { engine().pull(d, 0) }
-        assertEquals(1 + WindowRetryPolicy.RETRIES, fake.readCount)
-        assertEquals(listOf(16384L, 8112L, 4056L, 2028L, 2028L, 2028L), fake.readLengths)
-        assertNull(finalBytes(fake.station, fake.files[0].name))
+        val e = assertFailsWith<LinkTimeoutException> { engine().pull(d, 0) }
+        assertEquals(TimeoutPhase.FIRST_FRAME, e.timeout.phase)
+        assertEquals(2 + WindowRetryPolicy.RETRIES, fake.readCount)
+        assertEquals(listOf(16384L, 16384L, 8112L, 4056L, 2028L, 2028L, 2028L), fake.readLengths)
+        assertNull(finalBytes(fake.station, file.name))
+        // The verified first window stays on disk, so the next attempt resumes from it.
+        assertContentEquals(file.bytes.copyOfRange(0, 16_384), partialBytes(fake.station, file.name))
+        assertEquals(0, store.openWriters)
+    }
+
+    @Test
+    fun aStallBetweenChunksIsAskedAgainFromTheLastByteReceived() = runTest {
+        val d = device(backgroundScope)
+        val fake = d.first
+        val file = fake.files[0]
+        // READ 1 sends 3 CHUNKs of 507 bytes, then goes silent until the link sends ABORT.
+        fake.stallAfterChunks = { k -> if (k == 1) 3 else -1 }
+
+        assertIs<FileOutcome.Synced>(engine().pull(d, 0))
+        assertTrue(Opcode.ABORT in fake.requests, fake.requests.toString())
+        // The retry starts where the delivered CHUNKs ended, with a half window.
+        assertEquals(listOf(0L, 3L * 507), fake.readOffsets.take(2))
+        assertEquals(listOf(16384L, 8112L), fake.readLengths.take(2))
+        assertContentEquals(file.bytes, finalBytes(fake.station, file.name))
+        assertFalse(hasPartials())
+    }
+
+    @Test
+    fun aSendTimeoutEndsTheAttemptWithoutARetry() = runTest {
+        val d = device(backgroundScope)
+        val fake = d.first
+        val file = fake.files[0]
+        // The first READ is written, every later READ write never completes.
+        fake.hangWrite = { op -> op == Opcode.READ && fake.writes.count { it == Opcode.READ } > 1 }
+
+        val e = assertFailsWith<LinkTimeoutException> { engine().pull(d, 0) }
+        assertEquals(TimeoutPhase.SEND, e.timeout.phase)
+        assertEquals(2, fake.writes.count { it == Opcode.READ }, fake.writes.toString())
+        assertEquals(1, fake.readCount)
+        assertNull(finalBytes(fake.station, file.name))
+        assertContentEquals(file.bytes.copyOfRange(0, 16_384), partialBytes(fake.station, file.name))
     }
 
     @Test

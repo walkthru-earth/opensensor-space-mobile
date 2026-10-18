@@ -46,6 +46,18 @@ class QcRulesTest {
     }
 
     @Test
+    fun anInfinitePm10OrRhIsMissingNotAFlag() {
+        val rows = listOf(
+            row(0, pm25 = 10.0, pm10 = Double.NEGATIVE_INFINITY),
+            row(1, pm25 = 10.0, pm10 = Double.POSITIVE_INFINITY),
+            row(2, rh = Double.POSITIVE_INFINITY),
+            row(3, rh = Double.NEGATIVE_INFINITY),
+        )
+        assertEquals(emptyList(), flagged(QcRules.flags(rows), QcFlags.PM25_ABOVE_PM10))
+        assertEquals(emptyList(), flagged(QcRules.flags(rows), QcFlags.HIGH_HUMIDITY))
+    }
+
+    @Test
     fun highHumidityOnlyAboveEightyFivePercentAndOnlyWithRh() {
         val rows = listOf(row(0, rh = 85.0), row(1, rh = 85.01), row(2), row(3, rh = 99.0), row(4, rh = 84.99))
         assertEquals(listOf(1, 3), flagged(QcRules.flags(rows), QcFlags.HIGH_HUMIDITY))
@@ -132,6 +144,15 @@ class QcRulesTest {
     }
 
     @Test
+    fun theRatioReadsTheLargerNeighbour() {
+        // Neighbours 150 and 200 give 40, the larger one. The smaller would give 30.
+        assertEquals(false, spikeAt1(spike(150.0, 240.0, 200.0)))
+        assertEquals(true, spikeAt1(spike(150.0, 240.01, 200.0)))
+        assertEquals(false, spikeAt1(spike(200.0, 240.0, 150.0)))
+        assertEquals(true, spikeAt1(spike(200.0, 240.01, 150.0)))
+    }
+
+    @Test
     fun aDipIsASpikeTooButAStepIsNot() {
         assertEquals(true, spikeAt1(spike(50.0, 10.0, 50.0)))
         assertEquals(false, spikeAt1(spike(10.0, 50.0, 50.0)))
@@ -202,11 +223,34 @@ class QcRulesTest {
     }
 
     @Test
+    fun anEvenNumberOfStepsTakesTheUpperMedian() {
+        // With an even count the upper of the two middle steps is taken, pinned so the gap limit never moves.
+        assertEquals(30, QcRules.typicalStepMs(listOf(QcRow(0), QcRow(10), QcRow(40))))
+        assertEquals(30, QcRules.typicalStepMs(listOf(QcRow(0), QcRow(10), QcRow(30), QcRow(60), QcRow(100))))
+    }
+
+    @Test
     fun valuesAreNeverChanged() {
         val rows = frozenRun(30) + spike(10.0, 80.0, 10.0).map { QcRow(it.timeMs + 40 * step, it.pm1, it.pm25, it.pm10, it.counts, 90.0) }
         val before = rows.map { listOf(it.timeMs, it.pm1, it.pm25, it.pm10, it.rh, it.counts?.toList()) }
         val flags = QcRules.flags(rows)
         assertTrue(flags.any { it != 0 })
         assertEquals(before, rows.map { listOf(it.timeMs, it.pm1, it.pm25, it.pm10, it.rh, it.counts?.toList()) })
+    }
+
+    @Test
+    fun countsAreNeverChangedWhileTheSpikeCheckReadsThem() {
+        // Counts that rise too little, rise enough, and fall, so the count check walks every bin.
+        val moving = listOf(
+            counts(1000).also { it[0] = 1599 },
+            counts(1000).also { it[0] = 1600 },
+            counts(1000).also { it[0] = 100 },
+        )
+        for (atCounts in moving) {
+            val rows = spike(10.0, 40.0, 10.0, atCounts = atCounts)
+            val before = rows.map { it.counts?.toList() }
+            QcRules.flags(rows)
+            assertEquals(before, rows.map { it.counts?.toList() }, "counts ${atCounts.toList()}")
+        }
     }
 }

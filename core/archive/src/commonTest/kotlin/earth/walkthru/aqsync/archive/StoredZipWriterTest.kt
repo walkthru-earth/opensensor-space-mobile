@@ -262,6 +262,13 @@ class ArchiveExportTest {
     }
 
     @Test
+    fun aFileRightUnderDerivedBelongsToNoStation() {
+        // Its own name is no station folder, even when a station has that name.
+        val loose = listOf(entry("derived/v1/loose.parquet"), entry("derived/v1/loose.manifest.json"))
+        assertEquals(null, ArchiveExport.dailyEntries(loose, setOf("loose.parquet", "loose.manifest.json")))
+    }
+
+    @Test
     fun copiesOfTheSameNameFromTwoStationsStayApart() {
         val space = MemoryExportSpace()
         val staged = ArchiveExport.stageCopies(space, listOf(entry("A/x.parquet"), entry("B/x.parquet"), entry("A/y.parquet")))
@@ -385,6 +392,32 @@ class ArchiveExportTest {
         assertEquals(listOf("A/a.parquet"), zipNames(entries))
         assertEquals(42, entries.single().modifiedEpochMs)
         assertContentEquals(byteArrayOf(8), entries.single().open().read(0, 1))
+    }
+
+    @Test
+    fun aFinalRemovedAfterTheListingIsSkippedAndCounted() = kotlinx.coroutines.test.runTest {
+        val store = twoStationsAndAnOrphan()
+        val entries = ArchiveExport.archiveEntries(store, listOf(record("A", "a.parquet", 1), record("B", "b.parquet", 2)))
+        // The old format cleanup removes a listed final before the zip is written.
+        store.files.remove("${ArchiveLayout.ARCHIVE}/A/a.parquet")
+        val left = entries.filter { it.path == "B/b.parquet" }
+        assertEquals(ArchiveExport.plannedZipBytes(left), ArchiveExport.plannedZipBytes(entries))
+
+        val sink = MemorySink()
+        assertEquals(1, ArchiveExport.writeZip(sink, entries))
+        assertEquals(listOf("B/b.parquet"), ParsedZip(sink.bytes()).entries.map { it.name })
+
+        val space = MemoryExportSpace().apply { free = Long.MAX_VALUE }
+        assertEquals(1, ArchiveExport.stageZip(space, entries, "z.zip").skipped)
+        assertEquals(0, ArchiveExport.stageZip(space, left, "b.zip").skipped)
+        assertFalse(space.runs.first().deleted)
+        assertContentEquals(sink.bytes(), space.runs.first().files.getValue("z.zip").bytes())
+
+        // With every listed final gone there is nothing to share, so the export fails and leaves no run.
+        store.files.remove("${ArchiveLayout.ARCHIVE}/B/b.parquet")
+        assertFailsWith<NoSuchElementException> { ArchiveExport.writeZip(MemorySink(), entries) }
+        assertFailsWith<NoSuchElementException> { ArchiveExport.stageZip(space, entries, "gone.zip") }
+        assertTrue(space.runs.last().deleted)
     }
 
     @Test

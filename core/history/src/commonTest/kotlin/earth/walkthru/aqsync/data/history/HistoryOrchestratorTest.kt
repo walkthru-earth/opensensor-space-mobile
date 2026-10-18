@@ -18,6 +18,7 @@ import earth.walkthru.aqsync.storage.StorageTree
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -79,6 +80,10 @@ class HistoryOrchestratorTest {
         override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
             rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
         override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
+
+        /** A failure for the never indexed flow to throw before its first value, as a closed database would. */
+        var neverIndexedFails: Exception? = null
+        override fun observeNeverIndexed(): Flow<Boolean> = neverIndexedFails?.let { e -> flow { throw e } } ?: super.observeNeverIndexed()
 
         /** How many times a time estimate or other caller listed the stations. */
         var stationReads = 0
@@ -189,6 +194,44 @@ class HistoryOrchestratorTest {
         assertEquals(listOf("derive 1", "derive 2"), events)
         assertFalse(index.rows.value.any { it.awaitsIndex })
         life.cancel()
+    }
+
+    @Test
+    fun aCleanStartStillBackfillsAndDerivesOnceThenWaitsForARecordThatWaits() = runTest {
+        waiting("a")
+        val history = orchestrator()
+        history.backfill()
+        assertFalse(index.rows.value.any { it.awaitsIndex }, "nothing waits when History starts")
+        val events = ArrayList<String>()
+        val life = launch {
+            history.run { history.derivePass { events += "derive ${index.rows.value.count { it.isIndexed }}" } }
+        }
+        runCurrent()
+        assertEquals(listOf("derive 1"), events, "the start pass runs with nothing waiting")
+
+        // An index change that leaves nothing waiting runs no pass.
+        index.put(index.rows.value.single().copy(sourceDevice = "fake-b"))
+        runCurrent()
+        assertEquals(listOf("derive 1"), events)
+
+        waiting("b")
+        runCurrent()
+        assertEquals(listOf("derive 1", "derive 2"), events)
+        life.cancel()
+    }
+
+    @Test
+    fun anIndexFlowThatFailsBeforeItsFirstValueStillRunsTheStartPass() = runTest {
+        waiting("a")
+        index.neverIndexedFails = IllegalStateException("database closed")
+        val logged = ArrayList<String>()
+        val history = HistoryOrchestrator(ArchiveIndexRepair(store, index, io = StandardTestDispatcher(testScheduler), nowEpochMs = { 42L }), index, log = { logged += it })
+        val events = ArrayList<String>()
+
+        history.run { history.derivePass { events += "derive ${index.rows.value.count { it.isIndexed }}" } }
+
+        assertEquals(listOf("derive 1"), events, "one start pass, then run returns")
+        assertEquals(listOf("index repair stopped: IllegalStateException"), logged)
     }
 
     @Test
