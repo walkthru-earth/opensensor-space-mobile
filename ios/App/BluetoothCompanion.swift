@@ -494,12 +494,13 @@ final class BluetoothCompanion {
         state.today.linkIdle()
         collectWhenReady()
         backgroundWhenReady()
-        // A run iOS interrupted may have waited for this link to be free.
-        runs?.retryInterrupted()
+        // A close the user asked for goes first, so a resume never delays it.
         if let id = closeWhenIdle {
             closeWhenIdle = nil
             closeIdle(id: id)
         }
+        // A run iOS interrupted may have waited for this link to be free.
+        runs?.retryInterrupted()
     }
 
     /// The collection's one result, after the controller handed the link back.

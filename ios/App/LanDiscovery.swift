@@ -563,6 +563,8 @@ final class LanDiscovery {
         resolveDial(name, links[name]?.isOpen == true)
         advanceCollect(name)
         closeIfUnheld(name)
+        // A run iOS interrupted may have waited for this connect to end.
+        runs?.retryInterrupted()
     }
 
     /// Answers the controller's dials of this service.
