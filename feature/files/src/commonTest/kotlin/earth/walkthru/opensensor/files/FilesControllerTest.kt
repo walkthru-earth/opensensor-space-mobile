@@ -186,8 +186,26 @@ class FilesControllerTest {
         val a = record("s", nameA, bytesA)
         val b = record("s", nameB, bytesB)
         val other = record("t", nameA, bytesB)
-        val store = Store(mapOf(a.key to bytesA, b.key to bytesB, other.key to bytesB))
+        // A final the janitor kept but the index never verified, with bytes that are not Parquet.
+        val orphan = ArchiveKey("s", orphanName)
+        val store = Store(mapOf(a.key to bytesA, b.key to bytesB, other.key to bytesB, orphan to "orphan-bytes".encodeToByteArray()))
         return Fixture(this, store, Index(listOf(a, b, other)), owner, daily, holdDaily)
+    }
+
+    private val orphanName = "station=s/year=2026/month=09/day=17/data_1100_b_5-6-1.parquet"
+
+    /** The names inside a STORED zip, read from its central directory. */
+    private fun zipNames(zip: ByteArray): List<String> {
+        fun u16(i: Int) = (zip[i].toInt() and 0xFF) or ((zip[i + 1].toInt() and 0xFF) shl 8)
+        var eocd = zip.size - 22
+        while (u16(eocd) != 0x4B50 || u16(eocd + 2) != 0x0605) eocd--
+        var at = u16(eocd + 16) or (u16(eocd + 18) shl 16)
+        return List(u16(eocd + 10)) {
+            val nameLength = u16(at + 28)
+            val name = zip.copyOfRange(at + 46, at + 46 + nameLength).decodeToString()
+            at += 46 + nameLength + u16(at + 30) + u16(at + 32)
+            name
+        }
     }
 
     @Test
@@ -244,11 +262,11 @@ class FilesControllerTest {
         assertTrue(name.startsWith("opensensor-space-archive-") && name.endsWith(".zip"), name)
         assertTrue(p.saved.isEmpty())
         assertTrue(f.space.runs.isEmpty())
-        // Local file header first, end of central directory last, and every archive file stored inside.
+        // Local file header first, end of central directory last, and every file of the owner stored inside.
         assertContentEquals(byteArrayOf(0x50, 0x4B, 0x03, 0x04), zip.copyOfRange(0, 4))
         assertContentEquals(byteArrayOf(0x50, 0x4B, 0x05, 0x06), zip.copyOfRange(zip.size - 22, zip.size - 18))
+        assertEquals(listOf("s/$nameA", "s/$nameB"), zipNames(zip))
         val text = zip.decodeToString()
-        for (path in listOf("s/$nameA", "s/$nameB", "t/$nameA")) assertTrue(path in text, path)
         assertTrue(bytesA.decodeToString() in text && bytesB.decodeToString() in text)
         assertFalse(f.controller.state.value.exporting)
     }
@@ -431,6 +449,59 @@ class FilesControllerTest {
         f.controller.shareAll(phonePresenter)
         advanceUntilIdle()
         assertEquals(3, phonePresenter.shared.single().first.size)
+    }
+
+    @Test
+    fun aStationZipHoldsOnlyThatStationsVerifiedFiles() = runTest {
+        val f = fixture(owner = "s")
+        advanceUntilIdle()
+        val p = Presenter()
+        f.controller.shareZip(p)
+        advanceUntilIdle()
+        val zip = f.space.runs.single().files.values.single()
+        // Not station t's copy of nameA, and not the unindexed orphan of station s.
+        assertEquals(listOf("s/$nameA", "s/$nameB"), zipNames(zip))
+        val streaming = Presenter(streams = true)
+        f.controller.saveZip(streaming)
+        advanceUntilIdle()
+        assertEquals(listOf("s/$nameA", "s/$nameB"), zipNames(streaming.streamed.single().second))
+    }
+
+    @Test
+    fun theWholePhoneZipHoldsEveryVerifiedFileButNoOrphan() = runTest {
+        val f = fixture(owner = null)
+        advanceUntilIdle()
+        f.controller.shareZip(Presenter())
+        advanceUntilIdle()
+        assertEquals(listOf("s/$nameA", "s/$nameB", "t/$nameA"), zipNames(f.space.runs.single().files.values.single()))
+    }
+
+    @Test
+    fun aStationDailyZipHoldsOnlyThatStationsDayFiles() = runTest {
+        fun day(path: String) = ExportEntry(path, 0) { ByteArrayReader(bytesA) }
+        val f = fixture(
+            owner = "s",
+            daily = {
+                listOf(
+                    day("derived/v1/s/day=2026-09-17.parquet"),
+                    day("derived/v1/s/day=2026-09-17.manifest.json"),
+                    day("derived/v1/t/day=2026-09-17.parquet"),
+                    day("derived/v1/t/day=2026-09-17.manifest.json"),
+                )
+            },
+        )
+        advanceUntilIdle()
+        f.controller.shareDaily(Presenter())
+        advanceUntilIdle()
+        assertEquals(
+            listOf("derived/v1/s/day=2026-09-17.manifest.json", "derived/v1/s/day=2026-09-17.parquet"),
+            zipNames(f.space.runs.single().files.values.single()),
+        )
+        f.owner.value = null
+        advanceUntilIdle()
+        f.controller.shareDaily(Presenter())
+        advanceUntilIdle()
+        assertEquals(4, zipNames(f.space.runs.last().files.values.single()).size)
     }
 
     @Test

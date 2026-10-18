@@ -233,11 +233,31 @@ class ArchiveExportTest {
 
     @Test
     fun dailyEntriesNeedAParquetFile() {
-        assertEquals(null, ArchiveExport.dailyEntries(listOf(entry("derived/v1/x.manifest.json"))))
+        assertEquals(null, ArchiveExport.dailyEntries(listOf(entry("derived/v1/A/x.manifest.json")), setOf("A")))
         val kept = ArchiveExport.dailyEntries(
-            listOf(entry("derived/v1/b.parquet"), entry("derived/v1/tmp.part"), entry("derived/v1/a.manifest.json")),
+            listOf(entry("derived/v1/A/b.parquet"), entry("derived/v1/A/tmp.part"), entry("derived/v1/A/a.manifest.json")),
+            setOf("A"),
         )
-        assertEquals(listOf("derived/v1/a.manifest.json", "derived/v1/b.parquet"), kept?.map { it.path })
+        assertEquals(listOf("derived/v1/A/a.manifest.json", "derived/v1/A/b.parquet"), kept?.map { it.path })
+    }
+
+    @Test
+    fun dailyEntriesKeepOnlyTheGivenStations() {
+        val derived = listOf(
+            entry("derived/v1/A/day=2026-10-01.parquet"),
+            entry("derived/v1/A/day=2026-10-01.manifest.json"),
+            entry("derived/v1/B/day=2026-10-01.parquet"),
+            entry("derived/v1/B/day=2026-10-01.manifest.json"),
+            // Outside any station directory.
+            entry("derived/v1/loose.parquet"),
+        )
+        assertEquals(
+            listOf("derived/v1/A/day=2026-10-01.manifest.json", "derived/v1/A/day=2026-10-01.parquet"),
+            ArchiveExport.dailyEntries(derived, setOf("A"))?.map { it.path },
+        )
+        assertEquals(4, ArchiveExport.dailyEntries(derived, setOf("A", "B"))?.size)
+        // Only another station's day files is nothing to share.
+        assertEquals(null, ArchiveExport.dailyEntries(derived, setOf("C")))
     }
 
     @Test
@@ -339,15 +359,37 @@ class ArchiveExportTest {
         assertTrue(opened.all { it.closes == 1 })
     }
 
+    private fun record(station: String, name: String, syncedAt: Long) =
+        ArchiveRecord(station = station, name = name, bytes = 1, crc32 = 1, sha256 = "x", syncedAtEpochMs = syncedAt, sourceDevice = station)
+
+    /** Two stations' verified finals plus a PAR1-invalid final no record vouches for. */
+    private fun twoStationsAndAnOrphan(): InMemoryArchiveStore = InMemoryArchiveStore().apply {
+        files["${ArchiveLayout.ARCHIVE}/B/b.parquet"] = byteArrayOf(9)
+        files["${ArchiveLayout.ARCHIVE}/A/a.parquet"] = byteArrayOf(8)
+        files["${ArchiveLayout.ARCHIVE}/A/orphan.parquet"] = "not parquet".encodeToByteArray()
+    }
+
+    private fun zipNames(entries: List<ExportEntry>): List<String> {
+        val sink = MemorySink()
+        ArchiveExport.writeZip(sink, entries)
+        return ParsedZip(sink.bytes()).entries.map { it.name }
+    }
+
     @Test
-    fun archiveEntriesListEveryFinalFileSorted() = kotlinx.coroutines.test.runTest {
-        val store = InMemoryArchiveStore()
-        store.files["${ArchiveLayout.ARCHIVE}/B/b.parquet"] = byteArrayOf(9)
-        store.files["${ArchiveLayout.ARCHIVE}/A/a.parquet"] = byteArrayOf(8)
-        val entries = ArchiveExport.archiveEntries(store, emptyList(), nowEpochMs = 42)
-        assertEquals(listOf("A/a.parquet", "B/b.parquet"), entries.map { it.path })
-        assertEquals(42, entries.first().modifiedEpochMs)
-        assertContentEquals(byteArrayOf(8), entries.first().open().read(0, 1))
+    fun aStationZipHoldsOnlyThatStationsVerifiedFiles() = kotlinx.coroutines.test.runTest {
+        val store = twoStationsAndAnOrphan()
+        val a = record("A", "a.parquet", syncedAt = 42)
+        val entries = ArchiveExport.archiveEntries(store, listOf(a))
+        assertEquals(listOf("A/a.parquet"), zipNames(entries))
+        assertEquals(42, entries.single().modifiedEpochMs)
+        assertContentEquals(byteArrayOf(8), entries.single().open().read(0, 1))
+    }
+
+    @Test
+    fun theWholePhoneZipHoldsEveryVerifiedFileAndNoOrphan() = kotlinx.coroutines.test.runTest {
+        val store = twoStationsAndAnOrphan()
+        val records = listOf(record("B", "b.parquet", 2), record("A", "a.parquet", 1), record("A", "a.parquet", 1))
+        assertEquals(listOf("A/a.parquet", "B/b.parquet"), zipNames(ArchiveExport.archiveEntries(store, records)))
     }
 }
 
