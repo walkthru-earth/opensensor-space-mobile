@@ -1,13 +1,15 @@
 package earth.walkthru.opensensor.history
 
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -15,37 +17,60 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import earth.walkthru.aqsync.data.history.ChartAxes
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.settings.DetailLevel
+import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import kotlinx.datetime.TimeZone
-import org.jetbrains.compose.resources.stringResource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * At a font size of 200 percent (fontScale 2.0) no axis label of the History bar chart is clipped or
- * drawn over another (#99), on a 320 dp phone. The labels are measured with the chart's own text
- * style, so this is the size TalkBack and VoiceOver users with large text see.
+ * At large font sizes no label the History bar chart draws is clipped or drawn over another (#99).
+ * The chart itself is rendered and every label it draws is recorded through [LocalChartDrawRecorder],
+ * at 200 percent and at 310 percent (the largest iOS size), on 280 and 320 dp charts, in English and
+ * in Arabic right to left, at Simple and Detailed.
  */
 @OptIn(ExperimentalTestApi::class)
 class BandColumnChartFontScaleTest {
-    private class Case(val name: String, val metric: MetricSpec, val range: HistoryRange, val spanS: Long, val peak: Float, val system: UnitSystem = UnitSystem.METRIC)
+    private class Case(val name: String, val metric: MetricSpec, val range: HistoryRange, val spanS: Long, val peak: Float, val units: UnitFormatter = UnitFormatter.Metric)
+
+    private class Locale(val name: String, val direction: LayoutDirection, val labels: (DetailLevel) -> List<String>)
 
     private val cases = listOf(
         Case("PM2.5 day", Metrics.PM25, HistoryRange.DAY, DAY, 40f),
         Case("PM2.5 week, off scale", Metrics.PM25, HistoryRange.WEEK, 7 * DAY, 180f),
         Case("PM10 month", Metrics.PM10, HistoryRange.MONTH, 30 * DAY, 60f),
         Case("particle count year", Metrics.PARTICLES_GT03, HistoryRange.YEAR, 365 * DAY, 12_000f),
-        Case("temperature in °F", Metrics.AMBIENT_TEMP, HistoryRange.DAY, DAY, 38f, UnitSystem.IMPERIAL),
+        Case("temperature in °F", Metrics.AMBIENT_TEMP, HistoryRange.DAY, DAY, 38f, UnitFormatter(UnitSystem.IMPERIAL)),
     )
+
+    // The guideline labels as values and values-ar hold them, the Arabic Detailed one is the widest.
+    private val locales = listOf(
+        Locale("en", LayoutDirection.Ltr) { if (it.detailed) listOf("WHO 24 h guideline", "24 h guideline", "24 h") else listOf("24 h guideline", "24 h") },
+        Locale("ar", LayoutDirection.Rtl) {
+            val simple = listOf("الحد الإرشادي لمدة 24 ساعة", "24 ساعة")
+            if (it.detailed) listOf("إرشاد منظمة الصحة العالمية لمدة 24 ساعة") + simple else simple
+        },
+    )
+
+    private class Setup(val case: Case, val locale: Locale, val level: DetailLevel, val fontScale: Float, val widthDp: Int) {
+        override fun toString() = "${case.name}, ${locale.name}, $level, font ${fontScale}x, $widthDp dp"
+    }
+
+    private val setups = cases.flatMap { case ->
+        locales.flatMap { locale ->
+            listOf(DetailLevel.SIMPLE, DetailLevel.DETAILED).flatMap { level ->
+                listOf(2f, 3.1f).flatMap { scale -> listOf(280, 320).map { Setup(case, locale, level, scale, it) } }
+            }
+        }
+    }
 
     private fun columns(case: Case): List<HistoryColumn> {
         val n = 24
@@ -56,62 +81,70 @@ class BandColumnChartFontScaleTest {
         }
     }
 
-    /** Every label laid out at [fontScale] on a [widthDp] by 200 dp chart, as `case: problem` lines, empty when all fit. */
-    @Composable
-    private fun problems(fontScale: Float, widthDp: Int): List<String> {
-        val base = LocalDensity.current
-        var out = emptyList<String>()
-        val guideText = stringResource(guidelineLabelRes(DetailLevel.DETAILED))
-        CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale)) {
-            val density = LocalDensity.current
-            val measurer = rememberTextMeasurer()
-            val label = chartTextStyle(Color.Black, AXIS_LABEL_SP)
-            val cap = chartTextStyle(Color.Black, CAP_LABEL_SP, bold = true)
-            val gap = with(density) { LABEL_GAP.toPx() }
-            val canvas = with(density) { Size(widthDp.dp.toPx(), 200.dp.toPx()) }
-            out = cases.flatMap { case ->
-                val cols = columns(case)
-                val axis = ChartAxes.of(cols, case.metric)
-                val yTicks = yAxisTicks(axis, case.metric.unit, case.system)
-                val xTicks = timeTicks(case.range, 0, case.spanS, TimeZone.UTC)
-                val ySizes = yTicks.map { measurer.measure(it.second, label).size }
-                val xSizes = xTicks.map { measurer.measure(it.second, label).size }
-                val guide = measurer.measure(guideText, label).size
-                val margins = chartMargins(ySizes.map { it.width }, xSizes.maxOf { it.height }, measurer.measure("0", cap).size.height, gap)
-                val geometry = ChartGeometry(canvas, margins, axis, 0, case.spanS)
-                val guideline = ChartAxes.guidelineOf(case.metric)?.takeIf { it <= axis.max }
-                val placed = placeAxisLabels(geometry, yTicks.map { it.first }, ySizes, xTicks.map { it.first }, xSizes, guideline, guide, gap)
-                fun rect(at: Offset, size: IntSize) = Rect(at, Size(size.width.toFloat(), size.height.toFloat()))
-                val yRects = placed.y.map { (i, at) -> rect(at, ySizes[i]) }
-                val xRects = placed.x.map { (i, at) -> rect(at, xSizes[i]) }
-                val all = yRects + xRects + listOfNotNull(placed.guide?.let { rect(it, guide) })
-                buildList {
-                    all.filterNot { geometry.canvas.contains(it.topLeft) && it.right <= geometry.canvas.right + 0.5f && it.bottom <= geometry.canvas.bottom + 0.5f }
-                        .forEach { add("${case.name}: $it leaves the canvas ${geometry.canvas}") }
-                    yRects.forEach { if (it.right > geometry.plot.left) add("${case.name}: y label $it runs into the plot at ${geometry.plot.left}") }
-                    xRects.forEach { if (it.top < geometry.plot.bottom) add("${case.name}: x label $it runs into the plot at ${geometry.plot.bottom}") }
-                    for (rects in listOf(yRects, xRects)) {
-                        rects.zipWithNext().forEach { (a, b) -> if (a.overlaps(b)) add("${case.name}: $a overlaps $b") }
-                    }
-                    if (yRects.size < 2) add("${case.name}: only ${yRects.size} y labels")
-                    if (xRects.size < 2) add("${case.name}: only ${xRects.size} x labels")
+    /** What is wrong with one drawn frame, empty when every label fits. */
+    private fun problems(setup: Setup, frame: ChartDrawing, gap: Float): List<String> = buildList {
+        val canvas = frame.canvas
+        val plot = frame.plot
+        val slack = 0.5f
+        fun byKind(kind: LabelKind) = frame.labels.filter { it.kind == kind }.map { it.rect }
+        val yRects = byKind(LabelKind.Y)
+        val xRects = byKind(LabelKind.X)
+        frame.labels.forEach {
+            val r = it.rect
+            if (r.left < canvas.left - slack || r.top < canvas.top - slack || r.right > canvas.right + slack || r.bottom > canvas.bottom + slack) add("${it.kind} $r leaves the canvas $canvas")
+        }
+        yRects.forEach { if (it.right > plot.left + slack) add("y label $it runs into the plot at ${plot.left}") }
+        xRects.forEach { if (it.top < plot.bottom - slack) add("x label $it runs into the plot at ${plot.bottom}") }
+        // Values rise up the axis and time runs right, each kept label clears the one before by the gap.
+        yRects.zipWithNext().forEach { (lower, upper) -> if (upper.bottom + gap > lower.top + slack) add("y label $upper is closer than the gap to $lower") }
+        xRects.zipWithNext().forEach { (a, b) -> if (a.right + gap > b.left + slack) add("x label $b is closer than the gap to $a") }
+        if (yRects.size < 2) add("only ${yRects.size} y labels")
+        if (xRects.size < 2) add("only ${xRects.size} x labels")
+        val hasGuideline = setup.case.metric == Metrics.PM25 || setup.case.metric == Metrics.PM10
+        if (hasGuideline && byKind(LabelKind.GUIDE).size != 1) add("the guideline line has no label")
+    }.map { "$setup: $it" }
+
+    @Test
+    fun noDrawnLabelIsClippedOrOverlappedAtLargeFontSizes() = runComposeUiTest {
+        var index by mutableStateOf(0)
+        var frame: ChartDrawing? = null
+        var gap = 0f
+        setContent {
+            val setup = setups[index]
+            val base = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(base.density, setup.fontScale),
+                LocalLayoutDirection provides setup.locale.direction,
+                LocalChartDrawRecorder provides { frame = it },
+            ) {
+                gap = with(LocalDensity.current) { LABEL_GAP.toPx() }
+                MaterialTheme {
+                    val case = setup.case
+                    BandColumnChart(
+                        columns(case), case.metric, case.range, 0, case.spanS, selected = null, onSelect = {},
+                        modifier = Modifier.width(setup.widthDp.dp), zone = TimeZone.UTC, units = case.units,
+                        level = setup.level, guideLabels = setup.locale.labels(setup.level),
+                    )
                 }
             }
         }
-        return out
-    }
-
-    @Test
-    fun noAxisLabelIsClippedOrOverlappedAtTwiceTheFontSize() = runComposeUiTest {
-        var found: List<String>? = null
-        setContent { found = problems(fontScale = 2f, widthDp = 320) }
         waitForIdle()
+        val found = setups.indices.flatMap { i ->
+            if (i > 0) {
+                // A new frame for the next setup, so a stale one is never checked.
+                frame = null
+                index = i
+                waitForIdle()
+            }
+            val drawn = frame ?: return@flatMap listOf("${setups[i]}: nothing was drawn")
+            problems(setups[i], drawn, gap)
+        }
         assertEquals(emptyList(), found)
     }
 
     @Test
     fun theLabelsReallyGrowWithTheFontSize() = runComposeUiTest {
-        // Guards the test above: the labels it checks are measured at the scaled size, not a fixed px size.
+        // Guards the test above, the labels it checks are measured at the scaled size, not a fixed px size.
         var small = 0
         var large = 0
         setContent {
@@ -121,6 +154,35 @@ class BandColumnChartFontScaleTest {
         }
         waitForIdle()
         assertTrue(large > small * 1.6f, "fontScale 2 label is $large px, fontScale 1 is $small px")
+    }
+
+    @Test
+    fun theLongArabicGuidelineLabelWrapsOrFallsBack() = runComposeUiTest {
+        // At 200 percent on 320 dp the Arabic Detailed label is wider than the plot. It is drawn on two
+        // lines or replaced by a shorter one, never past the edge.
+        var frame: ChartDrawing? = null
+        val ar = locales.last()
+        setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(base.density, 2f),
+                LocalLayoutDirection provides LayoutDirection.Rtl,
+                LocalChartDrawRecorder provides { frame = it },
+            ) {
+                MaterialTheme {
+                    BandColumnChart(
+                        columns(cases[0]), Metrics.PM25, HistoryRange.DAY, 0, DAY, selected = null, onSelect = {},
+                        modifier = Modifier.width(320.dp), zone = TimeZone.UTC, level = DetailLevel.DETAILED, guideLabels = ar.labels(DetailLevel.DETAILED),
+                    )
+                }
+            }
+        }
+        waitForIdle()
+        val drawn = checkNotNull(frame)
+        val guide = drawn.labels.single { it.kind == LabelKind.GUIDE }
+        val oneLine = guide.layout.lineCount == 1 && guide.layout.layoutInput.text.text == ar.labels(DetailLevel.DETAILED).first()
+        assertTrue(!oneLine, "the full label fits on one line, the case no longer tests wrapping")
+        assertTrue(guide.rect.right <= drawn.canvas.right + 0.5f && guide.rect.left >= drawn.plot.left - 0.5f, "${guide.rect} leaves the plot ${drawn.plot}")
     }
 
     @Test

@@ -72,6 +72,26 @@ class BarSemanticsTest {
         assertEquals(45f - 18f - 2f, mid.y)
     }
 
+    @Test
+    fun labelsCloserThanTheGapAreSkipped() {
+        // A 100 px plot, so a value or a time lands on its own number of px.
+        val geometry = ChartGeometry(Size(120f, 120f), ChartMargins(left = 20f, top = 10f, bottom = 10f), ChartAxis(0f, 100f, 10f), 0, 100)
+        // The label at 12 would end 2 px under the one at 0, less than the 4 px gap.
+        val y = placeAxisLabels(geometry, listOf(0f, 12f), listOf(IntSize(10, 10), IntSize(10, 10)), emptyList(), emptyList(), null, IntSize.Zero, gap = 4f)
+        assertEquals(listOf(0), y.y.map { it.first })
+        // The label at 62 would start 2 px after the one at 0 ends.
+        val x = placeAxisLabels(geometry, emptyList(), emptyList(), listOf(0L, 62L), listOf(IntSize(40, 10), IntSize(40, 10)), null, IntSize.Zero, gap = 4f)
+        assertEquals(listOf(0), x.x.map { it.first })
+    }
+
+    @Test
+    fun aTallGuidelineLabelBelowItsLineStaysInsideTheCanvas() {
+        // The line is at the top, 10 px down a 30 px canvas, and the label is 25 px tall.
+        val geometry = ChartGeometry(Size(200f, 30f), ChartMargins(left = 20f, top = 10f, bottom = 0f), ChartAxis(0f, 15f, 5f), 0, 100)
+        val at = assertNotNull(placeAxisLabels(geometry, emptyList(), emptyList(), emptyList(), emptyList(), 15f, IntSize(60, 25), gap = 4f).guide)
+        assertEquals(5f, at.y, "pulled up so its bottom is the canvas bottom")
+    }
+
     private companion object {
         const val HOUR = 3_600L
     }

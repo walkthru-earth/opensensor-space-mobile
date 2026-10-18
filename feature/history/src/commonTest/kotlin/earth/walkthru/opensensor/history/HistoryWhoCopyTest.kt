@@ -10,8 +10,9 @@ class HistoryWhoCopyTest {
 
     @Test
     fun theGuidelineLabelFollowsTheLevel() {
-        assertEquals("chart_guideline_24h", guidelineLabelRes(DetailLevel.SIMPLE).key)
-        detailedLevels.forEach { assertEquals("chart_who_24h", guidelineLabelRes(it).key, "$it") }
+        // The label and its shorter fallbacks, longest first. Simple never falls back to a WHO label.
+        assertEquals(listOf("chart_guideline_24h", "chart_guideline_short"), guidelineLabelsRes(DetailLevel.SIMPLE).map { it.key })
+        detailedLevels.forEach { assertEquals(listOf("chart_who_24h", "chart_guideline_24h", "chart_guideline_short"), guidelineLabelsRes(it).map { r -> r.key }, "$it") }
     }
 
     @Test
