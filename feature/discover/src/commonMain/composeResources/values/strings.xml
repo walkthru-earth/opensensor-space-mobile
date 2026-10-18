@@ -135,4 +135,16 @@
     <string name="discover_window_latest_day">Latest day</string>
     <string name="discover_window_short_latest_day">Day</string>
     <string name="discover_scale_info2_real">Each area shows daily means from one or more public stations, for the latest day of data. A faded area has no value in the last 2 days of data. An outline only means the area does not measure this.</string>
+
+    <!-- Names of the feed properties and categories the app knows (DiscoverLabels.kt). An unknown id keeps the feed label. PM2.5 uses pm25_raw from the design system. -->
+    <string name="discover_property_pm10">PM10</string>
+    <string name="discover_property_pm1">PM1</string>
+    <string name="discover_property_um003">PM0.3 count</string>
+    <string name="discover_property_temperature">Temperature</string>
+    <string name="discover_property_humidity">Humidity</string>
+    <string name="discover_property_pressure">Pressure</string>
+    <string name="discover_property_co2">CO2</string>
+    <string name="discover_property_no2">NO2</string>
+    <string name="discover_category_air">Air</string>
+    <string name="discover_category_weather">Weather</string>
 </resources>

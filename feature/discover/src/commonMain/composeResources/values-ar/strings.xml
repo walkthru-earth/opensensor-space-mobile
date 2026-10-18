@@ -154,4 +154,15 @@
     <string name="discover_window_latest_day">آخر يوم</string>
     <string name="discover_window_short_latest_day">يوم</string>
     <string name="discover_scale_info2_real">تعرض كل منطقة متوسطات يومية من محطة عامة واحدة أو أكثر، لآخر يوم من البيانات. المنطقة الباهتة ليس لها قيمة في آخر يومين من البيانات. الحدود وحدها تعني أن المنطقة لا تقيس هذا.</string>
+
+    <string name="discover_property_pm10">PM10</string>
+    <string name="discover_property_pm1">PM1</string>
+    <string name="discover_property_um003">عدد جسيمات PM0.3</string>
+    <string name="discover_property_temperature">درجة الحرارة</string>
+    <string name="discover_property_humidity">الرطوبة</string>
+    <string name="discover_property_pressure">الضغط الجوي</string>
+    <string name="discover_property_co2">CO2</string>
+    <string name="discover_property_no2">NO2</string>
+    <string name="discover_category_air">الهواء</string>
+    <string name="discover_category_weather">الطقس</string>
 </resources>

@@ -386,7 +386,7 @@ private fun TopControls(
                 FilterChip(
                     selected = p.id == state.property?.id,
                     onClick = { onProperty(p.id) },
-                    label = { Text(p.shownLabel()) },
+                    label = { FitText(p.shownLabel()) },
                     colors = chipColors,
                     shape = FloatingControl.SmallShape,
                 )
@@ -494,7 +494,7 @@ private fun Legend(
                         }
                     }
                     Column(Modifier.width(212.dp).padding(vertical = 8.dp).clearAndSetSemantics { contentDescription = spoken }) {
-                        Text("${property.shownLabel()}  $unit", style = MaterialTheme.typography.labelMedium)
+                        FitText("${property.shownLabel()}  $unit", style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.height(2.dp))
                         WhoStepBar(health, strings)
                         Spacer(Modifier.height(2.dp))
@@ -507,7 +507,7 @@ private fun Legend(
                     val high = scale.percentile.high
                     // Read as one item, label and unit, low, high and the note. The gradient is decorative.
                     Column(Modifier.widthIn(min = 140.dp, max = 180.dp).padding(vertical = 8.dp).semantics(mergeDescendants = true) {}) {
-                        Text("${property.shownLabel()}  $unit", style = MaterialTheme.typography.labelMedium)
+                        FitText("${property.shownLabel()}  $unit", style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.height(4.dp))
                         Box(
                             Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
@@ -773,7 +773,7 @@ private fun DiscoverStateMessage(text: String, expression: PeacockExpression, mo
 private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: DiscoverUiState, trailing: String? = null) {
     // One heading for the chart below, read as label, unit, window and the trailing note.
     Row(Modifier.semantics(mergeDescendants = true) { heading() }, verticalAlignment = Alignment.Bottom) {
-        Text("${property.shownLabel()}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)
+        FitText("${property.shownLabel()}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.width(8.dp))
         Text(
             "${strings.avg}  ${windowLabel(state.window, strings, state.daily)}",
@@ -865,7 +865,7 @@ private fun CellDetail(
             val groups = if (others.size > 5) others.groupBy { it.property.category } else mapOf("" to others)
             groups.forEach { (category, ranges) ->
                 if (category.isNotEmpty()) {
-                    Text(category, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 2.dp).semantics { heading() })
+                    FitText(shownCategory(category), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 2.dp).semantics { heading() })
                 }
                 ranges.forEach { r -> RangeRow(r, strings) { onShowProperty(r.property.id) } }
             }
@@ -988,7 +988,7 @@ private fun AllProperties(state: DiscoverUiState, strings: DiscoverStrings, onPi
     Spacer(Modifier.height(8.dp))
     // Grouped by the category the dictionary gives each property (Air, Weather, and so on).
     state.dictionary.groupBy { it.category }.forEach { (category, properties) ->
-        Text(category, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp).semantics { heading() })
+        FitText(shownCategory(category), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp).semantics { heading() })
         properties.forEach { p ->
             val count = state.rows.count { it.mean(p.id) != null }
             Row(
