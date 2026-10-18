@@ -84,7 +84,7 @@ class DailyParquetBuilderTest {
     }
 
     @Test
-    fun aFailedDailySinkKeepsTiersWithoutDecodingAgain() {
+    fun aFailedDailySinkKeepsTiersWithoutTimingAgain() {
         val (fixture, anchor) = dailyFixture()
         val day = StationDays.dayOf(anchor.utcNs)
         val anchors = mapOf(anchor.boot to anchor)
@@ -101,8 +101,10 @@ class DailyParquetBuilderTest {
             assertEquals(expected, pass.buckets)
             assertNull(pass.daily)
             assertEquals(failure, pass.dailyError)
-            assertEquals(1, counter.opened, "sink failure must keep the original decode")
-            assertEquals(1, counter.closed)
+            // One open times the rows for both outputs. The file's columns open the source once more,
+            // only once the sink took the header (#98). A sink failure never redoes the tiers.
+            assertEquals(if (failOnFlush) 2 else 1, counter.opened)
+            assertEquals(counter.opened, counter.closed)
         }
     }
 
@@ -115,8 +117,9 @@ class DailyParquetBuilderTest {
             DailyParquetBuilder.build(source.record.station, StationDays.dayOf(anchor.utcNs), sources, DailyBuffer(), mapOf(anchor.boot to anchor), anchor.utcNs / 1_000_000_000L + 100_000L)
         )
         assertEquals(12, result.sources.size, "every source stays in the manifest")
-        assertEquals(12, counter.opened)
-        assertEquals(12, counter.closed)
+        // The copies are duplicates, so only the first gives rows and is opened again for its columns.
+        assertEquals(13, counter.opened)
+        assertEquals(13, counter.closed)
         assertEquals(0, counter.open)
         assertEquals(1, counter.maxOpen, "a day never holds two source files at once")
     }
@@ -135,6 +138,65 @@ class DailyParquetBuilderTest {
         }
         assertEquals(2, counter.opened)
         assertEquals(0, counter.open, "the sources read before the failure are closed")
+    }
+
+    @Test
+    fun aSourceThatFailsToReopenForTheFileFailsTheFileButKeepsTheTiers() {
+        val (fixture, anchor) = dailyFixture()
+        val day = StationDays.dayOf(anchor.utcNs)
+        val anchors = mapOf(anchor.boot to anchor)
+        val expected = DayPass.run(fixture.record.station, day, listOf(fixture), null, anchors, 0).buckets
+        var calls = 0
+        val (source, _) = dailyFixture { bytes ->
+            if (++calls == 2) throw ParquetFormatException("gone")
+            ParquetFile.wrap(bytes)
+        }
+        val pass = DayPass.run(source.record.station, day, listOf(source), DailyBuffer(), anchors, 0)
+        assertEquals(expected, pass.buckets)
+        assertNull(pass.daily)
+        assertEquals(listOf(source.record), pass.failedSources, "the caller must not cache these tiers as current")
+        assertEquals("gone", pass.dailyError?.message)
+
+        calls = 0
+        assertFailsWith<ParquetFormatException> {
+            DailyParquetBuilder.build(source.record.station, day, listOf(source), DailyBuffer(), anchors, 0)
+        }
+    }
+
+    @Test
+    fun aSourceThatChangedBetweenThePassesFailsTheFile() {
+        val (fixture, anchor) = dailyFixture()
+        val other = fixtureBytes("parquet/device/v1-none-90rows-dated.parquet")
+        var calls = 0
+        val source = DailyParquetSource(fixture.record) { if (++calls == 1) fixture.open() else ParquetFile.wrap(other) }
+        val pass = DayPass.run(source.record.station, StationDays.dayOf(anchor.utcNs), listOf(source), DailyBuffer(), mapOf(anchor.boot to anchor), 0)
+        assertNull(pass.daily)
+        assertEquals(listOf(source.record), pass.failedSources)
+        assertTrue(pass.dailyError?.message.orEmpty().contains("changed"), pass.dailyError.toString())
+    }
+
+    @Test
+    fun aSourceIsDecodedForTheFileOnlyWhenItsHourIsWritten() {
+        // The first pass only times rows. The columns are read once the file is started (#98).
+        val events = ArrayList<String>()
+        val bytes = fixtureBytes("parquet/device/v3-board-2rg-180rows.parquet")
+        val file = ParquetFile.wrap(bytes)
+        val index = ParquetIndexer.index(file)
+        val station = file.metadata.stationId ?: "station-a"
+        fun record(name: String) = ArchiveRecord(
+            station, name, bytes.size.toLong(), 1, "sha-$name", 1, "fixture", indexedAtEpochMs = 1, rows = index.rows,
+            bootId = index.bootId, utcRows = index.utcRows, firstUtcNs = index.firstUtcNs, lastUtcNs = index.lastUtcNs,
+        )
+        val sources = listOf(DailyParquetSource(record("a.parquet")) { events += "open"; ParquetFile.wrap(bytes) })
+        val sink = object : ParquetSink {
+            override fun write(bytes: ByteArray) { events += "write" }
+        }
+        val day = StationDays.dayOf(index.firstUtcNs!!)
+        assertNotNull(DailyParquetBuilder.build(station, day, sources, sink, emptyMap(), 0))
+        // Timing open, then the header, then the column decode, then the row groups.
+        assertEquals("open", events.first())
+        val second = events.indexOf("open").let { first -> events.withIndex().first { it.index > first && it.value == "open" }.index }
+        assertTrue(events.subList(1, second).contains("write"), "columns decode after the file started, $events")
     }
 
     @Test

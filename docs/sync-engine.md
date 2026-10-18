@@ -58,7 +58,7 @@ sequenceDiagram
   E->>S: OPEN name
   S->>D: OPEN
   D-->>S: OPENED(handle,size,crc32,name)
-  loop offset < size (window = max_read 16 KiB)
+  loop offset < size (window ≤ max_read 16 KiB, AdaptiveReadWindow)
     E->>S: READ handle, offset, window
     D-->>S: CHUNK × n (absolute offsets) … READ_END(next_offset)
     S-->>E: contiguous bytes, or WindowLostException(receivedUpTo)
@@ -194,10 +194,23 @@ flowchart LR
 The **window** fails, never the sync; the device's `next_offset` is never trusted over our byte
 count. Continuity is checked **in the session**, so the "one request, one ordered reply" invariant
 holds for every caller ([lesson](lessons-learned.md#protocol--sync)). `ProtocolViolationException`
-is reserved for malformed streams (wrong handle, undecodable frame). `READ` window = the device's
-`max_read` (16 KiB) on **both** links; `ReadWindow.kt` records why BLE is not given a smaller one
-(the 2026-09-17 loss was 514-byte frames > 512, a firmware bug, not the radio). `info.max_read`
-missing → `DEFAULT_MAX_READ` 4096 (dead guard; firmware always sends 16384).
+is reserved for malformed streams (wrong handle, undecodable frame). The device's `max_read`
+(16 KiB) is the `READ` window cap on **both** links and the window starts there. `ReadWindow.kt`
+records why BLE does not start smaller (the 2026-09-17 loss was 514-byte frames > 512, a firmware
+bug, not the radio). `info.max_read` missing → `DEFAULT_MAX_READ` 4096 (dead guard, firmware always
+sends 16384). `STATUS` has no window field, so `max_read` is the only firmware cap.
+
+Under the cap, each link adapts its window (`AdaptiveReadWindow`, #98, shared by Android and iOS
+through `DeviceSession.readWindow`). A lost window halves it, rounded down to whole `CHUNK` frames
+(`min(payload_max, 512 on BLE) − 7` bytes), never below 4 frames. Eight clean windows in a row add
+one 4-frame step back, never above `max_read`. A reply that stalls past the first-frame or
+inter-frame timeout on a link that is still up halves the window the same way. The link has
+already sent `ABORT` and drained that `READ` to its terminal, so the engine asks again from its own
+offset with the smaller window, under the same retry budget, and a timeout never counts as clean.
+A send timeout, or a timeout past the budget, ends the attempt, and a reconnect starts again at
+`max_read`. The size, CRC-32 and `PAR1` checks still gate the commit. The window lives as long as the link, so the next
+file on a weak link starts small. The window changes only the `READ` length, the wire frames are
+the contract's.
 
 ## Requests over the link (#55)
 

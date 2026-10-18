@@ -18,6 +18,8 @@ import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Sha256
 import earth.walkthru.aqsync.data.protocol.toHex
+import earth.walkthru.aqsync.link.LinkTimeoutException
+import earth.walkthru.aqsync.link.TimeoutPhase
 import earth.walkthru.aqsync.storage.AlreadyCommitted
 import earth.walkthru.aqsync.storage.StorageException
 import earth.walkthru.aqsync.sync.nowEpochMs
@@ -49,7 +51,7 @@ fun interface ArchiveRecordIndexer {
  *
  * ```
  * OPEN name → OPENED handle,size,crc32
- * loop offset < size: READ handle, offset, max_read → CHUNK × n, READ_END next_offset
+ * loop offset < size: READ handle, offset, window ≤ max_read → CHUNK × n, READ_END next_offset
  * verify size, CRC-32, PAR1 magic; write under original Hive path; record SHA-256
  * CLOSE handle
  * ```
@@ -61,7 +63,8 @@ fun interface ArchiveRecordIndexer {
  * A window that arrives incomplete ([WindowLostException]: notifications were lost between the
  * device and this code) is re-read from the last good offset (`READ` is idempotent on an immutable
  * file) up to [WINDOW_RETRIES] times with a short backoff. Only when the same window keeps failing is
- * the *file* marked [FileOutcome.Failed]. The sync goes on with the next file.
+ * the *file* marked [FileOutcome.Failed]. The sync goes on with the next file. Each lost window
+ * halves the link's [AdaptiveReadWindow] and clean windows grow it back toward `max_read`.
  */
 class SyncEngine(
     private val store: ArchiveStore,
@@ -296,13 +299,14 @@ class SyncEngine(
     ): FileOutcome? {
         var offset = writer.written
         var windowsRecovered = recoveredBefore
-        val readLength = maxRead.coerceAtLeast(1).toLong()
+        // The device's max_read is the cap, the link's AIMD window picks the length under it (#98).
+        val window = session.readWindow(maxRead)
         var attempt = 0
         while (offset < size) {
             currentCoroutineContext().ensureActive()
             val before = offset
             val end = try {
-                session.read(handle, offset, readLength) { chunk ->
+                session.read(handle, offset, window.current.toLong()) { chunk ->
                     when {
                         chunk.offset == offset -> {
                             writer.write(chunk.offset, chunk.payload)
@@ -322,6 +326,7 @@ class SyncEngine(
                     progress.report(offset, windowsRecovered)
                 }
             } catch (e: WindowLostException) {
+                window.onLost()
                 attempt++
                 // Bytes queued before the gap are good (absolute offsets). The next READ starts at
                 // our own `offset`, never the device's count (e.receivedUpTo is the session's view of it).
@@ -332,6 +337,18 @@ class SyncEngine(
                             "notifications keep getting lost on this link, move closer and retry"
                     )
                 }
+                delay(WindowRetryPolicy.backoffMs(attempt, windowRetryBackoffMs))
+                continue
+            } catch (e: LinkTimeoutException) {
+                // A reply that stalled on a link that is still up (#98). The link has abandoned the
+                // READ, sent ABORT and drains what is left before it admits the next request, and the
+                // contract resumes a stopped READ from the phone's own offset. So the window halves
+                // and the same bytes are asked again, smaller. A timeout is never clean. A send
+                // timeout, or one past the retry budget, ends the attempt as before.
+                if (e.timeout.phase != TimeoutPhase.FIRST_FRAME && e.timeout.phase != TimeoutPhase.INTER_FRAME) throw e
+                window.onLost()
+                attempt++
+                if (WindowRetryPolicy.givesUp(attempt)) throw e
                 delay(WindowRetryPolicy.backoffMs(attempt, windowRetryBackoffMs))
                 continue
             }
@@ -345,6 +362,7 @@ class SyncEngine(
             if (offset == before && offset < size) {
                 return FileOutcome.Failed(name, "READ at $offset returned no data before end of file")
             }
+            window.onClean()
             if (attempt > 0) {
                 windowsRecovered++
                 recovered(windowsRecovered)

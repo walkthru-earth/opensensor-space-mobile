@@ -46,12 +46,18 @@ class FakeArchiveDevice(
     /** The offset of every `READ` handled, in order, so a test can see where a resume started. */
     val readOffsets: MutableList<Long> = mutableListOf()
 
+    /** The length asked by every `READ` handled, in order, so a test can follow the adaptive window. */
+    val readLengths: MutableList<Long> = mutableListOf()
+
     /** `READ` requests handled so far. The hooks below are keyed on it (1-based). */
     var readCount: Int = 0
         private set
 
     /** Leading CHUNKs of the k-th READ window to drop, as a lossy BLE link does. READ_END still says the true offset. */
     var dropLeadingChunks: (readIndex: Int) -> Int = { 0 }
+
+    /** True for a READ (1-based) that sends no frame until an `ABORT` stops it, as a stalled link does. */
+    var stallRead: (readIndex: Int) -> Boolean = { false }
 
     /** Runs before an OPEN is answered, so a test can change the files between LIST and OPEN. */
     var beforeOpen: (name: String) -> Unit = {}
@@ -159,12 +165,20 @@ class FakeArchiveDevice(
                 val f = openFile
                 if (f == null || handle != openHandle) return send(Frame.Error(op, ProtocolError.BAD_HANDLE.code, ""))
                 readOffsets += offset
+                readLengths += length
                 beforeRead(readCount + 1)
                 val end = minOf(f.bytes.size.toLong(), offset + minOf(length, maxRead.toLong()))
                 val chunkMax = mtu - 10
                 var toDrop = dropLeadingChunks(++readCount)
                 var pos = offset
                 streaming = op
+                if (stallRead(readCount)) {
+                    while (!abortRequested) delay(100)
+                    abortRequested = false
+                    streaming = 0
+                    send(Frame.Error(op, ProtocolError.ABORTED.code, ""))
+                    return send(Frame.Aborted(op))
+                }
                 while (pos < end) {
                     if (abortRequested) {
                         abortRequested = false

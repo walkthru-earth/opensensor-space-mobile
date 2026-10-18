@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Request
+import earth.walkthru.aqsync.data.sync.AdaptiveReadWindow
 import earth.walkthru.aqsync.data.sync.ClockSyncAction
 import earth.walkthru.aqsync.data.sync.SmartSyncPolicy
 import earth.walkthru.aqsync.link.LinkLog
@@ -116,6 +117,19 @@ class DeviceSession(val link: LinkSession, val transport: AqTransport, val frame
 
     /** `payload_max = MTU − 3`. */
     val payloadMax: Int get() = transport.mtu - 3
+
+    private var window: AdaptiveReadWindow? = null
+
+    /**
+     * The adaptive `READ` window of this link (#98), made on first use from the device's [maxRead],
+     * the link kind and [payloadMax], and kept for every later file so a weak link stays small.
+     */
+    fun readWindow(maxRead: Int?): AdaptiveReadWindow {
+        val fresh = AdaptiveReadWindow.of(transport.kind, payloadMax, maxRead)
+        val held = window
+        if (held != null && held.max == fresh.max && held.frame == fresh.frame) return held
+        return fresh.also { window = it }
+    }
 
     val status: Flow<DeviceStatus> = transport.statusNotifications.mapNotNull { raw ->
         runCatching { DeviceStatus.parse(raw.decodeToString()) }.getOrNull()

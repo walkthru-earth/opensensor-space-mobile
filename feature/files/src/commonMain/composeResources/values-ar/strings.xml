@@ -194,4 +194,10 @@
     <string name="fm_loading">جارٍ قراءة هذا الملف…</string>
     <!-- Files screen, the click label of a device file row that syncs it. -->
     <string name="file_sync_one">مزامنة الملف</string>
+    <string name="fm_rows_page">الصفوف</string>
+    <string name="fm_rows_range">الصفوف %1$d إلى %2$d من %3$d</string>
+    <string name="fm_rows_previous">الصفوف السابقة</string>
+    <string name="fm_rows_next">الصفوف التالية</string>
+    <string name="fm_rows_unavailable">تعذّرت قراءة الصفوف</string>
+    <string name="fm_rows_retry">أعد المحاولة</string>
 </resources>

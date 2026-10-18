@@ -13,8 +13,10 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import kotlinx.coroutines.CancellationException
 
 /**
- * One immutable source and its verified archive identity. [DailyParquetBuilder] calls [open] once and
- * closes the file before it opens the next source, so a day holds at most one source file open (#61).
+ * One immutable source and its verified archive identity. [DailyParquetBuilder] calls [open] once to
+ * time the rows and, when it writes a daily file, once more to decode the columns of the hours the
+ * source fills (#98). It closes each file before it opens the next, so a day holds at most one source
+ * file open (#61). [open] must give a fresh [ParquetFile] on every call.
  */
 data class DailyParquetSource(val record: ArchiveRecord, val open: () -> ParquetFile)
 
@@ -38,8 +40,9 @@ class DayPassResult(
     val rowsRead: Long,
     /**
      * Sources that failed to open, decode or close. A failure before accumulation leaves no tiers for
-     * that source. A later all-column decode or close failure can retain contributions already added
-     * to the tiers. The daily file is not written, and these partial tiers must not be cached as current.
+     * that source. A later close failure, or a failure to reopen or decode it for the daily file, can
+     * retain contributions already added to the tiers. The daily file is not written, and these partial
+     * tiers must not be cached as current.
      */
     val failedSources: List<ArchiveRecord>,
     /** Why the daily file was not written although the sink was given, logged by the caller. */
@@ -47,9 +50,10 @@ class DayPassResult(
 )
 
 /**
- * One decode of a station-day's sources feeds both the tier [Aggregator] and the derived daily file
- * (#63). Before it, the derive opened and decoded every source once for the tiers and again for the
- * daily file. Rows are timed (UTC or the same-boot estimate), kept when they fall in the UTC day, and
+ * One pass over a station-day's sources feeds both the tier [Aggregator] and the derived daily file
+ * (#63). Each source is opened once to time its rows and feed the tiers. With a sink it is opened
+ * once more and decoded only while its hourly row groups are written, then dropped, so the day's
+ * columns are never all held at once (#98). Rows are timed (UTC or the same-boot estimate), kept when they fall in the UTC day, and
  * de-duplicated once with [RowKeys], so the tiers and the daily file count the same rows.
  *
  * A source that fails to open or decode is left out of the tiers, like before, and stops the daily
@@ -102,16 +106,21 @@ object DailyParquetBuilder {
         return LongColumn(values, valid)
     }
 
-    /** One open source after its pass. [decoded] holds every column of a contributing source, by leaf name. */
+    /** One source after its first pass. Its columns are decoded later, only while its hours are written. */
     private class Src(
-        val row: ArchiveRecord,
+        val source: DailyParquetSource,
+        val numRows: Long,
         val keepCount: Int,
         /** The estimated instant of each row, valid only where the anchor gave one. Null without an anchor. */
         val estimated: LongColumn?,
-        val decoded: Map<String, ColumnValues>,
         val keyValueMetadata: Map<String, String>,
         val schemaVersion: String?,
-    )
+    ) {
+        val row: ArchiveRecord get() = source.record
+    }
+
+    /** A source that could not be reopened or decoded for the daily file, apart from a sink failure. */
+    private class SourceFailure(val record: ArchiveRecord, override val cause: Exception) : Exception(cause.message, cause)
 
     /**
      * The shared pass. [strict] throws the first source or schema failure, as the daily builder always
@@ -136,7 +145,7 @@ object DailyParquetBuilder {
         var rowsRead = 0L
 
         // 1. Open one source at a time, time its rows, keep those of this day seen for the first time,
-        // feed them to the tiers, decode what the daily file needs and close it before the next (#61).
+        // feed them to the tiers and close it before the next (#61). No other column is decoded yet (#98).
         // Estimated times (§4.6) per source: monotonic → UTC for unsynced files whose boot has an anchor.
         val opened = ArrayList<Src>()
         var anyEstimated = false
@@ -213,18 +222,7 @@ object DailyParquetBuilder {
                         }
                     }
                     if (estimated != null && keepCount > 0) anyEstimated = true
-                    // Decode every column of a contributing source once, while it is open. The tiers'
-                    // columns are already in the cache.
-                    // UTC instants are stored in microseconds under their current name, whatever the source wrote.
-                    val decoded = if (!writing || keepCount == 0) {
-                        emptyMap()
-                    } else {
-                        pf.leaves.associate { leaf ->
-                            val values = col(leaf.name) ?: pf.readColumn(leaf)
-                            UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(values, leaf) else values
-                        }
-                    }
-                    Src(src, keepCount, estimated, decoded, md.keyValueMetadata, md.schemaVersion)
+                    Src(source, pf.numRows, keepCount, estimated, md.keyValueMetadata, md.schemaVersion)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -303,22 +301,41 @@ object DailyParquetBuilder {
             sortedBy = utcIndex.takeIf { it >= 0 && !anyEstimated },
             pageIndex = true,
         )
+        // 5. One hourly row group at a time. A source is decoded when its first hour is written and
+        // dropped after its last one, so memory holds the sources of about one hour, not the day (#98).
+        val rows = Rows(order, keptRow, startsArray)
+        val bounds = ArrayList<Int>()
+        var at = 0
+        while (at < kept) {
+            bounds += at
+            val hour = keptUtc[order[at]].floorDiv(HOUR_NS)
+            while (at < kept && keptUtc[order[at]].floorDiv(HOUR_NS) == hour) at++
+        }
+        bounds += kept
+        val lastGroup = IntArray(opened.size) { -1 }
+        for (g in 0 until bounds.size - 1) for (j in bounds[g] until bounds[g + 1]) lastGroup[rows.source(j)] = g
+        val live = arrayOfNulls<Map<String, ColumnValues>>(opened.size)
         var groups = 0
         try {
             writer.begin()
-            var start = 0
-            val rows = Rows(order, keptRow, startsArray)
-            while (start < kept) {
-                val hour = keptUtc[order[start]].floorDiv(HOUR_NS)
-                var end = start
-                while (end < kept && keptUtc[order[end]].floorDiv(HOUR_NS) == hour) end++
-                writer.rowGroup(gather(columns, opened, rows, start, end))
+            for (g in 0 until bounds.size - 1) {
+                val from = bounds[g]
+                val to = bounds[g + 1]
+                for (j in from until to) {
+                    val s = rows.source(j)
+                    if (live[s] == null) live[s] = decode(opened[s])
+                }
+                writer.rowGroup(gather(columns, opened, live, rows, from, to))
                 groups++
-                start = end
+                for (s in opened.indices) if (lastGroup[s] == g) live[s] = null
             }
             writer.finish()
         } catch (e: CancellationException) {
             throw e
+        } catch (e: SourceFailure) {
+            if (strict) throw e.cause
+            failed += e.record
+            return DayPassResult(buckets, null, rowsRead, failed, e.cause)
         } catch (e: Exception) {
             if (strict) throw e
             // The daily output is rebuildable. A failed sink must not discard the already decoded tiers.
@@ -332,6 +349,25 @@ object DailyParquetBuilder {
             opened.map { s -> DailyParquetContribution(s.row, s.keepCount, anchors[s.row.bootId]?.sourceFile.takeIf { s.estimated != null }) },
         )
         return DayPassResult(buckets, daily, rowsRead, failed, null)
+    }
+
+    /**
+     * Every column of [src], reopened, by canonical name. UTC instants are stored in microseconds under
+     * their current name, whatever the source wrote. Each leaf is read the way the tiers' cache read it.
+     */
+    private fun decode(src: Src): Map<String, ColumnValues> = try {
+        src.source.open().use { pf ->
+            if (pf.numRows != src.numRows) throw ParquetFormatException("source changed between passes")
+            val md = pf.metadata
+            pf.leaves.associate { leaf ->
+                val values = md.leaf(leaf.name)?.let { pf.readColumn(it) } ?: pf.readColumn(leaf)
+                UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(values, leaf) else values
+            }
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        throw SourceFailure(src.row, e)
     }
 
     /** The kept rows in output order. Position [j] is kept row `order[j]`, of source [source] and row [row] there. */
@@ -380,8 +416,8 @@ object DailyParquetBuilder {
         if (src !== order) src.copyInto(order)
     }
 
-    /** Builds one row group's columns by gathering output rows [from] until [to] from the decoded sources. */
-    private fun gather(columns: List<ParquetWriter.Column>, opened: List<Src>, rows: Rows, from: Int, to: Int): List<ColumnValues> {
+    /** Builds one row group's columns by gathering output rows [from] until [to] from the [live] decoded sources. */
+    private fun gather(columns: List<ParquetWriter.Column>, opened: List<Src>, live: Array<Map<String, ColumnValues>?>, rows: Rows, from: Int, to: Int): List<ColumnValues> {
         val n = to - from
         val src = IntArray(n) { rows.source(from + it) }
         val row = IntArray(n) { rows.row(from + it) }
@@ -396,7 +432,7 @@ object DailyParquetBuilder {
                 }
                 ColumnValues.Int64(v, valid.takeIf { it.any { b -> !b } })
             } else {
-                val perSource = Array(opened.size) { opened[it].decoded[c.name] }
+                val perSource = Array(opened.size) { live[it]?.get(c.name) }
                 when (c.type) {
                     ParquetType.INT32 -> {
                         val v = IntArray(n); val valid = BooleanArray(n)

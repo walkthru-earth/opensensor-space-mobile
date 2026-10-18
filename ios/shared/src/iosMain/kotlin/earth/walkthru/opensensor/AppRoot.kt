@@ -504,7 +504,8 @@ private fun FileMetricsEntry(station: String, name: String, level: DetailLevel, 
     val controller = viewModel(key = "$station/$name") { FileMetricsHolder() }.controller
     LaunchedEffect(station, name) { controller.load(station, name) }
     val state by controller.state.collectAsState()
-    FileMetricsScreen(state = state, level = level, name = name, onBack = onBack)
+    val rows by controller.rows.collectAsState()
+    FileMetricsScreen(state = state, level = level, name = name, rows = rows, onRowPage = controller::page, onBack = onBack)
 }
 
 /** The marketing version from Info.plist, as Android shows its version name. */

@@ -121,8 +121,13 @@ Means over a span are weighted by valid rows — never averages of averages.
 
 `derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` on both platforms, in the OS cache
 directory under the derived quota (`docs/data-model.md`, Quotas and memory pressure), written by the shared
-`ParquetWriter`. One shared `DayPass` opens each source once, feeds primitive decoded columns to the tiers and
-daily builder, and closes it before the next. Row keys use a 64-bit hash with exact comparison
+`ParquetWriter`. One shared `DayPass` opens each source once to time its rows and feed the tiers, and
+closes it before the next. The daily file is then written one hourly row group at a time. A source is
+opened again and decoded when its first hour is written and dropped after its last, so the builder holds
+the columns of about one hour of sources, not the whole day (#98). On a JVM, 96 files of 900 rows peak at
+about 10 MB instead of 45 MB (`DailyParquetMemoryTest`), and the bytes are the same as when every column
+was held (`HistoryGoldenTest`). A source that cannot be reopened, or whose row count changed, fails the
+daily file and is listed in `failedSources`. Row keys use a 64-bit hash with exact comparison
 of the identity fields on collisions. Primitive timeline arrays preserve source order on ties. Every UTC row of the day from the verified files is time-ordered and de-duplicated, with
 **one row group per UTC hour**. Columns: union of sources (v1 files leave the four v2
 columns null) + `source_file_index` (INT32 into the manifest's `sources`) +
@@ -147,8 +152,8 @@ opened file descriptor are acquired under the same short lock as replacement. A 
 stale manifest sends chart reads to immutable raw files. iOS rebuilds
 at startup, after index changes and after new clock receipts, without a History screen visit.
 
-Footer reuse. `DayPass` opens each source once per derive, so a derive has no repeated footer read
-to save. The repeats are on the read side. `HistorySeriesReader` opens a day's derived file again for
+Footer reuse. `DayPass` opens each source at most twice per derive, once to time it and once for the
+hours it fills, so a footer cache would save one parse per source. The repeats are on the read side. `HistorySeriesReader` opens a day's derived file again for
 every metric switch and every re-emission of the same Day window, so it keeps a `FooterCache` of 32
 derived footers and page indexes (`DERIVED_FOOTERS`, a few tens of KB each), keyed by `SourceId` (path,
 size and modification time). A rebuilt day is a new file with a new identity. Raw files still go

@@ -8,6 +8,7 @@ import earth.walkthru.aqsync.data.ble.WindowLostException
 import earth.walkthru.aqsync.data.protocol.FrameType
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.link.LinkEvent
+import earth.walkthru.aqsync.link.LinkTimeoutException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -109,9 +110,9 @@ class SyncEngineTest {
     @Test
     fun lostWindowsAreReReadFromThePhoneOffsetAndCounted() = runTest {
         val d = device(backgroundScope)
-        // File 0 is 24 000 bytes, so two 16 KiB windows of 507-byte chunks.
-        // READ 1 (window at 0) loses 3 CHUNKs. READ 2 (retry) is intact.
-        // READ 3 (window at 16384) loses every CHUNK. READ 4 loses 2 again. READ 5 is intact.
+        // File 0 is 24 000 bytes in 507-byte chunks. READ 1 (16384 at 0) loses 3 CHUNKs, so the window
+        // halves to 8112 and READ 2 is intact. READ 3 (8112 at 8112) loses every CHUNK and READ 4 (4056)
+        // loses 2, so the window sits at its 2028-byte floor. READ 5 and the 7 reads after it are intact.
         d.first.dropLeadingChunks = { k -> when (k) { 1 -> 3; 3 -> 99; 4 -> 2; else -> 0 } }
         val progress = ArrayList<FileProgress>()
 
@@ -120,7 +121,8 @@ class SyncEngineTest {
         val synced = assertIs<FileOutcome.Synced>(outcome)
         val file = d.first.files[0]
         assertEquals(file.bytes.size.toLong(), synced.bytes)
-        assertEquals(5, d.first.readCount)
+        assertEquals(12, d.first.readCount)
+        assertEquals(listOf(16384L, 8112L, 8112L, 4056L) + List(8) { 2028L }, d.first.readLengths)
         assertEquals(2, progress.last().windowsRecovered)
         assertTrue(progress.zipWithNext().all { (a, b) -> b.bytesDone >= a.bytesDone }, "progress never goes backwards")
         assertContentEquals(file.bytes, finalBytes(d.first.station, file.name))
@@ -144,6 +146,83 @@ class SyncEngineTest {
         assertIs<FileOutcome.Synced>(engine().pull(d, 1))
         assertEquals(d.first.files[1].name, index.records.single().name)
         assertContentEquals(d.first.files[1].bytes, finalBytes(d.first.station, d.first.files[1].name))
+    }
+
+    @Test
+    fun aWeakLinkShrinksTheWindowUntilReadsLandAndTheNextFileKeepsTheSmallWindow() = runTest {
+        val d = device(backgroundScope)
+        // A link that loses the head of every window longer than 8 frames. A fixed 16 KiB window
+        // would lose all 6 attempts and fail the file. The adaptive one halves to 8 frames and lands.
+        val fake = d.first
+        fake.dropLeadingChunks = { if (fake.readLengths.last() > 8 * 507) 1 else 0 }
+
+        assertIs<FileOutcome.Synced>(engine().pull(d, 0))
+        assertEquals(listOf(16384L, 8112L, 4056L), fake.readLengths.take(3))
+        assertContentEquals(fake.files[0].bytes, finalBytes(fake.station, fake.files[0].name))
+
+        val before = fake.readLengths.size
+        assertIs<FileOutcome.Synced>(engine().pull(d, 1))
+        assertTrue(fake.readLengths.drop(before).all { it <= 6084L }, "the link remembers it is weak: ${fake.readLengths}")
+        assertContentEquals(fake.files[1].bytes, finalBytes(fake.station, fake.files[1].name))
+    }
+
+    /** A file long enough for the window to climb from 8 frames back to max_read, 8 clean windows per step. */
+    private fun FakeArchiveDevice.addLongFile(): Int {
+        files += FakeArchiveDevice.FakeFile(
+            "station=$station/year=2026/month=09/day=15/data_1030_b41d_15180-15269-90.parquet",
+            FakeArchiveDevice.fakeParquet(4, 540_000),
+        )
+        return files.lastIndex
+    }
+
+    /** The READ lengths after one shrink to 8112 when every window after it lands, 507-byte frames. */
+    private val climbBack: List<Long> =
+        listOf(8112L, 10140L, 12168L, 14196L, 16224L).flatMap { step -> List(AdaptiveReadWindow.GROW_AFTER) { step } }
+
+    @Test
+    fun aLinkThatLostOneWindowGrowsBackToMaxReadAfterCleanWindows() = runTest {
+        val d = device(backgroundScope)
+        val fake = d.first
+        val long = fake.addLongFile()
+        fake.dropLeadingChunks = { k -> if (k == 1) 1 else 0 }
+
+        assertIs<FileOutcome.Synced>(engine().pull(d, long))
+        val lengths = fake.readLengths
+        assertEquals(16384L, lengths[0])
+        // Eight clean windows at each step add one 4-frame step, until the cap.
+        assertEquals(climbBack, lengths.subList(1, 1 + climbBack.size), lengths.toString())
+        assertTrue(lengths.drop(1 + climbBack.size).let { it.isNotEmpty() && it.all { l -> l == 16384L } }, lengths.toString())
+        assertContentEquals(fake.files[long].bytes, finalBytes(fake.station, fake.files[long].name))
+    }
+
+    @Test
+    fun aReadThatTimesOutIsAskedAgainFromTheSameOffsetWithAHalfWindow() = runTest {
+        val d = device(backgroundScope)
+        val fake = d.first
+        val long = fake.addLongFile()
+        fake.stallRead = { k -> k == 1 }
+
+        assertIs<FileOutcome.Synced>(engine().pull(d, long))
+        // The stalled READ was stopped with ABORT, and the retry asked the same offset, halved.
+        assertTrue(Opcode.ABORT in fake.requests, fake.requests.toString())
+        assertEquals(listOf(0L, 0L), fake.readOffsets.take(2))
+        assertEquals(16384L, fake.readLengths[0])
+        // The timeout never counted as clean, the window grows after 8 windows that landed.
+        assertEquals(climbBack, fake.readLengths.subList(1, 1 + climbBack.size), fake.readLengths.toString())
+        // Size, CRC-32 and PAR1 still gate the commit.
+        assertContentEquals(fake.files[long].bytes, finalBytes(fake.station, fake.files[long].name))
+    }
+
+    @Test
+    fun aReadThatKeepsTimingOutEndsTheAttemptAtTheFloorAndKeepsThePartial() = runTest {
+        val d = device(backgroundScope)
+        val fake = d.first
+        fake.stallRead = { true }
+
+        assertFailsWith<LinkTimeoutException> { engine().pull(d, 0) }
+        assertEquals(1 + WindowRetryPolicy.RETRIES, fake.readCount)
+        assertEquals(listOf(16384L, 8112L, 4056L, 2028L, 2028L, 2028L), fake.readLengths)
+        assertNull(finalBytes(fake.station, fake.files[0].name))
     }
 
     @Test

@@ -22,6 +22,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -29,6 +30,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.settings.DetailLevel
@@ -75,6 +77,12 @@ import earth.walkthru.opensensor.files.resources.fm_row_groups
 import earth.walkthru.opensensor.files.resources.fm_row_groups_note
 import earth.walkthru.opensensor.files.resources.fm_rows
 import earth.walkthru.opensensor.files.resources.fm_rows_count
+import earth.walkthru.opensensor.files.resources.fm_rows_next
+import earth.walkthru.opensensor.files.resources.fm_rows_page
+import earth.walkthru.opensensor.files.resources.fm_rows_previous
+import earth.walkthru.opensensor.files.resources.fm_rows_range
+import earth.walkthru.opensensor.files.resources.fm_rows_retry
+import earth.walkthru.opensensor.files.resources.fm_rows_unavailable
 import earth.walkthru.opensensor.files.resources.fm_schema
 import earth.walkthru.opensensor.files.resources.fm_sequence
 import earth.walkthru.opensensor.files.resources.fm_size
@@ -97,10 +105,11 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * Detailed and Developer view of one archived file, decoded by the app's own Parquet reader on Android
  * and iOS. Footer facts, row groups with their UTC spans (from v6 statistics), and every column's
- * decoded summary. Purely descriptive. Nothing here changes the archive.
+ * decoded summary. At Developer level the rows themselves, one [RowPage] at a time from [rows], and
+ * [onRowPage] asks for the page starting at a row index. Purely descriptive. Nothing here changes the archive.
  */
 @Composable
-fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String, onBack: () -> Unit) {
+fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String, rows: RowsState, onRowPage: (from: Long) -> Unit, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -134,13 +143,13 @@ fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String,
                 if (level.developer) state.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (state.reason != FailReason.NOT_IN_ARCHIVE) InfoNote(stringResource(Res.string.fm_failed_archive_safe))
             }
-            is FileMetricsState.Loaded -> Loaded(state, padding, level.developer)
+            is FileMetricsState.Loaded -> Loaded(state, padding, level.developer, rows, onRowPage)
         }
     }
 }
 
 @Composable
-private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer: Boolean) {
+private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer: Boolean, rows: RowsState, onRowPage: (Long) -> Unit) {
     val idx = s.index
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
@@ -252,6 +261,9 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                 }
             }
         }
+        if (developer && s.index.rows > 0) {
+            item(key = "rows") { RowsCard(rows, onRowPage) }
+        }
         if (developer) {
             item(key = "metadata") {
                 SectionCard(stringResource(Res.string.fm_metadata), modifier = Modifier.padding(top = 8.dp)) {
@@ -264,6 +276,60 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                         Spacer(Modifier.height(4.dp))
                     }
                 }
+            }
+        }
+    }
+}
+
+/** One page of decoded rows, each row one line of its cells in column order, with paging by row index. */
+@Composable
+private fun RowsCard(state: RowsState, onPage: (Long) -> Unit) {
+    LaunchedEffect(Unit) { if (state == RowsState.Idle) onPage(0) }
+    SectionCard(stringResource(Res.string.fm_rows_page), modifier = Modifier.padding(top = 8.dp)) {
+        val page = when (state) {
+            RowsState.Idle, RowsState.Loading -> {
+                CircularProgressIndicator(Modifier.size(24.dp).align(Alignment.CenterHorizontally))
+                return@SectionCard
+            }
+            is RowsState.Unavailable -> {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(Res.string.fm_rows_unavailable),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    IconButton(onClick = { onPage(state.from) }) {
+                        Icon(AppIcons.Refresh, contentDescription = stringResource(Res.string.fm_rows_retry))
+                    }
+                }
+                return@SectionCard
+            }
+            is RowsState.Shown -> state.page
+        }
+        Text(page.columns.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(4.dp))
+        page.rows.forEachIndexed { k, cells ->
+            Text(
+                "#${page.from + k}  " + cells.joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { onPage(page.from - FileInspector.PAGE_ROWS) }, enabled = page.from > 0) {
+                Icon(AppIcons.ChevronLeft, contentDescription = stringResource(Res.string.fm_rows_previous))
+            }
+            Text(
+                stringResource(Res.string.fm_rows_range, page.from, page.to - 1, page.totalRows),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium,
+                textAlign = TextAlign.Center,
+            )
+            IconButton(onClick = { onPage(page.to) }, enabled = page.to < page.totalRows) {
+                Icon(AppIcons.ChevronRight, contentDescription = stringResource(Res.string.fm_rows_next))
             }
         }
     }
