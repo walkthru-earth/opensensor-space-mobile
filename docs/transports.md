@@ -289,6 +289,7 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 | `WIFI_SCAN_END.status` ≠ 0 | The scan's error (15 → "Wi-Fi unavailable"), not partial success; APs received before it are discarded. |
 | `LOG` slices | Kept as bytes, decoded after concatenation (a boundary may split UTF-8). `LOG_END.returned` ≠ bytes received → "a slice may be missing" but the text is shown (for humans, not data). |
 | `SET_CONFIG` recording | Recorded as opcode only (PSK is a secret); `Frame.Token` redacted. |
+| Secrets on LAN | A patch with `wifi.psk` or `ble.pin` (`ConfigPatch.carriesSecret`) goes over Bluetooth only, which is encrypted. The check is the pipe kind, not the pairing mode, so pair mode `none` (encrypted, no MITM protection) is lab only per the firmware docs. `DeviceSession.setConfig` reads the real driver kind (`LinkSession.kind`), not the screen label, and throws `SecretNeedsBluetoothException` before writing on LAN. iOS borrows the Bluetooth link alone for such a patch (`bluetoothLinkFor`). The snackbar offers Reconnect over Bluetooth (#155). |
 | Fake "LAN" | `FakeTransport(simulateLan = true)` is not a socket: `payload_max` 1024 and `GET_TOKEN` → `ERROR` 13. The real pipe is unit-tested over loopback (`TcpLinkDriverTest`) and otherwise only on hardware. |
 
 ## Uses → affects

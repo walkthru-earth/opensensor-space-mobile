@@ -146,6 +146,7 @@
     <string name="msg_lan_off">المزامنة عبر Wi-Fi متوقفة</string>
     <string name="msg_bonds_cleared">نسي المستشعر كل الهواتف المقترنة. ستُقرن من جديد عند اتصال Bluetooth التالي.</string>
     <string name="msg_config_key_rejected">رفض المستشعر %1$s. لم يتغيّر شيء.</string>
+    <string name="msg_secret_needs_bluetooth">تُرسل كلمات المرور والرموز عبر Bluetooth فقط.</string>
     <string name="msg_rebooting">يُعاد تشغيل المستشعر. جارٍ إعادة الاتصال…</string>
     <string name="msg_no_reboot_syncing">لن يُعاد التشغيل أثناء المزامنة. أوقف المزامنة أولًا.</string>
     <string name="msg_rejected_get_token">رفض المستشعر مشاركة رمز الوصول عبر Wi-Fi.</string>

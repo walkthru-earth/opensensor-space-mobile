@@ -311,6 +311,12 @@ final class AppServices {
         lan.link(device: device) ?? bluetooth.link(device: device)
     }
 
+    /// The open Bluetooth link alone. A passphrase or PIN change borrows only this one, never the
+    /// plaintext Wi-Fi socket `linkFor` prefers.
+    func bluetoothLinkFor(device: String) -> IosLink? {
+        bluetooth.link(device: device)
+    }
+
     /// The open link of the kind a run allows, Wi-Fi first when either will do.
     private func syncLink(device: String, transport: RunTransport) -> IosLink? {
         switch transport {
@@ -449,6 +455,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             syncBluetooth: { [weak services] id in services?.syncSensor(id: id) },
             closeIdle: { [weak services] id in services?.closeIdle(id: id) },
             linkFor: { [weak services] device in services?.linkFor(device: device) },
+            bluetoothLinkFor: { [weak services] device in services?.bluetoothLinkFor(device: device) },
             command: { [weak services] id, command in services?.commandSensor(id: id, command: command) },
             syncOneFile: { [weak services] id, name in services?.syncOneFile(id: id, name: name) },
             cancelSync: { [weak services] id in services?.cancelSync(id: id) },

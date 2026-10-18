@@ -103,6 +103,7 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
     is DeviceMessage.Finalized -> plural(R.plurals.msg_finalized, rows.toLong(), rows, files)
     is DeviceMessage.ConfigSaved -> if (rebootRequired) res(R.string.msg_saved_after_reboot, res(change.toStringRes())) else res(change.toStringRes())
     is DeviceMessage.ConfigKeyRejected -> res(R.string.msg_config_key_rejected, key)
+    DeviceMessage.SecretNeedsBluetooth -> res(R.string.msg_secret_needs_bluetooth)
     DeviceMessage.NoRebootWhileSyncing -> res(R.string.msg_no_reboot_syncing)
     DeviceMessage.Rebooting -> res(R.string.msg_rebooting)
     is DeviceMessage.CommandRejected -> res(command.rejectedRes())

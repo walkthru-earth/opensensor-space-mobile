@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -45,6 +46,7 @@ import earth.walkthru.opensensor.device.resources.device_back
 import earth.walkthru.opensensor.device.resources.device_not_ready
 import earth.walkthru.opensensor.device.resources.device_refresh
 import earth.walkthru.opensensor.device.resources.device_screen_title
+import earth.walkthru.opensensor.device.resources.lan_reconnect_ble
 import earth.walkthru.opensensor.device.resources.msg_bonds_cleared
 import earth.walkthru.opensensor.device.resources.msg_busy
 import earth.walkthru.opensensor.device.resources.msg_config_key_rejected
@@ -64,6 +66,7 @@ import earth.walkthru.opensensor.device.resources.msg_rejected_reboot
 import earth.walkthru.opensensor.device.resources.msg_rejected_rotate_token
 import earth.walkthru.opensensor.device.resources.msg_rejected_set_config
 import earth.walkthru.opensensor.device.resources.msg_saved_after_reboot
+import earth.walkthru.opensensor.device.resources.msg_secret_needs_bluetooth
 import earth.walkthru.opensensor.device.resources.msg_sensor_busy
 import earth.walkthru.opensensor.device.resources.msg_sensor_failed
 import earth.walkthru.opensensor.device.resources.msg_sensor_not_confirmed
@@ -219,7 +222,14 @@ fun LazyListScope.deviceConfigItems(state: DeviceConfigUiState, lanAccess: LanAc
 fun DeviceConfigEffects(controller: DeviceConfigController, snackbar: SnackbarHostState) {
     val dialog by controller.dialog.collectAsState()
     LaunchedEffect(controller) {
-        controller.notices.collect { notice -> snackbar.showSnackbar(deviceConfigNoticeText(notice)) }
+        controller.notices.collect { notice ->
+            if (notice == DeviceConfigNotice.SecretNeedsBluetooth) {
+                val result = snackbar.showSnackbar(deviceConfigNoticeText(notice), actionLabel = getString(Res.string.lan_reconnect_ble))
+                if (result == SnackbarResult.ActionPerformed) controller.reconnectOverBluetooth()
+            } else {
+                snackbar.showSnackbar(deviceConfigNoticeText(notice))
+            }
+        }
     }
     dialog?.let { DeviceConfigDialogs(it, onConfirm = controller::confirm, onDismiss = controller::dismiss) }
 }
@@ -276,6 +286,7 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
         if (notice.rebootRequired) getString(Res.string.msg_saved_after_reboot, line) else line
     }
     is DeviceConfigNotice.KeyRejected -> getString(Res.string.msg_config_key_rejected, notice.key)
+    DeviceConfigNotice.SecretNeedsBluetooth -> getString(Res.string.msg_secret_needs_bluetooth)
     is DeviceConfigNotice.Rejected -> getString(
         when (notice.command) {
             DeviceConfigCommand.GET_CONFIG -> Res.string.msg_rejected_get_config

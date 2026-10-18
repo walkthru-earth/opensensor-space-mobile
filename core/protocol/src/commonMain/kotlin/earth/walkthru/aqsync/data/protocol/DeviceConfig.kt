@@ -140,6 +140,13 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
     /** Whether the patch touches `ble.*` settings that only apply at the next boot. */
     val changesBle: Boolean get() = lines.any { it.first == KEY_BLE_PAIR || it.first == KEY_BLE_PIN }
 
+    /**
+     * Whether the patch carries a secret (`wifi.psk` or `ble.pin`). Such a patch goes only over the
+     * Bluetooth link, which is encrypted, never the plaintext LAN socket (#155). Pair mode `none`
+     * is encrypted without MITM protection and is lab only per the firmware docs.
+     */
+    val carriesSecret: Boolean get() = lines.any { it.first in SECRET_KEYS }
+
     /** The wire text. Each line ends in `\n`; the firmware skips empty lines. */
     fun encode(): String = buildString {
         for ((k, v) in lines) append(k).append('=').append(v).append('\n')
@@ -191,7 +198,7 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
             val bytes = psk.encodeToByteArray().size
             if (bytes > PSK_MAX_BYTES) throw ConfigValidationException(ConfigProblem.PSK_TOO_LONG, "passphrase is $bytes bytes, max $PSK_MAX_BYTES")
             requireSingleLine(psk, "passphrase")
-            return add("wifi.psk", psk)
+            return add(KEY_WIFI_PSK, psk)
         }
 
         fun lanOn(on: Boolean): Builder = add("lan.on", if (on) "1" else "0")
@@ -228,6 +235,10 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
     companion object {
         const val KEY_BLE_PAIR = "ble.pair"
         const val KEY_BLE_PIN = "ble.pin"
+        const val KEY_WIFI_PSK = "wifi.psk"
+
+        /** Keys whose values are secrets. See [carriesSecret]. */
+        val SECRET_KEYS: Set<String> = setOf(KEY_WIFI_PSK, KEY_BLE_PIN)
         const val SSID_MAX_BYTES = 32
         const val PSK_MAX_BYTES = 63
 
