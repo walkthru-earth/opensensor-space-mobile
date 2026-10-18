@@ -245,8 +245,8 @@ The rules for a new screen or component.
    to swipe and scrim dismissal.
 4. **One element per thing.** A card or row that is one item (a reading with its unit and WHO step, a
    device row, a stat line) merges with `Modifier.cardSemantics()` (`semantics(mergeDescendants = true)`)
-   or `Modifier.valueSemantics(label, value, unit, state)`, and a clickable row merges by itself. A
-   settings row with a switch reads its label and its state together through
+   or `Modifier.valueSemantics(label, value, unit, state)` (`clearAndSetSemantics`), and a clickable row
+   merges by itself. A settings row with a switch reads its label and its state together through
    `Modifier.switchRowSemantics(checked, onCheckedChange)` (`toggleable(role = Role.Switch)`), and the
    `Switch` takes `onCheckedChange = null` when the row and the switch do the same thing.
 5. **Touch targets.** Every tap target is at least 48 dp (`MinTouchTarget` and `FloatingControl.Size`,
@@ -258,26 +258,34 @@ The rules for a new screen or component.
 6. **Text scaling and wrapping.** `TypographyLimits` in `Typography.kt` sets multi-line caps
    (`EyebrowMaxLines = 2`, `StatLabelMaxLines = 3`, `StatValueMaxLines = 2`, `TabLabelMaxLines = 2`,
    `TickingMaxLines = 2`) so labels wrap instead of clipping at 200 percent font scale. `SectionCard`
-   and `StatLine` weight their primary text so trailing buttons and values stay inside a 320 dp
-   viewport. `MascotGuide` stacks the peacock above its text on narrow widths (`< 340.dp`) or at font
-   scales `>= 1.5f`. `brandTypography` caps display numeral growth (`displayLarge`, `displayMedium`,
-   `displaySmall`) at `TypographyLimits.MaxDisplayFontScale` (`1.35f`) while body, label, title and
-   headline styles scale up to 200 percent.
-7. **Contrast and non-colour cues.** `ColorContrast.kt` in `:ui:designsystem` defines
-   `relativeLuminance`, `contrastRatio`, `BODY_TEXT_CONTRAST` (`4.5`), `LARGE_TEXT_CONTRAST` (`3.0`),
+   and `StatLine` weight their primary text and cap value width so trailing buttons and values stay
+   inside a 320 dp viewport. `MascotGuide` stacks the peacock above its text on narrow widths
+   (`< 340.dp`) or at font scales `>= 1.5f`. `brandTypography` clamps display numeral sizes
+   (`displayLarge`, `displayMedium`, `displaySmall`) through `clampedDisplaySizeSp(baseSp, density)`
+   using `Density.toDp()` so they never render smaller than their 1.0x `dp` size (including under
+   Android 14 non-linear font scaling) and cap at `TypographyLimits.MaxDisplayFontScale` (`1.35f`)
+   while body, label, title and headline styles scale up to 200 percent.
+7. **Contrast and non-colour cues.** `ColorContrast.kt` in `:ui:designsystem` is the single definition
+   of `relativeLuminance`, `contrastRatio`, `BODY_TEXT_CONTRAST` (`4.5`), `LARGE_TEXT_CONTRAST` (`3.0`),
    `UI_COMPONENT_CONTRAST` (`3.0`), `WhoStep.color()`, `WhoStep.onColor()`,
-   `WhoStep.textColorOnSurface()`, `signalBarColor()` and `swatchBorderColor()`. `FloatingSurface` and
-   plain `BrandCard` borders, `SignalBars` filled and hollow-outlined unfilled bars, and `MoodStrip` and
-   `MoodLegend` swatch borders maintain at least 3 to 1 contrast in both Light and Dark themes.
-   Selected, on, off, progress and a WHO step reach the screen reader as words, through the control's
-   own state, `stateDescription` or the merged text. The `Eyebrow` capitals are visual only, its
-   semantics carry the text as written.
-8. **Reduce motion and live regions.** `Motion.kt` provides `LocalReduceMotion`,
-   `rememberReduceMotion()`, `shouldReduceMotion()`, `reduceMotionDurationMillis()` and
-   `coarsenTickPeriodMs()`. `Peacock` skips its entrance animation when reduce motion is active, and
-   `rememberNowMillis` coarsens its 1 second tick to 10 seconds under reduce motion. `liveRegion =
-   LiveRegionMode.Polite` goes only on a line that changes while the person waits, such as sync
-   progress or a notice, never on a value that ticks every second.
+   `WhoStep.textColorOnSurface()`, `signalBarColor()` and `swatchBorderColor()`, with `app`,
+   `:feature:today` and `:feature:history` delegating to it. `FloatingSurface`, `FloatingIconButton`
+   and `FloatingTextButton` borders, `SignalBars` filled and hollow-outlined unfilled bars, and
+   `MoodLegend` swatch borders maintain at least 3 to 1 contrast in both Light and Dark themes, while
+   plain `BrandCard` keeps the website `outlineVariant` border token and `MoodStrip` outlines only the
+   selected block. Selected, on, off, progress and a WHO step reach the screen reader as words, through
+   the control's own state, `stateDescription` or the merged text. The `Eyebrow` capitals are visual
+   only, its semantics carry the text as written.
+8. **Reduce motion and live regions.** Compose honours Android "Remove animations", and `Motion.kt`
+   reads the system setting on both platforms through `rememberSystemReduceMotion()` (Android
+   `Settings.Global.ANIMATOR_DURATION_SCALE` and `ValueAnimator.areAnimatorsEnabled()` observed via
+   `ContentObserver`, iOS `UIAccessibility.isReduceMotionEnabled` observed via
+   `UIAccessibilityReduceMotionStatusDidChangeNotification`). `OpenSensorTheme` and `AppShell` provide
+   `LocalReduceMotion` at the app root, and `Peacock` skips its entrance animation when
+   `rememberReduceMotion()` is true. `rememberNowMillis` keeps its 1 second tick so stale checks stay
+   exact, while `TickingText` quantises its spoken `contentDescription` to 10 second steps via
+   `quantiseSpokenMillis()`. `liveRegion = LiveRegionMode.Polite` goes only on a line that changes
+   while the person waits, such as sync progress or a notice, never on a value that ticks every second.
 9. **Charts and maps.** A chart starts with a text summary in `contentDescription` (what it shows,
    the highest value and its WHO step, which Simple leaves out). Then the bar chart and the calendar give one node per bar or
    day with a reading, in time order, naming the time, the value with its unit, the mood and the WHO
@@ -289,12 +297,13 @@ The rules for a new screen or component.
     arguments, and no em dashes, colons or semicolons.
 
 `ColorContrastTest` and `ComponentsTest` in `:ui:designsystem` `commonTest` check palette contrast,
-touch target tokens, display scale clamping and reduce-motion helpers. `SemanticsTest` in
-`:ui:designsystem` `iosTest` renders the shared components on the iOS simulator and checks 48 dp touch
-bounds, headings, merged rows, 200 percent font scale layout, `InfoSheet` close action, switch rows and
-tab roles, and `BandColumnChartSemanticsTest` in `:feature:history` `iosTest` walks the bar chart node
-by node (`verifyIos`). Host tests cannot render Compose without Robolectric, so the Android check is the
-phone walk below.
+threshold-pinned luminance math, touch target tokens, non-linear and linear display scale clamping,
+spoken tick quantisation and reduce-motion helpers. `SemanticsTest` in `:ui:designsystem` `iosTest`
+renders the shared components on the iOS simulator and checks 48 dp touch bounds, 8 dp bottom bar
+spacing, headings, merged rows, 200 percent font scale multi-line wrapping, `InfoSheet` close action,
+switch rows, tab roles and live iOS reduce-motion notifications, and `BandColumnChartSemanticsTest` in
+`:feature:history` `iosTest` walks the bar chart node by node (`verifyIos`). Host tests cannot render
+Compose without Robolectric, so the Android check is the phone walk below.
 
 #### Phone walk (TalkBack and VoiceOver)
 

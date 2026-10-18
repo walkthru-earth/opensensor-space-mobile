@@ -5,6 +5,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -61,7 +62,8 @@ fun formatValueDescription(
 }
 
 /**
- * Merges a reading element and sets its spoken [formatValueDescription] for TalkBack and VoiceOver.
+ * Replaces descendant text nodes with a single spoken [formatValueDescription] for TalkBack and
+ * VoiceOver so the value is not read twice.
  */
 fun Modifier.valueSemantics(
     label: String,
@@ -69,7 +71,7 @@ fun Modifier.valueSemantics(
     unit: String? = null,
     state: String? = null,
     separator: String = ",",
-): Modifier = this.semantics(mergeDescendants = true) {
+): Modifier = this.clearAndSetSemantics {
     contentDescription = formatValueDescription(label, value, unit, state, separator)
 }
 

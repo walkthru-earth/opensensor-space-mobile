@@ -152,7 +152,6 @@ internal fun MoodStripLayout(
     val captioned = shown.any { captions.getOrNull(it) != null }
     val scheme = MaterialTheme.colorScheme
     val outline = scheme.onSurface
-    val swatchBorder = swatchBorderColor(scheme)
     val hatch = scheme.outline
     val track = scheme.surfaceContainerHighest
     val muted = scheme.onSurfaceVariant
@@ -191,11 +190,7 @@ internal fun MoodStripLayout(
                         }
                     }
                 }
-                bar = if (i == selected) {
-                    bar.border(2.5.dp, outline, shape)
-                } else {
-                    bar.border(1.dp, swatchBorder, shape)
-                }
+                if (i == selected) bar = bar.border(2.dp, outline, shape)
                 // The bar and its caption are one target, the whole column takes the tap.
                 var target = Modifier.width(widths[k].dp)
                 if (onBlock != null) target = target.heightIn(min = 48.dp).clickable(role = Role.Button) { onBlock(i) }

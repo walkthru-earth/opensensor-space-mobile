@@ -86,21 +86,34 @@ class SemanticsTest {
     }
 
     @Test
-    fun bottomBarTabsAreTabsWithASelectedState() = runComposeUiTest {
+    fun bottomBarTabsAreTabsWithASelectedStateAnd48DpBoundsAnd8DpSpacing() = runComposeUiTest {
         setContent {
-            MaterialTheme {
-                BrandBottomBar(
-                    tabs = listOf(
-                        BottomBarTab("today", "Today", AppIcons.Sync),
-                        BottomBarTab("map", "Map", AppIcons.Outlined.Map),
-                    ),
-                    selected = "today",
-                    onSelect = {},
-                )
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density = 2f, fontScale = 1f),
+            ) {
+                MaterialTheme {
+                    Column(Modifier.width(320.dp)) {
+                        BrandBottomBar(
+                            tabs = listOf(
+                                BottomBarTab("today", "Today", AppIcons.Sync),
+                                BottomBarTab("map", "Map", AppIcons.Outlined.Map),
+                            ),
+                            selected = "today",
+                            onSelect = {},
+                        )
+                    }
+                }
             }
         }
-        onNodeWithText("Today").assert(hasRole(Role.Tab)).assertIsSelected()
-        onNodeWithText("Map").assert(hasRole(Role.Tab)).assertIsNotSelected()
+        onNodeWithText("Today").assert(hasRole(Role.Tab)).assertIsSelected().assertHeightIsAtLeast(48.dp)
+        onNodeWithText("Map").assert(hasRole(Role.Tab)).assertIsNotSelected().assertHeightIsAtLeast(48.dp)
+        val todayBounds = onNodeWithText("Today").fetchSemanticsNode().boundsInRoot
+        val mapBounds = onNodeWithText("Map").fetchSemanticsNode().boundsInRoot
+        // At density 2f, 48 dp is 96 px and 8 dp spacing is 16 px.
+        kotlin.test.assertTrue(todayBounds.width >= 96f, "Today tab width ${todayBounds.width} >= 96 px (48 dp)")
+        kotlin.test.assertTrue(mapBounds.width >= 96f, "Map tab width ${mapBounds.width} >= 96 px (48 dp)")
+        val gapPx = mapBounds.left - todayBounds.right
+        kotlin.test.assertTrue(gapPx >= 15.9f, "Bottom bar tab gap $gapPx px >= 16 px (8 dp)")
     }
 
     @Test
@@ -258,7 +271,7 @@ class SemanticsTest {
     }
 
     @Test
-    fun floatingAndPillButtonsEnforce48DpTouchTargets() = runComposeUiTest {
+    fun floatingPillAndInfoButtonsEnforce48DpTouchTargets() = runComposeUiTest {
         setContent {
             MaterialTheme {
                 Column {
@@ -282,10 +295,14 @@ class SemanticsTest {
                         onClick = {},
                         modifier = Modifier.testTag("outline-btn"),
                     )
+                    InfoButton(
+                        info = InfoContent("Wi-Fi", "Connects over home Wi-Fi."),
+                        modifier = Modifier.testTag("info-btn"),
+                    )
                 }
             }
         }
-        for (tag in listOf("icon-btn", "text-btn", "pill-btn", "outline-btn")) {
+        for (tag in listOf("icon-btn", "text-btn", "pill-btn", "outline-btn", "info-btn")) {
             onNodeWithTag(tag).assertHeightIsAtLeast(48.dp)
             val bounds = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
             kotlin.test.assertTrue(bounds.width >= 48f, "$tag width ${bounds.width}")
@@ -311,6 +328,66 @@ class SemanticsTest {
     }
 
     @Test
+    fun eyebrowTickingCardHeaderAndSectionTabsWrapAt200PercentFontScale() = runComposeUiTest {
+        setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density = 2f, fontScale = 2f),
+            ) {
+                MaterialTheme {
+                    Column(Modifier.width(240.dp)) {
+                        Eyebrow("PM", modifier = Modifier.testTag("eyebrow-short"))
+                        Eyebrow(
+                            "Automatic background sync over home Wi-Fi",
+                            modifier = Modifier.testTag("eyebrow-long"),
+                        )
+                        TickingText(
+                            text = { "1 s" },
+                            modifier = Modifier.testTag("ticking-short"),
+                        )
+                        TickingText(
+                            text = { "Updated 45 seconds ago over home Wi-Fi" },
+                            modifier = Modifier.testTag("ticking-long"),
+                        )
+                        CardHeader(
+                            title = "Automatic background sync over home Wi-Fi",
+                            info = InfoContent("Wi-Fi sync", "Details"),
+                            modifier = Modifier.testTag("card-header"),
+                        )
+                        SectionTabs(
+                            labels = listOf("Today", "Historical readings", "Files"),
+                            selectedIndex = 0,
+                            onSelect = {},
+                        )
+                    }
+                }
+            }
+        }
+        val shortEyebrowHeight = onNodeWithTag("eyebrow-short").fetchSemanticsNode().boundsInRoot.height
+        val longEyebrowHeight = onNodeWithTag("eyebrow-long").fetchSemanticsNode().boundsInRoot.height
+        kotlin.test.assertTrue(
+            longEyebrowHeight >= shortEyebrowHeight * 1.6f,
+            "Long eyebrow height $longEyebrowHeight should wrap to 2 lines vs short $shortEyebrowHeight",
+        )
+
+        val shortTickingHeight = onNodeWithTag("ticking-short").fetchSemanticsNode().boundsInRoot.height
+        val longTickingHeight = onNodeWithTag("ticking-long").fetchSemanticsNode().boundsInRoot.height
+        kotlin.test.assertTrue(
+            longTickingHeight >= shortTickingHeight * 1.6f,
+            "Long ticking text height $longTickingHeight should wrap to 2 lines vs short $shortTickingHeight",
+        )
+
+        val infoBounds = onNodeWithContentDescription("More about Wi-Fi sync").fetchSemanticsNode().boundsInRoot
+        kotlin.test.assertTrue(infoBounds.right <= 480f, "CardHeader info button right ${infoBounds.right} <= 480")
+        kotlin.test.assertTrue(infoBounds.width >= 96f, "CardHeader info button width ${infoBounds.width} >= 96 px (48 dp)")
+        kotlin.test.assertTrue(infoBounds.height >= 96f, "CardHeader info button height ${infoBounds.height} >= 96 px (48 dp)")
+
+        val shortTabHeight = onNodeWithText("Today").fetchSemanticsNode().boundsInRoot.height
+        val longTabHeight = onNodeWithText("Historical readings").fetchSemanticsNode().boundsInRoot.height
+        kotlin.test.assertTrue(longTabHeight >= 96f, "SectionTabs height $longTabHeight >= 96 px (48 dp)")
+        kotlin.test.assertTrue(longTabHeight >= shortTabHeight, "Long tab wraps without clipping")
+    }
+
+    @Test
     fun sectionCardAndStatLineAt200PercentFontScaleKeepTrailingAndValueInsideViewport() = runComposeUiTest {
         setContent {
             androidx.compose.runtime.CompositionLocalProvider(
@@ -325,9 +402,19 @@ class SemanticsTest {
                             },
                         ) {
                             StatLine(
+                                label = "Status",
+                                value = "OK",
+                                modifier = Modifier.testTag("stat-line-short"),
+                            )
+                            StatLine(
                                 label = "Last recorded reading from station",
                                 value = "24 µg/m³",
                                 modifier = Modifier.testTag("stat-line"),
+                            )
+                            StatLine(
+                                label = "Connection",
+                                value = "Connected over home Wi-Fi network",
+                                modifier = Modifier.testTag("stat-line-long-value"),
                             )
                         }
                     }
@@ -339,34 +426,34 @@ class SemanticsTest {
         kotlin.test.assertTrue(trailingBounds.right <= 640f, "trailing right ${trailingBounds.right} <= 640")
         kotlin.test.assertTrue(trailingBounds.width >= 96f, "trailing width ${trailingBounds.width} >= 96 px (48 dp)")
         onNodeWithTag("stat-line").assert(hasText("24 µg/m³"))
+
+        val shortStatHeight = onNodeWithTag("stat-line-short").fetchSemanticsNode().boundsInRoot.height
+        val longValueStatHeight = onNodeWithTag("stat-line-long-value").fetchSemanticsNode().boundsInRoot.height
+        kotlin.test.assertTrue(
+            longValueStatHeight >= shortStatHeight * 1.5f,
+            "StatLine long value height $longValueStatHeight wraps within 55 percent width cap vs short $shortStatHeight",
+        )
     }
 
     @Test
-    fun switchRowAndValueSemanticsExposeRolesAndDescriptions() = runComposeUiTest {
+    fun switchRowAndValueSemanticsExposeRolesAndSingleSpokenDescription() = runComposeUiTest {
         var toggled = false
         setContent {
-            androidx.compose.runtime.CompositionLocalProvider(LocalReduceMotion provides true) {
-                MaterialTheme {
-                    Column {
-                        Row(
-                            Modifier
-                                .testTag("switch-row")
-                                .switchRowSemantics(checked = toggled, onCheckedChange = { toggled = it }),
-                        ) {
-                            Text("Sync on Wi-Fi")
-                        }
-                        Row(
-                            Modifier
-                                .testTag("value-node")
-                                .valueSemantics(label = "PM2.5", value = "12", unit = "µg/m³", state = "Fair"),
-                        ) {
-                            Text("12")
-                        }
-                        Peacock(
-                            contentDescription = "Calm peacock",
-                            expression = PeacockExpression.CALM,
-                            animate = true,
-                        )
+            MaterialTheme {
+                Column {
+                    Row(
+                        Modifier
+                            .testTag("switch-row")
+                            .switchRowSemantics(checked = toggled, onCheckedChange = { toggled = it }),
+                    ) {
+                        Text("Sync on Wi-Fi")
+                    }
+                    Row(
+                        Modifier
+                            .testTag("value-node")
+                            .valueSemantics(label = "PM2.5", value = "12", unit = "µg/m³", state = "Fair"),
+                    ) {
+                        Text("12")
                     }
                 }
             }
@@ -375,6 +462,58 @@ class SemanticsTest {
         onNodeWithTag("switch-row").fetchSemanticsNode().config[SemanticsActions.OnClick].action?.invoke()
         kotlin.test.assertTrue(toggled)
         onNodeWithTag("value-node").assert(hasContentDescription("PM2.5, 12 µg/m³, Fair"))
-        onNodeWithContentDescription("Calm peacock").assertExists()
+        onNodeWithTag("value-node").onChildren().assertCountEquals(0)
+    }
+
+    @Test
+    fun systemReduceMotionNotificationUpdatesStateAndPeacockSkipsEntranceTransition() = runComposeUiTest {
+        val originalReader = iosReduceMotionReader
+        try {
+            iosReduceMotionReader = { false }
+            mainClock.autoAdvance = false
+            var observedReduceMotion = false
+            setContent {
+                val systemReduce = rememberReduceMotion()
+                observedReduceMotion = systemReduce
+                androidx.compose.runtime.CompositionLocalProvider(LocalReduceMotion provides systemReduce) {
+                    MaterialTheme {
+                        Column {
+                            if (!systemReduce) {
+                                Peacock(
+                                    contentDescription = "Animated peacock",
+                                    expression = PeacockExpression.CALM,
+                                    animate = true,
+                                )
+                            } else {
+                                Peacock(
+                                    contentDescription = "Static peacock",
+                                    expression = PeacockExpression.CALM,
+                                    animate = true,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            // When reduce motion is false, Peacock enters via AnimatedVisibility after LaunchedEffect,
+            // so at frame 0 before advancing the clock the icon node is not yet visible.
+            kotlin.test.assertFalse(observedReduceMotion)
+            onNodeWithContentDescription("Animated peacock").assertDoesNotExist()
+            mainClock.advanceTimeBy(500)
+            onNodeWithContentDescription("Animated peacock").assertExists()
+
+            // Flip the iOS system setting and post UIAccessibilityReduceMotionStatusDidChangeNotification.
+            iosReduceMotionReader = { true }
+            platform.Foundation.NSNotificationCenter.defaultCenter.postNotificationName(
+                platform.UIKit.UIAccessibilityReduceMotionStatusDidChangeNotification,
+                `object` = null,
+            )
+            mainClock.advanceTimeByFrame()
+            kotlin.test.assertTrue(observedReduceMotion, "rememberReduceMotion updates when iOS notification fires")
+            // With reduce motion active, Peacock renders immediately at frame 0 without advancing 420 ms.
+            onNodeWithContentDescription("Static peacock").assertExists()
+        } finally {
+            iosReduceMotionReader = originalReader
+        }
     }
 }

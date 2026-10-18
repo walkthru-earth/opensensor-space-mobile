@@ -96,9 +96,47 @@ class ColorContrastTest {
     }
 
     @Test
+    fun contrastMathPinsLuminanceThresholdAndKnownPairs() {
+        assertEquals(0.0, relativeLuminance(Color.Black), 1e-6)
+        assertEquals(1.0, relativeLuminance(Color.White), 1e-6)
+        // Channel 10/255 = 0.039216 <= 0.04045 uses the linear sRGB branch.
+        assertEquals(0.003035, relativeLuminance(Color(0xFF0A0A0A)), 1e-5)
+        // Channels 32/255 = 0.12549 and 51/255 = 0.2 sit between 0.04045 and 0.4 and must use the gamma branch.
+        assertEquals(0.014444, relativeLuminance(Color(0xFF202020)), 1e-5)
+        assertEquals(0.033105, relativeLuminance(Color(0xFF333333)), 1e-5)
+        assertEquals(21.0, contrastRatio(Color.Black, Color.White), 0.01)
+        assertEquals(4.54, contrastRatio(Color(0xFF767676), Color.White), 0.01)
+        assertEquals(12.63, contrastRatio(Color(0xFF333333), Color.White), 0.02)
+        assertEquals(1.0, contrastRatio(WhoStep.GUIDELINE.color(), WhoStep.GUIDELINE.color()), 1e-4)
+    }
+
+    @Test
     fun whoStepsAndAirMoodsMaintainReadableInksAndSurfaceFallbacks() {
         val lum = WhoStep.entries.map { relativeLuminance(it.color()) }
         assertEquals(lum.sortedDescending(), lum, "WHO steps run light to dark for greyscale legibility")
+        for (step in WhoStep.entries) {
+            assertEquals(step.darkFill, step.onColor() == BandInkLight, step.name)
+        }
+        val lightLargeKept = WhoStep.entries.filter {
+            it.textColorOnSurface(BrandLightScheme.surface, BrandLightScheme.onSurface, LARGE_TEXT_CONTRAST) == it.color()
+        }.toSet()
+        assertEquals(setOf(WhoStep.IT2, WhoStep.IT1, WhoStep.ABOVE_IT1), lightLargeKept)
+
+        val lightBodyKept = WhoStep.entries.filter {
+            it.textColorOnSurface(BrandLightScheme.surface, BrandLightScheme.onSurface, BODY_TEXT_CONTRAST) == it.color()
+        }.toSet()
+        assertEquals(setOf(WhoStep.IT1, WhoStep.ABOVE_IT1), lightBodyKept)
+
+        val darkLargeKept = WhoStep.entries.filter {
+            it.textColorOnSurface(BrandDarkScheme.surface, BrandDarkScheme.onSurface, LARGE_TEXT_CONTRAST) == it.color()
+        }.toSet()
+        assertEquals(setOf(WhoStep.GUIDELINE, WhoStep.IT4, WhoStep.IT3, WhoStep.IT2), darkLargeKept)
+
+        val darkBodyKept = WhoStep.entries.filter {
+            it.textColorOnSurface(BrandDarkScheme.surface, BrandDarkScheme.onSurface, BODY_TEXT_CONTRAST) == it.color()
+        }.toSet()
+        assertEquals(setOf(WhoStep.GUIDELINE, WhoStep.IT4, WhoStep.IT3), darkBodyKept)
+
         for (mood in AirMood.entries) {
             assertEquals(mood.step.color(), mood.color())
             assertEquals(mood.step.onColor(), mood.onColor())

@@ -11,7 +11,10 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.walkthru.opensensor.designsystem.resources.Res
 import earth.walkthru.opensensor.designsystem.resources.cairo
@@ -36,19 +39,28 @@ object TypographyLimits {
     /**
      * Maximum effective scale multiplier for display numerals (`displayLarge` 84 sp, `displayMedium`
      * 48 sp, `displaySmall` 32 sp). Body, label, title, and headline styles scale all the way to 200
-     * percent (`fontScale = 2.0f`), while display numerals cap at 1.35x so 3-digit readings fit on
-     * 320 dp screens without horizontal clipping.
+     * percent (`fontScale = 2.0f`), while display numerals cap at 1.35x in converted `dp` so 3-digit
+     * readings fit on 320 dp screens without horizontal clipping and never shrink below their 1.0x
+     * `dp` size under Android 14 non-linear font scaling.
      */
     val MaxDisplayFontScale: Float = 1.35f
 }
 
 /**
- * Returns the compensation multiplier applied to `sp` display sizes at [fontScale] so the rendered
- * pixel size caps at [TypographyLimits.MaxDisplayFontScale] times the 1.0x size.
+ * Clamps a display numeral size of [baseSp] using [density]'s actual `sp` to `dp` converter
+ * (including Android 14 and later non-linear font scaling) so the rendered `dp` size never drops
+ * below [baseSp] dp when `fontScale >= 1f` and never exceeds
+ * [TypographyLimits.MaxDisplayFontScale] times [baseSp] dp.
  */
-fun displayFontScaleFactor(fontScale: Float): Float {
-    val safeScale = fontScale.coerceAtLeast(0.1f)
-    return if (safeScale <= TypographyLimits.MaxDisplayFontScale) 1f else TypographyLimits.MaxDisplayFontScale / safeScale
+fun clampedDisplaySizeSp(baseSp: Float, density: Density): TextUnit = with(density) {
+    val minDp = baseSp.dp
+    val maxDp = (baseSp * TypographyLimits.MaxDisplayFontScale).dp
+    val targetDp = if (fontScale <= 1f) {
+        baseSp.sp.toDp().coerceAtMost(minDp)
+    } else {
+        baseSp.sp.toDp().coerceIn(minDp, maxDp)
+    }
+    targetDp.toSp()
 }
 
 /** Quicksand's variable `wght` axis (300 to 700). */
@@ -125,22 +137,26 @@ fun preferredLanguage(): String = Locale.current.language
 /**
  * The type scale. Headings are bold and rounded like the website (`.brand-page h1..h4` are weight
  * 700 with slightly negative tracking). Body text stays at Material sizes for a phone. Display
- * styles carry numbers and use [numbers], clamping their effective growth above
- * [TypographyLimits.MaxDisplayFontScale] when [fontScale] exceeds it.
+ * styles carry numbers and use [numbers], clamping their rendered `dp` size through [density] so
+ * they never drop below their 1.0x `dp` size and never exceed
+ * [TypographyLimits.MaxDisplayFontScale] times that size.
  */
-fun brandTypography(text: FontFamily, numbers: FontFamily, fontScale: Float = 1f): Typography {
+fun brandTypography(text: FontFamily, numbers: FontFamily, density: Density = Density(1f, 1f)): Typography {
     val base = Typography()
-    val displayFactor = displayFontScaleFactor(fontScale)
     fun TextStyle.brand(weight: FontWeight) = copy(fontFamily = text, fontWeight = weight)
-    fun number(weight: FontWeight, size: Int, lineHeight: Int, tracking: Double) = TextStyle(
-        fontFamily = numbers,
-        fontWeight = weight,
-        fontSize = (size * displayFactor).sp,
-        lineHeight = (lineHeight * displayFactor).sp,
-        letterSpacing = (tracking * displayFactor).sp,
-        fontFeatureSettings = TABULAR,
-        lineHeightStyle = TrimmedNumbers,
-    )
+    fun number(weight: FontWeight, size: Int, lineHeight: Int, tracking: Double): TextStyle {
+        val clampedFontSize = clampedDisplaySizeSp(size.toFloat(), density)
+        val scaleRatio = clampedFontSize.value / size.toFloat()
+        return TextStyle(
+            fontFamily = numbers,
+            fontWeight = weight,
+            fontSize = clampedFontSize,
+            lineHeight = (lineHeight * scaleRatio).sp,
+            letterSpacing = (tracking * scaleRatio).sp,
+            fontFeatureSettings = TABULAR,
+            lineHeightStyle = TrimmedNumbers,
+        )
+    }
     return Typography(
         displayLarge = number(FontWeight.ExtraBold, 84, 88, -2.0),
         displayMedium = number(FontWeight.Bold, 48, 54, -1.0),
@@ -161,17 +177,17 @@ fun brandTypography(text: FontFamily, numbers: FontFamily, fontScale: Float = 1f
 }
 
 /**
- * The brand type scale for the current locale and system [fontScale]. Quicksand text, or Cairo for
+ * The brand type scale for the current locale and [density]. Quicksand text, or Cairo for
  * Arabic-script languages and right-to-left layouts, with Cairo display numbers either way.
  */
 @Composable
 fun rememberBrandTypography(
     arabicScript: Boolean = usesCairoText(preferredLanguage(), LocalLayoutDirection.current),
-    fontScale: Float = LocalDensity.current.fontScale,
+    density: Density = LocalDensity.current,
 ): Typography {
     val quicksand = quicksandFontFamily()
     val cairo = cairoFontFamily()
-    return remember(arabicScript, quicksand, cairo, fontScale) {
-        brandTypography(text = if (arabicScript) cairo else quicksand, numbers = cairo, fontScale = fontScale)
+    return remember(arabicScript, quicksand, cairo, density) {
+        brandTypography(text = if (arabicScript) cairo else quicksand, numbers = cairo, density = density)
     }
 }

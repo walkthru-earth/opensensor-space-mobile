@@ -4,10 +4,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 
 /**
- * Composition local indicating whether animations and rapid live tickers should be reduced or
- * skipped for users who prefer reduced motion.
+ * Composition local indicating whether non-essential animations should be skipped for users who
+ * prefer reduced motion. Provided at the app root from [rememberSystemReduceMotion].
  */
 val LocalReduceMotion = compositionLocalOf { false }
+
+/**
+ * Reads the operating system's reduce-motion setting (Android `ANIMATOR_DURATION_SCALE` and
+ * `ValueAnimator.areAnimatorsEnabled()`, iOS `UIAccessibility.isReduceMotionEnabled` updated via
+ * `UIAccessibilityReduceMotionStatusDidChangeNotification`).
+ */
+@Composable
+expect fun rememberSystemReduceMotion(): Boolean
 
 /**
  * Pure decision helper for reduce-motion preferences. Returns true when [reduceMotion] is enabled
@@ -23,12 +31,9 @@ fun reduceMotionDurationMillis(defaultMs: Int, reduceMotion: Boolean): Int =
     if (reduceMotion) 0 else defaultMs.coerceAtLeast(0)
 
 /**
- * Coarsens a live ticker period from 1 Hz to at least 10 seconds when [reduceMotion] is active, so
- * screen readers and low-vision users are not interrupted by once-per-second recompositions.
+ * Whether the current composition should skip non-essential animations, combining
+ * [LocalReduceMotion] and the live platform setting from [rememberSystemReduceMotion].
  */
-fun coarsenTickPeriodMs(periodMs: Long, reduceMotion: Boolean): Long =
-    if (reduceMotion) maxOf(periodMs, 10_000L) else periodMs
-
-/** Whether the current composition should skip non-essential transitions and slow live tickers. */
 @Composable
-fun rememberReduceMotion(): Boolean = shouldReduceMotion(LocalReduceMotion.current)
+fun rememberReduceMotion(): Boolean =
+    shouldReduceMotion(LocalReduceMotion.current || rememberSystemReduceMotion())

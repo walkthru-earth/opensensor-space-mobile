@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,7 +56,7 @@ fun BrandCard(
         shape = CardShape,
         color = container,
         contentColor = onContainer,
-        border = if (tone == CardTone.PLAIN) BorderStroke(1.dp, scheme.outline) else null,
+        border = if (tone == CardTone.PLAIN) BorderStroke(1.dp, scheme.outlineVariant) else null,
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(contentPadding), content = content)
@@ -101,7 +102,8 @@ fun Peacock(
         return
     }
     // A finite, gentle entrance. Skipped when [animate] is false or [rememberReduceMotion] is active.
-    val visible = remember { MutableTransitionState(false).apply { targetState = true } }
+    val visible = remember { MutableTransitionState(false) }
+    LaunchedEffect(Unit) { visible.targetState = true }
     AnimatedVisibility(
         visibleState = visible,
         enter = fadeIn(tween(durationMs)) + scaleIn(tween(durationMs), initialScale = 0.92f),
