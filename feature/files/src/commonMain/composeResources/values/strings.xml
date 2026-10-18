@@ -150,4 +150,10 @@
     <string name="fm_loading">Reading this file…</string>
     <!-- Files screen, the click label of a device file row that syncs it. -->
     <string name="file_sync_one">Sync file</string>
+    <!-- File metrics screen, Developer level. The rows of the file, one page at a time. -->
+    <string name="fm_rows_page">Rows</string>
+    <!-- Row indexes, from 0, of the first and last row on the page, then the rows in the file. -->
+    <string name="fm_rows_range">rows %1$d to %2$d of %3$d</string>
+    <string name="fm_rows_previous">Previous rows</string>
+    <string name="fm_rows_next">Next rows</string>
 </resources>

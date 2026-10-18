@@ -118,5 +118,6 @@ fun FileMetricsRoute(station: String, name: String, onBack: () -> Unit, viewMode
     LaunchedEffect(station, name) { viewModel.metrics.load(station, name) }
     val state by viewModel.metrics.state.collectAsStateWithLifecycle()
     val level by viewModel.detailLevel.collectAsStateWithLifecycle()
-    FileMetricsScreen(state = state, level = level, name = name, onBack = onBack)
+    val rows by viewModel.metrics.rows.collectAsStateWithLifecycle()
+    FileMetricsScreen(state = state, level = level, name = name, rows = rows, onRowPage = viewModel.metrics::page, onBack = onBack)
 }
