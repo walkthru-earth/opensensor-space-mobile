@@ -124,11 +124,12 @@ class IosDailyDerivedStoreTest {
         assertTrue(spans.all { it == daySpan })
         assertEquals(1, prepares, "concurrent observers prepare the daily pass once")
         assertEquals(2, daySpan.count)
-        assertEquals(2, reads, "one source open for each UTC day builds both daily files and tiers")
+        // Each UTC day opens the source twice, once to time its rows and feed the tiers, once to write its hours (#98).
+        assertEquals(4, reads, "two source opens for each UTC day build both daily files and tiers")
         assertEquals(0, tiers.decodedDays)
         val restarted = ArchiveHistoryTiers(archive, index, tierStore = IosFileTierStore(root, atomic))
         assertEquals(daySpan, restarted.observeDays(record.station).first())
-        assertEquals(2, reads)
+        assertEquals(4, reads, "a restart reads the tiers from disk, not the source")
         assertEquals(0, restarted.decodedDays)
     }
 
