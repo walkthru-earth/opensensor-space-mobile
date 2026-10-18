@@ -38,7 +38,18 @@ enum class TemperatureSource(val label: String, val key: String) {
  * Older dictionaries keep a profile because boards in the field still run them.
  */
 object LiveProfiles {
-    /** CoreS3 v6.12 writes schema `cores3-telemetry-v5` over dictionary `cores3-telemetry-v4`. */
+    /**
+     * CoreS3 v6.13 writes schema and dictionary `cores3-telemetry-v5`. Its field table holds the LIVE
+     * keys, so the digest covers them (aq-parquet #31). The keys match the last v6.12 build, and `t`
+     * and `rh` stay out of [CORES3] on purpose because they are always null on CoreS3.
+     */
+    const val CORES3_V5_DICTIONARY = "e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b"
+
+    /**
+     * CoreS3 v6.12 writes schema `cores3-telemetry-v5` over dictionary `cores3-telemetry-v4`. The digest
+     * does not cover the LIVE keys. Two v6.12 builds share it, one sends the IMU temperature as `t` and
+     * one as `imu_t`, so [CORES3] falls back to `t`.
+     */
     const val CORES3_DICTIONARY = "22291d3aab63365404394f30c1549fb18bde0699df9b2de863de70bb3f4edf65"
 
     /** CoreS3 v6.11 and earlier, `cores3-telemetry-v4`, which sends the IMU temperature as `t`. */
@@ -77,7 +88,7 @@ object LiveProfiles {
     val WAVESHARE_FAMILY = setOf(WAVESHARE, WAVESHARE_V5)
 
     fun resolve(info: DeviceInfo?): LiveProfile? = when (info?.dict) {
-        CORES3_DICTIONARY -> CORES3
+        CORES3_V5_DICTIONARY, CORES3_DICTIONARY -> CORES3
         CORES3_V4_DICTIONARY, CORES3_V3_DICTIONARY -> CORES3_LEGACY
         WAVESHARE_V5_DICTIONARY, WAVESHARE_V5_FIRST_DICTIONARY -> WAVESHARE_V5
         WAVESHARE_DICTIONARY, WAVESHARE_V3_DICTIONARY, WAVESHARE_V2_DICTIONARY, WAVESHARE_V1_DICTIONARY -> WAVESHARE
