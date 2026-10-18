@@ -92,8 +92,13 @@ shared `CollectionState.endReason()`. `SyncResult.dropsLanToken` is true for `TO
 Keychain token. A BYE in place of HELLO goes through `peerClosedCause` the same way, so a rotated
 token is dropped and sessions-full reads as busy. A run iOS stops when the app leaves the screen is kept as interrupted
 (`SensorCollections.interrupt`). When the app is active again, `AppServices.resumeInterrupted`
-starts it once through the Swift entry points, and Forget drops it. A Bluetooth resume yields to a
-page reopened over Bluetooth for another sensor and is dropped. Today shows how a run ended
+hands `SensorCollections.resumeInterrupted` the Swift entry points. The run stays queued until its
+controller accepts a start, then leaves the queue once. While the cancelled run still cleans up,
+or a transport refuses for now (`ResumeOutcome.WAITING`), it is tried again after any run's
+`finished`, when Bluetooth settles idle and when Bonjour reports sensors (`retryInterrupted`).
+Leaving the screen holds the queue (`holdInterrupted`). Forget and a deliberate disconnect
+(`SensorCollections.stop`) drop it. A Bluetooth resume yields to a page reopened over Bluetooth
+for another sensor and is dropped (`ResumeOutcome.SKIPPED`). Today shows how a run ended
 (`SyncMood` STOPPED or FAILED with one `SyncEndLine`), and its Stop ends only this phone's running
 sync, never a worker's.
 

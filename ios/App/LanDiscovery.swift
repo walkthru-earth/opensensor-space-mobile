@@ -172,6 +172,8 @@ final class LanDiscovery {
                 self.devices = devices
                 let names = Array(devices.keys)
                 self.state.lanSensorsFound(names: names, stations: names.map { devices[$0]?.station ?? "" })
+                // A run iOS interrupted may have waited for Bonjour to find its sensor.
+                self.runs?.retryInterrupted()
             }
         }
         browser.start(queue: .main)

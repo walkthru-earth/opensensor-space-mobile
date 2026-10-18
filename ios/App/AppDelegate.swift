@@ -377,25 +377,37 @@ final class AppServices {
     }
 
     /// Back on screen. Each run iOS interrupted starts again over its own transport, through the
-    /// entry point the screens follow. The shared controller skips the files already saved. A page
-    /// the user reopened for another sensor keeps the Bluetooth link, so that resume skips Bluetooth.
+    /// entry point the screens follow. The shared controller skips the files already saved. Kotlin
+    /// keeps a run until a controller accepts it and tries a refused one again once the last run
+    /// finished or a transport is ready.
     func resumeInterrupted() {
         autoSync.clearPaused()
+        runs.resumeInterrupted { [weak self] interrupted in
+            MainActor.assumeIsolated { self?.resume(interrupted) ?? .skipped }.outcome
+        }
+    }
+
+    /// The app left the screen, so interrupted runs wait for the next return.
+    func holdInterrupted() {
+        runs.holdInterrupted()
+    }
+
+    /// One try to start an interrupted run. A page the user reopened over Bluetooth for another
+    /// sensor keeps the link, so that resume skips Bluetooth.
+    private func resume(_ interrupted: InterruptedRun) -> ResumeTry {
+        let device = interrupted.device
+        let onlyName = interrupted.onlyName
         let pageDevice = livePage.page.flatMap { devices.deviceFor(peripheral: $0.id) }
-        for interrupted in runs.takeInterrupted() {
-            let device = interrupted.device
-            let onlyName = interrupted.onlyName
-            let bluetoothFree = livePage.letsResumeUseBluetooth(device: device, pageDevice: pageDevice)
-            switch RunTransport(interrupted.prefer) {
-            case .lan:
-                _ = lan.resumeSync(device: device, onlyName: onlyName)
-            case .ble:
-                if bluetoothFree { _ = bluetooth.resumeSync(device: device, onlyName: onlyName) }
-            case .any:
-                if !lan.resumeSync(device: device, onlyName: onlyName), bluetoothFree {
-                    _ = bluetooth.resumeSync(device: device, onlyName: onlyName)
-                }
-            }
+        let bluetoothFree = livePage.letsResumeUseBluetooth(device: device, pageDevice: pageDevice)
+        switch RunTransport(interrupted.prefer) {
+        case .lan:
+            return lan.resumeSync(device: device, onlyName: onlyName) ? .started : .waiting
+        case .ble:
+            guard bluetoothFree else { return .skipped }
+            return bluetooth.resumeSync(device: device, onlyName: onlyName) ? .started : .waiting
+        case .any:
+            if lan.resumeSync(device: device, onlyName: onlyName) { return .started }
+            return bluetoothFree && bluetooth.resumeSync(device: device, onlyName: onlyName) ? .started : .waiting
         }
     }
 
@@ -411,6 +423,19 @@ private enum RunTransport: Sendable {
 
     init(_ prefer: SyncLinkPreference) {
         self = prefer == .lan ? .lan : prefer == .ble ? .ble : .any
+    }
+}
+
+/// One try to resume an interrupted run, read on the main actor and handed to Kotlin.
+private enum ResumeTry: Sendable {
+    case started, waiting, skipped
+
+    var outcome: ResumeOutcome {
+        switch self {
+        case .started: .started
+        case .waiting: .waiting
+        case .skipped: .skipped
+        }
     }
 }
 
@@ -482,6 +507,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidEnterBackground(_ scene: UIScene) {
         guard let services else { return }
         services.cancelPendingOpen()
+        services.holdInterrupted()
         // Collect all is a foreground pass, unless iOS 26 took it as a continued task or is about to
         // launch one. Otherwise the step in flight ends with the link below.
         if !services.autoSync.collectAllHeld { services.devices.cancelCollectAll() }
@@ -501,6 +527,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidDisconnect(_ scene: UIScene) {
         guard let services else { return }
         services.cancelPendingOpen()
+        services.holdInterrupted()
         if !services.autoSync.collectAllContinues { services.devices.cancelCollectAll() }
         services.bluetooth.suspend()
         services.lan.suspend()

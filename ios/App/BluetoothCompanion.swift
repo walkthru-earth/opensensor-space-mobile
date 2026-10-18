@@ -494,6 +494,8 @@ final class BluetoothCompanion {
         state.today.linkIdle()
         collectWhenReady()
         backgroundWhenReady()
+        // A run iOS interrupted may have waited for this link to be free.
+        runs?.retryInterrupted()
         if let id = closeWhenIdle {
             closeWhenIdle = nil
             closeIdle(id: id)

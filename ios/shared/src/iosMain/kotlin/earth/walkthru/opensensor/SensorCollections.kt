@@ -74,8 +74,11 @@ class SensorCollections internal constructor(
     /** Guarded by [lock]. */
     private val controllers = HashMap<String, CollectionController>()
 
-    /** Runs the OS interrupted, by device, until the app is back. Guarded by [lock]. */
+    /** Runs the OS interrupted, by device, until a controller accepts one again. Guarded by [lock]. */
     private val interrupted = LinkedHashMap<String, InterruptedRun>()
+
+    /** How Swift starts an interrupted run, set while the app is on screen. Guarded by [lock]. */
+    private var resumer: ((InterruptedRun) -> ResumeOutcome)? = null
 
     /** Requests by intent id, until their `finished` ran. Guarded by [lock]. */
     private val requests = HashMap<Long, Request>()
@@ -98,12 +101,8 @@ class SensorCollections internal constructor(
         val id = ids.incrementAndFetch()
         val request = Request(device, onlyName, prefer, background, progress, finished)
         val controller = controllerFor(device)
-        // Registered before start, so a refusal published inside start still finds it. A new run
-        // replaces one the OS interrupted.
-        locked {
-            requests[id] = request
-            interrupted.remove(device)
-        }
+        // Registered before start, so a refusal published inside start still finds it.
+        locked { requests[id] = request }
         val intent = CollectionIntent(
             id = id,
             device = device,
@@ -118,6 +117,9 @@ class SensorCollections internal constructor(
             scope.launch(callbacks) { finished(SyncResult(SyncEnd.IN_USE, 0, 0, 0)) }
             return SyncHandle(null)
         }
+        // The controller took it, so it replaces the run the OS interrupted, once. A busy refusal
+        // above leaves that run waiting.
+        locked { interrupted.remove(device) }
         // ATOMIC runs the body even if the scope ends first, so `finished` fires on every path.
         scope.launch(start = CoroutineStart.ATOMIC) { deliver(controller, id, request) }
         return SyncHandle { controller.stop(StopSource.USER, id) }
@@ -129,14 +131,17 @@ class SensorCollections internal constructor(
      * so no later dial or transfer happens. Other devices keep their runs.
      */
     fun stop(device: String) {
-        locked { controllers.entries.filter { it.key.equals(device, ignoreCase = true) }.map { it.value } }
-            .forEach { it.stop(StopSource.APP) }
+        locked {
+            // A deliberate stop also ends a run the OS interrupted, so it never resumes.
+            interrupted.keys.removeAll { it.equals(device, ignoreCase = true) }
+            controllers.entries.filter { it.key.equals(device, ignoreCase = true) }.map { it.value }
+        }.forEach { it.stop(StopSource.APP) }
     }
 
     /**
      * The OS ended the background time of [device]'s run the user started. The run ends with
      * [earth.walkthru.aqsync.collection.SyncEndReason.INTERRUPTED], keeps its saved files and
-     * partials, and waits in [takeInterrupted] until the app is back. False when no such run is active.
+     * partials, and waits until [resumeInterrupted] gets it accepted. False when no such run is active.
      */
     fun interrupt(device: String): Boolean {
         val (controller, id) = locked {
@@ -152,11 +157,36 @@ class SensorCollections internal constructor(
     }
 
     /**
-     * The interrupted runs to start again, once each, oldest first. Swift calls it when the scene is
-     * active and starts each through its own entry point, so the screens follow the new run.
+     * Starts the interrupted runs again, oldest first, through [start]. Swift calls it when the scene
+     * is active, and [start] begins one through its own entry point, so the screens follow the new
+     * run. A run leaves the queue once its controller accepts it, or when [start] answers
+     * [ResumeOutcome.SKIPPED]. One whose last run still cleans up, or one a transport refused for
+     * now, waits and is tried again after any run's `finished` and on [retryInterrupted]. Call on the
+     * main thread.
      */
-    fun takeInterrupted(): List<InterruptedRun> = locked {
-        interrupted.values.toList().also { interrupted.clear() }
+    fun resumeInterrupted(start: (InterruptedRun) -> ResumeOutcome) {
+        locked { resumer = start }
+        retryInterrupted()
+    }
+
+    /** A transport became ready, so the waiting interrupted runs are tried again. Call on the main thread. */
+    fun retryInterrupted() {
+        val (start, waiting) = locked {
+            val start = resumer ?: return
+            // A device whose run still holds its reservation is tried after that run's `finished`.
+            start to interrupted.values.filter { run -> requests.values.none { it.device == run.device } }
+        }
+        for (run in waiting) {
+            // A nested retry from a Swift callback may have started it already.
+            if (locked { interrupted[run.device] !== run }) continue
+            if (start(run) != ResumeOutcome.SKIPPED) continue
+            locked { if (interrupted[run.device] === run) interrupted.remove(run.device) }
+        }
+    }
+
+    /** The app left the screen. Interrupted runs wait for the next [resumeInterrupted]. */
+    fun holdInterrupted() {
+        locked { resumer = null }
     }
 
     /**
@@ -214,6 +244,8 @@ class SensorCollections internal constructor(
         withContext(NonCancellable + callbacks) {
             IosSyncDiagnostics.record(controller.device, "result", "${result.end.name.lowercase()} · ${result.saved}/${result.files} saved")
             request.finished(result)
+            // Its transport is free now, so a run interrupted while this one cleaned up can start.
+            retryInterrupted()
         }
     }
 
@@ -306,6 +338,18 @@ class SensorCollections internal constructor(
     internal companion object {
         const val MAX_CONCURRENT = 2
     }
+}
+
+/** How Swift answered one try to start an interrupted run again. */
+enum class ResumeOutcome {
+    /** A transport began it. The queue drops it once its controller accepts it. */
+    STARTED,
+
+    /** No transport can take it yet, such as while another command holds the link. It waits. */
+    WAITING,
+
+    /** Policy says it does not resume, such as a page reopened over Bluetooth for another sensor. */
+    SKIPPED,
 }
 
 /** A run the OS interrupted off screen. [onlyName] is set for a one-file sync from Files. */
