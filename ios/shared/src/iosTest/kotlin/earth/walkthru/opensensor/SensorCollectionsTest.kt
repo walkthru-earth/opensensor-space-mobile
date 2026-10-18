@@ -4,6 +4,8 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.collection.KeepAlive
+import earth.walkthru.aqsync.collection.KeepAliveKind
+import earth.walkthru.aqsync.collection.Lease
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.collection.RetryPolicy
 import earth.walkthru.aqsync.collection.SyncEndReason
@@ -35,6 +37,7 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSLock
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUUID
+import platform.posix.usleep
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
@@ -238,6 +241,68 @@ class SensorCollectionsTest {
     }
 
     private fun SensorCollections.collect(seen: Seen) = collect(device, null, LinkPreference.ANY, false, seen::progress, seen::finished)
+
+    /** What waits to resume, read without starting it. */
+    private fun SensorCollections.waiting(): List<InterruptedRun> {
+        val seen = ArrayList<InterruptedRun>()
+        resumeInterrupted {
+            seen += it
+            ResumeOutcome.WAITING
+        }
+        holdInterrupted()
+        return seen
+    }
+
+    /**
+     * Swift's resume of an interrupted run. Like BluetoothCompanion and LanDiscovery it refuses while
+     * the device's last run still holds its reservation or [ready] says the transport is busy.
+     */
+    private inner class Resume(val runs: SensorCollections, var ready: Boolean = true) {
+        val tries = AtomicInt(0)
+        val starts = AtomicInt(0)
+        val seen = Seen()
+
+        fun start(run: InterruptedRun): ResumeOutcome {
+            tries.incrementAndFetch()
+            if (!ready || runs.isActive(run.device)) return ResumeOutcome.WAITING
+            starts.incrementAndFetch()
+            runs.collect(run.device, run.onlyName, run.prefer, false, seen::progress, seen::finished)
+            return ResumeOutcome.STARTED
+        }
+    }
+
+    /** Holds the first run's PROCESS release, the last step of its cleanup, until [open]. */
+    private class CleanupGate {
+        val reached = CompletableDeferred<Unit>()
+        private val opened = AtomicInt(0)
+        private val leases = AtomicInt(0)
+        val keepAlive = KeepAlive { kind, _ ->
+            if (kind != KeepAliveKind.PROCESS || leases.incrementAndFetch() != 1) {
+                Lease {}
+            } else {
+                Lease {
+                    reached.complete(Unit)
+                    while (opened.load() == 0) usleep(1_000u)
+                }
+            }
+        }
+
+        fun open() = opened.store(1)
+    }
+
+    /** A user run whose second file never answers, as when iOS suspends the app, then interrupted. */
+    private suspend fun interruptedRun(runs: SensorCollections, board: Board, held: CompletableDeferred<Unit>): Seen {
+        board.connect()
+        val first = Seen()
+        runs.collect(device, null, LinkPreference.LAN, false, first::progress, first::finished)
+        withTimeout(10_000) { held.await() }
+        assertTrue(runs.interrupt(device))
+        return first
+    }
+
+    private fun stallingBoard(held: CompletableDeferred<Unit>) = Board { _, name ->
+        (name == second && !held.isCompleted).also { if (it) held.complete(Unit) }
+    }
 
     @Test
     fun theProviderDialsWhenNoLinkIsOpenAndLendsTheNewOne() = runBlocking {
@@ -524,19 +589,127 @@ class SensorCollectionsTest {
         assertEquals(1, interrupted.saved, "the file saved before the interruption stays")
         assertFalse(runs.interrupt(device), "nothing left to interrupt")
 
-        val resumed = runs.takeInterrupted()
+        val resumed = runs.waiting()
         assertEquals(1, resumed.size)
         assertEquals(device, resumed[0].device)
         assertEquals(null, resumed[0].onlyName)
         assertEquals(LinkPreference.LAN, resumed[0].prefer)
-        assertTrue(runs.takeInterrupted().isEmpty(), "a run resumes once")
 
-        val next = Seen()
-        runs.collect(resumed[0].device, resumed[0].onlyName, resumed[0].prefer, false, next::progress, next::finished)
-        val done = withTimeout(10_000) { next.done.await() }
+        val resume = Resume(runs)
+        runs.resumeInterrupted(resume::start)
+        val done = withTimeout(10_000) { resume.seen.done.await() }
         assertEquals(SyncEnd.COMPLETE, done.end)
         assertEquals(1, done.saved, "only the file the interrupted run lacked")
+        assertTrue(runs.waiting().isEmpty(), "a run resumes once")
+        assertEquals(1, resume.starts.load())
         assertFalse(board.current!!.leased)
+    }
+
+    @Test
+    fun foregroundingBeforeCleanupEndsResumesTheInterruptedRunOnceAfterIt() = runBlocking {
+        val held = CompletableDeferred<Unit>()
+        val board = stallingBoard(held)
+        val gate = CleanupGate()
+        val runs = collections(board, gate.keepAlive)
+        val first = interruptedRun(runs, board, held)
+        withTimeout(10_000) { gate.reached.await() }
+        assertTrue(runs.isActive(device), "the cancelled run still holds its reservation")
+
+        val resume = Resume(runs)
+        runs.resumeInterrupted(resume::start)
+        assertEquals(0, resume.tries.load(), "a device still cleaning up is tried after its finished")
+        assertFalse(first.done.isCompleted)
+
+        gate.open()
+        assertEquals(SyncEndReason.INTERRUPTED, withTimeout(10_000) { first.done.await() }.endReason)
+        val done = withTimeout(10_000) { resume.seen.done.await() }
+        assertEquals(SyncEnd.COMPLETE, done.end)
+        assertEquals(1, done.saved, "only the file the interrupted run lacked")
+        runs.retryInterrupted()
+        repeat(20) { yield() }
+        assertEquals(1, resume.starts.load(), "exactly one resumed collection")
+        assertEquals(1, resume.seen.finishes.load())
+        assertTrue(runs.waiting().isEmpty())
+        assertFalse(board.current!!.leased)
+    }
+
+    @Test
+    fun aResumeTheTransportRefusesWaitsUntilItIsReady() = runBlocking {
+        val held = CompletableDeferred<Unit>()
+        val board = stallingBoard(held)
+        val runs = collections(board)
+        val first = interruptedRun(runs, board, held)
+        withTimeout(10_000) { first.done.await() }
+
+        // Another command or a Bonjour lookup holds the transport.
+        val resume = Resume(runs, ready = false)
+        runs.resumeInterrupted(resume::start)
+        assertEquals(1, resume.tries.load())
+        assertEquals(0, resume.starts.load())
+
+        // The transport became ready. The refused run was kept, so it starts now, once.
+        resume.ready = true
+        runs.retryInterrupted()
+        assertEquals(SyncEnd.COMPLETE, withTimeout(10_000) { resume.seen.done.await() }.end)
+        runs.retryInterrupted()
+        assertEquals(1, resume.starts.load())
+        assertEquals(2, resume.tries.load())
+        assertTrue(runs.waiting().isEmpty())
+    }
+
+    @Test
+    fun aDeliberateStopOrASkipIsNeverResumed() = runBlocking {
+        val held = CompletableDeferred<Unit>()
+        val board = stallingBoard(held)
+        val gate = CleanupGate()
+        val runs = collections(board, gate.keepAlive)
+        val first = interruptedRun(runs, board, held)
+        withTimeout(10_000) { gate.reached.await() }
+
+        // The user disconnected the sensor while its cancelled run cleaned up.
+        runs.stop(device.uppercase())
+        val resume = Resume(runs)
+        runs.resumeInterrupted(resume::start)
+        gate.open()
+        withTimeout(10_000) { first.done.await() }
+        runs.retryInterrupted()
+        repeat(20) { yield() }
+        assertEquals(0, resume.tries.load(), "a deliberate stop is not resumed")
+
+        // A page reopened over Bluetooth for another sensor skips the resume for good.
+        val heldAgain = CompletableDeferred<Unit>()
+        val board2 = stallingBoard(heldAgain)
+        val runs2 = collections(board2)
+        val other = interruptedRun(runs2, board2, heldAgain)
+        withTimeout(10_000) { other.done.await() }
+        val skips = AtomicInt(0)
+        runs2.resumeInterrupted {
+            skips.incrementAndFetch()
+            ResumeOutcome.SKIPPED
+        }
+        runs2.retryInterrupted()
+        assertEquals(1, skips.load(), "a skipped run leaves the queue")
+    }
+
+    @Test
+    fun offScreenACleanupThatEndsLeavesTheInterruptedRunWaiting() = runBlocking {
+        val held = CompletableDeferred<Unit>()
+        val board = stallingBoard(held)
+        val gate = CleanupGate()
+        val runs = collections(board, gate.keepAlive)
+        val resume = Resume(runs)
+        runs.resumeInterrupted(resume::start)
+        runs.holdInterrupted()
+        val first = interruptedRun(runs, board, held)
+        withTimeout(10_000) { gate.reached.await() }
+        gate.open()
+        withTimeout(10_000) { first.done.await() }
+        repeat(20) { yield() }
+        assertEquals(0, resume.tries.load(), "nothing resumes while the app is off screen")
+
+        runs.resumeInterrupted(resume::start)
+        assertEquals(SyncEnd.COMPLETE, withTimeout(10_000) { resume.seen.done.await() }.end)
+        assertEquals(1, resume.starts.load())
     }
 
     @Test
@@ -562,12 +735,12 @@ class SensorCollectionsTest {
 
         val again = Seen()
         val next = runs.collect(device, null, LinkPreference.ANY, false, again::progress, again::finished)
-        assertTrue(runs.takeInterrupted().isEmpty(), "the user's new run replaced the interrupted one")
         withTimeout(10_000) { reads.receive() }
         next.cancel()
         withTimeout(10_000) { again.done.await() }
+        assertTrue(runs.waiting().isEmpty(), "the user's new run replaced the interrupted one")
         runs.interrupt(device)
-        assertTrue(runs.takeInterrupted().isEmpty())
+        assertTrue(runs.waiting().isEmpty())
     }
 
     @Test
