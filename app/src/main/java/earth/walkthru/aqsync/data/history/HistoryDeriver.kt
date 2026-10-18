@@ -29,7 +29,8 @@ fun interface HistoryRefresher {
     /** Persist an accepted collection clock receipt without starting a history pass. */
     suspend fun persistClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {}
 
-    suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {}
+    /** Re-dates and derives [station] in one History pass, after a clock receipt was persisted. */
+    suspend fun deriveStation(station: String) {}
 }
 
 /** Queues the stale days a post-sync pass skipped for a full pass under a charging constraint. */
@@ -76,8 +77,11 @@ class HistoryDeriver @Inject constructor(
         indexer.persistClockAnchor(station, boot, utcNs, monotonicUs)
     }
 
-    override suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
-        indexer.recordClockAnchor(station, boot, utcNs, monotonicUs)
+    /**
+     * Re-dates and derives [station] in one pass. The re-dating runs inside the pass ([deriveStale]
+     * estimates first), never beside a derive or a backfill that reads the estimates.
+     */
+    override suspend fun deriveStation(station: String) {
         deriveStale(listOf(station))
     }
 

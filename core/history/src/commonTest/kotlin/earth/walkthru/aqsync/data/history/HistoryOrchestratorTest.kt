@@ -9,6 +9,12 @@ import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.net.BlockCache
+import earth.walkthru.aqsync.net.MemoryBlockStore
+import earth.walkthru.aqsync.storage.StorageEntry
+import earth.walkthru.aqsync.storage.StorageJanitor
+import earth.walkthru.aqsync.storage.StorageRoots
+import earth.walkthru.aqsync.storage.StorageTree
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,12 +22,15 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 /** The History pass order both phones share, over an in-memory archive and fake platform passes. */
 class HistoryOrchestratorTest {
@@ -44,6 +53,9 @@ class HistoryOrchestratorTest {
         val rows = MutableStateFlow<List<ArchiveRecord>>(emptyList())
         var updating: CompletableDeferred<Unit>? = null
         var releaseUpdate: CompletableDeferred<Unit>? = null
+
+        /** How many next row updates throw, as a busy database would. */
+        var failUpdates = 0
         override fun observeAll(): Flow<List<ArchiveRecord>> = rows
         override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
@@ -53,6 +65,10 @@ class HistoryOrchestratorTest {
         override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) {
             updating?.complete(Unit)
             releaseUpdate?.await()
+            if (failUpdates > 0) {
+                failUpdates--
+                error("database busy")
+            }
             val current = get(key) ?: return
             put(transform(current))
         }
@@ -63,7 +79,10 @@ class HistoryOrchestratorTest {
         override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
             rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
         override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
-        override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
+
+        /** How many times a time estimate or other caller listed the stations. */
+        var stationReads = 0
+        override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct().also { stationReads++ }
     }
 
     private val store = Store()
@@ -76,8 +95,23 @@ class HistoryOrchestratorTest {
         return r
     }
 
-    private fun TestScope.orchestrator(janitor: suspend () -> Unit = {}) =
-        HistoryOrchestrator(ArchiveIndexRepair(store, index, io = StandardTestDispatcher(testScheduler), nowEpochMs = { 42L }), index, janitor)
+    private fun TestScope.orchestrator() =
+        HistoryOrchestrator(ArchiveIndexRepair(store, index, io = StandardTestDispatcher(testScheduler), nowEpochMs = { 42L }), index)
+
+    /** No storage roots, so the janitor only adopts the finals of [store] that the index lacks. */
+    private object NoTree : StorageTree {
+        override fun list(dir: String): List<StorageEntry> = emptyList()
+        override fun delete(path: String) = Unit
+    }
+
+    private fun TestScope.janitor(log: (String) -> Unit) =
+        StorageJanitor(StorageRoots(emptyMap()), NoTree, store, index, StandardTestDispatcher(testScheduler), clock = { 42L }, log = log)
+
+    /** One cached feed block over a zero quota, so [BlockCache.enforce] evicts it. */
+    private fun TestScope.blocks(onQuota: () -> Unit): Pair<BlockCache, MemoryBlockStore> {
+        val blockStore = MemoryBlockStore().apply { write("feed-block", ByteArray(8)) }
+        return BlockCache(blockStore, { onQuota(); 0L }, StandardTestDispatcher(testScheduler)) to blockStore
+    }
 
     @Test
     fun aDeriveAskedDuringABackfillWaitsAndSeesTheIndexedRecord() = runTest {
@@ -139,26 +173,172 @@ class HistoryOrchestratorTest {
     }
 
     @Test
-    fun runSweepsThenBackfillsThenDerivesAndAgainWhenARecordWaits() = runTest {
+    fun runBackfillsThenDerivesAndAgainWhenARecordWaits() = runTest {
         waiting("a")
         val events = ArrayList<String>()
-        lateinit var history: HistoryOrchestrator
-        history = orchestrator(janitor = {
-            events += "janitor ${index.rows.value.count { it.isIndexed }}"
-            error("disk busy")
-        })
+        val history = orchestrator()
         val life = launch {
             history.run { history.derivePass { events += "derive ${index.rows.value.count { it.isIndexed }}" } }
         }
         runCurrent()
-        // The janitor runs before any backfill. Its failure is logged and the start goes on.
-        assertEquals(listOf("janitor 0", "derive 1"), events)
+        assertEquals(listOf("derive 1"), events)
 
         // A sync adds a record without index columns, so a backfill runs and History derives again.
         waiting("b")
         runCurrent()
-        assertEquals(listOf("janitor 0", "derive 1", "derive 2"), events)
+        assertEquals(listOf("derive 1", "derive 2"), events)
         assertFalse(index.rows.value.any { it.awaitsIndex })
         life.cancel()
+    }
+
+    @Test
+    fun aFailedBackfillRetriesAfterABackoffWithoutANewIndexChange() = runTest {
+        waiting("a")
+        index.failUpdates = 1
+        val derives = ArrayList<Int>()
+        val history = orchestrator()
+        val life = launch { history.run { history.derivePass { derives += index.rows.value.count { it.isIndexed } } } }
+        runCurrent()
+        // The index threw, the record still waits, and the index flow will not emit again.
+        assertEquals(listOf(0), derives)
+        assertTrue(index.rows.value.single().awaitsIndex)
+
+        advanceTimeBy(HistoryOrchestrator.RETRY_DELAYS.first() - 1.seconds)
+        runCurrent()
+        assertEquals(listOf(0), derives, "no retry before the first backoff")
+
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        assertEquals(listOf(0, 1), derives, "the retry backfills and derives again")
+        assertFalse(index.rows.value.single().awaitsIndex)
+        life.cancel()
+    }
+
+    @Test
+    fun theStartAndRetryBackfillsWaitForADeriveInFlight() = runTest {
+        waiting("a")
+        index.failUpdates = 1
+        val history = orchestrator()
+        val inDerive = CompletableDeferred<Unit>()
+        var endDerive = CompletableDeferred<Unit>()
+        val held = launch { history.derivePass { inDerive.complete(Unit); endDerive.await() } }
+        inDerive.await()
+
+        val life = launch { history.run { history.derivePass { } } }
+        runCurrent()
+        assertEquals(1, index.failUpdates, "the start backfill waits for the derive in flight")
+        endDerive.complete(Unit)
+        held.join()
+        runCurrent()
+        assertEquals(0, index.failUpdates)
+        assertTrue(index.rows.value.single().awaitsIndex)
+
+        // A derive holds the pass when the retry falls due, so the retry backfill waits for it.
+        endDerive = CompletableDeferred()
+        val again = CompletableDeferred<Unit>()
+        val heldAgain = launch { history.derivePass { again.complete(Unit); endDerive.await() } }
+        again.await()
+        advanceTimeBy(HistoryOrchestrator.RETRY_DELAYS.first() + 1.seconds)
+        runCurrent()
+        assertTrue(index.rows.value.single().awaitsIndex, "the retry backfill waits for the derive in flight")
+        endDerive.complete(Unit)
+        heldAgain.join()
+        runCurrent()
+        assertFalse(index.rows.value.single().awaitsIndex)
+        life.cancel()
+    }
+
+    @Test
+    fun retriesGiveUpAfterTheLastBackoff() = runTest {
+        waiting("a")
+        index.failUpdates = Int.MAX_VALUE
+        val derives = ArrayList<Int>()
+        val history = orchestrator()
+        val life = launch { history.run { history.derivePass { derives += index.rows.value.count { it.isIndexed } } } }
+        runCurrent()
+        advanceTimeBy(HistoryOrchestrator.RETRY_DELAYS.reduce { a, b -> a + b } + 1.seconds)
+        runCurrent()
+        assertEquals(1 + HistoryOrchestrator.RETRY_DELAYS.size, derives.size, "one start pass and one per backoff")
+
+        advanceTimeBy((24 * 3600).seconds)
+        runCurrent()
+        assertEquals(1 + HistoryOrchestrator.RETRY_DELAYS.size, derives.size, "no retry after the last backoff")
+        assertTrue(index.rows.value.single().awaitsIndex, "the record waits for the next index change")
+        life.cancel()
+    }
+
+    @Test
+    fun timeEstimatesWaitForADeriveInFlight() = runTest {
+        waiting("a")
+        val history = orchestrator()
+        val inDerive = CompletableDeferred<Unit>()
+        val endDerive = CompletableDeferred<Unit>()
+        val derive = launch { history.derivePass { inDerive.complete(Unit); endDerive.await() } }
+        inDerive.await()
+
+        var estimated = false
+        val estimate = launch { history.estimateTimes(); estimated = true }
+        runCurrent()
+        assertFalse(estimated, "the estimates wait for the derive that reads them")
+        endDerive.complete(Unit)
+        derive.join()
+        estimate.join()
+        assertTrue(estimated)
+    }
+
+    @Test
+    fun aClockReceiptFollowUpEstimatesOnlyInsideAPassThenDerives() = runTest {
+        waiting("a")
+        val history = orchestrator()
+        val inDerive = CompletableDeferred<Unit>()
+        val endDerive = CompletableDeferred<Unit>()
+        val derive = launch { history.derivePass { inDerive.complete(Unit); endDerive.await() } }
+        inDerive.await()
+
+        val events = ArrayList<String>()
+        val followUp = launch { history.afterClockReceipt { history.derivePass { events += "derive after ${index.stationReads} estimate" } } }
+        runCurrent()
+        assertEquals(0, index.stationReads, "the estimates wait for the derive that reads them")
+        endDerive.complete(Unit)
+        derive.join()
+        followUp.join()
+        assertEquals(listOf("derive after 1 estimate"), events)
+    }
+
+    @Test
+    fun startSweepsThenAppliesTheFeedQuotaThenIndexesWhatTheJanitorAdopted() = runTest {
+        // A final on disk with no record, as a crash between commit and insert leaves it.
+        val orphan = ArchiveRecord(station, "station=$station/day/orphan.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        store.files[orphan.key] = bytes
+        val events = ArrayList<String>()
+        val (cache, blockStore) = blocks { events += "feed quota" }
+        val history = orchestrator()
+        val startup = HistoryStartup(history, janitor { events += "janitor" }, cache)
+        assertFalse(startup.started)
+
+        val job = startup.start(this) { history.derivePass { events += "derive ${index.rows.value.count { it.isIndexed }}" } }
+        runCurrent()
+        assertTrue(startup.started)
+        assertEquals(listOf("janitor", "feed quota", "derive 1"), events)
+        assertTrue(blockStore.list().isEmpty(), "the feed block quota was applied")
+        assertTrue(index.get(orphan.key)!!.isIndexed, "the adopted file is indexed in the same start")
+
+        assertSame(job, startup.start(this) { error("a second start runs nothing") })
+        job.cancel()
+    }
+
+    @Test
+    fun theFeedQuotaAndTheBackfillRunWhenTheJanitorFails() = runTest {
+        waiting("a")
+        val events = ArrayList<String>()
+        val (cache, blockStore) = blocks { events += "feed quota" }
+        val history = orchestrator()
+        val startup = HistoryStartup(history, janitor { events += "janitor"; error("disk busy") }, cache)
+
+        val job = startup.start(this) { history.derivePass { events += "derive ${index.rows.value.count { it.isIndexed }}" } }
+        runCurrent()
+        assertEquals(listOf("janitor", "feed quota", "derive 1"), events)
+        assertTrue(blockStore.list().isEmpty())
+        job.cancel()
     }
 }

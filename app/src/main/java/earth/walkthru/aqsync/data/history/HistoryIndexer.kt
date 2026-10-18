@@ -36,11 +36,6 @@ class HistoryIndexer @Inject constructor(
         clockAnchors.put(ClockAnchor(station, boot, utcNs, monotonicUs))
     }
 
-    suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
-        persistClockAnchor(station, boot, utcNs, monotonicUs)
-        repair.estimateTimes()
-    }
-
     /** The shared repair, which the [HistoryOrchestrator] runs as its backfill. */
     val repair = ArchiveIndexRepair(
         store = FileArchiveStore(archive, Dispatchers.IO),
@@ -61,7 +56,11 @@ class HistoryIndexer @Inject constructor(
     /** Runs [backfill] until nothing is left, bounded, then the time-estimate pass. */
     suspend fun backfillAll(maxBatches: Int = 50) = repair.backfillAll(maxBatches)
 
-    /** §4.6 estimated spans for unsynced files whose boot later received a clock. Returns how many rows changed. */
+    /**
+     * §4.6 estimated spans for unsynced files whose boot later received a clock. Returns how many rows
+     * changed. Call it only inside a History pass, as [HistoryDeriver.deriveStale] does, since a derive
+     * reads these columns.
+     */
     suspend fun estimateTimes(): Int = repair.estimateTimes()
 
     private companion object {

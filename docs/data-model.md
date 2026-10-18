@@ -273,7 +273,7 @@ checks the destination and runs `ATOMIC_MOVE`. iOS uses `renamex_np(RENAME_EXCL)
 flushed with `F_FULLFSYNC` on iOS (fsync only when the volume does not support it) and the parent
 directory is synced on both platforms. Clock receipts are written once with `createNoReplace`.
 
-`StorageJanitor` runs once per process as the first step of the shared `HistoryOrchestrator.run`,
+`StorageJanitor` runs once per process as the first step of the shared `HistoryStartup.start`,
 before the back-fill, from `AqSyncApplication` on Android and `IosArchive.startIndexRepair` on iOS. It also finds final files without an index record (a crash
 between commit and record), checks size, CRC-32, SHA-256 and `PAR1`, and indexes them with
 `sourceDevice = "adopted"` through `ArchiveIndex.putIfAbsent` (Room `INSERT OR IGNORE` on both
@@ -303,7 +303,7 @@ a day and in the janitor. The feed `BlockCache` (#94) reads its quota at every w
 Rebuildable data, so the cache gives its files back under storage pressure, and the OS may purge the
 directory at any time. It evicts the least recently used block first, before each write, so it never
 holds more than the quota. It applies the quota again once at process start, right after the
-startup sweep in `HistoryOrchestrator.run`, on both phones. The map cap is set once per process through MapLibre
+startup sweep in `HistoryStartup.start`, on both phones, also when the sweep failed. The map cap is set once per process through MapLibre
 `MapRuntimeOptions.maximumCacheSizeBytes`, before the first map. Settings shows the bytes per class
 and clears the History cache, which also empties the feed block cache, or the map cache. Sensor files have no clear button.
 

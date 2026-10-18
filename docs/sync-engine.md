@@ -379,8 +379,11 @@ destination is not a file") and is now a per-file storage failure. Host test
 `ArchiveCollectorTest`, `SensorSyncTest` on the simulator.
 
 **The post-sync `LIST` runs inside finalization.** Android interactive collection refreshes the
-manifest and history before publishing Done, while PROCESS and the LAN WIFI lease remain held.
-A failed refresh preserves verified files and the previous listing. The worker skips the second
+manifest before publishing Done, while PROCESS and the LAN WIFI lease remain held.
+A failed refresh preserves verified files and the previous listing. The post-sync derive
+(`deriveAfterSync`) and the timeline report start after finalization in the link owner's scope, so a
+derive that waits for a slow back-fill never holds the link, and the next collection can start
+(`DeviceFacadeTest`, #125). The worker skips the second
 LIST because its owned link closes after collection. Stop cancels finalization and retains its
 own terminal reason. Service lifetime follows PROCESS leases, with no flag inference or grace
 period.
@@ -460,8 +463,8 @@ a sync; raw box accepting `0b`) were closed anyway.
 
 ## Historical decisions (v1, mirrored into the firmware contract 2026-09-16)
 
-The table records the original implementation. Current finalization derives touched days
-through `deriveAfterSync`; charging `DeriveWorker` handles deferred stale history. Current
+The table records the original implementation. Current finalization starts `deriveAfterSync` for
+the touched days once the link is released; charging `DeriveWorker` handles deferred stale history. Current
 request routing and terminal matching belong to `LinkSession` and `TerminalRules`.
 
 | Question | Decision |

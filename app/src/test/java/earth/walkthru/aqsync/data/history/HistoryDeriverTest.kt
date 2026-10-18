@@ -382,6 +382,41 @@ class HistoryDeriverTest {
     }
 
     @Test
+    fun `a clock receipt re-dates files only inside a History pass`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-clock-pass").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val files = InMemoryFiles()
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val passes = indexer.passes(files)
+            val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), InMemoryDays(), DerivedStore(tmp), indexer, derivedQuota(tmp), passes)
+            val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
+            val raw = archive.fileFor(station, name).apply {
+                parentFile!!.mkdirs()
+                writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))
+            }
+            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            val before = files.rows.single()
+            val utcNs = 1_788_912_000_123_456_000L
+            val inPass = CompletableDeferred<Unit>()
+            val endPass = CompletableDeferred<Unit>()
+            // A derive in flight reads the estimate columns for its source sets.
+            val other = launch(Dispatchers.Default) { passes.derivePass { inPass.complete(Unit); endPass.await() } }
+            inPass.await()
+            deriver.persistClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
+            val receipt = launch(Dispatchers.Default) { deriver.deriveStation(station) }
+            assertNull("the re-dating waits for the pass in flight", withTimeoutOrNull(2_000) { receipt.join() })
+            assertNull("no estimate is written beside the derive", files.rows.single().estLastUtcNs)
+            endPass.complete(Unit)
+            other.join()
+            receipt.join()
+            assertEquals(utcNs, files.rows.single().estLastUtcNs)
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `clock receipt partitions unknown UTC across midnight and survives a new indexer`() = runBlocking {
         val tmp = java.nio.file.Files.createTempDirectory("aq-clock-derive").toFile()
         try {
@@ -403,7 +438,8 @@ class HistoryDeriverTest {
             val before = files.rows.single()
             assertEquals(0, deriver.deriveStale().daysChecked)
             val utcNs = 1_788_912_000_123_456_000L // midnight + submillisecond fraction
-            deriver.recordClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
+            deriver.persistClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
+            deriver.deriveStation(station)
             assertEquals(2, days.rows.size)
             assertEquals(64L, days.rows.sumOf { it.rows.toLong() })
             assertTrue(raw.readBytes().contentEquals(original))
@@ -454,7 +490,8 @@ class HistoryDeriverTest {
             files.upsert(indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw))
             val indexed = files.forStation(station).single()
             // An estimated file has no UTC rows, the shape the migration reopens.
-            deriver.recordClockAnchor(station, indexed.bootId!!, 1_788_912_000_123_456_000L, indexed.lastMonoUs!!)
+            deriver.persistClockAnchor(station, indexed.bootId!!, 1_788_912_000_123_456_000L, indexed.lastMonoUs!!)
+            deriver.deriveStation(station)
             val before = days.forStation(station).map { it.epochDay }.toSet()
             assertEquals(2, before.size)
             val bucketDays = buckets.observeDayCount(station).first()

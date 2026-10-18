@@ -32,8 +32,10 @@ milliseconds.
 
 ### Pass order (`HistoryOrchestrator`, `:core:history`)
 
-Both phones run the same order (#100). `HistoryOrchestrator.run` is called once per process, from
-`AqSyncApplication` on Android and `IosArchive.startIndexRepair` on iOS.
+Both phones run the same order (#100). The shared `HistoryStartup.start` is called once per process,
+from `AqSyncApplication.onCreate` on Android and `IosArchive.startIndexRepair` on iOS
+(`AppStartupTest`, `IosArchiveStartupTest`). It runs the storage janitor, then the feed block quota,
+then `HistoryOrchestrator.run`.
 
 ```mermaid
 flowchart LR
@@ -44,10 +46,19 @@ flowchart LR
 ```
 
 - **Janitor first.** The startup sweep runs before the first back-fill, so an orphan final it adopts
-  is indexed in the same start. A failed sweep is logged, the start goes on.
+  is indexed in the same start. A failed sweep is logged, and the feed block quota and the start go on.
 - **Backfill, then derive.** `backfill` and `derivePass` share one lock, so a back-fill and a derive
   never overlap. A derive asked during a back-fill waits and then sees the indexed records. After each
   back-fill `run` derives once, and again whenever a record waits for its index.
+- **Retry.** A back-fill that leaves a record waiting, because the index threw, runs again with the
+  derive after 30 s, 1, 2, 4 and 8 min (`RETRY_DELAYS`), then waits for the next index change. The
+  first index emission is the start pass, so a record still waiting is not retried twice. The
+  index flow emits only when waiting changes, so without the retry it would wait for the next start.
+- **Time estimates.** `estimateTimes` rewrites the estimated spans a derive reads for its source sets
+  and signatures, so it runs only inside a pass. A derive pass re-dates first. iOS's clock receipt
+  follow-up calls `HistoryOrchestrator.afterClockReceipt`, which estimates as one pass and then
+  derives. Android's SET_TIME saves the receipt on the link, then starts `deriveStation` off it, so a
+  pass in flight never holds the link.
 - **Every derive is a pass.** Android's `HistoryDeriver.deriveStale` and `ensureDailyFiles` and iOS's
   `IosArchive.rebuildDerived` each run inside one `derivePass`, which is not reentrant. iOS builds
   `rebuildDerived` with `derivePassOf`, so its derive body has no entry point outside a pass. The iOS
@@ -282,7 +293,7 @@ the user pages back, and opens on the last local day with readings.
 | Tiers | Room `metric_bucket` (`RoomHistoryTiers`) | persisted signature-gated sidecars from the shared day pass (`ArchiveHistoryTiers`) |
 | Current station | the known device's station | the archived station with the latest reading |
 | Chips | the device's authenticated station epochs | every archived station, oldest latest reading first |
-| Index repair | `HistoryOrchestrator.run` from `AqSyncApplication`. The engine indexes each file in the same upsert, so a record waits only after a migration reopens it | `HistoryOrchestrator.run` from `IosArchive.startIndexRepair`. The engine adds records without index columns, so a back-fill follows each new file. On both phones changes during a pass are conflated, and passes repeat until no record is waiting |
+| Index repair | `HistoryStartup.start` from `AqSyncApplication`. The engine indexes each file in the same upsert, so a record waits only after a migration reopens it | `HistoryStartup.start` from `IosArchive.startIndexRepair`. The engine adds records without index columns, so a back-fill follows each new file. On both phones changes during a pass are conflated, and passes repeat until no record is waiting |
 | Header | device section tabs and the link chip | a back arrow, opened from the History button on My devices |
 
 Repair writes only its own columns. It merges the index and estimate columns onto the latest

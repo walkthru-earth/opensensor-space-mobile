@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.data.history.ArchiveHistoryTiers
 import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
 import earth.walkthru.aqsync.data.history.HistoryOrchestrator
 import earth.walkthru.aqsync.data.history.HistorySeriesReader
+import earth.walkthru.aqsync.data.history.HistoryStartup
 import earth.walkthru.aqsync.data.history.IosDailyDerivedStore
 import earth.walkthru.aqsync.data.history.IosFileTierStore
 import earth.walkthru.aqsync.data.history.LegacyFileCleanup
@@ -117,23 +118,19 @@ internal object IosArchive {
     val coordinator: DeviceCoordinator by lazy { DeviceCoordinator(pruned) }
 
     /**
-     * The shared order of the History passes (#100). The janitor and the feed block quota first, then
-     * the backfill, then [rebuildDerived], and again whenever a record waits for its index.
+     * The shared order of the History passes (#100), the backfill then [rebuildDerived]. It owns the
+     * index repair, so no backfill or time estimate here runs outside a pass.
      */
     private val history by lazy {
-        HistoryOrchestrator(
-            repair,
-            index,
-            janitor = {
-                try {
-                    janitor.run()
-                } finally {
-                    feedBlocks.enforce()
-                }
-            },
-            log = ::println,
-        )
+        HistoryOrchestrator(ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, coordinator = coordinator), index, log = ::println)
     }
+
+    /**
+     * The shared History start (#125). The janitor and the feed block quota first, then the backfill,
+     * then [rebuildDerived], and again whenever a record waits for its index. [startIndexRepair]
+     * starts it once.
+     */
+    val historyStartup by lazy { HistoryStartup(history, janitor, feedBlocks, log = ::println) }
 
     private val derivedMutex = Mutex()
     private val base get() = store.finalRoot.substringBeforeLast('/')
@@ -247,7 +244,6 @@ internal object IosArchive {
     private val derivedAtomic by lazy { IosAtomicFiles("$base/${AtomicFiles.TEMP_DIR}") }
     private val tierStore by lazy { IosFileTierStore(cachesDirectory(), derivedAtomic) }
     private val derived by lazy { IosDailyDerivedStore(cachesDirectory(), derivedAtomic, tierStore) }
-    private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, coordinator = coordinator) }
     private val janitor by lazy {
         StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, coordinator = coordinator)
     }
@@ -267,10 +263,7 @@ internal object IosArchive {
      * here, never under the sync lease that recorded the anchor. A first sync starts downloading at once.
      */
     private val anchorFollowUp by lazy {
-        CoalescedWork(scope, "clock anchor estimate") {
-            repair.estimateTimes()
-            rebuildDerived(emptyList())
-        }
+        CoalescedWork(scope, "clock anchor estimate") { history.afterClockReceipt { rebuildDerived(emptyList()) } }
     }
 
     /** Called under the SYNC or COMMAND lease. Only the anchor is saved there, the rest follows later. */
@@ -312,8 +305,8 @@ internal object IosArchive {
         IosMemoryPressure.install()
         // The tiers give memory back on a memory warning, the next History pass rebuilds them (#61).
         scope.trimOnMemoryPressure(tiers)
-        // The startup sweep of #60, the backfill and the derive, in the shared order.
-        scope.launch { history.run { rebuildDerived(emptyList()) } }
+        // The startup sweep of #60, the feed block quota, the backfill and the derive, in the shared order.
+        historyStartup.start(scope) { rebuildDerived(emptyList()) }
         // Every archive change, a sync's new file or a removal, derives again after any backfill in flight.
         scope.launch {
             index.observeAll().conflate().collect {

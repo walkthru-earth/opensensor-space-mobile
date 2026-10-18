@@ -1289,14 +1289,20 @@ class DeviceLinkOwner @Inject constructor(
         if (_manifest.value.isLoading) _manifest.update { it.failed("collection LIST ended") }
     }
 
-    /** Finalization runs while the collection still owns its protection and link. */
+    /**
+     * Finalization runs while the collection still owns its protection and link, so only the manifest
+     * refresh, which needs the link, runs here. The derive and the timeline report run after it in
+     * [scope], since a derive waits for any backfill in flight and must never hold the sensor (#125).
+     */
     internal suspend fun collectionFinished(refresh: Boolean, startedMs: Long) {
         val session = _session.value
         if (refresh && session?.isUsable == true) refreshManifestNow(session)
-        suspendRunCatching {
-            if (refresh) historyDeriver.deriveAfterSync(startedMs)
-            _info.value?.station?.let { reportArchiveTimeline(it) }
-        }.onFailure { Log.w(TAG, "derive after collection failed (${it::class.simpleName})") }
+        scope.launch {
+            suspendRunCatching {
+                if (refresh) historyDeriver.deriveAfterSync(startedMs)
+                _info.value?.station?.let { reportArchiveTimeline(it) }
+            }.onFailure { Log.w(TAG, "derive after collection failed (${it::class.simpleName})") }
+        }
     }
 
     /** Drain queued last-lend cleanup before handing the endpoint to another owner. */
@@ -1340,8 +1346,15 @@ class DeviceLinkOwner @Inject constructor(
                 return true
             }
             val info = (session.link.state.value as? LinkState.Ready)?.info?.info
-            if (info?.station != null && info.boot != null) {
-                historyDeriver.recordClockAnchor(info.station!!, info.boot!!, r.epochNanos, r.monotonicMicros)
+            val station = info?.station
+            val boot = info?.boot
+            if (station != null && boot != null) {
+                historyDeriver.persistClockAnchor(station, boot, r.epochNanos, r.monotonicMicros)
+                // The re-dating derive waits for any History pass in flight, so it runs off the link (#125).
+                scope.launch {
+                    suspendRunCatching { historyDeriver.deriveStation(station) }
+                        .onFailure { Log.w(TAG, "derive after clock receipt failed (${it::class.simpleName})") }
+                }
             }
             recordDiagnostic("clock", "SET_TIME accepted at epoch ${r.epochSeconds}")
             if (!quiet) _events.emit(DeviceEvent.Info(DeviceMessage.ClockSet))
