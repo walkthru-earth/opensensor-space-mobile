@@ -3,6 +3,7 @@
 package earth.walkthru.aqsync.data.local.database
 
 import androidx.room.Room
+import androidx.room.useWriterConnection
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileProtectionCompleteUntilFirstUserAuthentication
 import platform.Foundation.NSFileProtectionKey
@@ -25,4 +26,19 @@ fun openAppDatabase(path: String): AppDatabase {
         NSURL.fileURLWithPath(dir, isDirectory = true).setResourceValue(true, NSURLIsExcludedFromBackupKey, null)
     }
     return AppDatabase.configured(Room.databaseBuilder<AppDatabase>(name = path))
+}
+
+/**
+ * Makes every commit so far survive a power loss. Room runs WAL with `synchronous = NORMAL`, where the
+ * last commits can roll back after a power cut. A full checkpoint copies the WAL into the database file
+ * and syncs it, with `F_FULLFSYNC` like the archive's Durable files. Throws when a reader kept it from
+ * finishing, so the caller retries.
+ */
+suspend fun AppDatabase.checkpointDurably() {
+    useWriterConnection { connection ->
+        connection.usePrepared("PRAGMA checkpoint_fullfsync = 1") { it.step() }
+        connection.usePrepared("PRAGMA wal_checkpoint(FULL)") { statement ->
+            check(statement.step() && statement.getLong(0) == 0L) { "database checkpoint did not finish" }
+        }
+    }
 }

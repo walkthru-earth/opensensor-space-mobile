@@ -8,6 +8,7 @@ import earth.walkthru.aqsync.archive.LegacyReceiptImport
 import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.local.database.AppDatabase
+import earth.walkthru.aqsync.data.local.database.checkpointDurably
 import earth.walkthru.aqsync.data.local.database.openAppDatabase
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,8 +20,9 @@ import kotlinx.coroutines.sync.withLock
 /**
  * The iOS [index] and [pruned] marks, the shared Room tables in `<dir>/aq-sync.db`. The database opens
  * on first use, and the first call of either port waits for [LegacyReceiptImport] to finish, so no
- * reader sees the index before the older receipts are in. A failed import throws to that caller and
- * runs again on the next call.
+ * reader sees the index before the older receipts are in. Each pass checkpoints the database before it
+ * writes the marker or deletes an old file. A failed import throws to that caller and runs again on the
+ * next call.
  */
 class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
     private val database: AppDatabase by lazy { openAppDatabase("$dir/${AppDatabase.FILE_NAME}") }
@@ -37,7 +39,7 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
         if (!imported.value) {
             importLock.withLock {
                 if (!imported.value) {
-                    import.run(rooms.first, rooms.second)
+                    import.run(rooms.first, rooms.second) { database.checkpointDurably() }
                     imported.value = true
                 }
             }
@@ -68,7 +70,7 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
         override suspend fun forStation(station: String): List<PrunedFile> = roomPruned().forStation(station)
         override suspend fun put(file: PrunedFile) = roomPruned().put(file)
         override suspend fun remove(key: ArchiveKey) = roomPruned().remove(key)
-        override suspend fun clear(): Int = roomPruned().clear()
+        override suspend fun clear(): Int = roomPruned().clear().also { import.dropLegacyMarks() }
     }
 
     /** Closes the database, for tests. The app keeps it open for the life of the process. */
@@ -77,7 +79,10 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
     }
 
     companion object {
-        /** Beside the database. Its presence means the older receipts are in Room. */
+        /**
+         * Beside the database. Its presence means the first import pass finished and its rows were
+         * checkpointed into the database file. The old files go on a later launch, once their rows are seen.
+         */
         const val IMPORT_MARKER = "receipts-imported"
     }
 }

@@ -45,11 +45,12 @@ class IosArchiveDatabaseTest {
     }
 
     @Test
-    fun theFirstOpenImportsTheReceiptsAndALaterOpenReadsTheFile() = runTest {
+    fun theFirstOpenImportsTheReceiptsAndALaterOpenReadsTheFileAndDeletesThem() = runTest {
         val receipt = "$finals/$station/$name${ArchiveLayout.LEGACY_RECEIPT_SUFFIX}"
+        val prunedFile = "$finals-pruned/pruned.v1"
         write("$finals/$station/$name", bytes)
         write(receipt, """{"size":${bytes.size},"crc":${ParquetVerify.crc32(bytes)},"sourceDevice":"dev"}""".encodeToByteArray())
-        write("$finals-pruned/pruned.v1", "pruned-v1\n$station\tother.parquet\t46\t5\t11\n".encodeToByteArray())
+        write(prunedFile, "pruned-v1\n$station\tother.parquet\t46\t5\t11\n".encodeToByteArray())
         val mark = PrunedFile(station, "other.parquet", 46, 5, 11)
 
         IosArchiveDatabase(store, dir).apply {
@@ -59,17 +60,31 @@ class IosArchiveDatabaseTest {
         }
         assertTrue(fm.fileExistsAtPath("$dir/${AppDatabase.FILE_NAME}"))
         assertTrue(fm.fileExistsAtPath("$dir/${IosArchiveDatabase.IMPORT_MARKER}"))
-        assertFalse(fm.fileExistsAtPath(receipt))
+        assertTrue(fm.fileExistsAtPath(receipt))
+        assertTrue(fm.fileExistsAtPath(prunedFile))
 
-        // A later launch reads the same rows from the file and imports nothing new.
+        // A later launch reads the same rows from the file, so the old files go and nothing is replaced.
         write(receipt, """{"size":${bytes.size},"crc":${ParquetVerify.crc32(bytes)},"sourceDevice":"later"}""".encodeToByteArray())
         IosArchiveDatabase(store, dir).apply {
             assertEquals("dev", index.get(ArchiveKey(station, name))?.sourceDevice)
-            index.remove(ArchiveKey(station, name))
-            assertEquals(emptyList(), index.observeAll().first())
             assertEquals(listOf(mark), pruned.forStation(station))
             close()
         }
         assertFalse(fm.fileExistsAtPath(receipt))
+        assertFalse(fm.fileExistsAtPath("$finals-pruned"))
+    }
+
+    @Test
+    fun downloadAgainAlsoDropsTheOldMarksFile() = runTest {
+        write("$finals-pruned/pruned.v1", "pruned-v1\n$station\tother.parquet\t46\t5\t11\n".encodeToByteArray())
+        IosArchiveDatabase(store, dir).apply {
+            assertEquals(1, pruned.clear())
+            close()
+        }
+        assertFalse(fm.fileExistsAtPath("$finals-pruned"))
+        IosArchiveDatabase(store, dir).apply {
+            assertEquals(emptyList(), pruned.observeAll().first())
+            close()
+        }
     }
 }

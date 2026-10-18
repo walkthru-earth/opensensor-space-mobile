@@ -226,7 +226,7 @@ internal object IosArchive {
     }
 
     /**
-     * The phone only cleanup of old format files behind Settings. The receipt index change already
+     * The phone only cleanup of old format files behind Settings. The index change already
      * rebuilds the derived days through [startIndexRepair], the explicit rebuild runs it now and also
      * visits the stations whose files all went, so their stale day files are removed.
      */

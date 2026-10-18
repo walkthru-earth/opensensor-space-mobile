@@ -14,6 +14,7 @@ import platform.Foundation.NSUUID
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 /** [LegacyReceiptImport] over the files an older iOS build left, into in-memory ports. */
@@ -21,6 +22,7 @@ class LegacyReceiptImportTest {
     private val base = NSTemporaryDirectory().trimEnd('/') + "/receipt-import-test-" + NSUUID().UUIDString()
     private val finals = "$base/SensorArchive"
     private val marker = "$base/database/receipts-imported"
+    private val prunedFile = "$finals-pruned/pruned.v1"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Unconfined)
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
@@ -30,6 +32,7 @@ class LegacyReceiptImportTest {
     private fun final(day: Int) = "$finals/$station/${name(day)}"
     private fun receipt(day: Int) = final(day) + ArchiveLayout.LEGACY_RECEIPT_SUFFIX
     private fun importer() = LegacyReceiptImport(store, marker, Dispatchers.Unconfined)
+    private fun kind(path: String) = IosFiles.kind(path)
 
     @AfterTest
     fun cleanUp() {
@@ -46,26 +49,40 @@ class LegacyReceiptImportTest {
         writeFile(receipt(day), receipt.encodeToByteArray())
     }
 
+    private fun writePruned(vararg days: Int) {
+        val lines = days.joinToString("") { "$station\t${name(it)}\t46\t5\t11\n" }
+        writeFile(prunedFile, "${PrunedFilesCodec.VERSION}\n$lines".encodeToByteArray())
+    }
+
+    private fun mark(day: Int) = PrunedFile(station, name(day), 46, 5, 11)
+
     @Test
-    fun verifiedReceiptsAndPrunedMarksMoveAndTheOldFilesGo() = runTest {
+    fun theFirstLaunchCopiesAndALaterLaunchDeletesWhatItSees() = runTest {
         synced(1)
         synced(2, """{"size":${bytes.size},"crc":$crc,"sha256":"ab","syncedAtEpochMs":7,"sourceDevice":"dev","rows":2,"utcRows":2,"firstUtcNs":1,"lastUtcNs":2,"indexedAtEpochMs":9,"indexLayout":${ArchiveRecord.INDEX_LAYOUT}}""")
-        val mark = PrunedFile(station, name(3), 46, 5, 11)
-        writeFile("$finals-pruned/pruned.v1", "${PrunedFilesCodec.VERSION}\n$station\t${name(3)}\t46\t5\t11\n".encodeToByteArray())
+        writePruned(3)
         val index = InMemoryArchiveIndex()
         val pruned = MemoryPruned()
+        val markerAtDurable = mutableListOf<IosFiles.Kind>()
 
-        assertEquals(LegacyReceiptImport.Result(2, 1), importer().run(index, pruned))
+        assertEquals(LegacyReceiptImport.Result(2, 1), importer().run(index, pruned) { markerAtDurable += kind(marker) })
 
+        assertEquals(listOf(IosFiles.Kind.ABSENT), markerAtDurable)
         assertEquals(ArchiveRecord(station, name(1), bytes.size.toLong(), crc, "", 0, ""), index.get(ArchiveKey(station, name(1))))
         val full = index.get(ArchiveKey(station, name(2)))!!
         assertEquals("ab", full.sha256)
         assertEquals(9L, full.indexedAtEpochMs)
-        assertEquals(listOf(mark), pruned.observeAll().first())
-        assertEquals(IosFiles.Kind.FILE, IosFiles.kind(marker))
-        assertEquals(IosFiles.Kind.ABSENT, IosFiles.kind(receipt(1)))
-        assertEquals(IosFiles.Kind.ABSENT, IosFiles.kind(receipt(2)))
-        assertEquals(IosFiles.Kind.ABSENT, IosFiles.kind("$finals-pruned"))
+        assertEquals(listOf(mark(3)), pruned.observeAll().first())
+        assertEquals(IosFiles.Kind.FILE, kind(marker))
+        // Nothing goes before a later launch has seen the rows.
+        assertEquals(IosFiles.Kind.FILE, kind(receipt(1)))
+        assertEquals(IosFiles.Kind.FILE, kind(prunedFile))
+
+        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned))
+
+        assertEquals(IosFiles.Kind.ABSENT, kind(receipt(1)))
+        assertEquals(IosFiles.Kind.ABSENT, kind(receipt(2)))
+        assertEquals(IosFiles.Kind.ABSENT, kind("$finals-pruned"))
         assertEquals(listOf(ArchiveKey(station, name(1)), ArchiveKey(station, name(2))), store.listFinal(station).sortedBy { it.name })
     }
 
@@ -79,27 +96,95 @@ class LegacyReceiptImportTest {
         val index = InMemoryArchiveIndex()
 
         assertEquals(LegacyReceiptImport.Result(1, 0), importer().run(index, MemoryPruned()))
-
         assertEquals(listOf(name(5)), index.observeAll().first().map { it.name })
-        for (day in 1..5) assertEquals(IosFiles.Kind.ABSENT, IosFiles.kind(receipt(day)))
-        assertEquals(IosFiles.Kind.FILE, IosFiles.kind(final(1)))
+
+        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, MemoryPruned()))
+        assertEquals(listOf(name(5)), index.observeAll().first().map { it.name })
+        for (day in 1..5) assertEquals(IosFiles.Kind.ABSENT, kind(receipt(day)))
+        assertEquals(IosFiles.Kind.FILE, kind(final(1)))
     }
 
     @Test
-    fun aSecondLaunchImportsNothingAndOnlyDeletesLeftovers() = runTest {
+    fun aReceiptThatThrowsIsSkippedAndTheGoodOnesStillMove() = runTest {
         synced(1)
-        importer().run(InMemoryArchiveIndex(), MemoryPruned())
-        synced(2)
-        writeFile("$finals-pruned/pruned.v1", "${PrunedFilesCodec.VERSION}\n$station\t${name(3)}\t46\t5\t11\n".encodeToByteArray())
+        writeFile("$base/elsewhere", bytes)
+        IosFiles.mkdirs(final(2).substringBeforeLast('/'))
+        NSFileManager.defaultManager.createSymbolicLinkAtPath(final(2), "$base/elsewhere", null)
+        writeFile(receipt(2), """{"size":${bytes.size},"crc":$crc}""".encodeToByteArray())
+        synced(3)
+        writePruned(4)
         val index = InMemoryArchiveIndex()
         val pruned = MemoryPruned()
 
-        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned))
+        assertEquals(LegacyReceiptImport.Result(2, 1), importer().run(index, pruned))
+        assertEquals(listOf(name(1), name(3)), index.observeAll().first().map { it.name }.sorted())
+        assertEquals(listOf(mark(4)), pruned.observeAll().first())
 
-        assertEquals(emptyList(), index.observeAll().first())
+        importer().run(index, pruned)
+        for (day in 1..3) assertEquals(IosFiles.Kind.ABSENT, kind(receipt(day)))
+        assertEquals(IosFiles.Kind.ABSENT, kind(prunedFile))
+    }
+
+    @Test
+    fun aPutThatThrowsLeavesEveryOldFileAndALaterRunFinishes() = runTest {
+        synced(1)
+        synced(2)
+        writePruned(3)
+        val index = InMemoryArchiveIndex()
+        val failing = object : ArchiveIndex by index {
+            var puts = 0
+            override suspend fun putIfAbsent(record: ArchiveRecord): Boolean {
+                if (++puts == 2) error("disk full")
+                return index.putIfAbsent(record)
+            }
+        }
+        val pruned = MemoryPruned()
+
+        assertFailsWith<IllegalStateException> { importer().run(failing, pruned) }
+
+        assertEquals(IosFiles.Kind.FILE, kind(receipt(1)))
+        assertEquals(IosFiles.Kind.FILE, kind(receipt(2)))
+        assertEquals(IosFiles.Kind.FILE, kind(prunedFile))
+        assertEquals(IosFiles.Kind.ABSENT, kind(marker))
+
+        assertEquals(LegacyReceiptImport.Result(1, 1), importer().run(index, pruned))
+        assertEquals(2, index.observeAll().first().size)
+        assertEquals(listOf(mark(3)), pruned.observeAll().first())
+    }
+
+    @Test
+    fun aMarkerWithoutItsRowsKeepsTheOldFilesAndCopiesThemAgain() = runTest {
+        synced(1)
+        writePruned(2)
+        importer().run(InMemoryArchiveIndex(), MemoryPruned())
+        // The rows were lost after the marker was written, as a power loss could do.
+        val index = InMemoryArchiveIndex()
+        val pruned = MemoryPruned()
+
+        assertEquals(LegacyReceiptImport.Result(1, 1), importer().run(index, pruned))
+
+        assertEquals(IosFiles.Kind.FILE, kind(receipt(1)))
+        assertEquals(IosFiles.Kind.FILE, kind(prunedFile))
+        assertEquals(listOf(name(1)), index.observeAll().first().map { it.name })
+        assertEquals(listOf(mark(2)), pruned.observeAll().first())
+
+        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned))
+        assertEquals(IosFiles.Kind.ABSENT, kind(receipt(1)))
+        assertEquals(IosFiles.Kind.ABSENT, kind("$finals-pruned"))
+    }
+
+    @Test
+    fun downloadAgainDropsTheOldMarksSoNoLaunchBringsThemBack() = runTest {
+        writePruned(1)
+        val pruned = MemoryPruned()
+        importer().run(InMemoryArchiveIndex(), pruned)
+
+        pruned.clear()
+        importer().dropLegacyMarks()
+        importer().run(InMemoryArchiveIndex(), pruned)
+
         assertEquals(emptyList(), pruned.observeAll().first())
-        assertEquals(IosFiles.Kind.ABSENT, IosFiles.kind(receipt(2)))
-        assertEquals(IosFiles.Kind.ABSENT, IosFiles.kind("$finals-pruned"))
+        assertEquals(IosFiles.Kind.ABSENT, kind("$finals-pruned"))
     }
 
     @Test
@@ -128,6 +213,7 @@ class LegacyReceiptImportTest {
     private class MemoryPruned : PrunedFiles {
         private val rows = MutableStateFlow<List<PrunedFile>>(emptyList())
         override fun observeAll(): Flow<List<PrunedFile>> = rows
+        override suspend fun forStation(station: String): List<PrunedFile> = rows.value.filter { it.station == station }
         override suspend fun put(file: PrunedFile) {
             rows.value = rows.value.filterNot { it.key == file.key } + file
         }
