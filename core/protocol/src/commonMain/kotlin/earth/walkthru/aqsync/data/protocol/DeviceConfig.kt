@@ -141,8 +141,9 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
     val changesBle: Boolean get() = lines.any { it.first == KEY_BLE_PAIR || it.first == KEY_BLE_PIN }
 
     /**
-     * Whether the patch carries a secret (`wifi.psk` or `ble.pin`). Such a patch goes only over an
-     * authenticated, encrypted Bluetooth link, never the plaintext LAN socket (#155).
+     * Whether the patch carries a secret (`wifi.psk` or `ble.pin`). Such a patch goes only over the
+     * Bluetooth link, which is encrypted, never the plaintext LAN socket (#155). Pair mode `none`
+     * is encrypted without MITM protection and is lab only per the firmware docs.
      */
     val carriesSecret: Boolean get() = lines.any { it.first in SECRET_KEYS }
 

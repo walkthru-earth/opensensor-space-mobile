@@ -40,9 +40,10 @@ enum class TransportKind {
     ;
 
     /**
-     * Whether a secret (`wifi.psk`, `ble.pin`) may travel on this pipe. Only the bonded, encrypted
-     * Bluetooth link, and the in-process fake whose bytes never leave the phone. The LAN socket is
-     * plaintext TCP and never carries one (#155).
+     * Whether a secret (`wifi.psk`, `ble.pin`) may travel on this pipe. Only the Bluetooth link,
+     * which is encrypted, and the in-process fake whose bytes never leave the phone. This checks the
+     * pipe kind only, not the pairing mode. Pair mode `none` is encrypted without MITM protection and
+     * is lab only per the firmware docs. The LAN socket is plaintext TCP and never carries one (#155).
      */
     val carriesSecrets: Boolean get() = this == BLE || this == FAKE
 }
