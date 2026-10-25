@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor.files
 
+import earth.walkthru.aqsync.archive.ArchiveFileMissingException
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveRecord
@@ -41,6 +42,9 @@ class FilesControllerTest {
 
     private class Store(val finals: Map<ArchiveKey, ByteArray>) : ArchiveStore {
         var reads = 0
+
+        /** Finals removed after the listing, such as by the old format cleanup. */
+        val gone = mutableSetOf<ArchiveKey>()
         override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("exports never write the archive")
         override suspend fun discardPartial(key: ArchiveKey) = error("exports never write the archive")
@@ -48,6 +52,7 @@ class FilesControllerTest {
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader {
             check(!partial)
             reads++
+            if (key in gone) throw ArchiveFileMissingException("gone: ${key.name}")
             return ByteArrayReader(finals.getValue(key))
         }
         override suspend fun commit(key: ArchiveKey) = error("exports never write the archive")
@@ -296,6 +301,52 @@ class FilesControllerTest {
     }
 
     @Test
+    fun aZipThatSkipsAGoneFinalSaysHowManyAfterTheExport() = runTest {
+        val f = fixture(owner = "s")
+        val messages = mutableListOf<FilesMessage>()
+        collectMessages(f.controller, messages)
+        advanceUntilIdle()
+        f.store.gone += ArchiveKey("s", nameA)
+        val shared = Presenter()
+        f.controller.shareZip(shared)
+        advanceUntilIdle()
+        assertEquals(listOf("s/$nameB"), zipNames(f.space.runs.single().files.values.single()))
+        assertEquals(1, shared.shared.single().first.single().skipped)
+        f.controller.saveZip(Presenter())
+        advanceUntilIdle()
+        val streaming = Presenter(streams = true)
+        f.controller.saveZip(streaming)
+        advanceUntilIdle()
+        assertEquals(listOf("s/$nameB"), zipNames(streaming.streamed.single().second))
+        assertEquals(List<FilesMessage>(3) { FilesMessage.Skipped(1) }, messages)
+        // A zip that left nothing out says nothing.
+        f.store.gone.clear()
+        f.controller.shareZip(Presenter())
+        f.controller.saveZip(Presenter(streams = true))
+        advanceUntilIdle()
+        assertEquals(3, messages.size)
+    }
+
+    @Test
+    fun aDailyZipThatSkipsAGoneDayFileSaysSo() = runTest {
+        val f = fixture(
+            daily = {
+                listOf(
+                    ExportEntry("derived/v1/s/day=2026-09-16.parquet", 0) { throw ArchiveFileMissingException("evicted") },
+                    ExportEntry("derived/v1/s/day=2026-09-17.parquet", 0) { ByteArrayReader(bytesA) },
+                )
+            },
+        )
+        val messages = mutableListOf<FilesMessage>()
+        collectMessages(f.controller, messages)
+        advanceUntilIdle()
+        f.controller.shareDaily(Presenter())
+        advanceUntilIdle()
+        assertEquals(listOf("derived/v1/s/day=2026-09-17.parquet"), zipNames(f.space.runs.single().files.values.single()))
+        assertEquals(listOf<FilesMessage>(FilesMessage.Skipped(1)), messages)
+    }
+
+    @Test
     fun aZipWithoutRoomSaysSoAndStagesNothing() = runTest {
         val f = fixture()
         f.space.free = 10
@@ -305,7 +356,7 @@ class FilesControllerTest {
         val p = Presenter()
         f.controller.saveZip(p)
         advanceUntilIdle()
-        assertEquals(listOf(FilesMessage.NO_SPACE), messages)
+        assertEquals(listOf<FilesMessage>(FilesMessage.NoSpace), messages)
         assertTrue(p.saved.isEmpty())
         assertTrue(f.space.runs.single().deleted)
         assertTrue(f.space.runs.single().files.isEmpty())
@@ -322,7 +373,7 @@ class FilesControllerTest {
         advanceUntilIdle()
         f.controller.saveZip(Presenter(streams = true, closeFailure = "close failed: No space left on device"))
         advanceUntilIdle()
-        assertEquals(listOf(FilesMessage.NO_SPACE, FilesMessage.NO_SPACE), messages)
+        assertEquals(listOf<FilesMessage>(FilesMessage.NoSpace, FilesMessage.NoSpace), messages)
         assertFalse(f.controller.state.value.exporting)
     }
 
@@ -350,7 +401,7 @@ class FilesControllerTest {
         advanceUntilIdle()
         f.controller.shareZip(Presenter(fail = true))
         advanceUntilIdle()
-        assertEquals(listOf(FilesMessage.EXPORT_FAILED), messages)
+        assertEquals(listOf<FilesMessage>(FilesMessage.ExportFailed), messages)
         assertFalse(f.controller.state.value.exporting)
     }
 
@@ -391,7 +442,7 @@ class FilesControllerTest {
         val p = Presenter()
         f.controller.shareDaily(p)
         advanceUntilIdle()
-        assertEquals(listOf(FilesMessage.NO_DAILY), messages)
+        assertEquals(listOf<FilesMessage>(FilesMessage.NoDaily), messages)
         assertTrue(p.shared.isEmpty())
     }
 

@@ -87,6 +87,7 @@ import earth.walkthru.opensensor.files.resources.files_bytes_of
 import earth.walkthru.opensensor.files.resources.files_dev_summary
 import earth.walkthru.opensensor.files.resources.files_export_failed
 import earth.walkthru.opensensor.files.resources.files_export_no_space
+import earth.walkthru.opensensor.files.resources.files_export_skipped
 import earth.walkthru.opensensor.files.resources.files_frame_mismatch
 import earth.walkthru.opensensor.files.resources.files_group_benchmarks
 import earth.walkthru.opensensor.files.resources.files_group_boot
@@ -127,6 +128,7 @@ import earth.walkthru.opensensor.files.resources.scan_files
 import earth.walkthru.opensensor.strings.resources.sync_some_failed
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.datetime.TimeZone
+import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -187,9 +189,10 @@ fun FilesScreen(
         controller.messages.collect { m ->
             snackbar.showSnackbar(
                 when (m) {
-                    FilesMessage.NO_DAILY -> getString(Res.string.files_no_daily)
-                    FilesMessage.EXPORT_FAILED -> getString(Res.string.files_export_failed)
-                    FilesMessage.NO_SPACE -> getString(Res.string.files_export_no_space)
+                    FilesMessage.NoDaily -> getString(Res.string.files_no_daily)
+                    FilesMessage.ExportFailed -> getString(Res.string.files_export_failed)
+                    FilesMessage.NoSpace -> getString(Res.string.files_export_no_space)
+                    is FilesMessage.Skipped -> getPluralString(Res.plurals.files_export_skipped, m.count, m.count)
                 },
             )
         }

@@ -146,6 +146,10 @@
     <string name="fm_metadata">File metadata</string>
     <string name="files_export_failed">Could not prepare the export. Try again.</string>
     <string name="files_export_no_space">Not enough free space on this phone for the export.</string>
+    <plurals name="files_export_skipped">
+        <item quantity="one">%1$d missing file was left out.</item>
+        <item quantity="other">%1$d missing files were left out.</item>
+    </plurals>
     <!-- File metrics screen, spoken by the screen reader on the loading spinner. -->
     <string name="fm_loading">Reading this file…</string>
     <!-- Files screen, the click label of a device file row that syncs it. -->

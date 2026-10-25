@@ -63,7 +63,14 @@ interface ExportPresenter {
 }
 
 /** One-off notices for the snackbar. */
-enum class FilesMessage { NO_DAILY, EXPORT_FAILED, NO_SPACE }
+sealed interface FilesMessage {
+    data object NoDaily : FilesMessage
+    data object ExportFailed : FilesMessage
+    data object NoSpace : FilesMessage
+
+    /** A zip went out without [count] listed files that were gone by then (#168). */
+    data class Skipped(val count: Int) : FilesMessage
+}
 
 data class FilesState(
     /** The verified files of [owner] when known, else of every station. */
@@ -137,7 +144,7 @@ class FilesController(
 
     fun shareZip(presenter: ExportPresenter) = run(presenter) {
         val zip = archiveZip() ?: return@run null
-        present(it, listOf(zip), ShareKind.ARCHIVE)
+        present(it, listOf(zip), ShareKind.ARCHIVE).also { reportSkipped(zip.skipped) }
     }
 
     /**
@@ -148,11 +155,12 @@ class FilesController(
         val entries = ArchiveExport.archiveEntries(store, state.value.shown)
         if (entries.isEmpty()) return@run null
         val name = ArchiveExport.archiveZipName(now())
-        val streamed = p.saveStreaming(name) { sink -> withContext(io) { ArchiveExport.writeZip(sink, entries, cancelCheck()) } }
-        if (streamed != null) return@run streamed
+        var skipped = 0
+        val streamed = p.saveStreaming(name) { sink -> skipped = withContext(io) { ArchiveExport.writeZip(sink, entries, cancelCheck()) } }
+        if (streamed != null) return@run streamed.also { reportSkipped(skipped) }
         val check = cancelCheck()
         val zip = stage { listOf(ArchiveExport.stageZip(space, entries, name, check)) }.single()
-        removingRun(zip.run) { p.save(zip) }
+        removingRun(zip.run) { p.save(zip) }.also { reportSkipped(zip.skipped) }
     }
 
     fun shareDaily(presenter: ExportPresenter) = run(presenter) {
@@ -174,10 +182,15 @@ class FilesController(
         }
         val staged = zip
         if (staged == null) {
-            _messages.tryEmit(FilesMessage.NO_DAILY)
+            _messages.tryEmit(FilesMessage.NoDaily)
             return@run null
         }
-        present(it, listOf(staged), ShareKind.ARCHIVE)
+        present(it, listOf(staged), ShareKind.ARCHIVE).also { reportSkipped(staged.skipped) }
+    }
+
+    /** Says after the sheet or picker how many listed files a zip left out, when any. */
+    private fun reportSkipped(count: Int) {
+        if (count > 0) _messages.tryEmit(FilesMessage.Skipped(count))
     }
 
     /**
@@ -225,10 +238,10 @@ class FilesController(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: StorageException) {
-                _messages.tryEmit(FilesMessage.NO_SPACE)
+                _messages.tryEmit(FilesMessage.NoSpace)
             } catch (e: Exception) {
                 // A full disk while the platform flushes or closes the document is a plain I/O error.
-                _messages.tryEmit(if (isOutOfSpace(e)) FilesMessage.NO_SPACE else FilesMessage.EXPORT_FAILED)
+                _messages.tryEmit(if (isOutOfSpace(e)) FilesMessage.NoSpace else FilesMessage.ExportFailed)
             } finally {
                 exporting.value = false
             }

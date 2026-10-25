@@ -190,6 +190,14 @@
     <string name="fm_metadata">بيانات الملف الوصفية</string>
     <string name="files_export_failed">تعذّر تجهيز التصدير. حاول مرة أخرى.</string>
     <string name="files_export_no_space">لا توجد مساحة كافية على هذا الهاتف للتصدير.</string>
+    <plurals name="files_export_skipped">
+        <item quantity="zero">لم يُستبعد أي ملف (%1$d).</item>
+        <item quantity="one">استُبعد ملف واحد لم يعد موجودًا (%1$d).</item>
+        <item quantity="two">استُبعد ملفان لم يعودا موجودين (%1$d).</item>
+        <item quantity="few">استُبعدت %1$d ملفات لم تعد موجودة.</item>
+        <item quantity="many">استُبعد %1$d ملفًا لم يعد موجودًا.</item>
+        <item quantity="other">استُبعد %1$d ملف لم يعد موجودًا.</item>
+    </plurals>
     <!-- File metrics screen, spoken by the screen reader on the loading spinner. -->
     <string name="fm_loading">جارٍ قراءة هذا الملف…</string>
     <!-- Files screen, the click label of a device file row that syncs it. -->
