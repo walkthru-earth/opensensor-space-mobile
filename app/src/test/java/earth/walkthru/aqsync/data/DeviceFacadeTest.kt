@@ -540,6 +540,19 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `the SET_TIME on connect and a manual one each record the clock anchor`() = harnessTest { h ->
+        h.clockEpochOffset = 1_789_581_931_987L
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        assertEquals(1, h.factory.requests.count { it == Opcode.SET_TIME })
+        assertEquals("the automatic SET_TIME on connect", 1, h.clockAnchorsBeforeList.size)
+
+        h.repo.setTimeFromPhone()
+        h.until { h.factory.requests.count { it == Opcode.SET_TIME } == 2 && !h.repo.busy.value }
+        assertEquals("the manual SET_TIME", 2, h.clockAnchorsBeforeList.size)
+    }
+
+    @Test
     fun `a refused automatic clock still lists original files`() = harnessTest { h ->
         // Virtual epoch zero is deliberately refused by the firmware-compatible fake.
         h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
@@ -938,6 +951,23 @@ class DeviceFacadeTest {
         h.until { h.events.count { it is DeviceEvent.Info && it.message is DeviceMessage.ConfigSaved } == 2 }
         val second = h.events.filterIsInstance<DeviceEvent.Info>().map { it.message }.filterIsInstance<DeviceMessage.ConfigSaved>().last()
         assertEquals("the default change is a plain settings save", DeviceMessage.ConfigChange.SETTINGS, second.change)
+    }
+
+    @Test
+    fun `a secret refused on LAN reports the Bluetooth only code and sends nothing`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
+        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.factory.lanOpens = true
+        h.repo.connect(ADDRESS, "AQ-6b40", preference = TransportPreference.LAN_ONLY)
+        h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null && !h.repo.busy.value }
+        assertEquals(TransportKind.LAN, h.repo.activeTransport.value)
+        val configWrites = h.factory.requests.count { it == Opcode.SET_CONFIG }
+
+        h.repo.applyConfig(ConfigPatch.build { wifiSsid("<dev ssid>").wifiPsk("<dev psk>") }, DeviceMessage.ConfigChange.WIFI_SENT)
+        h.until { !h.repo.busy.value && h.events.any { it is DeviceEvent.Error } }
+
+        assertEquals(listOf(DeviceEvent.Error(DeviceMessage.SecretNeedsBluetooth)), h.events.filterIsInstance<DeviceEvent.Error>())
+        assertEquals("nothing reaches the LAN socket", configWrites, h.factory.requests.count { it == Opcode.SET_CONFIG })
     }
 
     @Test
