@@ -15,8 +15,8 @@ Inputs.
 
 1. The app is about 80 percent ready for this. Sync, archive, verification, Parquet reading, daily rollups, tiers and Discover rendering are already generic. The AQ coupling sits in five places. These are the metric registry, the LIVE model, the Today, History and Devices screens, `:core:airquality`, and the Discover WHO legend.
 2. The firmware already exposes almost everything a STAC Item needs. That covers station UUID, H3 cell and centre, country, UTC range from column statistics, schema name, firmware, dictionary SHA-256 and `field_id` per column. What it does not expose is the per-column dictionary itself. Units, procedure, validity and property URI exist only in `telemetry_fields.inc` and never reach the phone. The phone recognises a digest and falls back to a hardcoded profile.
-3. STAC fits the envelope well (catalog, station, file, column list, units, statistics, i18n, Parquet mirrors). STAC does not model observation semantics such as validity gates, aggregation, health scales or a LIVE key. Those need one small custom extension. The mapping to SensorThings (Thing, Datastream, ObservedProperty, Sensor) is kept in field names so a later SensorThings or Connected Systems adapter is a projection, not a redesign.
-4. Recommended split. The firmware owns facts (name, type, unit, procedure, validity, live key, sensor model, cadence). A published profile owns presentation (labels in en and ar, precision, scales and colours, chart defaults, hero card). Both are keyed by the dictionary SHA-256 that devices already send.
+3. STAC fits the envelope well (catalog, station, file, column list, units, statistics, i18n, Parquet mirrors). STAC does not model observation semantics such as validity gates, aggregation or health scales. Those need one small custom extension, released as stac-opensensor v0.1.0. The mapping to SensorThings (Thing, Datastream, ObservedProperty, Sensor) is kept in field names so a later SensorThings or Connected Systems adapter is a projection, not a redesign.
+4. Recommended split, in three layers. The firmware owns facts (name, type, unit label, procedure, validity, live key, sensor model, cadence) and the dictionary digest. The public STAC layer carries what any reader of the data needs (core `unit` as UCUM, core `roles`, `opensensor:` column fields, scales) in each station Collection. An app profile owns presentation (labels in en and ar, display step, family, default columns, hero card) outside any published schema. The app profile is keyed by the dictionary SHA-256 that devices already send, and the station Collection points at the dictionary through a `describedby` link with `file:checksum`.
 
 ---
 
@@ -97,7 +97,7 @@ Shared-code limits that block non-AQ boards.
 - LIVE floats at one decimal. pH 7.25, soil EC or accelerometer values under 0.05 g lose precision. Changing the format is a wire change.
 - BLE name prefix `AQ-`. The `sensor.*` config keys assume one PMS-style module.
 
-`docs/shared/table-and-observation-model.md` already decided the layering. Immutable wide Parquet stays the raw archive, a versioned dictionary carries meaning, and SensorThings and Iceberg are later host-side projections. It proposes Thing = station, Sensor = procedure, Datastream = column contract, ObservedProperty = exact quantity and processing variant, feature of interest = local air or the board itself. Nothing in either repo mentions STAC today.
+`docs/shared/table-and-observation-model.md` already decided the layering. Immutable wide Parquet stays the raw archive, a versioned dictionary carries meaning, and SensorThings and Iceberg are later host-side projections. It proposes Thing = station, Sensor = procedure, Datastream = column contract, ObservedProperty = exact quantity and processing variant, feature of interest = local air or the board itself. No code in either repo reads or writes STAC today.
 
 ---
 
@@ -115,19 +115,20 @@ Shared-code limits that block non-AQ boards.
 
 | Extension | Version, maturity | Use here |
 | --- | --- | --- |
-| Table (`table:`) | v1.3.0, Pilot | `table:columns` (name, type, description, plus common `unit`, `data_type`, `statistics`), `table:primary_datetime`, `table:row_count`. The column list of a Parquet asset |
+| Table (`table:`) | v1.3.0, Pilot | `table:columns` (name, type, description, plus common `unit`, `roles`, `statistics`), `table:primary_datetime`, `table:row_count`. The column list sits in the station Collection's `item_assets.data`, and each day Item repeats only the columns it has statistics for. Upstream proposals table#16 (`field_id`) and table#17 (validate common metadata in columns) are open |
 | Datacube (`cube:`) | v2.3.0, Candidate | `cube:variables` with `type: data` or `auxiliary`, `unit`, `extent`. Optional richer view of the same columns, good for clients like xarray. `cube:dimensions` becomes required, and a station dimension needs a custom type, never `spatial` |
-| CF (`cf:`) | v1.0.0, Proposal | `cf:standard_name` and `cf:cell_methods` on columns. Gives a shared vocabulary, for example `mass_concentration_of_pm2p5_ambient_aerosol_particles_in_air` (canonical unit kg m-3) |
-| Classification | v2.0.0, Pilot | Classes with `value`, `name`, `description`, `color_hint`. Fits code columns such as `pms_status` and `clock_status`, which are free-text legends today. It documents assets, bands and Item properties, not table columns, so this design uses the same class shape under `opensensor:codes` |
+| CF (`cf:`) | v1.0.0, Proposal | `cf:standard_name` on columns. Gives a shared vocabulary, for example `mass_concentration_of_pm2p5_ambient_aerosol_particles_in_air` (canonical unit kg m-3). Column use is proposed upstream in cf#11 |
+| Classification | v2.0.0, Pilot | `classification:classes` with `value`, `name`, `description`, `color_hint`, `nodata`. Fits code columns such as `pms_status` and `clock_status`, which are free-text legends today. Classes inside table columns are proposed upstream in classification#55 |
 | Grid (`grid:code`) | v1.1.0 | Item scope only. `H3-<cell>` is allowed as a proprietary designation. Use only the owner's privacy-capped cell |
+| Anonymized Location (`anon:`) | v1.0.0 | `anon:size` and `anon:warning` on Items, so clients know the geometry is the owner's coarse cell and not the station position |
 | Language (`language`, `languages`) | v1.0.0, Proposal | Declares en and ar variants of titles and descriptions |
-| File (`file:`) | v2.1.0, Stable | `file:size`, `file:checksum` on Parquet assets. The phone already verifies size and CRC-32 |
-| Version | v1.2.0, Candidate | `version`, `deprecated`, predecessor and successor links between profile revisions |
+| File (`file:`) | v2.1.0, Stable | `file:size`, `file:checksum` on Parquet assets. The phone already verifies size and CRC-32. `file:checksum` on the `describedby` link to the firmware dictionary carries the dictionary digest |
+| Version | v1.2.0, Candidate | `version`, `deprecated`, predecessor and successor links between Collection revisions |
 | Contacts, Scientific | Proposal, Stable | Owner and citation for CC BY 4.0 publishing |
 | Time Series (`ts:`) | Archived Jan 2023 | Do not use |
 | Moving Features | WIP, unreleased | Not needed, stations are fixed |
 
-No registered STAC extension describes in-situ station observations, validity gates, aggregation rules or health scales. That gap is why a small custom extension is proposed in section 4.4.
+No registered STAC extension describes in-situ station observations, validity gates, aggregation rules or health scales. That gap is why a small custom extension exists, see section 4.4.
 
 ### 3.3 stac-geoparquet
 
@@ -146,11 +147,11 @@ Conclusion. Use STAC for discovery and file-level description. Borrow SensorThin
 
 ### 3.5 Units and vocabularies
 
-- STAC `unit` accepts UCUM or UDUNITS-2, while the CF extension ties `unit` to CF `units`, which are UDUNITS. This design puts the UDUNITS string in `unit` and the UCUM code in `opensensor:ucum`, and keeps the firmware label in `opensensor:unit_label`.
+- STAC `unit` accepts UCUM or UDUNITS-2, and the CF extension README prefers the same two. This design puts the UCUM code in core `unit`, one unit system with no second field. The firmware label stays in the firmware descriptor as `unit_label`.
 - UCUM is case-sensitive. `ug/m3` is valid. `degC` becomes `Cel`. `count/0.1L` becomes `{count}/dL`. `g` in the CoreS3 IMU columns means standard gravity, which is `[g]` in UCUM (plain `g` is gram). `byte` is `By`. `YYYYMMDD` and `hhmmss` are formats, not units. `us_since_unix_epoch` is a time column described by `table:primary_datetime`.
 - CF names need care. `mass_concentration_of_pm2p5_ambient_aerosol_particles_in_air` fits the `atmospheric` columns only, not the CF=1 columns. `air_temperature` must not be used for `imu_temperature_c`.
-- Keep the firmware label as written and add the UCUM code next to it. Never rewrite the firmware string, because it is part of the digest.
-- Observed property URIs stay `urn:walkthru-earth:<board>:property:<name>`. Add `cf:standard_name` where CF has one. Leave it empty otherwise, as the CF extension requires.
+- Keep the firmware label as written in the descriptor and put the UCUM code in the STAC `unit`. Never rewrite the firmware string, because it is part of the digest.
+- `opensensor:property` uses a shared URI where one exists. For PM2.5 the NERC P07 term `http://vocab.nerc.ac.uk/collection/P07/current/YUDG9DXK/` matches `cf:standard_name` exactly. Columns without a shared term keep `urn:walkthru-earth:<board>:property:<name>`. Add `cf:standard_name` where CF has one. Leave it empty otherwise, as the CF extension requires.
 
 ---
 
@@ -161,12 +162,13 @@ Conclusion. Use STAC for discovery and file-level description. Borrow SensorThin
 | Our concept | SensorThings | STAC | Today |
 | --- | --- | --- | --- |
 | Network root | none | Catalog `opensensor.space` | none |
-| Device profile (one dictionary digest) | Sensor plus ObservedProperty set | Collection of type profile, no Items, `table:columns` plus `opensensor:` fields | `telemetry_fields.inc`, `LiveProfile`, `MetricSpec` |
-| Station | Thing | Collection per station UUID, `extent` from data, `links rel=describedby` to its profile | station UUID, footer keys |
-| Column | Datastream | One entry in `table:columns` (and optionally `cube:variables`) | `FIELD(...)` line |
+| Firmware dictionary (one digest) | Sensor plus ObservedProperty set | `describedby` link on the station Collection, with the digest in `file:checksum` | `telemetry_fields.inc` |
+| App profile (one digest) | none | None, a plain JSON file outside any published schema | `LiveProfile`, presentation parts of `MetricSpec` |
+| Station | Thing | Collection per station UUID, `extent` from data, `instruments`, `keywords`, `opensensor:scales`, `opensensor:sample_interval_s`, columns in `item_assets.data.table:columns` | station UUID, footer keys |
+| Column | Datastream | One entry in `item_assets.data.table:columns` with core `unit` and `roles` plus `opensensor:` column fields (and optionally `cube:variables`) | `FIELD(...)` line |
 | Quantity | ObservedProperty | `cf:standard_name` plus `opensensor:property` URI | `property_uri` |
-| Day of data | none | Item per Hive day partition, geometry = H3 cell polygon, `start_datetime` and `end_datetime` from column statistics | `station=/year=/month=/day=` |
-| Parquet file | none | Asset with `file:size`, `file:checksum`, roles `data` | file in archive |
+| Day of data | none | Item per Hive day partition, geometry = H3 cell polygon, `grid:code`, `anon:size` and `anon:warning`, `start_datetime` and `end_datetime` from column statistics | `station=/year=/month=/day=` |
+| Parquet file | none | Asset with `file:size`, `file:checksum`, roles `data`, `table:row_count` and core `statistics` per column | file in archive |
 | Discover aggregate | none | Collection `discover-cells` with assets per `h3_res`, `table:columns` from the feed dictionary | `FeedProperty` and `manifest.json` |
 
 Why Item per day and not per file. A station writes about 35,000 files per year at 15 minute rotation. Per-day Items give 365 per year, line up with the Hive layout and with the app's existing daily Parquet builder, and keep catalogs well under the 1 MB guidance. Unsynced device files also cannot be valid Items, because STAC needs `datetime` or a start and end, and those files have null UTC on every row. Only the phone's reconciled daily files have a real range. Items should carry `clock_status` and `clock_epoch`, because RTC-restored days are dated but approximate. A station UUID lives in NVS and follows the board when it moves, so the H3 cell and time range tell deployments apart.
@@ -175,62 +177,92 @@ Why Item per day and not per file. A station writes about 35,000 files per year 
 
 | Fact | Owner | Delivery |
 | --- | --- | --- |
-| Column name, type, `field_id`, firmware unit label, procedure, validity rule, live key, sample interval | Firmware | Generated at build time from `telemetry_fields.inc` |
-| Code values (for example `pms_status` 0 to 5) | Firmware `telemetry_fields.inc` side, a new value moves `dict` | Generated descriptor |
-| UCUM and UDUNITS codes, `cf:standard_name`, sensor make and model, labels for code values | Firmware source, reviewed once per digest | Same generated descriptor, from a new sidecar table next to the `.inc` so the existing digest does not change |
-| Labels (en, ar), description, display precision, category, chart role, default metric, hero card, scales and colours | Profile registry (repo plus source.coop) | Published JSON keyed by digest, bundled in the app as fallback |
+| Column name, type, `field_id`, procedure, validity rule, sample interval | Firmware | Generated at build time from `telemetry_fields.inc`, mapped to `opensensor:` column fields |
+| Firmware fields `unit_label`, `live_key`, `proto_min` and the dictionary digest | Firmware | Generated descriptor only. The digest reaches STAC as `file:checksum` on the `describedby` link |
+| Code values (for example `pms_status` 0 to 5) | Firmware `telemetry_fields.inc` side, a new value moves `dict` | Generated descriptor, published as `classification:classes` |
+| UCUM code for core `unit`, `cf:standard_name`, ACDD role for core `roles`, aggregate, plausible range, sensor make and model, labels for code values | Firmware source, reviewed once per digest | Same generated descriptor, from a new sidecar table next to the `.inc` so the existing digest does not change |
+| Labels (en, ar), description, display step, category, family, default columns, hero card | App profile registry (repo plus source.coop) | Plain JSON keyed by digest, outside any published schema, bundled in the app as fallback |
+| Health scales and colours | Scale registry next to the app profiles | Written into each station Collection as `opensensor:scales` |
 | Station metadata (H3 cell, country, license, owner contact) | Phone at provisioning | Station Collection written by the phone, uploaded only when the owner enables publishing |
-| Statistics per day | Phone | Computed from Parquet footers, already done by the daily builder |
+| Statistics per day | Phone | Computed from Parquet footers into core `statistics` on Item columns, already done by the daily builder |
 
 Keeping labels and health scales out of firmware means WHO, EPA or national scale updates, new translations and new colour rules ship without a flash.
 
 ### 4.3 Delivery paths
 
-1. Bundled profiles first. Generate profile Collections for every known digest (CoreS3 v3 to v5, Waveshare v1 to v5) from `tools/fixtures/live_keys/*.json` plus the host dictionary JSON. Commit them to `aq-parquet/docs/shared/profiles/` and bundle them in the app. No firmware change. This replaces `LiveProfiles.resolve` and `Metrics.all`.
+1. Bundled profiles first. For every known digest (CoreS3 v3 to v5, Waveshare v1 to v5), generate the column list (`table:columns` entries with core and `opensensor:` fields) and the app profile from `tools/fixtures/live_keys/*.json` plus the host dictionary JSON. Commit them to `aq-parquet/docs/shared/profiles/` and bundle them in the app. The phone copies the column list into each station Collection it writes. No firmware change. This replaces `LiveProfiles.resolve` and `Metrics.all`.
 2. Published profiles. Mirror the same files on source.coop under `opensensor-space/profiles/<sha256>.json`. Change the footer `dictionary_uri` from a GitHub `main` URL to this immutable address in the next firmware release.
 3. Device-served descriptor (optional). Add read-only opcode `0x11 GET_DESCRIPTOR` (opcodes end at `0x10`) and frame type `0x4F DESCRIPTOR_CHUNK` (frame types end at `0x4e`, `ble_sync.h:43-86`). Use a request per chunk, `GET_DESCRIPTOR(offset u32, length u16)`, answered with one frame up to the negotiated size (512 on BLE, 1024 on LAN), so the app can re-request lost ranges. The `CONFIG_CHUNK` style does not fit, because it is BLE only, sends 128 byte slices with no end frame, and Android drops bursts of 16 to 18 notifications. Advertise support with `"desc":"<16 hex prefix>"` in `info` (313 and 327 bytes, under both 400 byte caps), or probe the opcode, since old firmware answers an unknown opcode with ERROR 11. `AqJson` ignores unknown keys, so released apps are safe. A new frame type is safe only because it is never sent unsolicited, since `Frames.kt:499` throws on unknown types. An app with that descriptor cached skips the download.
-   - The descriptor gets its own digest (`desc`) over the generated JSON bytes. `dict` keeps covering only `telemetry_fields.inc`, so released app profiles stay valid while labels, units and scales evolve. `desc` needs the same three gates as `dict` today (`tools/build-idf-board.sh:19-23` and both contract tests), or it will drift.
-   - Cost. Today's bare CoreS3 dictionary is already 15.4 KB minified (about 1.9 KB zlib). A full Collection with labels in two languages, CF names, codes and scales is likely 25 to 40 KB raw. The app slot is 6 MB on both boards, so that is still under 1 percent. No ESP-IDF image size is recorded yet, the 1.4 MB figure is from Arduino builds. RAM cost is near zero because chunks stream from `.rodata` into the existing frame buffer. Serving raw JSON avoids a gzip dependency on the phone.
+   - The descriptor holds the firmware fields plus the column list, never app profile labels or scales. It gets its own digest (`desc`) over the generated JSON bytes. `dict` keeps covering only `telemetry_fields.inc`, so released app profiles stay valid while units and column semantics evolve. `desc` needs the same three gates as `dict` today (`tools/build-idf-board.sh:19-23` and both contract tests), or it will drift.
+   - Cost. Today's bare CoreS3 dictionary is already 15.4 KB minified (about 1.9 KB zlib). A full descriptor with UCUM units, CF names, roles and code classes is likely 25 to 40 KB raw. The app slot is 6 MB on both boards, so that is still under 1 percent. No ESP-IDF image size is recorded yet, the 1.4 MB figure is from Arduino builds. RAM cost is near zero because chunks stream from `.rodata` into the existing frame buffer. Serving raw JSON avoids a gzip dependency on the phone.
    - Footer. Do not embed the descriptor in each Parquet file. A full Collection exceeds the 4096 byte value cap, and `table-and-observation-model.md:114` already rules out repeating descriptions in every small file. Add two keys instead, `stac:collection_href` (pinned URL or `urn:opensensor:collection:<board>:<desc sha>`) and `stac:descriptor_sha256`, about 260 bytes per file. Pass them as board metadata, which only counts against the 32 board slots (CoreS3 goes from 5 to 7, Waveshare from 13 to 15). No budget change is needed. Never raise `kFooterMetadata` alone, because the writer's literal 64 would then fail every file.
 4. Self-describing exports. When the phone exports or publishes a daily Parquet file, write the station Collection into the footer under the `stac-geoparquet` key, `collections` map. A file then stands alone on source.coop or in DuckDB. `DailyParquetBuilder.kt:488` copies a fixed key list (`COPIED_METADATA`), so it must also copy the new `stac:*` keys or they never reach published files.
 
 ### 4.4 Custom extension `opensensor:`
 
-The draft lives in walkthru-earth/stac-opensensor, with its JSON Schema at `https://walkthru-earth.github.io/stac-opensensor/v0.1.0/schema.json`. Field names follow SensorThings words. All fields are optional, so a profile with only `table:columns` and `unit` still renders as plain numbers with raw names.
+The extension is released as v0.1.0 in walkthru-earth/stac-opensensor, with its JSON Schema at `https://walkthru-earth.github.io/stac-opensensor/v0.1.0/schema.json`. It only defines what STAC core and existing extensions do not cover, and `docs/overlap-review-2026-10-25.md` there explains each decision. Field names follow SensorThings words. All fields are optional, so a station Collection with only `table:columns` and `unit` still renders as plain numbers with raw names.
 
-Column-level fields (inside `table:columns` entries).
+Column fields (inside `table:columns` entries).
 
 | Field | Type | Meaning | Replaces |
 | --- | --- | --- | --- |
-| `opensensor:property` | string URI | Observed property URI | `property_uri` |
-| `opensensor:procedure` | string | Firmware procedure or sensor id | `procedure` |
-| `opensensor:ucum` | string | UCUM code next to the UDUNITS `unit` | none |
-| `opensensor:unit_label` | string | Firmware unit label, unchanged | `unit` in `telemetry_fields.inc` |
+| `opensensor:property` | string URI | Observed property, a shared vocabulary URI such as NERC P07 where one exists | `property_uri` |
+| `opensensor:procedure` | string | Sensor model or procedure id that produced the column | `procedure` |
 | `opensensor:field_id` | integer | Parquet `field_id`, join key to Iceberg, schema v5 and later | none |
-| `opensensor:codes` | array of `{value, name, title, color_hint}` | Meaning of code values, Classification class shape | free-text board footer keys, `PmsStatus` |
-| `opensensor:live_key` | string | LIVE JSON key, `[a-z0-9_]{1,15}` | `VOCABULARY`, `LiveSample` fields |
-| `opensensor:role` | enum `measurement`, `health`, `identity`, `time`, `status` | Separates environmental data from board health and bookkeeping | `MetricKind`, `chartable` |
-| `opensensor:valid_when` | `{column, equals}` or `{column, finite}` | Validity gate | `Gate`, `PMS_VALID` |
+| `opensensor:valid_when` | `{column, equals}` or `{column, finite: true}` | Validity gate | `Gate`, `PMS_VALID` |
 | `opensensor:settle_s` | number | Warm-up seconds after power on | `settleSeconds` |
-| `opensensor:aggregate` | enum `mean`, `min`, `max`, `last`, `sum`, `count` | How tiers roll up | implicit mean |
-| `opensensor:range` | `[min, max]` | Plausible range for QC and axis floor | `axisFloor`, `QcRules` |
-| `opensensor:precision` | number | Display step | `FeedProperty.precision` |
-| `opensensor:scale` | id | Reference to a scale object | `healthScale` |
-| `opensensor:derived` | `{from: [...], method: id}` | Derived column computed on the phone, for example EPA correction | `basis`, `humidityColumn` |
-| `title`, `description`, `languages` | i18n | Labels in en and ar | string resources, `label` |
+| `opensensor:aggregate` | enum `mean`, `minimum`, `maximum`, `sum`, `point`, `mode` | How tiers roll up, in CF `cell_methods` words. `point` is an instantaneous read, `mode` is for coded columns | implicit mean |
+| `opensensor:plausible_range` | `[min, max]` | Plausible range for QC flags and axis floor. Values outside are suspect, not masked | `axisFloor`, `QcRules` |
+| `opensensor:scale` | id | Id of a scale in `opensensor:scales` | `healthScale` |
+| `opensensor:derived` | `{from: [...], method: URI}` | Derived column computed on the phone, for example EPA correction | `basis`, `humidityColumn` |
 
-Collection-level fields.
+Collection and Item fields.
 
 | Field | Meaning |
 | --- | --- |
-| `opensensor:digest` | SHA-256 of the firmware dictionary this profile describes |
-| `opensensor:family` | Family id such as `air`, `weather`, `soil`, `water`, `noise` |
-| `opensensor:primary` | Ordered list of default columns for Today, History and Devices |
-| `opensensor:scales` | Map of scale objects. Each has `source` (citation URL), `unit`, `steps` (`upper`, `label` en and ar, `color_hint`) and an optional `guideline` line |
-| `opensensor:hero` | Optional hero card id that a family plugin can render, for example the air mood face |
-| `opensensor:sample_interval_s`, `opensensor:proto_min` | Cadence and minimum protocol |
+| `opensensor:scales` | Map of scale objects keyed by id. Each has `source` (citation URL), `steps` (`upper`, `label` as a string or an en and ar map, `color_hint`), an optional `unit` and an optional `guideline` line |
+| `opensensor:sample_interval_s` | Seconds between samples |
 
-### 4.5 Example profile (shortened)
+Reused instead of new fields.
+
+| Need | Use | Replaces |
+| --- | --- | --- |
+| Unit | Core `unit` with a UCUM code, such as `ug/m3` or `Cel` | `MetricSpec.unit` |
+| Column kind | Core `roles` with ACDD `coverage_content_type` values. Measurement is `physicalMeasurement`, board health `auxiliaryInformation`, status `qualityInformation`, identity `referenceInformation`, time `coordinate` | `MetricKind`, `chartable` |
+| Code meanings | `classification:classes` (`value`, `name`, `color_hint`, `nodata`) | free-text board footer keys, `PmsStatus` |
+| CF name | `cf:standard_name` | none |
+| Sensor models | Core `instruments` on the Collection | none |
+| Real minimum, maximum and mean | Core `statistics` on Item columns | daily builder output |
+| Location cell | `grid:code`, such as `H3-887576970bfffff` | footer H3 keys |
+| Coarse location | `anon:size` and `anon:warning` | none |
+| Dictionary digest | `file:checksum` on the `describedby` link to the firmware dictionary | `dict` in `info` |
+| Search terms | Core `keywords` | none |
+| Labels | Column `title` and `description`, with `languages` for en and ar | string resources, `label` |
+
+Upstream proposals are open on github.com/stac-extensions. Table#16 adds `field_id` to the Column Object, table#17 validates common metadata such as `unit` in columns, classification#55 allows `classification:classes` in table columns, and cf#11 allows `cf:standard_name` and `cf:cell_methods` in table columns. If one lands, the matching field moves upstream.
+
+Firmware fields, outside the extension. They live in the firmware descriptor the phone reads over BLE or LAN, and keep the wire contract as it is.
+
+| Field | Meaning |
+| --- | --- |
+| `unit_label` | Firmware unit string, unchanged, pinned by the digest |
+| `live_key` | LIVE JSON key, `[a-z0-9_]{1,15}`. Replaces `VOCABULARY` and `LiveSample` fields |
+| `proto_min` | Minimum device protocol |
+| digest | SHA-256 of `telemetry_fields.inc`, the `dict` value in `info` and `HELLO` |
+
+App profile fields, outside any published schema. One small JSON file per digest.
+
+| Field | Meaning | Replaces |
+| --- | --- | --- |
+| `family` | Family id such as `air`, `weather`, `soil`, `water`, `noise`, routes to a family plugin | `DeviceCapabilities.showsParticles`, schema prefix checks |
+| `primary` | Ordered list of default columns for Today, History and Devices | `Metrics.primary` |
+| `hero` | Optional hero card id that a family plugin renders, for example the air mood face | `TodayCard.NOW_AIR` |
+| `display_step` | Display step per column | `FeedProperty.precision` |
+| `labels` | Column labels in en and ar | string resources |
+
+### 4.5 Example station Collection (shortened)
+
+Shortened from `examples/collection.json` in stac-opensensor.
 
 ```json
 {
@@ -240,62 +272,83 @@ Collection-level fields.
     "https://stac-extensions.github.io/table/v1.3.0/schema.json",
     "https://stac-extensions.github.io/cf/v1.0.0/schema.json",
     "https://stac-extensions.github.io/classification/v2.0.0/schema.json",
+    "https://stac-extensions.github.io/file/v2.1.0/schema.json",
     "https://walkthru-earth.github.io/stac-opensensor/v0.1.0/schema.json"
   ],
-  "id": "profile-cores3-telemetry-v5",
-  "title": "CoreS3 air station",
-  "description": "M5Stack CoreS3 with PMSA003",
+  "id": "station-3f2b9c1e",
+  "title": "Osu air station",
+  "description": "An M5Stack CoreS3 station with a Plantower PMSA003 particle sensor. Each Item is one reconciled day of one-minute samples.",
   "license": "CC-BY-4.0",
-  "extent": {"spatial": {"bbox": [[-180, -90, 180, 90]]}, "temporal": {"interval": [[null, null]]}},
-  "opensensor:digest": "<sha256 of telemetry_fields.inc>",
-  "opensensor:family": "air",
-  "opensensor:primary": ["pm25_atmospheric_ug_m3", "imu_temperature_c"],
+  "keywords": ["air quality", "PM2.5", "low-cost sensor"],
+  "instruments": ["pmsa003"],
+  "extent": {
+    "spatial": {"bbox": [[-0.19204, 5.59786, -0.18411, 5.60568]]},
+    "temporal": {"interval": [["2026-10-01T00:00:00Z", null]]}
+  },
+  "opensensor:sample_interval_s": 60,
   "opensensor:scales": {
     "who-2021-pm25": {
       "source": "https://www.who.int/publications/i/item/9789240034228",
       "unit": "ug/m3",
       "guideline": 5,
       "steps": [
-        {"upper": 5, "label": {"en": "Guideline", "ar": "..."}, "color_hint": "2E7D32"},
-        {"upper": 10, "label": {"en": "Interim 4"}, "color_hint": "9E9D24"}
+        {"upper": 5, "label": {"en": "Guideline", "ar": "الحد الإرشادي"}, "color_hint": "2E7D32"},
+        {"upper": 10, "label": {"en": "Interim target 4"}, "color_hint": "9E9D24"},
+        {"upper": null, "label": {"en": "Above interim target 4"}, "color_hint": "C62828"}
       ]
     }
   },
-  "table:primary_datetime": "event_time_utc_us",
-  "table:columns": [
-    {
-      "name": "pm25_atmospheric_ug_m3",
-      "type": "int32",
-      "unit": "ug m-3",
-      "opensensor:ucum": "ug/m3",
-      "opensensor:unit_label": "ug/m3",
-      "opensensor:field_id": 17,
-      "title": "PM2.5",
-      "cf:standard_name": "mass_concentration_of_pm2p5_ambient_aerosol_particles_in_air",
-      "opensensor:property": "urn:walkthru-earth:cores3:property:pm25_atmospheric_ug_m3",
-      "opensensor:procedure": "pmsa003",
-      "opensensor:live_key": "pm25",
-      "opensensor:role": "measurement",
-      "opensensor:valid_when": {"column": "pms_status", "equals": 4},
-      "opensensor:settle_s": 180,
-      "opensensor:aggregate": "mean",
-      "opensensor:scale": "who-2021-pm25"
-    },
-    {
-      "name": "pms_status",
-      "type": "int32",
-      "opensensor:role": "status",
-      "opensensor:codes": [
-        {"value": 0, "name": "missing"},
-        {"value": 4, "name": "valid", "color_hint": "2E7D32"}
+  "item_assets": {
+    "data": {
+      "type": "application/vnd.apache.parquet",
+      "roles": ["data"],
+      "table:primary_datetime": "event_time_utc_us",
+      "table:columns": [
+        {
+          "name": "pm25_atmospheric_ug_m3",
+          "type": "int32",
+          "title": "PM2.5",
+          "unit": "ug/m3",
+          "roles": ["physicalMeasurement"],
+          "cf:standard_name": "mass_concentration_of_pm2p5_ambient_aerosol_particles_in_air",
+          "opensensor:property": "http://vocab.nerc.ac.uk/collection/P07/current/YUDG9DXK/",
+          "opensensor:procedure": "pmsa003",
+          "opensensor:field_id": 17,
+          "opensensor:valid_when": {"column": "pms_status", "equals": 4},
+          "opensensor:settle_s": 180,
+          "opensensor:aggregate": "mean",
+          "opensensor:plausible_range": [0, 1000],
+          "opensensor:scale": "who-2021-pm25"
+        },
+        {
+          "name": "pms_status",
+          "type": "int32",
+          "roles": ["qualityInformation"],
+          "opensensor:procedure": "pmsa003",
+          "opensensor:aggregate": "mode",
+          "classification:classes": [
+            {"value": 0, "name": "missing", "nodata": true},
+            {"value": 4, "name": "valid", "color_hint": "2E7D32"}
+          ]
+        }
       ]
     }
-  ],
-  "links": []
+  },
+  "links": [
+    {
+      "rel": "describedby",
+      "href": "https://github.com/walkthru-earth/aq-parquet/blob/main/firmware/esp-idf-cores3/bringup/telemetry_fields.inc",
+      "type": "text/plain",
+      "title": "Firmware column dictionary",
+      "file:checksum": "1220e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b"
+    }
+  ]
 }
 ```
 
-A soil station profile uses the same shape with `opensensor:family: "soil"`, columns such as `soil_moisture_pct` (unit `%`), `soil_temperature_c` (unit `Cel`) and `soil_ec_us_cm` (unit `uS/cm`), and no scale. The app shows it with neutral colours and needs no code change.
+A day Item (`examples/item.json`) has the H3 cell polygon as geometry, `grid:code` such as `H3-887576970bfffff`, `anon:size` and `anon:warning` in its properties, and a `data` asset whose `table:columns` carry only `name`, `type` and core `statistics`.
+
+A soil station Collection uses the same shape, with columns such as `soil_moisture_pct` (unit `%`), `soil_temperature_c` (unit `Cel`) and `soil_ec_us_cm` (unit `uS/cm`), and no scale. Its app profile sets `family` to `soil`. The app shows it with neutral colours and needs no code change.
 
 ### 4.6 Catalog layout on source.coop
 
@@ -303,12 +356,11 @@ A soil station profile uses the same shape with `opensensor:family: "soil"`, col
 opensensor-space/
   catalog.json
   profiles/
-    catalog.json
-    <sha256>.json                    profile Collections, immutable
+    <sha256>.json                    app profile and column list per firmware digest, plain JSON, immutable
   stations/
     catalog.json
     <station-uuid>/
-      collection.json                station Collection, describedby -> profile
+      collection.json                station Collection, columns in item_assets, describedby -> firmware dictionary
       items.parquet                  stac-geoparquet mirror of the day Items
       <yyyy>/<mm>/<dd>.json          optional per-day Item JSON
   discover/
@@ -324,19 +376,19 @@ Only stations whose owners enable CC BY 4.0 publishing appear. Geometry is alway
 
 ### 5.1 New core model
 
-Create the planned `:core:model` (pure `commonMain`) with `Station`, `Profile`, `Datastream`, `ObservedProperty`, `Scale`, `ScaleStep`, `ValidityGate`, `Aggregate`, `Role` and `Family`. Add `:core:catalog` to parse STAC JSON (kotlinx.serialization, unknown fields ignored), resolve a profile by digest (device opcode, then cache, then source.coop, then bundled), and validate extension versions.
+Create the planned `:core:model` (pure `commonMain`) with `Station`, `Profile`, `Datastream`, `ObservedProperty`, `Scale`, `ScaleStep`, `ValidityGate`, `Aggregate`, `Role` and `Family`. Add `:core:catalog` to parse STAC JSON (kotlinx.serialization, unknown fields ignored), resolve the column list and the app profile by digest (device opcode, then cache, then source.coop, then bundled), and validate extension versions.
 
 Then replace the three current descriptions.
 
 | Today | After |
 | --- | --- |
-| `Metrics.all`, `MetricSpec` | `Profile.datastreams` filtered by `role = measurement` |
-| `Metrics.primary = PM25` | `Profile.primary.first()`, and bucket `validRows` uses each datastream's own gate |
-| `LiveSample` data class | `Map<String, Double?>` keyed by live key, labelled through the profile. Unknown keys are kept, not dropped |
+| `Metrics.all`, `MetricSpec` | `Profile.datastreams` filtered by core `roles` containing `physicalMeasurement` |
+| `Metrics.primary = PM25` | The first column of the app profile `primary` list, and bucket `validRows` uses each datastream's own gate |
+| `LiveSample` data class | `Map<String, Double?>` keyed by the firmware `live_key`, labelled through the column list and the app profile. Unknown keys are kept, not dropped |
 | `LiveProfiles.resolve` and `VOCABULARY` | Profile lookup by digest. Unknown digest shows raw keys with raw names |
-| `WhoGuidelines.forProperty("pm25")` | `Datastream.scale` from the profile |
+| `WhoGuidelines.forProperty("pm25")` | `Datastream.scale`, resolved through `opensensor:scale` in the station Collection's `opensensor:scales` |
 | `FeedProperty` | `Datastream` read from the discover Collection's `table:columns` |
-| `DeviceCapabilities.showsParticles`, schema prefix checks | `Profile.family` and per-datastream roles |
+| `DeviceCapabilities.showsParticles`, schema prefix checks | App profile `family` and per-datastream core `roles` |
 | `pmValidRows` (Room) | Per-datastream valid counts already in `metric_bucket`. Drop the column in a schema bump |
 
 ### 5.2 Family plugins
@@ -345,10 +397,10 @@ AQ science becomes one plugin, not core logic. Move `:core:airquality` to `:fami
 
 ### 5.3 Screens
 
-- Today. Cards are generated from `Profile.primary` and the remaining measurement datastreams, grouped by category. The air family supplies the mood hero card.
-- History. The default metric is `Profile.primary.first()`. Axes use the datastream's scale when there is one, otherwise `opensensor:range` or the data range.
+- Today. Cards are generated from the app profile `primary` list and the remaining measurement datastreams, grouped by category. The air family supplies the mood hero card.
+- History. The default metric is the first column of the app profile `primary` list. Axes use the datastream's scale when there is one, otherwise `opensensor:plausible_range` or the data range.
 - Devices. The row glance shows the first primary datastream with its scale colour or a neutral chip.
-- Discover. The WHO legend becomes "the property's scale when the profile has one". Category chips already come from data.
+- Discover. The WHO legend becomes "the property's scale when the station Collection has one". Category chips already come from data.
 
 ### 5.4 Rename map
 
@@ -372,18 +424,18 @@ Rename (app-only).
 | `AirMood`, `NowReading.pm25`, `TodaySoFar.pm25Mean`, `TodayCard.NOW_AIR` | `Reading`, `NowReading.primary`, `TodaySoFar.primaryMean`, `TodayCard.NOW` |
 | `MetricSpec`, `MetricKind` | `Datastream`, `Role` plus `Family` |
 | `pm25Label`, `formatPm` | `datastreamLabel`, `formatValue` |
-| AQ string keys (`mood_*`, `pm25_*`, `discover_property_pm10`) | Move into the air family module, or into profiles as `title` |
+| AQ string keys (`mood_*`, `pm25_*`, `discover_property_pm10`) | Move into the air family module, or into the app profile `labels` |
 
-Term choice. Use `Station` for the device as the user sees it, `Datastream` for one measured column, and `Profile` for a dictionary digest. "Data feed" stays the name of the public Discover source. These follow SensorThings and the existing `devices-and-discovery.md` vocabulary.
+Term choice. Use `Station` for the device as the user sees it, `Datastream` for one measured column, and `Profile` for the column list plus app profile of one dictionary digest. "Data feed" stays the name of the public Discover source. These follow SensorThings and the existing `devices-and-discovery.md` vocabulary.
 
 ---
 
 ## 6. Firmware changes (later, backward compatible)
 
-1. Add a sibling table per board, `telemetry_semantics.inc`, keyed by column name, with UCUM code, `cf:standard_name`, role, aggregate, range and sensor model. A static assert keeps it the same length and order as `telemetry_fields.inc`, which stays byte identical so the released `dict` digest survives.
-2. Generate the descriptor on the host. `tools/telemetry_contract_fixture.cpp:59-77` already compiles `kFields` and prints dictionary JSON, and `tools/test_telemetry_contract.py:160-200` runs it. Extend it to join the semantics table and emit the STAC Collection, then embed the minified bytes as a generated `const char[]` with its `desc` digest.
+1. Add a sibling table per board, `telemetry_semantics.inc`, keyed by column name, with UCUM code, `cf:standard_name`, ACDD role, aggregate, plausible range and sensor model. A static assert keeps it the same length and order as `telemetry_fields.inc`, which stays byte identical so the released `dict` digest survives.
+2. Generate the descriptor on the host. `tools/telemetry_contract_fixture.cpp:59-77` already compiles `kFields` and prints dictionary JSON, and `tools/test_telemetry_contract.py:160-200` runs it. Extend it to join the semantics table and emit the descriptor (firmware fields plus `table:columns` entries with core and `opensensor:` fields), then embed the minified bytes as a generated `const char[]` with its `desc` digest.
 3. Add opcode `0x11`, frame `0x4F`, the `desc` key in `info` and the two footer keys from section 4.3. Add a test that a row with every LIVE key valid at its widest real value, including a real `utc`, stays under 480 bytes.
-4. Point `dictionary_uri` at a pinned address (git tag or the immutable source.coop profile) instead of the `main` blob.
+4. Point `dictionary_uri` at a pinned address (git tag or the immutable source.coop profile file) instead of the `main` blob.
 5. Shared-code generalisation for non-AQ boards. Make `sample_interval_ms` and `row_group_rows_max` footer values come from config, replace the `%.1f` LIVE format with per-field precision (a wire change, so it needs a `dict` bump and app support first), make the BLE name prefix a board constant (keep `AQ-` for existing boards), and fill `deployment_id` and `calibration_id` when provisioning supports it.
 6. Firmware names that must stay. NVS namespaces `parquet` (`station`, `codec`, `boots`), `aqcfg` (`cfg`, `token`, `location`, `ntp`, `pair`) and `aqdump`, because renaming loses station identity and pairing. Also the `AQS1` LAN handshake on port 47390, mDNS TXT keys and the serial lines `PARQUET`, `AQ OWNER_PIN`, `AQ WIFI_PROFILE` and `AQ CONFIG` that host tools parse.
 7. Firmware names that can be renamed, low priority. Doc labels `AQCommon` to `AQLocation`, namespaces `aqlogger` and `aqsync`, Kconfig symbols `AQ_LOGGER_*`, `AQ_LOG_PERSIST_*` and `AQ_PM_DFS_*` (update both boards' `sdkconfig.defaults` together), project names `aq_cores3` and `aq_waveshare` (these change `.bin` names in the release workflow), board components and `created_by` strings.
@@ -394,33 +446,33 @@ Term choice. Use `Station` for the device as the user sees it, `Datastream` for 
 
 | Phase | Scope | Repo | Risk |
 | --- | --- | --- | --- |
-| P0 | Freeze the contract. JSON Schema for `opensensor:`, profile examples, this mapping, owner sign-off | aq-parquet `docs/shared/`, this repo docs | Low |
+| P0 | Freeze the contract. The public layer is stac-opensensor v0.1.0 with schema and examples. Still needed are the app profile format, this mapping and owner sign-off | aq-parquet `docs/shared/`, this repo docs | Low |
 | P1 | Generate bundled profiles for all 10 known digests. Add `:core:model` and `:core:catalog`. Parity tests that profiles reproduce `Metrics.all` and `LiveProfiles` | both | Low, no UI change |
 | P2 | Switch History, tiers, LIVE parsing and Discover to profiles. `LiveSample` becomes a map. Delete `MetricSpec` and `LiveProfiles` | this repo | Medium, needs OnePlus and iPhone checks |
 | P3 | Generic Today and Devices. Move AQ code to `:family:air` plugin | this repo | Medium, visible UI |
 | P4 | Package and type renames in one mechanical PR per module | this repo | Low, large diff |
 | P5 | Firmware semantics table, descriptor opcode and `desc` digest, footer keys, pinned `dictionary_uri`, shared-code limits | aq-parquet | Medium, bench qualification |
-| P6 | Publish STAC on source.coop. Profiles, station Collections with stac-geoparquet mirrors, Discover Collection replacing `manifest.json` | host tooling | Low |
+| P6 | Publish STAC on source.coop. App profiles, station Collections with stac-geoparquet mirrors, Discover Collection replacing `manifest.json` | host tooling | Low |
 | P7 | First non-AQ test board (for example an ESP32-S3 N16R8 adapter with a soil or weather sensor) rendered with zero app code | both | Proof of the goal |
 
 ---
 
 ## Tracking
 
-Mobile epic #182 with #183 (core model), #184 (profile resolver and bundled profiles), #185 (LIVE map), #186 (History and tiers), #187 (Today and Devices), #188 (air family plugin), #189 (Discover), #190 (STAC through daily files), #191 (device descriptor fetch) and #192 (renames). Firmware epic walkthru-earth/aq-parquet#83 with #84 to #93 there. The extension schema and examples are in walkthru-earth/stac-opensensor. The firmware audit and review are under `docs/shared/stac-contract/` there.
+Mobile epic #182 with #183 (core model), #184 (profile resolver and bundled profiles), #185 (LIVE map), #186 (History and tiers), #187 (Today and Devices), #188 (air family plugin), #189 (Discover), #190 (STAC through daily files), #191 (device descriptor fetch) and #192 (renames). Firmware epic walkthru-earth/aq-parquet#83 with #84 to #93 there. The extension is released as v0.1.0 in walkthru-earth/stac-opensensor, with schema, examples and the overlap review in `docs/overlap-review-2026-10-25.md`. Upstream proposals are open on github.com/stac-extensions as table#16, table#17, classification#55 and cf#11. The firmware audit and review are under `docs/shared/stac-contract/` there.
 
 ---
 
 ## 8. Open questions for the owner
 
 1. Item granularity. Per day from the phone's reconciled files (recommended here) or per dated device file (the firmware audit). Both reviews agree unsynced files never become Items.
-2. Collection shape. This report proposes a profile Collection per digest plus a Collection per station. The firmware audit prefers one Collection per board schema with the station as an Item property (`opensensor:station_id`). The second is simpler for Discover, the first is simpler for per-station licensing and extents.
-3. Do health scales live only in published profiles (recommended), or can firmware ship them too.
-4. Name of the custom extension prefix. `opensensor:` is drafted as v0.1.0 in walkthru-earth/stac-opensensor.
+2. Collection shape. v0.1.0 puts the columns in each station Collection's `item_assets`, with one Collection per station. The firmware audit prefers one Collection per board schema with the station id as a plain Item property. The second is simpler for Discover, the first is simpler for per-station licensing and extents.
+3. Health scales live in station Collections as `opensensor:scales`, filled from the app side scale registry (recommended). Can firmware ship them too.
+4. Name of the custom extension prefix. `opensensor:` is released as v0.1.0 in walkthru-earth/stac-opensensor. A neutral prefix such as `obs:` would help other networks adopt it.
 5. Is `Station`, `Datastream`, `Profile` acceptable as the type vocabulary, or do you prefer `Feed` for Datastream.
 6. Should the `GET_DESCRIPTOR` opcode be built, or are bundled plus published profiles enough for now.
 7. Which scale ships first for PM, WHO 2021 (current app default) or US EPA AQI, and who reviews the Arabic labels.
-8. Units. UDUNITS in `unit` plus UCUM in `opensensor:ucum` (proposed), or one system only.
+8. Units. Decided, UCUM codes in core `unit`, one system only. The firmware label stays in the descriptor as `unit_label`.
 9. Public H3 resolution. Which resolution may appear in public Items.
 10. Is `pms_status 6` (#39) planned before or after the descriptor, since it moves `dict`.
 11. For LoRa-only boards (PR #68), is a catalog lookup by `desc` hash enough, since they cannot use the opcode.
