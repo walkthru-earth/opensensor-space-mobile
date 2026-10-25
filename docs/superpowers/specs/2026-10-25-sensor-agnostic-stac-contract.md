@@ -196,7 +196,7 @@ Keeping labels and health scales out of firmware means WHO, EPA or national scal
 
 ### 4.4 Custom extension `opensensor:`
 
-A small JSON Schema hosted with the profiles. Field names follow SensorThings words. All fields are optional, so a profile with only `table:columns` and `unit` still renders as plain numbers with raw names.
+The draft lives in walkthru-earth/stac-opensensor, with its JSON Schema at `https://walkthru-earth.github.io/stac-opensensor/v0.1.0/schema.json`. Field names follow SensorThings words. All fields are optional, so a profile with only `table:columns` and `unit` still renders as plain numbers with raw names.
 
 Column-level fields (inside `table:columns` entries).
 
@@ -240,7 +240,7 @@ Collection-level fields.
     "https://stac-extensions.github.io/table/v1.3.0/schema.json",
     "https://stac-extensions.github.io/cf/v1.0.0/schema.json",
     "https://stac-extensions.github.io/classification/v2.0.0/schema.json",
-    "https://opensensor.space/stac/opensensor/v0.1.0/schema.json"
+    "https://walkthru-earth.github.io/stac-opensensor/v0.1.0/schema.json"
   ],
   "id": "profile-cores3-telemetry-v5",
   "title": "CoreS3 air station",
@@ -407,7 +407,7 @@ Term choice. Use `Station` for the device as the user sees it, `Datastream` for 
 
 ## Tracking
 
-Mobile epic #182 with #183 (core model), #184 (profile resolver and bundled profiles), #185 (LIVE map), #186 (History and tiers), #187 (Today and Devices), #188 (air family plugin), #189 (Discover), #190 (STAC through daily files), #191 (device descriptor fetch) and #192 (renames). Firmware work is tracked in walkthru-earth/aq-parquet, with its audit and review under `docs/shared/stac-contract/` there.
+Mobile epic #182 with #183 (core model), #184 (profile resolver and bundled profiles), #185 (LIVE map), #186 (History and tiers), #187 (Today and Devices), #188 (air family plugin), #189 (Discover), #190 (STAC through daily files), #191 (device descriptor fetch) and #192 (renames). Firmware epic walkthru-earth/aq-parquet#83 with #84 to #93 there. The extension schema and examples are in walkthru-earth/stac-opensensor. The firmware audit and review under `docs/shared/stac-contract/` there.
 
 ---
 
@@ -416,7 +416,7 @@ Mobile epic #182 with #183 (core model), #184 (profile resolver and bundled prof
 1. Item granularity. Per day from the phone's reconciled files (recommended here) or per dated device file (the firmware audit). Both reviews agree unsynced files never become Items.
 2. Collection shape. This report proposes a profile Collection per digest plus a Collection per station. The firmware audit prefers one Collection per board schema with the station as an Item property (`opensensor:station_id`). The second is simpler for Discover, the first is simpler for per-station licensing and extents.
 3. Do health scales live only in published profiles (recommended), or can firmware ship them too.
-4. Name of the custom extension prefix. `opensensor:` is proposed.
+4. Name of the custom extension prefix. `opensensor:` is drafted as v0.1.0 in walkthru-earth/stac-opensensor.
 5. Is `Station`, `Datastream`, `Profile` acceptable as the type vocabulary, or do you prefer `Feed` for Datastream.
 6. Should the `GET_DESCRIPTOR` opcode be built, or are bundled plus published profiles enough for now.
 7. Which scale ships first for PM, WHO 2021 (current app default) or US EPA AQI, and who reviews the Arabic labels.
