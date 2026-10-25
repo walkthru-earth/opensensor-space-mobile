@@ -103,7 +103,7 @@ Shared-code limits that block non-AQ boards.
 - 96 columns max (`parquet_writer.h:8`). Types are Int32, Int64 and Float only.
 - Footer literals `sample_interval_ms = "10000"` and `row_group_rows_max = "90"`. `deployment_id` and `calibration_id` are always `"unknown"`.
 - LIVE floats at one decimal, integer fields as integers. pH 7.25, soil EC or accelerometer values under 0.05 g lose precision. Changing the format is a wire change.
-- BLE name prefix `AQ-`, and the app scans on `AqGatt.NAME_PREFIX = "AQ-"`. Firmware #90 moves every board to the `OS-` prefix and the `os-xxxx` mDNS host (bridge decision 6), so the app scans by GATT service UUID and changes in lockstep. The `sensor.*` config keys assume one PMS-style module.
+- BLE name prefix. Firmware #90 moves every board to the `OS-` prefix and the `os-xxxx` mDNS host (bridge decision 6). The app scans by GATT service UUID only and has no name prefix, shipped in lockstep with #90. The `sensor.*` config keys assume one PMS-style module.
 
 `docs/shared/table-and-observation-model.md` already decided the layering. Immutable wide Parquet stays the raw archive, a versioned dictionary carries meaning, and SensorThings and Iceberg are later host-side projections. It proposes Thing = station, Sensor = procedure, Datastream = column contract, ObservedProperty = exact quantity and processing variant, feature of interest = local air or the board itself. No code in either repo reads or writes STAC today.
 
@@ -561,7 +561,7 @@ Owner decision 2026-10-26 (ecosystem bridge). No backward compatibility right no
 | Name | How it changes |
 | --- | --- |
 | `applicationId`, `namespace`, iOS bundle id, test ids | #192 renames them to `space.opensensor.app` (iOS tests `space.opensensor.app.tests`), approved by the owner. Bench phones get a fresh install, logged in `.handoff/pending-hardware.md` |
-| BLE base UUID, `AQ-` advert prefix, `_aqsync._tcp`, `aq-XXXX` LAN host | Wire contract, in lockstep with firmware. #90 moves the prefix to `OS-` and the host to `os-xxxx`, so the app scans by GATT service UUID. UUIDs, `_aqsync._tcp` and `AQS1` move later in firmware #93 |
+| BLE base UUID, `OS-` advert prefix, `_aqsync._tcp`, `os-xxxx` LAN host | Wire contract, in lockstep with firmware. #90 moved the prefix from `AQ-` to `OS-` and the host to `os-xxxx`. The app scans by GATT service UUID and matches no name. UUIDs, `_aqsync._tcp` and `AQS1` move later in firmware #93 |
 | LIVE keys, Parquet column names, footer keys, Hive paths | File contract, in lockstep with aq-parquet `docs/shared/`. Uploaded files keep the archive layout `station=<uuid>/year=YYYY/month=MM/day=DD/data_HHMM_<boot>_<first>-<last>-<attempt>.parquet` (bridge decision 16) |
 | `aq-sync.db`, `aqsync_lan_token_v1`, `aqblocks1` | Persisted on phones. Rename freely, with a destructive migration where needed |
 

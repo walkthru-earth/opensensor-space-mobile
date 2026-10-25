@@ -9,7 +9,7 @@ package earth.walkthru.aqsync.data.protocol
  * 5 s of connecting.
  */
 object LanProtocol {
-    /** DNS-SD service type; the instance name is the BLE local name (`AQ-xxxx`). */
+    /** DNS-SD service type; the instance name is the BLE local name (`OS-xxxx`). */
     const val SERVICE_TYPE = "_aqsync._tcp"
     const val SERVICE_TYPE_DOT = "_aqsync._tcp."
     const val DEFAULT_PORT = 47390

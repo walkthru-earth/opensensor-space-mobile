@@ -24,7 +24,7 @@ class KnownDeviceDaoTest {
 
     private fun device(token: String?) = KnownDevice(
         address = ADDRESS,
-        name = "AQ-test",
+        name = "OS-test",
         station = "old-station",
         deviceId = "old-device",
         firmware = "old-fw",
@@ -54,7 +54,7 @@ class KnownDeviceDaoTest {
     fun `insertIfAbsent leaves an existing row untouched`() = runBlocking {
         dao.upsert(device("enc1:kept"))
 
-        val result = dao.insertIfAbsent(KnownDevice(ADDRESS, "AQ-new", "station", "device", "fw", 50, 50))
+        val result = dao.insertIfAbsent(KnownDevice(ADDRESS, "OS-new", "station", "device", "fw", 50, 50))
 
         assertEquals(-1L, result)
         assertEquals(device("enc1:kept"), dao.get(ADDRESS))
@@ -70,8 +70,8 @@ class KnownDeviceDaoTest {
             device("enc1:kept").copy(station = "station", deviceId = "device", firmware = "fw", lastSeenEpochMs = 50, lastConnectedEpochMs = 50),
             dao.get(ADDRESS),
         )
-        dao.recordConnection(ADDRESS, "AQ-new", "station", "device", "fw", 60)
-        assertEquals("AQ-new", dao.get(ADDRESS)!!.name)
+        dao.recordConnection(ADDRESS, "OS-new", "station", "device", "fw", 60)
+        assertEquals("OS-new", dao.get(ADDRESS)!!.name)
     }
 
     private companion object {

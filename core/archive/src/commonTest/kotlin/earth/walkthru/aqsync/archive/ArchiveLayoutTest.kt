@@ -36,7 +36,7 @@ class ArchiveLayoutTest {
 
     @Test
     fun `station ids are one safe directory name and may contain a dot`() {
-        for (ok in listOf(station, "AQ-6b40", "board.v2", "a_b", "x")) assertTrue(ArchiveLayout.isSafeStation(ok), ok)
+        for (ok in listOf(station, "OS-6b40", "board.v2", "a_b", "x")) assertTrue(ArchiveLayout.isSafeStation(ok), ok)
         for (bad in listOf("", ".", "..", "a/b", "a\\b", "a b", "a\u0000b", "é", "a:b")) assertFalse(ArchiveLayout.isSafeStation(bad), bad)
         assertFailsWith<IllegalArgumentException> { ArchiveKey("..", dated) }
         assertFailsWith<IllegalArgumentException> { ArchiveLayout.stationDir("a/b") }

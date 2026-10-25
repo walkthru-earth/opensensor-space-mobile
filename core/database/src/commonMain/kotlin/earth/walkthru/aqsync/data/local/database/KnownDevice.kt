@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.Flow
 @Entity(tableName = "known_device")
 data class KnownDevice(
     @PrimaryKey override val address: String,
-    /** Advertised local name, `AQ-xxxx`. */
+    /** Advertised local name such as `OS-6b40`, shown as is and never parsed. */
     override val name: String?,
     /** `info.station` UUID once read; null until the first successful connection. */
     override val station: String?,

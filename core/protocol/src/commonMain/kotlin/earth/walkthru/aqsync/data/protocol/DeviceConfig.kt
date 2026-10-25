@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
  * ```json
  * {"ble":{"pair":"random","pin":123456,"pin_default":1,"bonds":1,"display":1},
  *  "wifi":{"on":1,"ssid":"home","psk_set":1,"state":"connected","ip":"192.168.1.42","rssi":-58,"mac":"e0..6b40"},
- *  "lan":{"on":1,"port":47390,"host":"aq-6b40","clients":0},
+ *  "lan":{"on":1,"port":47390,"host":"os-6b40","clients":0},
  *  "sensor":{"vendor":"Plantower","model":"PMS5003T","serial":"PMS5003T-202604081332","batch_candidate":0}}
  * ```
  */
@@ -113,7 +113,7 @@ data class WifiConfig(
 data class LanConfig(
     val on: Int? = null,
     val port: Int? = null,
-    /** mDNS host label, `aq-xxxx`. */
+    /** mDNS host label such as `os-6b40`. */
     val host: String? = null,
     /** Authenticated TCP clients right now (0 or 1). */
     val clients: Int? = null,

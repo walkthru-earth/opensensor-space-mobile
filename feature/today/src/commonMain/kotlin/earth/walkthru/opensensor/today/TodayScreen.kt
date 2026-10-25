@@ -167,7 +167,7 @@ fun TodayContent(
                         title = {
                             Column {
                                 // The device name titles the page (TalkBack headings list, VoiceOver rotor).
-                                // Fits to one line, then wraps only between words, so "AQ-7500" never splits (#143).
+                                // Fits to one line, then wraps only between words, so "OS-7500" never splits (#143).
                                 FitText(
                                     snapshot.name ?: stringResource(Res.string.device_unnamed),
                                     style = MaterialTheme.typography.titleLarge,

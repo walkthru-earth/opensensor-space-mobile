@@ -113,7 +113,7 @@ class FakeArchiveDevice(
     /** Requests received, by opcode, in order. */
     val requests: MutableList<Int> = mutableListOf()
 
-    override val displayName: String = "AQ-fake"
+    override val displayName: String = "OS-fake"
     override val endpoint: String = "in-process fake"
     override val connectionState: StateFlow<ConnectionState> = state
     override val statusNotifications: Flow<ByteArray> = statusUpdates

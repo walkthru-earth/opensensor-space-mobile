@@ -37,7 +37,12 @@ connection failure falls back to BLE with a snackbar. After connection, INFO mus
 `DeviceContinuityPolicy` before identity is persisted or files collected; a mismatch closes the
 attempt and surfaces an error. Enrollment stays keyed by the Bluetooth address on both pipes.
 The [canonical firmware contract](../../aq-parquet/docs/shared/ble-sync-protocol.md) owns the UUIDs,
-advertising and mDNS names; the app rebrand does not change them.
+advertising and mDNS names. Boards advertise `OS-xxxx` and publish the mDNS host `os-xxxx.local`,
+where `xxxx` is the last four hex digits of `device_id`. Both phones find boards by the GATT
+service UUID alone (Android `ScanFilter.setServiceUuid`, iOS `scanForPeripherals(withServices:)`)
+and Wi-Fi boards by the `_aqsync._tcp` service type, so the app has no name prefix. The advertised
+name and the DNS-SD instance name are display data only. Identity comes from INFO `dev` and
+`station`.
 
 `DeviceConnectionManager` owns one controller per enrolled public Bluetooth endpoint. Each has
 its own session, reconnect, manifest and sync state; selecting another device does not close it.
@@ -144,7 +149,7 @@ measurements do not establish Android/iPhone throughput after the upgrade.
 
 | | Bluetooth LE (`BleLinkDriver`) | LAN (`TcpLinkDriver`) |
 | --- | --- | --- |
-| Discovery | GATT scan for the service UUID (`BleScanner`), timeboxed by `ScanPlan`: `LOW_LATENCY` until 2 s after the first result or 10 s, then `BALANCED`, stop at 45 s; initial starts and restarts share a process-local five-starts-per-30-s budget with `AdvertFlagScan`. Exhausted discovery returns a scan failure without a radio start. Step down and flag re-registration reserve one slot for discovery. The policy is conservative, Android vendor limits and process restarts can differ. My devices folds adverts in `NearbyAdverts` (seen map at most every 250 ms, Room `touch` at most once per device per 60 s) | mDNS `_aqsync._tcp` via `NsdManager` (`LanDiscovery`), TXT `station`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |
+| Discovery | GATT scan for the service UUID (`BleScanner`), any advertised name, timeboxed by `ScanPlan`: `LOW_LATENCY` until 2 s after the first result or 10 s, then `BALANCED`, stop at 45 s; initial starts and restarts share a process-local five-starts-per-30-s budget with `AdvertFlagScan`. Exhausted discovery returns a scan failure without a radio start. Step down and flag re-registration reserve one slot for discovery. The policy is conservative, Android vendor limits and process restarts can differ. My devices folds adverts in `NearbyAdverts` (seen map at most every 250 ms, Room `touch` at most once per device per 60 s) | mDNS `_aqsync._tcp` via `NsdManager` (`LanDiscovery`), TXT `station`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |
 | Auth | LE Secure Connections bond; passkey/PIN modes require encrypted, authenticated access; explicit lab `none` mode uses encrypted Just Works without MITM authentication | `"AQS1"` + 32-byte token, obtainable **only** over BLE; the socket itself is unencrypted by contract and does not authenticate server identity |
 | Framing | one notification per frame; `payload_max = min(MTU − 3, 512)` — Android silently drops notifications above the 512-byte GATT attribute limit; control requests ≤ 512 B | `len` u16 LE + frame; `payload_max` from `HELLO` (1024), `mtu` reports `payload_max + 3` |
 | Pushes | `status` / `live` characteristics. The firmware omits a snapshot notification larger than `MTU − 3` (snapshots are at most 480 B), so below MTU 483 the phone also long reads both every 10 s (`SnapshotPoller` on Android, `BleSnapshotReads` on iOS). Reads start once setup is done and stop with the link. On Android a tick skips while a transfer holds or borrows the link, and otherwise queues behind other GATT ops on `opMutex`. It runs whenever the session is open, also with the app in the background while a link the UI opened stays up. On iOS a tick skips while a run, command, lease, token request or any GATT op holds the link, and runs only while the link is kept for on screen or running work | `STATUS` 0x48 / `LIVE` 0x49 frames, **demultiplexed by type byte in the transport's single reader loop** — they may sit between two `CHUNK`s; `DeviceSession` is byte-for-byte identical for both pipes |

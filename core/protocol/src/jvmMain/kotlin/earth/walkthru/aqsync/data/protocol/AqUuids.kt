@@ -36,7 +36,4 @@ object AqUuids {
     /** Device accepts up to 517; the phone MUST request ≥ 247 before using `control`. */
     const val MTU_REQUEST = 517
     const val MTU_MINIMUM = 247
-
-    /** Local name prefix; `xxxx` is the last four hex digits of `device_id`. */
-    const val NAME_PREFIX = AqGatt.NAME_PREFIX
 }

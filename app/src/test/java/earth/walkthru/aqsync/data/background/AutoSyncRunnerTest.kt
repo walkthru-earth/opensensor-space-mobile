@@ -65,10 +65,10 @@ class AutoSyncRunnerTest {
     }
 
     private fun device(address: String = bleAddr, token: String? = TOKEN, autoSync: Boolean = true, station: String? = gateway.fake.station) =
-        KnownDevice(address, "AQ-6b40", station, "441bf6e26b40", "v5", 1L, 1L, lanToken = token, lanPort = 47390, autoSync = autoSync)
+        KnownDevice(address, "OS-6b40", station, "441bf6e26b40", "v5", 1L, 1L, lanToken = token, lanPort = 47390, autoSync = autoSync)
 
     private fun onLan(station: String = gateway.fake.station) = mapOf(
-        station to LanDevice("AQ-6b40", InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 1, 42)), 47390, mapOf(LanFraming.TXT_STATION to station), 0L)
+        station to LanDevice("OS-6b40", InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 1, 42)), 47390, mapOf(LanFraming.TXT_STATION to station), 0L)
     )
 
     private fun run(onlyAddress: String? = null, allKnown: Boolean = false, lanOnly: Boolean = false): AutoSyncReport {
@@ -100,7 +100,7 @@ class AutoSyncRunnerTest {
         // Discovered under another station: not this device.
         assertEquals(listOf<AutoSyncLink>(BackgroundSyncLink.Ble), BackgroundSyncPolicy.linksFor(device(), onLan("other-station"), bonded = true))
         // Unresolved address: not connectable.
-        val unresolved = mapOf(gateway.fake.station to LanDevice("AQ-6b40", null, 47390, mapOf(LanFraming.TXT_STATION to gateway.fake.station), 0L))
+        val unresolved = mapOf(gateway.fake.station to LanDevice("OS-6b40", null, 47390, mapOf(LanFraming.TXT_STATION to gateway.fake.station), 0L))
         assertTrue(BackgroundSyncPolicy.linksFor(device(), unresolved, bonded = false).isEmpty())
     }
 
@@ -127,7 +127,7 @@ class AutoSyncRunnerTest {
         assertEquals(gateway.fake.files.sumOf { it.bytes.size.toLong() }, report.newBytes)
         assertEquals(0, report.failures)
         assertTrue(report.shouldNotify)
-        assertEquals("AQ-6b40", report.summaryDeviceName)
+        assertEquals("OS-6b40", report.summaryDeviceName)
         assertFalse(report.transientFailure)
         assertEquals(gateway.fake.files.size, gateway.dao.rows.size)
         assertEquals(TransportKind.LAN, report.devices.single().result?.transport)

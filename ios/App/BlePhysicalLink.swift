@@ -409,7 +409,7 @@ actor BlePhysicalLink {
     fileprivate func found(_ peripheral: CBPeripheral, name: String?, rssi: Int32) {
         let id = peripheral.identifier.uuidString
         discovered[id] = peripheral
-        let name = name ?? peripheral.name ?? "AQ sensor"
+        let name = name ?? peripheral.name ?? "Sensor"
         advertisedNames[id] = name
         deliver(0, .found(id: id, name: name, rssi: rssi))
     }

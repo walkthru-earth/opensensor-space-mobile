@@ -11,7 +11,7 @@ import kotlin.test.fail
 class DeviceConfigTest {
     private val full = """{"ble":{"pair":"random","pin":123456,"pin_default":1,"bonds":1,"display":1},""" +
         """"wifi":{"on":1,"ssid":"home","psk_set":1,"state":"connected","ip":"192.168.1.42","rssi":-58,"mac":"e0..6b40"},""" +
-        """"lan":{"on":1,"port":47390,"host":"aq-6b40","clients":0}}"""
+        """"lan":{"on":1,"port":47390,"host":"os-6b40","clients":0}}"""
 
     @Test
     fun `full document parses`() {
@@ -29,7 +29,7 @@ class DeviceConfigTest {
         assertEquals(-58, c.wifi?.rssi)
         assertTrue(c.lan!!.isOn)
         assertEquals(47390, c.lan?.port)
-        assertEquals("aq-6b40", c.lan?.host)
+        assertEquals("os-6b40", c.lan?.host)
         assertEquals(0, c.lan?.clients)
     }
 

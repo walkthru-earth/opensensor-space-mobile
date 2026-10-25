@@ -47,7 +47,7 @@ history stays reachable after a station change. Missing identity fields never ma
 | `dev` changes, or a changed address without continuity | Rejected as an identity mismatch. The user enrolls the replacement |
 
 The app never re-pairs silently, never uses hidden bond APIs, never forgets a bond on its own and
-never sends configuration or reset commands to recover. A name, `AQ-xxxx` suffix, advert boot
+never sends configuration or reset commands to recover. A name, its `OS-xxxx` suffix, advert boot
 field or mDNS TXT never authorises replacing trust. The LAN bearer token authenticates the phone
 to the device, not the reverse, so TXT and INFO comparisons are consistency checks only.
 

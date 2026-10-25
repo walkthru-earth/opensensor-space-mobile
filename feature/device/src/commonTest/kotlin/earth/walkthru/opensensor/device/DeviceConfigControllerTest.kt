@@ -39,7 +39,7 @@ private fun config(wifiState: String = "off", sensor: SensorConfig? = null) = Co
     config = DeviceConfig(
         ble = BleConfig(pair = "random", pin = 123456, pinDefault = 0, bonds = 1, display = 1),
         wifi = WifiConfig(on = 1, ssid = "home", pskSet = 1, state = wifiState),
-        lan = LanConfig(on = 1, port = 47390, host = "aq-6b40", clients = 0),
+        lan = LanConfig(on = 1, port = 47390, host = "os-6b40", clients = 0),
         sensor = sensor,
     ),
     rebootRequired = false,

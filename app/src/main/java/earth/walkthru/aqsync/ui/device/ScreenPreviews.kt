@@ -39,7 +39,7 @@ internal object PreviewFakes {
     fun today(level: DetailLevel) = TodayUiState(
         snapshot = TodaySnapshot(
             address = "AA:BB:CC:DD:EE:FF",
-            name = "AQ-1A2B",
+            name = "OS-1A2B",
             connection = ConnectionState.Ready(247),
             transport = TransportKind.BLE,
             info = info,
@@ -56,7 +56,7 @@ internal object PreviewFakes {
 
     fun device(level: DetailLevel) = DeviceUiState(
         address = "AA:BB:CC:DD:EE:FF",
-        name = "AQ-1A2B",
+        name = "OS-1A2B",
         connection = ConnectionState.Ready(247),
         transport = TransportKind.BLE,
         info = info,

@@ -22,7 +22,7 @@ sequenceDiagram
 
 | Attribute | UUID (`c0a5e9f0-XXXX-4b1a-9c3e-2d7f8a6b4e01`) | Role |
 | --- | --- | --- |
-| SERVICE | `0001` | scan filter; device name prefix `AQ-` |
+| SERVICE | `0001` | the only scan filter. The board name (`OS-xxxx` today) is display data, never matched |
 | INFO | `0002` | read once: `proto`, `fw`, `station`, `max_read`, … |
 | STATUS | `0003` | read + notify: status JSON (≤ 480 B) |
 | LIVE | `0004` | read + notify: live JSON (10-s sample, ≤ 480 B) |

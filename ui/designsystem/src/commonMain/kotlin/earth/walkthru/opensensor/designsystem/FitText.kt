@@ -71,13 +71,13 @@ internal data class FitChoice(val px: Float, val fits: Boolean)
 /** Characters a line may end on without splitting a word: a dash, a slash or a zero width space. */
 private const val BREAK_AFTER = "-/‐–—​"
 
-/** Hyphens that join a compound name such as AQ-7500 or Wi-Fi into one word. */
+/** Hyphens that join a compound name such as OS-7500 or Wi-Fi into one word. */
 private const val JOINING_HYPHENS = "-‐"
 
 /**
  * True when a line of [text] ends inside a word. [lineEnds] are the exclusive end offsets of every
  * line but the last. A break is between words when whitespace sits on either side of it or the line
- * ends on a dash, slash or zero width space. A hyphen between two letters or digits (AQ-7500,
+ * ends on a dash, slash or zero width space. A hyphen between two letters or digits (OS-7500,
  * Wi-Fi) joins one word, so a line may not end on it.
  */
 internal fun breaksInsideWord(text: CharSequence, lineEnds: List<Int>): Boolean = lineEnds.any { end ->

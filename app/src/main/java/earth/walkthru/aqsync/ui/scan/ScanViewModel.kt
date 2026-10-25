@@ -243,12 +243,12 @@ class ScanViewModel @Inject constructor(
     }
 
     fun connectFake() {
-        connectIfIdle(FakeTransport.FAKE_ADDRESS, "AQ-6b40 (fake)", fake = true)
+        connectIfIdle(FakeTransport.FAKE_ADDRESS, "OS-6b40 (fake)", fake = true)
     }
 
     /** Debug: the same fake, behaving like the LAN pipe (payload_max 1024, GET_TOKEN refused). */
     fun connectFakeLan() {
-        connectIfIdle(FakeTransport.FAKE_LAN_ADDRESS, "AQ-6b40 (fake LAN)", fake = true)
+        connectIfIdle(FakeTransport.FAKE_LAN_ADDRESS, "OS-6b40 (fake LAN)", fake = true)
     }
 
     /** Opening a device observes an existing owner; it never interrupts its connection or transfer. */

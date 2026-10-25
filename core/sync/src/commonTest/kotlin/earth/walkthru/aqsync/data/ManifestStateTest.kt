@@ -54,7 +54,7 @@ class ManifestStateTest {
 
     @Test
     fun aSuccessfulRefreshReplacesTheListingAndClearsTheError() {
-        val newer = ManifestState.Loaded(files + Frame.File(8192, "archive/AQ-6b40/date=2026-09-16/part-0002.parquet"), end.copy(count = 2), 2_000L)
+        val newer = ManifestState.Loaded(files + Frame.File(8192, "archive/OS-6b40/date=2026-09-16/part-0002.parquet"), end.copy(count = 2), 2_000L)
         val state = loaded.refreshing().failed("timeout").refreshing().loaded(newer.files, newer.end, newer.atEpochMs)
         assertEquals(newer, state)
         assertEquals(newer, state.last)

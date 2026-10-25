@@ -10,5 +10,4 @@ object AqGatt {
     const val CONTROL = "c0a5e9f0-0005-4b1a-9c3e-2d7f8a6b4e01"
     const val RESPONSE = "c0a5e9f0-0006-4b1a-9c3e-2d7f8a6b4e01"
     const val CCCD = "00002902-0000-1000-8000-00805f9b34fb"
-    const val NAME_PREFIX = "AQ-"
 }
