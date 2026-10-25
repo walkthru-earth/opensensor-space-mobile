@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.archive.StagedFile
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -121,6 +122,8 @@ class FilesControllerTest {
         val onWrite: (() -> Unit)? = null,
         /** Thrown after the zip was written, as a document that fails to flush or close. */
         val closeFailure: String? = null,
+        /** Keeps the sheet or picker open until completed. */
+        val hold: CompletableDeferred<Unit>? = null,
     ) : ExportPresenter {
         var writes = 0
         val shared = mutableListOf<Pair<List<StagedFile>, ShareKind>>()
@@ -148,12 +151,14 @@ class FilesControllerTest {
         override suspend fun share(files: List<StagedFile>, kind: ShareKind): Boolean {
             if (fail) error("no sheet")
             shared += files to kind
+            hold?.await()
             if (waitForever) awaitCancellation()
             return closesNow
         }
         override suspend fun save(file: StagedFile): Boolean {
             if (fail) error("no picker")
             saved += file
+            hold?.await()
             if (waitForever) awaitCancellation()
             return true
         }
@@ -325,6 +330,33 @@ class FilesControllerTest {
         f.controller.saveZip(Presenter(streams = true))
         advanceUntilIdle()
         assertEquals(3, messages.size)
+    }
+
+    @Test
+    fun theSkippedCountWaitsForTheSheetOrPickerToReturn() = runTest {
+        val f = fixture(owner = "s")
+        val messages = mutableListOf<FilesMessage>()
+        collectMessages(f.controller, messages)
+        advanceUntilIdle()
+        f.store.gone += ArchiveKey("s", nameA)
+        val sheet = CompletableDeferred<Unit>()
+        val shared = Presenter(hold = sheet)
+        f.controller.shareZip(shared)
+        advanceUntilIdle()
+        assertEquals(1, shared.shared.size)
+        assertTrue(messages.isEmpty())
+        sheet.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf<FilesMessage>(FilesMessage.Skipped(1)), messages)
+        val picker = CompletableDeferred<Unit>()
+        val saved = Presenter(hold = picker)
+        f.controller.saveZip(saved)
+        advanceUntilIdle()
+        assertEquals(1, saved.saved.size)
+        assertEquals(1, messages.size)
+        picker.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(2, messages.size)
     }
 
     @Test

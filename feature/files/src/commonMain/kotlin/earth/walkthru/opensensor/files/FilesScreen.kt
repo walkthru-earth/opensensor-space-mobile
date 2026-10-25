@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -194,6 +195,8 @@ fun FilesScreen(
                     FilesMessage.NoSpace -> getString(Res.string.files_export_no_space)
                     is FilesMessage.Skipped -> getPluralString(Res.plurals.files_export_skipped, m.count, m.count)
                 },
+                // Android's chooser returns at once, so the count stays up while it is open.
+                duration = if (m is FilesMessage.Skipped) SnackbarDuration.Long else SnackbarDuration.Short,
             )
         }
     }
