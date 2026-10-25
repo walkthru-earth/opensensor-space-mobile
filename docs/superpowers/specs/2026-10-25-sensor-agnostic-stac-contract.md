@@ -407,7 +407,7 @@ Term choice. Use `Station` for the device as the user sees it, `Datastream` for 
 
 ## Tracking
 
-Mobile epic #182 with #183 (core model), #184 (profile resolver and bundled profiles), #185 (LIVE map), #186 (History and tiers), #187 (Today and Devices), #188 (air family plugin), #189 (Discover), #190 (STAC through daily files), #191 (device descriptor fetch) and #192 (renames). Firmware epic walkthru-earth/aq-parquet#83 with #84 to #93 there. The extension schema and examples are in walkthru-earth/stac-opensensor. The firmware audit and review under `docs/shared/stac-contract/` there.
+Mobile epic #182 with #183 (core model), #184 (profile resolver and bundled profiles), #185 (LIVE map), #186 (History and tiers), #187 (Today and Devices), #188 (air family plugin), #189 (Discover), #190 (STAC through daily files), #191 (device descriptor fetch) and #192 (renames). Firmware epic walkthru-earth/aq-parquet#83 with #84 to #93 there. The extension schema and examples are in walkthru-earth/stac-opensensor. The firmware audit and review are under `docs/shared/stac-contract/` there.
 
 ---
 
