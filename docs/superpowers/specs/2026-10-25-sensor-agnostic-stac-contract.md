@@ -486,11 +486,11 @@ A soil station uses the same shape. Its board template comes from its own firmwa
 ### 4.6 Catalog layout on source.coop
 
 Bridge decisions 12, 13 and 16 (2026-10-26) fix the main points.
-- The upload unit is one closed file of at most 1 hour, never a day. Board uploads (aq-parquet #81) send each file as soon as it closes. The phone path (#181, #190) uploads closed files as they arrive and never holds data back to build a day file.
-- Files keep the existing archive layout `station=<uuid>/year=YYYY/month=MM/day=DD/data_HHMM_<boot>_<first>-<last>-<attempt>.parquet`, with no extra prefix.
+- The upload unit is one closed file of at most 1 hour (rotation 600, 900, 1800 or 3600 s), never a day. Board uploads (aq-parquet #81) send each file as soon as it closes. The phone path (#181, #190) uploads closed files as they arrive and never holds data back to build a day file.
+- Files keep the existing archive layout `station=<uuid>/year=YYYY/month=MM/day=DD/data_HHMM_<boot>_<first>-<last>-<attempt>.parquet`, under one board prefix with no `raw/` prefix.
 - Each file stands alone, with a full footer (`dict`, `opensensor:template_sha256`, `sample_interval_ms`, station) and UTC times, so a consumer can use it without waiting for the day.
 - Files describe themselves, so one indexer that reads footers on source.coop builds the station Collection and day Items. The day Item gains one asset per file as files land. Until the indexer exists, the phone writes STAC for the files it uploads.
-- Day compaction is optional, comes later and lives under a separate prefix. Compacted and hour files never share a prefix, or readers count rows twice.
+- Day compaction is optional, comes later and lives under a separate prefix. Compacted files are never mixed with the raw hour files under one prefix, or readers count rows twice.
 
 Edge cases.
 - A reboot inside an hour gives two files for that hour, with different `<boot>`. Both are valid assets.
