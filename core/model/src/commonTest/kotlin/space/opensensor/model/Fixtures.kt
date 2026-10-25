@@ -1,6 +1,6 @@
-package earth.walkthru.aqsync.model
+package space.opensensor.model
 
-/** `templates/cores3-telemetry-v5.json` from walkthru-earth/stac-opensensor v0.1.0, verbatim. */
+/** `templates/cores3-telemetry-v5.json` from walkthru-earth/stac-opensensor main at a017edf, verbatim. */
 internal val CORES3_TEMPLATE = """
 {
   "type": "OpenSensorTemplate",
@@ -86,7 +86,7 @@ internal val CORES3_TEMPLATE = """
             "physicalMeasurement"
           ],
           "cf:standard_name": "mass_concentration_of_pm1_ambient_aerosol_particles_in_air",
-          "opensensor:property": "urn:walkthru-earth:cores3:property:pm1_atmospheric_ug_m3",
+          "opensensor:property": "http://vocab.nerc.ac.uk/standard_name/mass_concentration_of_pm1_ambient_aerosol_particles_in_air/",
           "opensensor:procedure": "pmsa003",
           "opensensor:field_id": 16,
           "opensensor:valid_when": {
@@ -130,7 +130,7 @@ internal val CORES3_TEMPLATE = """
             "physicalMeasurement"
           ],
           "cf:standard_name": "mass_concentration_of_pm10_ambient_aerosol_particles_in_air",
-          "opensensor:property": "urn:walkthru-earth:cores3:property:pm10_atmospheric_ug_m3",
+          "opensensor:property": "http://vocab.nerc.ac.uk/standard_name/mass_concentration_of_pm10_ambient_aerosol_particles_in_air/",
           "opensensor:procedure": "pmsa003",
           "opensensor:field_id": 18,
           "opensensor:valid_when": {
@@ -151,7 +151,7 @@ internal val CORES3_TEMPLATE = """
           "roles": [
             "physicalMeasurement"
           ],
-          "opensensor:property": "urn:walkthru-earth:cores3:property:pm25_cf1_ug_m3",
+          "opensensor:property": "urn:walkthru-earth:property:pm25_cf1_mass_concentration",
           "opensensor:procedure": "pmsa003",
           "opensensor:field_id": 14,
           "opensensor:valid_when": {
@@ -172,7 +172,7 @@ internal val CORES3_TEMPLATE = """
           "roles": [
             "physicalMeasurement"
           ],
-          "opensensor:property": "urn:walkthru-earth:cores3:property:particles_gt03_per_01l",
+          "opensensor:property": "urn:walkthru-earth:property:particle_count_gt_0p3um",
           "opensensor:procedure": "pmsa003",
           "opensensor:field_id": 19,
           "opensensor:valid_when": {
@@ -276,7 +276,7 @@ internal val CORES3_TEMPLATE = """
 
 internal const val CORES3_DICT = "e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b"
 internal const val OTHER_DICT = "0a024b85c632f621c0e1223f1ecafe3a9c4524a1ec3c0d03d910d191aaee2f82"
-internal const val DESC_A = "562e27596c62e8dda6524ee4660f5cb0cb64ec5476196c3425f4907bdf602ab3"
+internal const val DESC_A = "fb4230b3eb6e8eac881c719f900c8bd9c7e4bbd6ad247520a27368ec9d9a7218"
 internal const val DESC_B = "1111111111111111111111111111111111111111111111111111111111111111"
 
 /** A small board template around [columns], a JSON array body. */

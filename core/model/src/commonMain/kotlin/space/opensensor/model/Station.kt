@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.model
+package space.opensensor.model
 
 /**
  * What the app reads from a station Collection (stac-opensensor station profile). Column titles,

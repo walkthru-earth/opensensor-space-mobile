@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.model
+package space.opensensor.model
 
 import kotlin.math.ceil
 import kotlin.math.log10

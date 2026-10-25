@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.model
+package space.opensensor.model
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -78,21 +78,24 @@ class BoardTemplateTest {
     }
 
     @Test
-    fun boardScopedPropertyBecomesBoardNeutral() {
+    fun propertiesAreBoardNeutralAndSensorsCarryTheBoard() {
         val pm1 = cores3.datastream("pm1_atmospheric_ug_m3")!!
-        assertEquals("urn:walkthru-earth:property:pm1_atmospheric_ug_m3", pm1.property?.id)
+        assertEquals(
+            "http://vocab.nerc.ac.uk/standard_name/mass_concentration_of_pm1_ambient_aerosol_particles_in_air/",
+            pm1.property?.id,
+        )
+        assertEquals("urn:walkthru-earth:property:pm25_cf1_mass_concentration", cores3.datastream("pm25_cf1_ug_m3")!!.property?.id)
         assertEquals(Sensor("pmsa003", "cores3-telemetry-v5"), pm1.sensor)
-        // The same quantity on another board joins on the property, the sensor tells them apart.
+        // The same quantity on another board shares the property, the sensor tells them apart.
         val other = BoardTemplate.parse(
             template(
                 """{"name": "pm1", "type": "float", "roles": ["physicalMeasurement"],
-                    "opensensor:property": "urn:walkthru-earth:other:property:pm1_atmospheric_ug_m3",
+                    "opensensor:property": "${pm1.property!!.id}",
                     "opensensor:procedure": "pmsa003"}""",
             ),
         ).datastream("pm1")!!
         assertEquals(pm1.property?.id, other.property?.id)
         assertTrue(pm1.sensor != other.sensor)
-        assertFailsWith<IllegalArgumentException> { ObservedProperty("urn:walkthru-earth:cores3:property:x") }
     }
 
     @Test

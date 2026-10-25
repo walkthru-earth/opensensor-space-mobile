@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.model
+package space.opensensor.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -96,7 +96,7 @@ internal object ModelJson {
         type = type,
         role = roles.firstOrNull()?.let(::Role),
         unit = unit,
-        property = ObservedProperty.of(property, standardName),
+        property = property?.takeIf { it.isNotEmpty() }?.let { ObservedProperty(it, standardName) },
         sensor = procedure?.takeIf { it.isNotEmpty() }?.let { Sensor(it, board) },
         fieldId = fieldId,
         validWhen = validWhen?.let(::gateOf),

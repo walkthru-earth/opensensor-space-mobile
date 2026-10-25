@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.model
+package space.opensensor.model
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

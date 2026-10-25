@@ -29,7 +29,8 @@ derived from the template when none is bundled), `StationCollection`, `Scale`, `
 picks what shows first. `Aggregate`, `Role` and `Family` are open value classes, so an unknown value
 parses (an unknown aggregate rolls up as `point`). The template sample interval is a default, the
 runtime interval and a file footer `sample_interval_ms` win (`Station.sampleIntervalFor`). LIVE
-values are not modelled here. No caller uses it yet.
+values are not modelled here. No caller uses it yet. It is the first module in the `space.opensensor`
+package (`space.opensensor.model`), the rest move in #192.
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log` in any

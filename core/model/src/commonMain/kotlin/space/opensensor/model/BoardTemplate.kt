@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.model
+package space.opensensor.model
 
 /**
  * The key of a board template. [dict] is the firmware dictionary digest from `info` and `HELLO`, always

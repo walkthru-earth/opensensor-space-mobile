@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.model
+package space.opensensor.model
 
 /**
  * One step of a [Scale]. A value belongs to the first step whose [upper] it does not exceed. A null

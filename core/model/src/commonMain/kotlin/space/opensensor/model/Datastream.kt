@@ -1,34 +1,14 @@
-package earth.walkthru.aqsync.model
+package space.opensensor.model
 
 /**
- * The quantity a datastream observes, the same on every board. [id] comes from a shared vocabulary
- * (NERC P07, CF) when the template names one, else it is `urn:walkthru-earth:property:<quantity>`. It
- * never names a board, so two boards that measure the same quantity share it. Which id each quantity
- * gets is still open in the spec, so callers should not join on [standardName].
+ * The quantity a datastream observes, the same on every board. [id] is the template's
+ * `opensensor:property`, a shared vocabulary URI (NERC P07 or a NERC CF standard name) or the local
+ * `urn:walkthru-earth:property:<quantity>`. It never names a board, that lives in [Sensor]. Join on
+ * [id], never on [standardName].
  */
 data class ObservedProperty(val id: String, val standardName: String? = null) {
     init {
         require(id.isNotEmpty()) { "an observed property has an empty id" }
-        require(!BOARD_SCOPED.containsMatchIn(id)) { "property $id names a board" }
-    }
-
-    companion object {
-        /** Prefix of a board-neutral property id the app mints when no shared vocabulary has one. */
-        const val URN_PREFIX = "urn:walkthru-earth:property:"
-
-        /** A `urn:walkthru-earth:<board>:property:<quantity>` id, as early templates wrote them. */
-        private val BOARD_SCOPED = Regex("^urn:walkthru-earth:[^:]+:property:(.+)$")
-
-        /**
-         * The property for a template's `opensensor:property` and `cf:standard_name`, or null when it
-         * has neither. A board-scoped walkthru URN is rewritten to its board-neutral form.
-         */
-        fun of(property: String?, standardName: String?): ObservedProperty? {
-            val id = property?.takeIf { it.isNotEmpty() }?.let { raw ->
-                BOARD_SCOPED.find(raw)?.let { URN_PREFIX + it.groupValues[1] } ?: raw
-            } ?: return null
-            return ObservedProperty(id, standardName)
-        }
     }
 }
 
