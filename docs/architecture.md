@@ -12,6 +12,7 @@ flowchart TB
     PR[":core:protocol<br/>common wire rules + JVM adapters"]
     PQ[":core:parquet<br/>reader + writer, ByteReader, RangeSource, page index, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
     NT[":core:net<br/>HTTP range source, OkHttp and NSURLSession"]
+    MO1[":core:model<br/>board templates, app profiles, datastreams, scales, station join"]
     AQ[":core:airquality<br/>WHO 2021 scales and palette, PM quality checks"]
     HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
     PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample, OpenAQ live feed"]
@@ -82,13 +83,14 @@ the same answer on both phones is shared and platform code only adapts OS servic
 sync engine and one shared collection controller per device (Android through `DeviceFacade`, iOS
 through `SensorCollections`, [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
 iOS Core Bluetooth runs on the `BlePhysicalLink` serial queue. Both phones keep the archive index and
-pruned marks in one Room KMP database, `:core:database`. `:core:model` (device families and metrics as
-data, [devices-and-discovery.md](devices-and-discovery.md)) is planned.
+pruned marks in one Room KMP database, `:core:database`. `:core:model` holds what a station measures
+as data (board template, app profile, datastreams, scales and the station join, #183). No module
+depends on it yet. History, sync and the screens move onto it from #184 onward.
 
 ```mermaid
 flowchart TB
   subgraph shared["Kotlin commonMain, Android and iOS"]
-    MO[":core:model (planned)<br/>devices, families, capabilities, properties, scales"]
+    MO[":core:model<br/>templates, profiles, datastreams, scales"]
     PR2[":core:protocol"]
     SY[":core:sync<br/>LinkSession, engine, collection controller"]
     AR[":core:archive<br/>layout, verifier, records, store ports"]

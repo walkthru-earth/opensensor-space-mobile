@@ -19,6 +19,18 @@ engine and, in `collection/`, the per-device `CollectionController` ([sync guide
 through `DeviceFacade`; iOS uses `IosLink` and `SensorSync` for link and engine adoption,
 and `SensorCollections` for one controller per device, which every native sync entry point
 runs through ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
+`model/` owns what a station measures as data. `BoardTemplate` (parsed from the stac-opensensor
+v0.1.0 board template, keyed by `TemplateKey` of `dict` and an optional `desc`), `TemplateIndex`
+(resolves by `desc` first, then the bundled template keyed by `dict`), `Datastream` (one column or
+one phone-derived stream with its own id and `sourceColumns`, referencing a board-neutral
+`ObservedProperty` and a `Sensor` of procedure and board), `AppProfile` (app owned, keyed by `dict`,
+derived from the template when none is bundled), `StationCollection`, `Scale`, `ValidityGate`, and
+`Station.join`, which joins them. A station keeps every datastream whatever its role, the profile
+picks what shows first. `Aggregate`, `Role` and `Family` are open value classes, so an unknown value
+parses (an unknown aggregate rolls up as `point`). The template sample interval is a default, the
+runtime interval and a file footer `sample_interval_ms` win (`Station.sampleIntervalFor`). LIVE
+values are not modelled here. No caller uses it yet. It is the first module in the `space.opensensor`
+package (`space.opensensor.model`), the rest move in #192.
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log` in any
@@ -31,9 +43,8 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   families arrive as data (a measurement dictionary and a family entry), never as
   a code branch or a schema string check in a screen. Today add metrics through
   `history/.../Metrics.kt` (`MetricSpec`), with column, unit, validity gate and
-  an optional scale. A missing column produces no value. When `:core:model`
-  lands (planned), families, capabilities, properties and scales move
-  there. Read `docs/devices-and-discovery.md` first. New shared types use generic
+  an optional scale. A missing column produces no value. `:core:model` holds
+  the data model they move onto (#183), callers switch from #184 onward. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading`, or a future `MetricCard`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and
   the privacy rules. The phone uses H3 (`publicfeed`, `H3Grid`) for geometry, viewport cover, descendant
