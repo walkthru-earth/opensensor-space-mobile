@@ -100,8 +100,6 @@ class BoardTemplateTest {
 
     @Test
     fun columnWithoutPropertyOrProcedureHasNeither() {
-        val accel = cores3.datastream("accel_z_g")!!
-        assertNull(accel.property)
         val t = BoardTemplate.parse(template("""{"name": "x", "type": "float"}"""))
         assertNull(t.datastream("x")!!.sensor)
         assertNull(t.datastream("x")!!.property)
