@@ -632,7 +632,7 @@ Mobile epic #182 with #183 (core model), #184 (template resolver, bundled templa
 12. Accra demo timing. P1 and P2 change internals only and could land before the demo. P3 changes visible screens and is safer after.
 13. stac-opensensor release. Board neutral property ids are decided (section 3.5) and on stac-opensensor main at `a017edf`. `PROFILE.md:96` at the `v0.1.0` tag still has the board scoped fallback, which conflicts. The profile's single `assets.data` rule for day Items also predates per file assets (bridge decision 16). A stac-opensensor change, a tagged release that carries both, is pending an owner decision.
 14. Boards that upload directly (aq-parquet #81). Decided in bridge decision 12. One indexer that reads footers on source.coop writes the station Collection and day Items. Until it exists, the phone writes STAC for the files it uploads (section 4.6).
-15. The source.coop prefix layout. Decided in bridge decisions 13 and 16. Uploaded files keep the archive layout under one station prefix, and optional day compactions live under a separate prefix that is not named yet (section 4.6).
+15. The source.coop prefix layout. Decided in bridge decisions 13 and 16. Uploaded files keep the archive layout under one station prefix, and optional day compactions live under a separate prefix that is not named yet (section 4.6). Still open is whether source.coop mirrors board templates, for example at `templates/<schema>.json`.
 16. Parquet files already on phones. Decided in bridge decision 14. The app does not need to read them, they are wiped after the matched reflash.
 
 ---
