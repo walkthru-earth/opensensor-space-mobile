@@ -1,8 +1,8 @@
 package space.opensensor.model
 
-import kotlin.math.ceil
-import kotlin.math.log10
+import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.round
 
 /**
  * The app's presentation choices for one firmware dictionary, keyed by [dict]. App owned, bundled and
@@ -53,7 +53,20 @@ data class AppProfile(
             isDerived = true,
         )
 
-        /** Decimals a value shows with at [step]: 0 for `1` or more, 1 for `0.1`, 2 for `0.01` or `0.05`. */
-        fun decimalsOf(step: Double): Int = max(0, ceil(-log10(step) - 1e-9).toInt())
+        /**
+         * Decimals a value shows with at [step], the fewest that write [step] exactly. 0 for `1`, `10`
+         * or `2`, 1 for `0.1` or `0.5`, 2 for `0.01`, `0.05` or `0.25`.
+         */
+        fun decimalsOf(step: Double): Int {
+            var scaled = step
+            for (decimals in 0 until MAX_DECIMALS) {
+                if (abs(scaled - round(scaled)) <= STEP_TOLERANCE * max(1.0, scaled)) return decimals
+                scaled *= 10
+            }
+            return MAX_DECIMALS
+        }
+
+        private const val MAX_DECIMALS = 9
+        private const val STEP_TOLERANCE = 1e-9
     }
 }

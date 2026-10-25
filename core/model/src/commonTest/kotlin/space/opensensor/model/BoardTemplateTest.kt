@@ -103,6 +103,8 @@ class BoardTemplateTest {
         val t = BoardTemplate.parse(template("""{"name": "x", "type": "float"}"""))
         assertNull(t.datastream("x")!!.sensor)
         assertNull(t.datastream("x")!!.property)
+        val empty = BoardTemplate.parse(template("""{"name": "y", "type": "float", "opensensor:property": ""}"""))
+        assertNull(empty.datastream("y")!!.property)
     }
 
     @Test
@@ -115,13 +117,26 @@ class BoardTemplateTest {
     fun templateIndexResolvesByDescThenDict() {
         val bundled = BoardTemplate.parse(CORES3_TEMPLATE)
         val served = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
-        val index = TemplateIndex(listOf(bundled, served))
+        val index = TemplateIndex(bundled = listOf(bundled), served = listOf(served))
         assertSame(served, index.resolve(CORES3_DICT, DESC_A))
         // An unknown desc falls back to the bundled template of the same dictionary.
         assertSame(bundled, index.resolve(CORES3_DICT, DESC_B))
         assertSame(bundled, index.resolve(CORES3_DICT))
         assertNull(index.resolve(OTHER_DICT, DESC_A))
-        assertNull(TemplateIndex(listOf(served)).resolve(CORES3_DICT, DESC_B))
+        // A served template is never the dict fallback.
+        assertNull(TemplateIndex(bundled = emptyList(), served = listOf(served)).resolve(CORES3_DICT, DESC_B))
+    }
+
+    @Test
+    fun bundledTemplateWithADescIsStillTheDictFallback() {
+        val bundled = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
+        val index = TemplateIndex(bundled = listOf(bundled))
+        assertSame(bundled, index.resolve(CORES3_DICT, DESC_A))
+        assertSame(bundled, index.resolve(CORES3_DICT, DESC_B))
+        assertSame(bundled, index.resolve(CORES3_DICT))
+        assertFailsWith<IllegalArgumentException> {
+            TemplateIndex(bundled = listOf(bundled, BoardTemplate.parse(CORES3_TEMPLATE)))
+        }
     }
 
     @Test
@@ -171,16 +186,16 @@ class BoardTemplateTest {
 
     @Test
     fun liveKeyMappingIsPerTemplate() {
-        // Legacy CoreS3 sends the board temperature as `t`, so the same column maps from another key.
+        // Two templates for one dictionary send the same column under different LIVE keys.
         val column = """{"name": "imu_temperature_c", "type": "float", "unit": "Cel", "roles": ["auxiliaryInformation"]}"""
-        val legacy = BoardTemplate.parse(template(column, liveKeys = """{"imu_temperature_c": "t"}"""), desc = DESC_B)
-        val current = BoardTemplate.parse(template(column, liveKeys = """{"imu_temperature_c": "imu_t"}"""), desc = DESC_A)
-        assertEquals("imu_temperature_c", legacy.columnForLiveKey("t"))
-        assertNull(legacy.columnForLiveKey("imu_t"))
-        assertEquals("imu_temperature_c", current.columnForLiveKey("imu_t"))
+        val first = BoardTemplate.parse(template(column, liveKeys = """{"imu_temperature_c": "t"}"""), desc = DESC_B)
+        val second = BoardTemplate.parse(template(column, liveKeys = """{"imu_temperature_c": "imu_t"}"""), desc = DESC_A)
+        assertEquals("imu_temperature_c", first.columnForLiveKey("t"))
+        assertNull(first.columnForLiveKey("imu_t"))
+        assertEquals("imu_temperature_c", second.columnForLiveKey("imu_t"))
         // One dictionary, two templates told apart by desc.
-        assertEquals(legacy.key.dict, current.key.dict)
-        assertTrue(legacy.key != current.key)
+        assertEquals(first.key.dict, second.key.dict)
+        assertTrue(first.key != second.key)
     }
 
     @Test
@@ -212,6 +227,9 @@ class BoardTemplateTest {
         }
         assertFailsWith<IllegalArgumentException> {
             BoardTemplate.parse(template("""{"name": "x", "type": "int32", "opensensor:plausible_range": [1]}"""))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            BoardTemplate.parse(template("""{"name": "x", "type": "float", "opensensor:valid_when": {"column": "x", "finite": false}}"""))
         }
     }
 }

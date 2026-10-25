@@ -148,6 +148,10 @@ class StationTest {
         assertEquals(1, AppProfile.decimalsOf(0.5))
         assertEquals(2, AppProfile.decimalsOf(0.05))
         assertEquals(2, AppProfile.decimalsOf(0.01))
+        assertEquals(2, AppProfile.decimalsOf(0.25))
+        assertEquals(1, AppProfile.decimalsOf(2.5))
+        assertEquals(0, AppProfile.decimalsOf(2.0))
+        assertEquals(3, AppProfile.decimalsOf(0.001))
     }
 
     @Test

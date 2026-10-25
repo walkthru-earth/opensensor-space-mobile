@@ -2,21 +2,24 @@ package space.opensensor.model
 
 /**
  * The key of a board template. [dict] is the firmware dictionary digest from `info` and `HELLO`, always
- * present. [desc] is the SHA-256 of the exact template bytes, null for a bundled template, which is
- * keyed by [dict] alone. A unit or range fix changes [desc] but not [dict]. See [TemplateIndex].
+ * present. [desc] is the SHA-256 of the exact template bytes, null when the caller has none. A unit or
+ * range fix changes [desc] but not [dict]. See [TemplateIndex].
  */
 data class TemplateKey(val dict: String, val desc: String? = null)
 
 /**
- * Finds the template a device or file names. A [TemplateKey.desc] match wins, then the bundled
- * template for the same [TemplateKey.dict]. A served template with another desc is never used as a
- * stand-in, since its units or ranges may differ.
+ * Finds the template a device or file names. A [TemplateKey.desc] match among [bundled] and [served]
+ * wins, then the bundled template for the same [TemplateKey.dict], whether or not it carries a desc. A
+ * served template with another desc is never used as a stand-in, since its units or ranges may differ.
  */
-class TemplateIndex(templates: Iterable<BoardTemplate>) {
+class TemplateIndex(bundled: Iterable<BoardTemplate>, served: Iterable<BoardTemplate> = emptyList()) {
     private val byDesc: Map<String, BoardTemplate> =
-        templates.mapNotNull { t -> t.key.desc?.let { it to t } }.toMap()
-    private val bundledByDict: Map<String, BoardTemplate> =
-        templates.filter { it.key.desc == null }.associateBy { it.dict }
+        (bundled + served).mapNotNull { t -> t.key.desc?.let { it to t } }.toMap()
+    private val bundledByDict: Map<String, BoardTemplate> = bundled.associateBy { it.dict }
+
+    init {
+        require(bundledByDict.size == bundled.count()) { "two bundled templates share a dict" }
+    }
 
     /** The template for [dict] and [desc], or null when none is known. */
     fun resolve(dict: String, desc: String? = null): BoardTemplate? =
