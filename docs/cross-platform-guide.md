@@ -284,7 +284,7 @@ The rules for a new screen or component.
    line. A word wider than its line even at the floor keeps shrinking until it fits whole, down to
    `MinFraction` (50 percent). Only past that does the label draw on one line at 50 percent with an
    ellipsis. Its semantics keep the full text, so screen readers read all of it. A hyphen between two
-   letters or digits (AQ-7500, Wi-Fi) joins one word, so no line ends on it. Body text and info sheet
+   letters or digits (OS-7500, Wi-Fi) joins one word, so no line ends on it. Body text and info sheet
    paragraphs use `BodyText`, which keeps the user's full size and shrinks only when one word is wider
    than the line, down to the same 50 percent. `SectionTabs` measures its labels at the floor and switches to
    `PrimaryScrollableTabRow` when they do not all fit their equal slots, so a tab never wraps or

@@ -58,7 +58,7 @@ class ScanClearanceTest {
         val rows = (1..setup.known).map {
             DeviceRow(
                 id = "AA:BB:CC:DD:EE:" + it.toString().padStart(2, '0'),
-                name = "AQ-$it",
+                name = "OS-$it",
                 station = null,
                 rssi = null,
                 bonded = true,

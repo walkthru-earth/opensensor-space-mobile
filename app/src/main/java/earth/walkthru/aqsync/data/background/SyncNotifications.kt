@@ -36,10 +36,10 @@ import javax.inject.Singleton
  * Builds the two notifications the app ever posts, so the foreground service and the WorkManager
  * worker show the same thing:
  *
- * - the **ongoing progress** notification while files are being pulled ("AQ-6b40 · 12/776 files ·
+ * - the **ongoing progress** notification while files are being pulled ("OS-6b40 · 12/776 files ·
  *   1.8 MiB", current file, a Stop action), and
  * - the **summary** after a background sync that actually brought new files ("Synced 23 new files
- *   from AQ-6b40 · 1.1 MiB"), which opens the app on tap. Nothing is posted when nothing was new.
+ *   from OS-6b40 · 1.1 MiB"), which opens the app on tap. Nothing is posted when nothing was new.
  *
  * Channels are created lazily and idempotently. Posting requires `POST_NOTIFICATIONS` on API 33+;
  * when it was denied the foreground service still runs (Android just hides its notification) and

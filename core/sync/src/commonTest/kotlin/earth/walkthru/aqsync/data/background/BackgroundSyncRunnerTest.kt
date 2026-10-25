@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 
 /** The shared background run against a fake gateway, the same rules Android's worker and iOS's BGTask follow. */
 class BackgroundSyncRunnerTest {
-    private data class Dev(override val address: String, override val name: String? = "AQ-6b40", override val station: String? = "st-$address", override val hasLanToken: Boolean = true) : BackgroundSyncDevice
+    private data class Dev(override val address: String, override val name: String? = "OS-6b40", override val station: String? = "st-$address", override val hasLanToken: Boolean = true) : BackgroundSyncDevice
 
     private data class Target(val station: String, override val isConnectable: Boolean = true) : BackgroundLanTarget
 
@@ -105,7 +105,7 @@ class BackgroundSyncRunnerTest {
         assertTrue(report.shouldNotify)
         assertEquals("2 loggers", report.summaryDeviceName)
         assertFalse(report.transientFailure)
-        assertTrue(log.any { it == "auto-sync AQ-6b40 over LAN: connect failed" })
+        assertTrue(log.any { it == "auto-sync OS-6b40 over LAN: connect failed" })
     }
 
     @Test
@@ -156,12 +156,12 @@ class BackgroundSyncRunnerTest {
     @Test
     fun failuresNotifyWithTheDeviceName() = runTest {
         val gw = FakeGateway(auto = listOf(Dev("a", name = null), Dev("b")), bonded = setOf("a", "b"))
-        gw.outcomes["a" to "BLE"] = { d -> BackgroundSyncResult(d.address, "AQ-0001", TransportKind.BLE, 0, 0, 2) }
+        gw.outcomes["a" to "BLE"] = { d -> BackgroundSyncResult(d.address, "OS-0001", TransportKind.BLE, 0, 0, 2) }
         gw.outcomes["b" to "BLE"] = { d -> BackgroundSyncResult(d.address, d.name, TransportKind.BLE, 0, 0, 0) }
         val report = BackgroundSyncRunner(gw).run()
         assertEquals(2, report.failures)
         assertTrue(report.shouldNotify)
-        assertEquals("AQ-0001", report.summaryDeviceName)
+        assertEquals("OS-0001", report.summaryDeviceName)
         assertEquals(listOf("a"), report.devicesWithNews.map { it.device.address })
     }
 

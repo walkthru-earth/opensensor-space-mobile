@@ -18,7 +18,7 @@ import javax.inject.Singleton
 
 /** One `_aqsync._tcp` instance on the current network, resolved. */
 data class LanDevice(
-    /** DNS-SD instance name = BLE local name, `AQ-xxxx`. */
+    /** DNS-SD instance name, the BLE local name such as `OS-6b40`. Display data only. */
     val serviceName: String,
     val host: InetAddress?,
     val port: Int,

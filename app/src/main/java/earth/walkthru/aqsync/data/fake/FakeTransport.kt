@@ -55,7 +55,7 @@ class FakeTransport(
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : AqTransport {
 
-    override val displayName: String = "AQ-6b40"
+    override val displayName: String = "OS-6b40"
     override val kind: TransportKind = if (simulateLan) TransportKind.LAN else TransportKind.FAKE
     override val endpoint: String get() = if (simulateLan) "fake 192.168.1.42:47390" else "in-process fake"
 
@@ -79,7 +79,7 @@ class FakeTransport(
 
     // --------------------------------------------------------------- device state
 
-    // Identities observed on real hardware (bench run 2026-09, AQ-6b40) so fixtures look authentic.
+    // Identities observed on real hardware (CoreS3 bench run 2026-09) so fixtures look authentic.
     val bootId = "b41d37a48c04031e9397e28ce48c2f43"
     val maxRead = 16_384
 
@@ -407,7 +407,7 @@ class FakeTransport(
         val mac = "e0:5a:1b:f6:6b:40"
         return """{"ble":{"pair":"${pendingPairMode ?: pairMode}","pin":$effectivePin,"pin_default":${if (effectivePin == 123_456) 1 else 0},"bonds":$bonds,"display":$display},""" +
             """"wifi":{"on":${if (wifiOn) 1 else 0},"ssid":"${ssid.replace("\"", "\\\"")}","psk_set":${if (pskSet) 1 else 0},"state":"$wifiState","ip":"$wifiIp","rssi":$wifiRssi,"mac":"$mac"},""" +
-            """"lan":{"on":${if (lanOn) 1 else 0},"port":$LAN_PORT,"host":"aq-6b40","clients":$lanClients}}"""
+            """"lan":{"on":${if (lanOn) 1 else 0},"port":$LAN_PORT,"host":"os-6b40","clients":$lanClients}}"""
     }
 
     /** Validate every line first (one bad key rejects all), then apply. Returns the bad key or null. */
@@ -473,7 +473,7 @@ class FakeTransport(
                 wifiIp = "192.168.1.42"
                 wifiRssi = -58
                 logLine("WIFI CONNECTED ip=$wifiIp rssi=$wifiRssi")
-                if (lanOn) logLine("LAN LISTEN port=$LAN_PORT mdns=_aqsync._tcp host=aq-6b40")
+                if (lanOn) logLine("LAN LISTEN port=$LAN_PORT mdns=_aqsync._tcp host=os-6b40")
             } else {
                 wifiState = "failed"
                 logLine("WIFI FAILED ssid=$ssid (fake: only 'home', 'walkthru-field', 'CoffeeShop Guest' exist)")

@@ -13,7 +13,7 @@ import java.io.OutputStream
  * 5 s of connecting.
  */
 object LanFraming {
-    /** DNS-SD service type; the instance name is the BLE local name (`AQ-xxxx`). */
+    /** DNS-SD service type; the instance name is the BLE local name (`OS-xxxx`). */
     const val SERVICE_TYPE = LanProtocol.SERVICE_TYPE
     const val SERVICE_TYPE_DOT = LanProtocol.SERVICE_TYPE_DOT
     const val DEFAULT_PORT = LanProtocol.DEFAULT_PORT

@@ -81,4 +81,16 @@ class NearbyAdvertsTest {
         adverts.collect(one)
         assertEquals(2, touches)
     }
+
+    @Test
+    fun `every advert under the service UUID is listed whatever its name`() = runTest {
+        val adverts = NearbyAdverts(touch = {}, nowMs = { testScheduler.currentTime })
+        val events = flow {
+            emit(BleScanner.Event.Seen(ScannedDevice("AA:BB", "OS-89ab", -50, false, 0)))
+            emit(BleScanner.Event.Seen(ScannedDevice("CC:DD", "SL-0001", -50, false, 0)))
+            emit(BleScanner.Event.Seen(ScannedDevice("EE:FF", null, -50, false, 0)))
+        }
+        adverts.collect(events)
+        assertEquals(mapOf("AA:BB" to "OS-89ab", "CC:DD" to "SL-0001", "EE:FF" to null), adverts.seen.value.mapValues { it.value.name })
+    }
 }

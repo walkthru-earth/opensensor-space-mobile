@@ -134,9 +134,9 @@ class FitTextTest {
     fun aLineEndInsideAWordIsAMidWordBreak() {
         assertTrue(breaksInsideWord("أجهزتي", listOf(5)))
         assertTrue(breaksInsideWord("History", listOf(5)))
-        assertTrue(breaksInsideWord("AQ-7500", listOf(5)))
+        assertTrue(breaksInsideWord("OS-7500", listOf(5)))
         // A hyphen between letters or digits joins one word.
-        assertTrue(breaksInsideWord("AQ-7500", listOf(3)))
+        assertTrue(breaksInsideWord("OS-7500", listOf(3)))
         assertTrue(breaksInsideWord("Wi-Fi on", listOf(3)))
         assertFalse(breaksInsideWord("PM2.5 / PM10", listOf(7)))
         assertFalse(breaksInsideWord("10–20", listOf(3)))

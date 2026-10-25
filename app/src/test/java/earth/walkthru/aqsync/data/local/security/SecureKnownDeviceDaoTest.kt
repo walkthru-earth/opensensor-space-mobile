@@ -186,7 +186,7 @@ class SecureKnownDeviceDaoTest {
         autoSync: Boolean = false,
     ) = KnownDevice(
         address = address,
-        name = "AQ-test",
+        name = "OS-test",
         station = "station",
         deviceId = "device",
         firmware = "firmware",

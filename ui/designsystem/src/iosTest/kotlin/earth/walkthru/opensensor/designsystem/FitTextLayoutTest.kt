@@ -146,7 +146,7 @@ class FitTextLayoutTest {
     fun aStationTitleOrAScreenTitleNeverSplitsAWord() {
         // The station name beside the header actions (#143) and the Arabic My devices title (#144).
         for (setup in setups) {
-            val title = if (setup.arabic) "أجهزتي" else "AQ-7500"
+            val title = if (setup.arabic) "أجهزتي" else "OS-7500"
             runComposeUiTest {
                 setContent { Scene(setup) { Box(Modifier.width(110.dp)) { FitText(title, style = MaterialTheme.typography.headlineMedium) } } }
                 val layout = layoutOf(title)
@@ -252,7 +252,7 @@ class FitTextLayoutTest {
 
     @Test
     fun noLineEverEndsInsideAWordAtAnyWidth() {
-        val texts = listOf("Synchronisation", "Archive synchronisation", "AQ-7500 station", "المزامنة والمسؤوليات")
+        val texts = listOf("Synchronisation", "Archive synchronisation", "OS-7500 station", "المزامنة والمسؤوليات")
         val widths = (24..360 step 8).map { it.dp }
         for (scale in listOf(1f, 2f)) {
             for (text in texts) {
