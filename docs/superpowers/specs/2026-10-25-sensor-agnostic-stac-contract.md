@@ -182,7 +182,7 @@ Conclusion. Use STAC for discovery and file-level description. Borrow SensorThin
 | Parquet file | none | Asset with `file:size`, `file:checksum`, roles `data`, `table:row_count` and core `statistics` per column | file in archive |
 | Discover aggregate | none | Collection `discover-cells` with assets per `h3_res`, `table:columns` from the feed dictionary | `FeedProperty` and `manifest.json` |
 
-Why Item per day and not per file. A station writes about 35,000 files per year at 15 minute rotation. Per-day Items give 365 per year, line up with the Hive layout and with the app's existing daily Parquet builder, and keep catalogs well under the 1 MB guidance. Unsynced device files also cannot be valid Items, because STAC needs `datetime` or a start and end, and those files have null UTC on every row. Only the phone's reconciled daily files have a real range. A full day has 86400 divided by the interval rows, 8640 at today's 10 s. The interval is the per file footer `sample_interval_ms`, never an assumed 10 s, because aq-parquet #90 makes it runtime config. RTC-restored days are dated but approximate, which the day Item shows through the core `statistics` of its `clock_status` column. A station UUID lives in NVS and follows the board when it moves, so the H3 cell and time range tell deployments apart.
+Why Item per day with one asset per file. The upload unit is one closed file of at most 1 hour (bridge decision 16, rotation 600, 900, 1800 or 3600 s, never longer). A station writes about 35,000 files per year at 15 minute rotation, so an Item per file would flood the catalog. Per-day Items give 365 per year, line up with the Hive `day=` partition and keep catalogs well under the 1 MB guidance. The day Item gains one asset per file as files land, so a near real time reader never waits for the day. A file is uploaded only with UTC times on its rows, because STAC needs a start and end and device files written before a clock sync have null UTC. A full day has 86400 divided by the interval rows, 8640 at today's 10 s. The interval is the per file footer `sample_interval_ms`, never an assumed 10 s, because aq-parquet #90 makes it runtime config. RTC-restored days are dated but approximate, which the day Item shows through the core `statistics` of its `clock_status` column. A station UUID lives in NVS and follows the board when it moves, so the H3 cell and time range tell deployments apart.
 
 ### 4.2 Who owns what
 
@@ -208,7 +208,7 @@ Keeping labels and health scales out of firmware means WHO, EPA or national scal
    - The descriptor is the board template, never app profile labels or scales. Its own digest (`desc`) is the SHA-256 of the generated template bytes, the same value as `file:checksum` on the station Collection's template link. `dict` keeps covering only `telemetry_fields.inc`, so released app profiles stay valid while units and column semantics evolve. `desc` needs the same three gates as `dict` today (`tools/build-idf-board.sh:19-23` and both contract tests), or it will drift.
    - Cost. Today's bare CoreS3 dictionary is already 15.4 KB minified (about 1.9 KB zlib). A full board template with UCUM units, CF names, roles and code classes for all 81 columns is likely 25 to 40 KB raw. The app slot is 6 MB on both boards, so that is still under 1 percent. No ESP-IDF image size is recorded yet, the 1.4 MB figure is from Arduino builds. RAM cost is near zero because chunks stream from `.rodata` into the existing frame buffer. Serving raw JSON avoids a gzip dependency on the phone.
    - Footer. Do not embed the board template in each Parquet file. A full Collection exceeds the 4096 byte value cap, and `table-and-observation-model.md:114` already rules out repeating descriptions in every small file. Add two keys instead, `opensensor:template_href` (pinned URL or `urn:opensensor:template:<board>:<desc sha>`) and `opensensor:template_sha256`, about 260 bytes per file. Pass them as board metadata, which only counts against the 32 board slots (CoreS3 goes from 5 to 7, Waveshare from 13 to 15). No budget change is needed. Never raise `kFooterMetadata` alone, because the writer's literal 64 would then fail every file.
-4. Self-describing exports. When the phone exports or publishes a daily Parquet file, write the station Collection into the footer under the `stac-geoparquet` key, `collections` map. A file then stands alone on source.coop or in DuckDB. `DailyParquetBuilder.kt:488` copies a fixed key list (`COPIED_METADATA`), so it must also copy `opensensor:template_href` and `opensensor:template_sha256` or they never reach published files. No `stac:*` footer keys exist. `sample_interval_ms` is already in that list.
+4. Self-describing exports. When the phone uploads a closed file or exports a Parquet file, write the station Collection into the footer under the `stac-geoparquet` key, `collections` map. A file then stands alone on source.coop or in DuckDB. `DailyParquetBuilder.kt:488` copies a fixed key list (`COPIED_METADATA`), so it must also copy `opensensor:template_href` and `opensensor:template_sha256` or they never reach published files. No `stac:*` footer keys exist. `sample_interval_ms` is already in that list.
 
 Resolution on the phone.
 - Template identity is `dict` (always known) plus `desc` (optional). Once a template carries `desc`, resolve by `desc` first, then `dict`, because a unit or range fix changes `desc` without `dict`. Bundled hand templates are found by `dict` only. App profiles stay keyed by `dict`.
@@ -300,6 +300,8 @@ Station profile. The [OpenSensor Station Profile](https://github.com/walkthru-ea
 | `start_datetime` and `end_datetime` cover the UTC day, `datetime` is null | Day Item | MUST |
 | `assets.data` is the Parquet file with `table:row_count` | Day Item | MUST |
 | Measurement columns carry core `statistics` for the day | Day Item | SHOULD |
+
+The profile's single `assets.data` rule predates bridge decision 16. A day Item now carries one asset per uploaded file, and a compacted day file later as one more asset, so the profile needs a matching change (section 8).
 
 H3 resolution. The profile conventions say resolution 8 by default, and its examples use a res 8 cell. This app's device default is 5 (`AGENTS.md:40`, `docs/device-location.md:8`). The owner's chosen cell, default 5, governs every public Item and Collection. The Collection `extent.spatial.bbox` is that cell's bounds, never the fix. The res 8 values in the examples below come from the upstream example.
 
@@ -477,24 +479,39 @@ Shortened from `examples/collection.json` in stac-opensensor. The station Collec
 }
 ```
 
-A day Item (`examples/item.json`) lists Table, Grid v1.1.0, Anonymized Location v1.0.0, the extension and the station profile in `stac_extensions`. Its geometry is the owner's H3 cell polygon, its properties carry `grid:code` such as `H3-887576970bfffff`, `anon:size`, `anon:warning`, `start_datetime` and `end_datetime` for the UTC day and `datetime` null, and its `data` asset has `table:row_count` 8640 (a full day at that file's 10 s footer interval) and `table:columns` with only `name`, `type` and core `statistics`.
+A day Item (`examples/item.json`) lists Table, Grid v1.1.0, Anonymized Location v1.0.0, the extension and the station profile in `stac_extensions`. Its geometry is the owner's H3 cell polygon, its properties carry `grid:code` such as `H3-887576970bfffff`, `anon:size`, `anon:warning`, `start_datetime` and `end_datetime` for the UTC day and `datetime` null, and its `data` asset has `table:row_count` 8640 (a full day at that file's 10 s footer interval) and `table:columns` with only `name`, `type` and core `statistics`. The upstream example shows one day file. Under bridge decision 16 the Item instead gains one asset per uploaded file of at most 1 hour, each with its own `file:checksum`, `table:row_count` and statistics, and an optional compacted day file is added later as another asset.
 
 A soil station uses the same shape. Its board template comes from its own firmware build, with columns such as `soil_moisture_pct` (unit `%`), `soil_temperature_c` (unit `Cel`) and `soil_ec_us_cm` (unit `uS/cm`), and its station Collection has no scale. Its app profile sets `family` to `soil`. The app shows it with neutral colours and needs no code change.
 
 ### 4.6 Catalog layout on source.coop
 
-Bridge decisions 12 and 13 (2026-10-26) fix two points. Files describe themselves, so one indexer that reads footers on source.coop builds the station Collection and day Items. The phone (#190) and a board upload (#81) write only Parquet with full footers. Until the indexer exists, the phone writes STAC for the files it uploads. Raw board files go under `raw/station=<id>/` and daily files from the phone or the indexer under `daily/station=<id>/`, never both under one prefix. The rest of the layout below is a proposal. App profiles are not part of the layout, they ship inside the app.
+Bridge decisions 12, 13 and 16 (2026-10-26) fix the main points.
+- The upload unit is one closed file of at most 1 hour, never a day. Board uploads (aq-parquet #81) send each file as soon as it closes. The phone path (#181, #190) uploads closed files as they arrive and never holds data back to build a day file.
+- Files keep the existing archive layout `station=<uuid>/year=YYYY/month=MM/day=DD/data_HHMM_<boot>_<first>-<last>-<attempt>.parquet`, with no extra prefix.
+- Each file stands alone, with a full footer (`dict`, `opensensor:template_sha256`, `sample_interval_ms`, station) and UTC times, so a consumer can use it without waiting for the day.
+- Files describe themselves, so one indexer that reads footers on source.coop builds the station Collection and day Items. The day Item gains one asset per file as files land. Until the indexer exists, the phone writes STAC for the files it uploads.
+- Day compaction is optional, comes later and lives under a separate prefix. Compacted and hour files never share a prefix, or readers count rows twice.
+
+Edge cases.
+- A reboot inside an hour gives two files for that hour, with different `<boot>`. Both are valid assets.
+- A board that was offline uploads many past hours at once. Order by file times, never by upload time.
+- A re-upload with a new `<attempt>` replaces the same rows. Consumers deduplicate by station plus time.
+- `FLUSH` gives a short file, which is fine.
+
+The tree below is a proposal beyond those points. App profiles are not part of the layout, they ship inside the app.
 
 ```text
 opensensor-space/
   catalog.json                       STAC Catalog, one child link per station
   templates/
     <schema>.json                    board template, cached forever by digest
-  raw/station=<id>/                  raw board files from direct uploads (aq-parquet #81)
-  daily/station=<id>/
+  station=<uuid>/
     collection.json                  station Collection, columns in item_assets, describedby links to the dictionary and the template
-    year=<yyyy>/month=<mm>/day=<dd>/ the day's Parquet file and its day Item
+    year=YYYY/month=MM/day=DD/
+      data_HHMM_<boot>_<first>-<last>-<attempt>.parquet   one closed file of at most 1 hour
+      item.json                      day Item, one asset per file
     items.parquet                    stac-geoparquet mirror of the day Items
+  <compaction prefix>/              optional later day files, prefix not decided
   discover/
     collection.json                  H3 aggregates, replaces manifest.json
     cells/h3_res=<n>/data.parquet
@@ -539,13 +556,13 @@ AQ science becomes one plugin, not core logic. Move `:core:airquality` to `:fami
 
 ### 5.4 Rename map
 
-Owner decision 2026-10-26 (ecosystem bridge). No backward compatibility right now, and nothing is frozen. Wire and file contract changes land in lockstep with aq-parquet `docs/shared/` and the bridge, before or with the mobile PR that reads them. Room may migrate destructively. The app does not need to read Parquet files already on phones or bench SD cards (bridge decision 14), they are wiped after the matched reflash.
+Owner decision 2026-10-26 (ecosystem bridge). No backward compatibility right now, and nothing is frozen. Wire and file contract changes land in lockstep with aq-parquet `docs/shared/` and the bridge, before or with the mobile PR that reads them. Any PR that touches `docs/shared/`, footer keys, LIVE, BLE or a digest adds a line to the bridge Log in the same step (bridge decision 15). Room may migrate destructively. The app does not need to read Parquet files already on phones or bench SD cards (bridge decision 14), they are wiped after the matched reflash.
 
 | Name | How it changes |
 | --- | --- |
 | `applicationId`, `namespace`, iOS bundle id, test ids | #192 renames them to `space.opensensor.app` (iOS tests `space.opensensor.app.tests`), approved by the owner. Bench phones get a fresh install, logged in `.handoff/pending-hardware.md` |
 | BLE base UUID, `AQ-` advert prefix, `_aqsync._tcp`, `aq-XXXX` LAN host | Wire contract, in lockstep with firmware. #90 moves the prefix to `OS-` and the host to `os-xxxx`, so the app scans by GATT service UUID. UUIDs, `_aqsync._tcp` and `AQS1` move later in firmware #93 |
-| LIVE keys, Parquet column names, footer keys, Hive paths | File contract, in lockstep with aq-parquet `docs/shared/`. Daily files go under `daily/station=<id>/` (#190) |
+| LIVE keys, Parquet column names, footer keys, Hive paths | File contract, in lockstep with aq-parquet `docs/shared/`. Uploaded files keep the archive layout `station=<uuid>/year=YYYY/month=MM/day=DD/data_HHMM_<boot>_<first>-<last>-<attempt>.parquet` (bridge decision 16) |
 | `aq-sync.db`, `aqsync_lan_token_v1`, `aqblocks1` | Persisted on phones. Rename freely, with a destructive migration where needed |
 
 Rename (app side, #192).
@@ -595,13 +612,13 @@ Term choice. Use `Station` for the device as the user sees it, `Datastream` for 
 
 ## Tracking
 
-Mobile epic #182 with #183 (core model), #184 (template resolver, bundled templates and app profiles), #185 (LIVE map), #186 (History and tiers), #187 (Today and Devices), #188 (air family plugin), #189 (Discover), #190 (STAC through daily files), #191 (device descriptor fetch) and #192 (renames). Firmware epic walkthru-earth/aq-parquet#83 with #84 to #93 there. The extension is released as v0.1.0 in walkthru-earth/stac-opensensor, with schema, examples and the overlap review in `docs/overlap-review-2026-10-25.md`. The same release holds the [station profile](https://github.com/walkthru-earth/stac-opensensor/blob/a017edfa6cf5eb04f612c42f8473a52aef9d7f22/PROFILE.md) with its schema `https://walkthru-earth.github.io/stac-opensensor/v0.1.0/profile.json`, the template schema `https://walkthru-earth.github.io/stac-opensensor/v0.1.0/template.json` and the CoreS3 board template `templates/cores3-telemetry-v5.json`. Main at commit `a017edf` makes property URIs board neutral and changes the CoreS3 template checksum, so this spec pins PROFILE.md and the template to that commit. `npm run check-profile` there validates the examples and checks that station columns and checksums match the template. Upstream proposals are open on github.com/stac-extensions as table#16, table#17, classification#55 and cf#11. The firmware audit and review are under `docs/shared/stac-contract/` there.
+Mobile epic #182 with #183 (core model), #184 (template resolver, bundled templates and app profiles), #185 (LIVE map), #186 (History and tiers), #187 (Today and Devices), #188 (air family plugin), #189 (Discover), #190 (STAC and footer copy for uploaded files), #191 (device descriptor fetch) and #192 (renames). Firmware epic walkthru-earth/aq-parquet#83 with #84 to #93 there. The extension is released as v0.1.0 in walkthru-earth/stac-opensensor, with schema, examples and the overlap review in `docs/overlap-review-2026-10-25.md`. The same release holds the [station profile](https://github.com/walkthru-earth/stac-opensensor/blob/a017edfa6cf5eb04f612c42f8473a52aef9d7f22/PROFILE.md) with its schema `https://walkthru-earth.github.io/stac-opensensor/v0.1.0/profile.json`, the template schema `https://walkthru-earth.github.io/stac-opensensor/v0.1.0/template.json` and the CoreS3 board template `templates/cores3-telemetry-v5.json`. Main at commit `a017edf` makes property URIs board neutral and changes the CoreS3 template checksum, so this spec pins PROFILE.md and the template to that commit. `npm run check-profile` there validates the examples and checks that station columns and checksums match the template. Upstream proposals are open on github.com/stac-extensions as table#16, table#17, classification#55 and cf#11. The firmware audit and review are under `docs/shared/stac-contract/` there.
 
 ---
 
 ## 8. Open questions for the owner
 
-1. Item granularity. Per day from the phone's reconciled files (recommended here) or per dated device file (the firmware audit). Both reviews agree unsynced files never become Items.
+1. Item granularity. Decided in bridge decision 16. One day Item per station and UTC day, with one asset per uploaded file of at most 1 hour. Files without UTC times are never uploaded.
 2. Collection shape. Decided by the station profile. One Collection per station keeps per-station licensing and extents, and the per-schema facts the firmware audit wanted in one place live once in the board template. Discover keeps its own aggregate Collection.
 3. Health scales live in station Collections as `opensensor:scales`, filled from the app side scale registry (recommended). Can firmware ship them too.
 4. Name of the custom extension prefix. `opensensor:` is released as v0.1.0 in walkthru-earth/stac-opensensor. A neutral prefix such as `obs:` would help other networks adopt it.
@@ -613,9 +630,9 @@ Mobile epic #182 with #183 (core model), #184 (template resolver, bundled templa
 10. Is `pms_status 6` (#39) planned before or after the descriptor, since it moves `dict`.
 11. For LoRa-only boards (PR #68), is a board template lookup by digest on source.coop enough, since they cannot use the opcode.
 12. Accra demo timing. P1 and P2 change internals only and could land before the demo. P3 changes visible screens and is safer after.
-13. stac-opensensor release. Board neutral property ids are decided (section 3.5) and on stac-opensensor main at `a017edf`. `PROFILE.md:96` at the `v0.1.0` tag still has the board scoped fallback, which conflicts. A stac-opensensor change, a tagged release that carries the rule, is pending an owner decision.
+13. stac-opensensor release. Board neutral property ids are decided (section 3.5) and on stac-opensensor main at `a017edf`. `PROFILE.md:96` at the `v0.1.0` tag still has the board scoped fallback, which conflicts. The profile's single `assets.data` rule for day Items also predates per file assets (bridge decision 16). A stac-opensensor change, a tagged release that carries both, is pending an owner decision.
 14. Boards that upload directly (aq-parquet #81). Decided in bridge decision 12. One indexer that reads footers on source.coop writes the station Collection and day Items. Until it exists, the phone writes STAC for the files it uploads (section 4.6).
-15. The source.coop prefix layout. Decided in bridge decision 13. Raw board files go under `raw/station=<id>/` and daily files under `daily/station=<id>/` (section 4.6).
+15. The source.coop prefix layout. Decided in bridge decisions 13 and 16. Uploaded files keep the archive layout under one station prefix, and optional day compactions live under a separate prefix that is not named yet (section 4.6).
 16. Parquet files already on phones. Decided in bridge decision 14. The app does not need to read them, they are wiped after the matched reflash.
 
 ---
