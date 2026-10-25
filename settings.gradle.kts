@@ -25,6 +25,8 @@ include(":app")
 include(":core:protocol")
 include(":core:parquet")
 include(":core:history")
+// The shared model of what a station measures: board templates, app profiles, datastreams, scales (#183).
+include(":core:model")
 // The public Discover feed: port, H3, viewport cover, bundled sample (docs/devices-and-discovery.md).
 include(":core:publicfeed")
 // Display units, metric or imperial, for every screen on both platforms (docs/screens.md, Settings).

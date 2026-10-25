@@ -124,9 +124,9 @@ Air quality is one family among many. Follow "Adding a device family" in
 [devices-and-discovery.md](devices-and-discovery.md). In short, the firmware contract names the
 properties, the metric registry gets a dictionary entry with `commonTest` coverage, and screens
 pick it up through capabilities. Never a schema string check in a screen. Today the registry is
-`Metrics` and `DeviceCapabilities` in `:core:history`. `:core:model`, `DeviceFamily` and a generic
-`MetricCard` are planned ([devices-and-discovery.md](devices-and-discovery.md)) and do not exist
-yet.
+`Metrics` and `DeviceCapabilities` in `:core:history`. `:core:model` holds the board template, app
+profile and datastream model that replaces them (#183), with no caller yet. A generic `MetricCard`
+is planned ([devices-and-discovery.md](devices-and-discovery.md)).
 
 ## Design parity
 

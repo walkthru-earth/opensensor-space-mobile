@@ -2,7 +2,7 @@
 
 **Scope:** how the app supports any sensor family (air quality is one of many), and how a new user
 sees public sensor data near them on first open through a privacy-preserving H3 map.
-**Code:** `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/`, planned `:core:model`. **Related:**
+**Code:** `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/`, `core/model/`. **Related:**
 [cross-platform-guide.md](cross-platform-guide.md),
 `../aq-parquet/docs/shared/table-and-observation-model.md`.
 
@@ -62,8 +62,8 @@ Rules.
 
 1. The firmware repository documents the family's wire and measurement contract in
    `../aq-parquet/docs/shared/` (or its own contract repo).
-2. Add its dictionary and a `DeviceFamily` entry in `:core:model` `commonMain`, with tests in
-   `commonTest` that parse a real file from that family.
+2. Bundle its board template (keyed by `dict`) and, if the derived default is not enough, an
+   `AppProfile` for that `dict`, with `:core:model` tests in `commonTest` that parse them.
 3. If it uses a new transport, follow "Adding a transport" in the cross-platform guide.
 4. Optional. A family may provide a hero component (the air-quality mood face is one). Without
    one, the generic `MetricCard` is used.
@@ -685,7 +685,7 @@ starts with the target layout from the producer guidance.
 
 | Module | Owns |
 | --- | --- |
-| `:core:model` | `Device`, `DeviceFamily`, `Capability`, `ObservedProperty`, `Scale`, registry |
+| `:core:model` | `BoardTemplate`, `TemplateKey`, `TemplateIndex`, `Datastream`, `ObservedProperty`, `Sensor`, `AppProfile`, `Family`, `StationCollection`, `Scale`, `ValidityGate`, `Aggregate`, `Role` and the `Station` join, parsed from stac-opensensor v0.1.0 JSON (#183). No caller yet, `Metrics` and `LiveProfiles` still drive the screens |
 | `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. `OpenAqAggregatesFeed` over `:core:net`, the daily schema in `ParquetFeedReader` and `DailyCellFold`, built 2026-10-12 (host and simulator tests only). Its reads go through the `:core:net` block cache (#94). Planned here: S3 listing for the opensensor feed |
 | `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, used by `OpenAqAggregatesFeed` in both apps |
 | `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |

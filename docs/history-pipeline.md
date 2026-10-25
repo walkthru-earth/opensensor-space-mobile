@@ -87,7 +87,7 @@ once. Until the back-fill reaches it, such a row awaits its index.
 
 ## Metric registry
 
-**A new sensor is a registry entry, not code.** (A planned `:core:model` generalizes this into device families, see [devices-and-discovery.md](devices-and-discovery.md).) Every quantity is a `MetricSpec(id, column, label,
+**A new sensor is a registry entry, not code.** (`:core:model` holds the board template and datastream model that generalizes this, not used here yet, see [devices-and-discovery.md](devices-and-discovery.md).) Every quantity is a `MetricSpec(id, column, label,
 unit, kind, gate, healthScale, chartable, envelope, axisFloor, settleSeconds)`. Tiers, daily files, the
 History picker (`Metrics.chartable`) and the charts iterate the registry and never name a column.
 A spec whose column a file lacks yields **no values, never zeros**, so the registry may be ahead of
