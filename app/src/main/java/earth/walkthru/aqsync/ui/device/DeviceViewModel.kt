@@ -179,7 +179,7 @@ class DeviceViewModel @AssistedInject constructor(
      * shared controller instead, whose snackbar offers the Bluetooth reconnect.
      */
     val events: Flow<ScreenMessage> = merge(
-        repository.events.filterNot { it.isSecretNeedsBluetooth() }.map(ScreenMessage::Device),
+        repository.events.screenMessages(),
         localEvents,
     )
 
@@ -254,8 +254,7 @@ class DeviceViewModel @AssistedInject constructor(
     fun disconnect() = repository.disconnect()
 
     private inner class RepositoryDeviceConfigSource(override val snapshot: StateFlow<DeviceConfigSnapshot>) : DeviceConfigSource {
-        override val notices: Flow<DeviceConfigNotice> =
-            repository.events.filter { it.isSecretNeedsBluetooth() }.map { DeviceConfigNotice.SecretNeedsBluetooth }
+        override val notices: Flow<DeviceConfigNotice> = repository.events.configNotices()
 
         override fun refreshConfig() = repository.refreshConfig()
         override suspend fun readLocation() = repository.readLocation()
@@ -421,3 +420,11 @@ private data class Activity(val busy: Boolean, val syncRunning: Boolean, val tra
 
 private fun DeviceEvent.isSecretNeedsBluetooth(): Boolean =
     this is DeviceEvent.Error && message == DeviceMessage.SecretNeedsBluetooth
+
+/** Repository events for the Device page snackbar. A secret refused on LAN is left to [configNotices]. */
+internal fun Flow<DeviceEvent>.screenMessages(): Flow<ScreenMessage> =
+    filterNot { it.isSecretNeedsBluetooth() }.map(ScreenMessage::Device)
+
+/** The secret refused on LAN, as the shared controller's notice that offers the Bluetooth reconnect. */
+internal fun Flow<DeviceEvent>.configNotices(): Flow<DeviceConfigNotice> =
+    filter { it.isSecretNeedsBluetooth() }.map { DeviceConfigNotice.SecretNeedsBluetooth }

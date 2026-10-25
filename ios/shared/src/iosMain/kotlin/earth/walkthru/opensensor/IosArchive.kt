@@ -262,9 +262,7 @@ internal object IosArchive {
      * Estimating times opens every indexed footer and the rebuild touches every station, so both run
      * here, never under the sync lease that recorded the anchor. A first sync starts downloading at once.
      */
-    private val anchorFollowUp by lazy {
-        CoalescedWork(scope, "clock anchor estimate") { history.afterClockReceipt { rebuildDerived(emptyList()) } }
-    }
+    private val anchorFollowUp by lazy { clockAnchorFollowUp(scope, history) { rebuildDerived(emptyList()) } }
 
     /** Called under the SYNC or COMMAND lease. Only the anchor is saved there, the rest follows later. */
     suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
@@ -322,6 +320,13 @@ internal object IosArchive {
         }
     }
 }
+
+/**
+ * The follow-up to a saved clock anchor, run on [scope] after each request. The shared
+ * [HistoryOrchestrator.afterClockReceipt] runs the time estimates as one pass, then [derive].
+ */
+internal fun clockAnchorFollowUp(scope: CoroutineScope, history: HistoryOrchestrator, derive: suspend () -> Unit): CoalescedWork =
+    CoalescedWork(scope, "clock anchor estimate") { history.afterClockReceipt(derive) }
 
 /**
  * The sync runner over the process archive, so History sees what it saves. Swift calls this once
