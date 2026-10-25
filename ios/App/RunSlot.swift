@@ -57,6 +57,73 @@ struct IdleClose<Key: Hashable> {
     mutating func forget(_ key: Key) { waiting.remove(key) }
 }
 
+/// A shared link whose leases Swift listens to. `IosLink` conforms in the app target.
+protocol LeaseWatched: AnyObject {
+    /// Adds [listener]. It hears every lease change on the main thread, true while a lease is held.
+    func watchLeases(_ listener: @escaping @Sendable (Bool) -> Void)
+}
+
+/// Runs [released] when the last lease of [link] ends while [isCurrent] still names it, so a late
+/// release of a replaced link is ignored. The listener keeps no reference to the link, which the
+/// link itself holds, so an old link is freed.
+@MainActor
+func whenLeasesEnd(
+    of link: some LeaseWatched,
+    isCurrent: @escaping @MainActor @Sendable (ObjectIdentifier) -> Bool,
+    released: @escaping @MainActor @Sendable () -> Void
+) {
+    let id = ObjectIdentifier(link)
+    link.watchLeases { leased in
+        MainActor.assumeIsolated {
+            guard !leased, isCurrent(id) else { return }
+            released()
+        }
+    }
+}
+
+/// Wi-Fi sessions whose last sensor page closed, and the lease listener that settles them. A session
+/// closes at once when nothing holds it, otherwise when the work or the last lease on it ends.
+/// Debug, Device settings and Files lease the link straight from Kotlin with no native task, so only
+/// the listener hears their last lease end (#111). Opening the sensor again keeps the session.
+@MainActor
+final class IdleSessions {
+    private var waiting = IdleClose<String>()
+    private let held: (String) -> Bool
+    private let link: (String) -> ObjectIdentifier?
+    private let closeNow: (String) -> Void
+
+    /// [held] says whether work or a lease holds a session, [link] names its current shared link, and
+    /// [close] closes it.
+    init(
+        held: @escaping (String) -> Bool, link: @escaping (String) -> ObjectIdentifier?,
+        close: @escaping (String) -> Void
+    ) {
+        self.held = held
+        self.link = link
+        closeNow = close
+    }
+
+    /// [link] became the shared link of session [name]. Its last lease ending settles a waiting close.
+    func adopt(_ link: some LeaseWatched, name: String) {
+        whenLeasesEnd(
+            of: link, isCurrent: { [weak self] id in self?.link(name) == id },
+            released: { [weak self] in self?.settle(name) })
+    }
+
+    /// The last page of the session closed. It closes now, or once the work holding it ends.
+    func pageClosed(_ name: String) {
+        if waiting.pageClosed(name, held: held(name)) { closeNow(name) }
+    }
+
+    /// Work on the session ended. A waiting close happens now if nothing else holds it.
+    func settle(_ name: String) {
+        if waiting.settled(name, held: held(name)) { closeNow(name) }
+    }
+
+    /// The user opened it again, or the session closed for another reason.
+    func forget(_ name: String) { waiting.forget(name) }
+}
+
 /// The sensor page the user has open, kept across the background so returning reconnects it.
 /// Leaving the page or disconnecting by hand forgets it.
 struct LivePage: Equatable {
@@ -137,28 +204,18 @@ struct RunCounts<Key: Hashable> {
 }
 
 /// The sensor a transport's run collects from, kept from its start until it ends. A run outlives its
-/// connection while it waits to retry or dials again, so Stop, Disconnect and Forget find it here
-/// instead of through the connection.
+/// connection while it waits to retry or dials again, so Disconnect and Forget find it here instead
+/// of through the connection. The Stop button goes to `SensorCollections.stopUserRun`, which finds
+/// the run in the shared controller.
 struct OwnedRun {
-    enum Kind: Equatable { case user, collectAll, autoSync }
-
     private(set) var device: String?
-    private(set) var kind: Kind = .user
 
-    mutating func started(device: String, kind: Kind) {
-        self.device = device
-        self.kind = kind
-    }
+    mutating func started(device: String) { self.device = device }
 
     mutating func ended() { device = nil }
 
-    /// The Stop button ends a run the user started. Collect all and Auto-sync keep their own cancel.
-    func stops(device: String) -> Bool { kind == .user && owns(device) }
-
-    /// Disconnect and Forget end any run of the sensor.
-    func closes(device: String) -> Bool { owns(device) }
-
-    private func owns(_ other: String) -> Bool {
-        device?.caseInsensitiveCompare(other) == .orderedSame
+    /// Disconnect and Forget end any run of the sensor, in any letter case.
+    func closes(device: String) -> Bool {
+        self.device?.caseInsensitiveCompare(device) == .orderedSame
     }
 }

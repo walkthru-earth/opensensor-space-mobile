@@ -86,8 +86,8 @@ final class BluetoothCompanion {
     private var run: SyncHandle?
     /// Numbers [run], so a callback from an earlier run is ignored.
     private var runToken: UUID?
-    /// The sensor of [run] and who started it. It outlives the connection while the controller waits
-    /// to retry or dials again, so Stop, Disconnect and Forget reach the run then too.
+    /// The sensor of [run]. It outlives the connection while the controller waits to retry or dials
+    /// again, so Disconnect and Forget reach the run then too.
     private var owned = OwnedRun()
     /// The controller asked for a link to the connecting sensor. Each answers once.
     private var dialWaiters: [(Bool) -> Void] = []
@@ -398,14 +398,6 @@ final class BluetoothCompanion {
         if !startSync(onlyName: fileName) { state.today.commandRefused() }
     }
 
-    /// The Stop button for [device]. It reaches the run in every phase, also while the connection is
-    /// gone and the controller waits to retry or dials again. Collect all and Auto-sync steps end
-    /// through their own cancel.
-    func cancelInteractiveSync(device: String) {
-        guard owned.stops(device: device) else { return }
-        run?.cancel()
-    }
-
     /// Starts the sync when the link is free. Collect all and Auto-sync steps call this from their
     /// idle waiters, so a refusal there stays quiet and the step waits for the next idle link. The
     /// shared controller for the device runs it over Bluetooth, takes its background time and
@@ -438,10 +430,11 @@ final class BluetoothCompanion {
         backgroundTimer = nil
         let token = UUID()
         runToken = token
-        owned.started(device: device, kind: backgroundId != nil ? .autoSync : collectId != nil ? .collectAll : .user)
+        owned.started(device: device)
         state.bluetoothSyncStarted()
+        let origin: RunOrigin = backgroundId != nil ? .autoSync : collectId != nil ? .collectAll : .user
         let handle = runs.collect(
-            device: device, onlyName: onlyName, prefer: .ble, background: backgroundId != nil,
+            device: device, onlyName: onlyName, prefer: .ble, origin: origin,
             progress: { [weak self] update in
                 MainActor.assumeIsolated {
                     guard let self, self.runToken == token else { return }
@@ -834,13 +827,10 @@ extension BluetoothCompanion {
         let port = BlePort(physical: physical, sender: nextSender, mtu: mtu)
         let link = IosLink.make(port: port, overWifi: false, identity: identity)
         physical.attach(link, sender: port.sender, to: connection)
-        link.onLeaseChange { @Sendable [weak self] leased in
-            // Kotlin calls this on the main thread.
-            MainActor.assumeIsolated {
-                guard let self, self.ioLink === link, !leased.boolValue else { return }
-                self.leaseEnded()
-            }
-        }
+        // The listener holds neither the link nor this companion, so a replaced link is freed.
+        whenLeasesEnd(
+            of: link, isCurrent: { [weak self] id in self?.ioLink.map { ObjectIdentifier($0) } == id },
+            released: { [weak self] in self?.leaseEnded() })
         let id = ObjectIdentifier(link)
         link.whenClosed { @Sendable [weak self] in
             Task { @MainActor in self?.linkClosed(id) }

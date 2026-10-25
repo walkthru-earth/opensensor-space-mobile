@@ -88,18 +88,18 @@ class SensorCollections internal constructor(
 
     /**
      * Collects every file of [device] this phone lacks, or only [onlyName]. [prefer] limits every
-     * attempt to one transport. [background] marks an unattended run. Call on the main thread.
+     * attempt to one transport. [origin] says who started it. Call on the main thread.
      */
     fun collect(
         device: String,
         onlyName: String?,
         prefer: LinkPreference,
-        background: Boolean,
+        origin: RunOrigin,
         progress: (SyncProgress) -> Unit,
         finished: (SyncResult) -> Unit,
     ): SyncHandle {
         val id = ids.incrementAndFetch()
-        val request = Request(device, onlyName, prefer, background, progress, finished)
+        val request = Request(device, onlyName, prefer, origin, progress, finished)
         val controller = controllerFor(device)
         // Registered before start, so a refusal published inside start still finds it.
         locked { requests[id] = request }
@@ -107,7 +107,7 @@ class SensorCollections internal constructor(
             id = id,
             device = device,
             scope = onlyName?.let { CollectionScope.One(it) } ?: CollectionScope.All,
-            origin = if (background) CollectionOrigin.WORKER else CollectionOrigin.USER_TAP,
+            origin = if (origin == RunOrigin.AUTO_SYNC) CollectionOrigin.WORKER else CollectionOrigin.USER_TAP,
             clockConfirmed = true,
             linkPreference = prefer,
         )
@@ -139,6 +139,19 @@ class SensorCollections internal constructor(
     }
 
     /**
+     * The Stop button for [device], in any letter case. It ends only a run the user started, in every
+     * phase, also while the link is gone and the run waits to retry or a dial is in flight. Collect
+     * all and Auto-sync runs keep their own cancel. Call on the main thread.
+     */
+    fun stopUserRun(device: String) {
+        locked {
+            requests.entries
+                .filter { (_, request) -> request.origin == RunOrigin.USER && request.device.equals(device, ignoreCase = true) }
+                .mapNotNull { (id, request) -> controllers[request.device]?.let { it to id } }
+        }.forEach { (controller, id) -> controller.stop(StopSource.USER, id) }
+    }
+
+    /**
      * The OS ended the background time of [device]'s run the user started. The run ends with
      * [earth.walkthru.aqsync.collection.SyncEndReason.INTERRUPTED], keeps its saved files and
      * partials, and waits until [resumeInterrupted] gets it accepted. False when no such run is active.
@@ -147,7 +160,7 @@ class SensorCollections internal constructor(
         val (controller, id) = locked {
             val controller = controllers[device] ?: return false
             val id = controller.state.value.intentId ?: return false
-            val request = requests[id]?.takeIf { !it.background } ?: return false
+            val request = requests[id]?.takeIf { it.origin != RunOrigin.AUTO_SYNC } ?: return false
             interrupted[device] = InterruptedRun(device, request.onlyName, request.prefer)
             controller to id
         }
@@ -208,9 +221,10 @@ class SensorCollections internal constructor(
 
     /**
      * True from [collect] until its `finished` ran, also while the controller waits to retry. Swift
-     * asks before it closes a link or lets another run take the device. Call on the main thread.
+     * asks before it closes a link or lets another run take the device. The device matches in any
+     * letter case, as in [stop]. Call on the main thread.
      */
-    fun isActive(device: String): Boolean = locked { requests.values.any { it.device == device } }
+    fun isActive(device: String): Boolean = locked { requests.values.any { it.device.equals(device, ignoreCase = true) } }
 
     private suspend fun deliver(controller: CollectionController, id: Long, request: Request) {
         val ticks = Channel<SyncProgress>(Channel.CONFLATED)
@@ -326,7 +340,7 @@ class SensorCollections internal constructor(
         val device: String,
         val onlyName: String?,
         val prefer: LinkPreference,
-        val background: Boolean,
+        val origin: RunOrigin,
         val progress: (SyncProgress) -> Unit,
         val finished: (SyncResult) -> Unit,
     ) {
@@ -338,6 +352,18 @@ class SensorCollections internal constructor(
     internal companion object {
         const val MAX_CONCURRENT = 2
     }
+}
+
+/** Who started a run. The Stop button ends only [USER] runs, Disconnect and Forget end every run. */
+enum class RunOrigin {
+    /** The Sync button, Smart Sync or a one-file sync from Files. */
+    USER,
+
+    /** One step of Collect all, which ends through its own cancel. */
+    COLLECT_ALL,
+
+    /** An unattended Auto-sync step. It is never remembered as interrupted. */
+    AUTO_SYNC,
 }
 
 /** How Swift answered one try to start an interrupted run again. */

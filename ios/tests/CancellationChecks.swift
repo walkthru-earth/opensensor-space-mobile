@@ -24,44 +24,118 @@ enum CancellationChecks {
         aNewRunCountsFromZero()
         aUserCancelReachesTheRunThroughAReconnect()
         aLeaseReleaseClosesAWaitingSession()
+        aLeaseListenerLetsAReplacedLinkGo()
+        onlyTheCurrentLinksLastLeaseCounts()
         print("iOS cancellation checks passed")
     }
 
     /// #105. The run outlives its connection while the controller waits to retry or dials again,
-    /// before INFO named the sensor. Stop, Disconnect and Forget route by the run, not the connection.
+    /// before INFO named the sensor. Disconnect and Forget route by the run, not the connection. The
+    /// Stop button goes to the shared controller, which `SensorCollectionsTest` covers.
     private static func aUserCancelReachesTheRunThroughAReconnect() {
         var run = OwnedRun()
-        precondition(!run.stops(device: "aabbccddeeff") && !run.closes(device: "aabbccddeeff"), "no run, nothing to stop")
-        run.started(device: "aabbccddeeff", kind: .user)
+        precondition(!run.closes(device: "aabbccddeeff"), "no run, nothing to close")
+        run.started(device: "aabbccddeeff")
         // The connection and its identity are gone now. Nothing here reads them.
-        precondition(run.stops(device: "AABBCCDDEEFF"), "Stop reaches a run that waits to retry or reconnects")
-        precondition(run.closes(device: "aabbccddeeff"), "Disconnect and Forget reach it too")
-        precondition(!run.stops(device: "112233445566"), "Stop for another sensor leaves this run alone")
+        precondition(run.closes(device: "AABBCCDDEEFF"), "Disconnect and Forget reach a run that reconnects, in any case")
         precondition(!run.closes(device: "112233445566"), "Forget of another sensor leaves this run alone")
         run.ended()
-        precondition(!run.stops(device: "aabbccddeeff") && !run.closes(device: "aabbccddeeff"), "an ended run is not stopped again")
+        precondition(!run.closes(device: "aabbccddeeff"), "an ended run is not closed again")
+    }
 
-        for kind in [OwnedRun.Kind.collectAll, .autoSync] {
-            run.started(device: "aabbccddeeff", kind: kind)
-            precondition(!run.stops(device: "aabbccddeeff"), "Collect all and Auto-sync keep their own cancel")
-            precondition(run.closes(device: "aabbccddeeff"), "Disconnect and Forget end every run of the sensor")
-            run.ended()
+    /// A shared link with scripted leases, like `IosLink` calling its listeners on main.
+    private final class FakeLink: LeaseWatched {
+        private var listeners: [@Sendable (Bool) -> Void] = []
+        private(set) var leased = false
+
+        func watchLeases(_ listener: @escaping @Sendable (Bool) -> Void) { listeners.append(listener) }
+
+        func lease(_ held: Bool) {
+            leased = held
+            listeners.forEach { $0(held) }
         }
     }
 
-    /// #111. A Debug, Device settings or Files lease ends after the last page closed. The lease
-    /// listener settles the waiting close, and reopening the page before that keeps the session.
+    /// The Wi-Fi sessions as `LanDiscovery` keeps them for `IdleSessions`.
+    @MainActor
+    private final class Sessions {
+        var links: [String: FakeLink] = [:]
+        var closed: [String] = []
+        lazy var idle = IdleSessions(
+            held: { [unowned self] in self.links[$0]?.leased == true },
+            link: { [unowned self] name in self.links[name].map { ObjectIdentifier($0) } },
+            close: { [unowned self] in self.closed.append($0) })
+
+        func adopt(_ link: FakeLink, name: String) {
+            links[name] = link
+            idle.adopt(link, name: name)
+        }
+    }
+
+    /// #111. A Debug, Device settings or Files lease ends after the last page closed, with no native
+    /// task. The lease listener `IdleSessions.adopt` adds settles the waiting close. A reopened page
+    /// or a replaced link keeps the session.
     private static func aLeaseReleaseClosesAWaitingSession() {
-        var close = IdleClose<String>()
-        var leased = true
-        precondition(!close.pageClosed("aq", held: leased), "a direct lease keeps the session")
-        leased = false
-        precondition(close.settled("aq", held: leased), "the final lease release closes it")
-        leased = true
-        _ = close.pageClosed("aq", held: leased)
-        close.forget("aq")
-        leased = false
-        precondition(!close.settled("aq", held: leased), "a reopened page cancels the pending close")
+        let sessions = Sessions()
+        let first = FakeLink()
+        sessions.adopt(first, name: "aq")
+        first.lease(true)
+        sessions.idle.pageClosed("aq")
+        precondition(sessions.closed.isEmpty, "a direct lease keeps the session")
+        first.lease(false)
+        precondition(sessions.closed == ["aq"], "the final lease release closes it")
+
+        let second = FakeLink()
+        sessions.adopt(second, name: "aq")
+        second.lease(true)
+        sessions.idle.pageClosed("aq")
+        sessions.idle.forget("aq")
+        second.lease(false)
+        precondition(sessions.closed == ["aq"], "a reopened page cancels the pending close")
+    }
+
+    @MainActor
+    private final class Count {
+        var value = 0
+    }
+
+    /// Only the last lease of the link still current counts. A held lease or a replaced link does not.
+    private static func onlyTheCurrentLinksLastLeaseCounts() {
+        let released = Count()
+        let replaced = FakeLink()
+        whenLeasesEnd(of: replaced, isCurrent: { _ in false }, released: { released.value += 1 })
+        replaced.lease(false)
+        precondition(released.value == 0, "a late release of a replaced link is ignored")
+
+        let current = FakeLink()
+        let id = ObjectIdentifier(current)
+        whenLeasesEnd(of: current, isCurrent: { $0 == id }, released: { released.value += 1 })
+        current.lease(true)
+        precondition(released.value == 0, "a lease taken is not a release")
+        current.lease(false)
+        precondition(released.value == 1, "the current link's last lease ending counts")
+    }
+
+    /// #121. The link holds its lease listeners, so a listener that held the link would keep every
+    /// replaced link alive. Bluetooth and Wi-Fi both listen through `whenLeasesEnd`.
+    private static func aLeaseListenerLetsAReplacedLinkGo() {
+        weak var gone: FakeLink?
+        do {
+            let link = FakeLink()
+            gone = link
+            whenLeasesEnd(of: link, isCurrent: { _ in true }, released: {})
+        }
+        precondition(gone == nil, "the lease listener must not keep the link alive")
+
+        let sessions = Sessions()
+        weak var replaced: FakeLink?
+        do {
+            let link = FakeLink()
+            replaced = link
+            sessions.adopt(link, name: "aq")
+        }
+        sessions.adopt(FakeLink(), name: "aq")
+        precondition(replaced == nil, "a replaced Wi-Fi link is freed")
     }
 
     private static func aNewRunCountsFromZero() {

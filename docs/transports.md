@@ -77,14 +77,19 @@ On iOS the one Bluetooth link and each Wi-Fi session close once nothing holds th
 sensor page asks for an idle close. While a run, a Collect all step, an Auto-sync step, a token
 request or a GATT exchange holds the link, the close waits and runs when that work ends. Debug,
 Device settings and Files lease the link straight from Kotlin. `IosLink.onLeaseChange` takes any
-number of listeners, so the Wi-Fi idle close and the heartbeat both hear the last lease end, and
-the waiting close runs then. Opening the sensor again before that keeps the session. A
+number of listeners, so the Wi-Fi idle close (`IdleSessions` in `ios/App/RunSlot.swift`) and the
+heartbeat both hear the last lease end, and the waiting close runs then. Opening the sensor again
+before that keeps the session. Both transports listen through `whenLeasesEnd`, which holds no
+reference to the link, so a replaced link is freed. A
 Bluetooth link that drops under a run is dialled again by the shared controller, and My devices
-shows it reconnecting with the run's progress. A paused Wi-Fi run shows the same way. Each
-transport keeps the sensor of its run (`OwnedRun`) from start to result, so Stop, Disconnect and
-Forget reach a run that waits to retry or dials again before INFO named the sensor. Stop ends only
-a run the user started. Disconnect and Forget also call `SensorCollections.stop`, which ends that
-sensor's run in any phase and leaves other sensors alone. Each new
+shows it reconnecting with the run's progress. A paused Wi-Fi run shows the same way. Stop calls
+`SensorCollections.stopUserRun`, which finds the run by its sensor in any letter case and ends it in
+every phase, also while it waits to retry or dials again before INFO named the sensor. It ends only
+a run the user started (`RunOrigin.USER`). Collect all and Auto-sync keep their own cancel. Each
+transport keeps the sensor of its run (`OwnedRun`) from start to result, so Disconnect and Forget
+close a run with no connection. They also call `SensorCollections.stop`, which ends every run of
+that sensor in any phase and leaves other sensors alone. `SensorCollections.isActive` matches the
+sensor in any letter case too. Each new
 Wi-Fi run counts its files from zero. Core Bluetooth reports no bonding step, so iOS never shows
 the pairing phase, and a lost bond shows as a failed link until the next connect or Forget.
 
