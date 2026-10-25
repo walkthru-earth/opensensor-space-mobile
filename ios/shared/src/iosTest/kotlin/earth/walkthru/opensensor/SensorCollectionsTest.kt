@@ -767,6 +767,24 @@ class SensorCollectionsTest {
     }
 
     @Test
+    fun aCollectAllStepIsInterruptedLikeAUserRun() = runBlocking {
+        val reads = Channel<Unit>(Channel.UNLIMITED)
+        // The second file never answers, so the step waits there when iOS ends the app's time.
+        val board = Board { _, name -> (name == second).also { if (it) reads.trySend(Unit) } }
+        board.connect()
+        val runs = collections(board)
+        val step = Seen()
+        runs.collect(device, null, LinkPreference.ANY, RunOrigin.COLLECT_ALL, step::progress, step::finished)
+        withTimeout(10_000) { reads.receive() }
+
+        assertTrue(runs.interrupt(device), "a Collect all step is interrupted, only Auto-sync is not")
+        val result = withTimeout(10_000) { step.done.await() }
+        assertEquals(SyncEndReason.INTERRUPTED, result.endReason)
+        assertEquals(1, result.saved, "the file saved before the interruption stays")
+        assertEquals(listOf(device), runs.waiting().map { it.device })
+    }
+
+    @Test
     fun anUnattendedRunIsNeverRememberedAndANewRunReplacesAnInterruptedOne() = runBlocking {
         val reads = Channel<Unit>(Channel.UNLIMITED)
         // Every READ of the second file goes unanswered, so each run waits there until it ends.

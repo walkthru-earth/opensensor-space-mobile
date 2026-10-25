@@ -152,7 +152,7 @@ class SensorCollections internal constructor(
     }
 
     /**
-     * The OS ended the background time of [device]'s run the user started. The run ends with
+     * The OS ended the background time of [device]'s run, a user run or a Collect all step. The run ends with
      * [earth.walkthru.aqsync.collection.SyncEndReason.INTERRUPTED], keeps its saved files and
      * partials, and waits until [resumeInterrupted] gets it accepted. False when no such run is active.
      */
