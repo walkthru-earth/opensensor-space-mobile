@@ -49,7 +49,7 @@ concern you are changing in `docs/README.md`.
 - `:core:*` stays reusable without Android or Hilt. Room lives only in `:core:database`,
   one Room KMP schema on the bundled SQLite driver for both phones. Every other `:core` module
   (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`, `archive`,
-  `storage`, `net`, `sync`, `settings`) compiles for JVM and iOS from `commonMain`.
+  `storage`, `net`, `sync`, `settings`, `stac`) compiles for JVM and iOS from `commonMain`.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
   H3). `:ui:designsystem`, `:ui:permissions` and `:feature:discover` are Compose
   for Android and iOS.

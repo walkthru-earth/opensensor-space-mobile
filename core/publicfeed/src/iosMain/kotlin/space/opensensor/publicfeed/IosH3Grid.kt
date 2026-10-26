@@ -6,12 +6,16 @@ import kotlinx.cinterop.alloc
 import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.get
 import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.pointed
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.set
 import kotlinx.cinterop.value
 import space.opensensor.publicfeed.h3c.CellBoundary
 import space.opensensor.publicfeed.h3c.GeoPolygon
 import space.opensensor.publicfeed.h3c.H3IndexVar
+import space.opensensor.publicfeed.h3c.LinkedGeoPolygon
+import space.opensensor.publicfeed.h3c.cellsToLinkedMultiPolygon
+import space.opensensor.publicfeed.h3c.destroyLinkedMultiPolygon
 import space.opensensor.publicfeed.h3c.maxPolygonToCellsSize
 import kotlin.math.PI
 import space.opensensor.publicfeed.h3c.LatLng as CLatLng
@@ -70,6 +74,42 @@ internal object NativeH3Grid : H3Grid {
         for (i in 0 until n) out[i] = 0u
         check(cPolygonToCells(polygon.ptr, res, 0u, out) == 0u) { "polygonToCells failed" }
         buildList { for (i in 0 until n) if (out[i] != 0uL) add(out[i].toLong()) }
+    }
+
+    override fun cellsToMultiPolygon(cells: Collection<Long>): List<List<List<LatLng>>> {
+        if (cells.isEmpty()) return emptyList()
+        return memScoped {
+            val set = allocArray<H3IndexVar>(cells.size)
+            cells.forEachIndexed { i, cell -> set[i] = cell.toULong() }
+            // The root polygon is ours, the C library allocates every node it links from it.
+            val root = alloc<LinkedGeoPolygon>()
+            check(cellsToLinkedMultiPolygon(set, cells.size, root.ptr) == 0u) { "cellsToLinkedMultiPolygon failed" }
+            try {
+                buildList {
+                    var polygon: LinkedGeoPolygon? = root
+                    while (polygon != null) {
+                        val loops = buildList {
+                            var loop = polygon.first?.pointed
+                            while (loop != null) {
+                                val ring = buildList {
+                                    var node = loop.first?.pointed
+                                    while (node != null) {
+                                        add(LatLng(node.vertex.lat * TO_DEG, node.vertex.lng * TO_DEG))
+                                        node = node.next?.pointed
+                                    }
+                                }
+                                if (ring.isNotEmpty()) add(ring)
+                                loop = loop.next?.pointed
+                            }
+                        }
+                        if (loops.isNotEmpty()) add(loops)
+                        polygon = polygon.next?.pointed
+                    }
+                }
+            } finally {
+                destroyLinkedMultiPolygon(root.ptr)
+            }
+        }
     }
 }
 

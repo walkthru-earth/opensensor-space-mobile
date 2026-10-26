@@ -43,6 +43,8 @@ include(":core:database")
 // Storage classes, durable no-replace commits, free space and the startup janitor's walk (issue #60).
 include(":core:storage")
 include(":core:settings")
+// One STAC File Item per synced device file, the sidecar the upload will publish (#190).
+include(":core:stac")
 // The Discover map, shared Compose for Android and iOS.
 include(":ui:designsystem")
 // The shared English copy and the repository copy lint (docs/screens.md, Copy).
