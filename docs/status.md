@@ -420,7 +420,7 @@ SELinux context; the observations above use app UI and firmware serial evidence.
 
 The working tree now synchronizes device UTC automatically on Android/iOS connection,
 without a manual clock setting. A boot-scoped receipt preserves the acknowledged clock
-mapping before collection. Shared history imports firmware footer anchors and rebuilds
+mapping before collection. Shared history rebuilds
 unknown-UTC readings into derived UTC-day Parquet on both platforms, preserving original
 bytes and null UTC. See [decision, behavior and limits](time-reconciliation.md).
 

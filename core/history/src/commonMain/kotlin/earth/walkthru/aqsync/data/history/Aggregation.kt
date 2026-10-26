@@ -139,7 +139,7 @@ class Aggregator(
         val md = file.metadata
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
         val utc = UtcColumns.readEventNs(file)?.let(LongColumn::of) ?: return
-        val applicable = anchor?.takeIf { it.boot == md.bootId }
+        val applicable = anchor?.takeIf { it.boot == md.footer?.bootId }
         val columns = columns(::col, md.keyValueMetadata)
         val mono = if (applicable != null) columns.mono else null
         val bootHi = col("boot_id_hi")?.let(LongColumn::of)

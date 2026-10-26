@@ -29,9 +29,14 @@ fun interface FileTemplates {
      */
     fun template(dict: String?, desc: String?): BoardTemplate?
 
-    /** The [FileTemplate] of a file with Parquet [keyValues]. */
-    fun of(keyValues: Map<String, String>): FileTemplate {
-        val footer = OpenSensorFooter.of(keyValues)
+    /** The [FileTemplate] of a raw file with Parquet [keyValues], from its `opensensor` footer. */
+    fun of(keyValues: Map<String, String>): FileTemplate = of(OpenSensorFooter.of(keyValues))
+
+    /** The [FileTemplate] of a derived day file with Parquet [keyValues], from its app-local [OpenSensorFooter.DAY_KEY]. */
+    fun ofDay(keyValues: Map<String, String>): FileTemplate = of(OpenSensorFooter.ofDay(keyValues))
+
+    /** The [FileTemplate] that [footer] names. */
+    fun of(footer: OpenSensorFooter?): FileTemplate {
         val template = template(footer?.dictionarySha256, footer?.templateSha256)
         val fallback = template?.defaultSampleIntervalS?.takeIf { it > 0 && it.isFinite() }?.let { (it * MS_PER_S).toLong() }
         return FileTemplate(template, footer?.sampleIntervalMs ?: fallback ?: 0L, footer)

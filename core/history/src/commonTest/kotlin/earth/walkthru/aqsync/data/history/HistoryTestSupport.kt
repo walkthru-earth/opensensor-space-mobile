@@ -14,8 +14,15 @@ import kotlin.math.abs
 // The asserts keep JUnit's argument order (message first) so the tests read as they did on the JVM.
 // Tests that import `kotlin.test` asserts by name keep those, an explicit import wins over this file.
 
-/** Bytes of a fixture under `core/parquet/src/test/resources`, for example `parquet/expected.json`. */
-expect fun fixtureBytes(path: String): ByteArray
+/** Bytes of a fixture under `core/parquet/src/test/resources`, as stored. */
+expect fun rawFixtureBytes(path: String): ByteArray
+
+/**
+ * Bytes of a fixture under `core/parquet/src/test/resources`, for example `parquet/expected.json`. A
+ * device `.parquet` fixture predates the `opensensor` footer, so its old unprefixed keys are moved
+ * into one by [migrateLegacyFooter] first. The app reads no unprefixed key (decision 25).
+ */
+fun fixtureBytes(path: String): ByteArray = rawFixtureBytes(path).let { if (path.endsWith(".parquet")) migrateLegacyFooter(it) else it }
 
 /** A [ParquetSink] that collects everything in memory. */
 class MemorySink : ParquetSink {
@@ -109,15 +116,25 @@ val CoreS3Files: FileTemplates = FileTemplates { _, _ -> coreS3Template }
 
 /**
  * A full stac-opensensor v0.1.0 `opensensor` footer value, shaped like `footers/cores3-telemetry-v5.json`,
- * naming [dict], [desc] and [intervalMs]. A null leaves that field out. Every other field is there so
- * the reader is shown to ignore it.
+ * naming [dict], [desc], [intervalMs], [station] and [boot]. A null leaves that field out. Every other
+ * field is there so the reader is shown to ignore it.
  */
-fun opensensorFooterJson(dict: String?, desc: String?, intervalMs: Long?, board: String = "m5stack-cores3", schema: String = "cores3-telemetry-v5"): String {
+fun opensensorFooterJson(
+    dict: String?,
+    desc: String?,
+    intervalMs: Long?,
+    board: String = "m5stack-cores3",
+    schema: String = "cores3-telemetry-v5",
+    station: String? = null,
+    boot: String? = null,
+): String {
     val dictionary = dict?.let { """"dictionary":{"sha256":"$it","version":"$schema"},""" }.orEmpty()
     val template = desc?.let { """"template":{"href":"https://example.invalid/templates/$schema.json","sha256":"$it"},""" }.orEmpty()
     val interval = intervalMs?.let { """"sample_interval_ms":$it,""" }.orEmpty()
-    return """{"version":"0.1.0","station":{"id":"station-test","device_id":"441bf6e26b40","board":"$board","deployment_id":"unknown"},""" +
-        """"firmware":{"version":"6.14.0","schema":"$schema","boot_id":"0f3a"},$dictionary$template""" +
+    val id = station?.let { """"id":"$it",""" }.orEmpty()
+    val bootId = boot?.let { ""","boot_id":"$it"""" }.orEmpty()
+    return """{"version":"0.1.0","station":{$id"device_id":"441bf6e26b40","board":"$board","deployment_id":"unknown"},""" +
+        """"firmware":{"version":"6.14.0","schema":"$schema"$bootId},$dictionary$template""" +
         """"acquisition":{$interval"time_semantics":"sample instant, UTC","config_id":"default","calibration_id":"unknown"},""" +
         """"file":{"rotation_interval_s":3600,"row_groups":4,"row_group_rows_max":90,"compression":"zstd","purpose":"telemetry"}}"""
 }
@@ -130,15 +147,18 @@ fun opensensorFooter(template: space.opensensor.model.BoardTemplate, intervalMs:
 fun coreS3Footer(extra: Map<String, String> = emptyMap()): Map<String, String> = opensensorFooter(coreS3Template) + extra
 
 /**
- * [bytes] rewritten with the bundled CoreS3 dict in the footer. The device fixtures predate it, and a
- * derived day file without a dict gives way to the raw files.
+ * [bytes] rewritten with the bundled CoreS3 dict, template digest and a 10 s cadence in the footer. The
+ * device fixtures predate them, and a derived day file without a dict gives way to the raw files. The
+ * station, boot, schema and purpose of the file's own footer are kept.
  */
 fun withCoreS3Dict(bytes: ByteArray): ByteArray = ParquetFile.wrap(bytes).use { file ->
     val sink = MemorySink()
+    val add = OpenSensorFooter.of(coreS3Footer())!!
+    val merged = file.metadata.footer?.copy(sampleIntervalMs = add.sampleIntervalMs, dictionarySha256 = add.dictionarySha256, templateSha256 = add.templateSha256) ?: add
     val w = ParquetWriter(
         sink,
         file.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) },
-        keyValueMetadata = file.metadata.keyValueMetadata + coreS3Footer(),
+        keyValueMetadata = file.metadata.keyValueMetadata + (OpenSensorFooter.KEY to merged.encode()),
     )
     w.begin()
     w.rowGroup(file.leaves.map { file.readColumn(it) })

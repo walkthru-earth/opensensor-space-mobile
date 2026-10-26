@@ -29,6 +29,10 @@ kotlin {
             // The `opensensor` footer value is JSON.
             implementation(libs.kotlinx.serialization.json)
         }
+        commonTest {
+            // The device fixture footer migration, shared with the :app unit tests.
+            kotlin.srcDir("src/legacyFooterFixtures/kotlin")
+        }
         commonTest.dependencies {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.test)

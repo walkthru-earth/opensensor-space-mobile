@@ -16,7 +16,7 @@ import java.io.File
 
 class HistoryIndexerTest {
 
-    private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
+    private fun bytes(path: String) = migrateLegacyFooter(checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes())
 
     @Test
     fun `history indexer fills the Room row and records a reader refusal instead of throwing`() = runBlocking {

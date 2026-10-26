@@ -11,8 +11,11 @@ class OpenSensorFooterTest {
     private fun parse(json: String) = OpenSensorFooter.parse(json)
 
     @Test
-    fun aFullFooterGivesOnlyTheThreeFieldsHistoryReads() {
-        assertEquals(OpenSensorFooter(10_000, dict, desc), parse(opensensorFooterJson(dict, desc, 10_000)))
+    fun aFullFooterGivesOnlyTheFieldsTheAppReads() {
+        assertEquals(
+            OpenSensorFooter(10_000, dict, desc, stationId = "station-a", bootId = "0f3a", schema = "cores3-telemetry-v5", purpose = "telemetry"),
+            parse(opensensorFooterJson(dict, desc, 10_000, station = "station-a", boot = "0f3a")),
+        )
     }
 
     @Test
@@ -25,7 +28,15 @@ class OpenSensorFooterTest {
             """"acquisition":{"sample_interval_ms":10000,"time_semantics":"sample instant, UTC","config_id":"default","calibration_id":"unknown"},""" +
             """"file":{"rotation_interval_s":3600,"row_groups":4,"row_group_rows_max":90,"compression":"zstd","purpose":"telemetry"}}"""
         assertEquals(
-            OpenSensorFooter(10_000, "e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b", "fb4230b3eb6e8eac881c719f900c8bd9c7e4bbd6ad247520a27368ec9d9a7218"),
+            OpenSensorFooter(
+                10_000,
+                "e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b",
+                "fb4230b3eb6e8eac881c719f900c8bd9c7e4bbd6ad247520a27368ec9d9a7218",
+                stationId = "station-3f2b9c1e",
+                bootId = "0f3a",
+                schema = "cores3-telemetry-v5",
+                purpose = "telemetry",
+            ),
             parse(example),
         )
     }
@@ -64,6 +75,12 @@ class OpenSensorFooterTest {
             """{"version":"0.1.0","acquisition":{"sample_interval_ms":"10000"}}""",
             """{"version":"0.1.0","acquisition":{"sample_interval_ms":10000.5}}""",
             """{"version":"0.1.0","acquisition":10000}""",
+            """{"version":"0.1.0","station":{"id":7}}""",
+            """{"version":"0.1.0","station":{"id":""}}""",
+            """{"version":"0.1.0","station":"station-a"}""",
+            """{"version":"0.1.0","firmware":{"boot_id":null}}""",
+            """{"version":"0.1.0","firmware":{"schema":["v5"]}}""",
+            """{"version":"0.1.0","file":{"purpose":true}}""",
         )
         for (json in bad) assertNull(parse(json), json)
     }
@@ -71,7 +88,15 @@ class OpenSensorFooterTest {
     @Test
     fun aFileWithoutTheKeyOrWithOnlyTheOldKeysHasNoFooter() {
         assertNull(OpenSensorFooter.of(emptyMap()))
-        val old = mapOf("dictionary_sha256" to dict, "sample_interval_ms" to "10000", "template_sha256" to desc)
+        val old = mapOf(
+            "dictionary_sha256" to dict,
+            "sample_interval_ms" to "10000",
+            "template_sha256" to desc,
+            "station_id" to "station-a",
+            "boot_id" to "0f3a",
+            "schema_version" to "cores3-telemetry-v3",
+            "purpose" to "telemetry",
+        )
         assertNull(OpenSensorFooter.of(old))
         val file = FileTemplates.BUNDLED.of(old)
         assertNull(file.template)
@@ -80,8 +105,18 @@ class OpenSensorFooterTest {
     }
 
     @Test
+    fun aDayFileIsReadOnlyFromItsAppKey() {
+        val day = OpenSensorFooter(10_000, dict, desc)
+        assertEquals(day, OpenSensorFooter.ofDay(mapOf(OpenSensorFooter.DAY_KEY to day.encode())))
+        assertNull(OpenSensorFooter.ofDay(mapOf(OpenSensorFooter.KEY to day.encode())))
+        assertNull(OpenSensorFooter.of(mapOf(OpenSensorFooter.DAY_KEY to day.encode())))
+        assertSame(coreS3Template, FileTemplates.BUNDLED.ofDay(mapOf(OpenSensorFooter.DAY_KEY to day.encode())).template)
+    }
+
+    @Test
     fun encodeRoundTrips() {
-        for (footer in listOf(OpenSensorFooter(10_000, dict, desc), OpenSensorFooter(sampleIntervalMs = 30_000), OpenSensorFooter(dictionarySha256 = dict))) {
+        val full = OpenSensorFooter(10_000, dict, desc, stationId = "station-a", bootId = "0f3a", schema = "cores3-telemetry-v5", purpose = "telemetry")
+        for (footer in listOf(full, OpenSensorFooter(10_000, dict, desc), OpenSensorFooter(sampleIntervalMs = 30_000), OpenSensorFooter(dictionarySha256 = dict))) {
             assertEquals(footer, parse(footer.encode()))
         }
         assertEquals("""{"version":"0.1.0","dictionary":{"sha256":"$dict"},"template":{"sha256":"$desc"},"acquisition":{"sample_interval_ms":10000}}""", OpenSensorFooter(10_000, dict, desc).encode())

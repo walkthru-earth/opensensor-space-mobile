@@ -123,8 +123,8 @@ object DailyParquetBuilder {
         val keepCount: Int,
         /** The estimated instant of each row, valid only where the anchor gave one. Null without an anchor. */
         val estimated: LongColumn?,
-        val keyValueMetadata: Map<String, String>,
-        val schemaVersion: String?,
+        /** The source's `opensensor` footer, null when it has none. */
+        val footer: OpenSensorFooter?,
     ) {
         val row: ArchiveRecord get() = source.record
     }
@@ -180,7 +180,8 @@ object DailyParquetBuilder {
                 require(src.station == station) { "source belongs to another station" }
                 source.open().use { pf ->
                     val md = pf.metadata
-                    require(md.stationId == null || md.stationId == station) { "Parquet source belongs to another station" }
+                    val footer = md.footer
+                    require(footer?.stationId == null || footer.stationId == station) { "Parquet source belongs to another station" }
                     rowsRead += pf.numRows
                     val cache = HashMap<String, ColumnValues?>()
                     fun col(name: String): ColumnValues? = cache.getOrPut(name) { md.leaf(name)?.let { pf.readColumn(it) } }
@@ -188,7 +189,7 @@ object DailyParquetBuilder {
                     val bootHi = col("boot_id_hi")?.let(LongColumn::of)
                     val bootLo = col("boot_id_lo")?.let(LongColumn::of)
                     val seq = col(ParquetIndexer.SEQ)?.let(LongColumn::of)
-                    val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.bootId } else null
+                    val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == footer?.bootId } else null
                     val mono = if (anchor != null) col(ParquetIndexer.MONO)?.let(LongColumn::of) else null
                     val estimated = if (anchor != null && mono != null) estimates(utc.size, mono, anchor) else null
                     val tierColumns = aggregator?.columns(::col, md.keyValueMetadata)
@@ -232,7 +233,7 @@ object DailyParquetBuilder {
                         }
                     }
                     if (estimated != null && keepCount > 0) anyEstimated = true
-                    Src(source, pf.numRows, keepCount, estimated, md.keyValueMetadata, md.schemaVersion)
+                    Src(source, pf.numRows, keepCount, estimated, footer)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -280,10 +281,10 @@ object DailyParquetBuilder {
         val startsArray = starts.toIntArray()
 
         // 4. Metadata.
-        val footer = dayFooter(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
+        val footer = dayFooter(opened.map { it.footer })
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
-            footer?.let { put(OpenSensorFooter.KEY, it.encode()) }
+            footer?.let { put(OpenSensorFooter.DAY_KEY, it.encode()) }
             put("station_id", station)
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
@@ -291,7 +292,7 @@ object DailyParquetBuilder {
             put("source_count", opened.size.toString())
             put("coverage_rows", kept.toString())
             put("complete", complete.toString())
-            put("schema_versions", opened.map { it.schemaVersion ?: "?" }.distinct().joinToString(","))
+            put("schema_versions", opened.map { it.footer?.schema ?: "?" }.distinct().joinToString(","))
             put("purpose", "telemetry-derived-day")
             if (anyEstimated) {
                 put("estimated_rows", opened.filter { it.estimated != null }.sumOf { it.keepCount }.toString())
@@ -495,10 +496,12 @@ object DailyParquetBuilder {
     val SOURCE_ORDER: Comparator<ArchiveRecord> = compareBy({ it.firstUtcNs ?: Long.MAX_VALUE }, { it.name })
 
     /**
-     * The `opensensor` footer of a day file built from sources with [footers], null when no source
-     * says anything. It holds only what the app knows for the whole day. The shortest positive
+     * The app-local [OpenSensorFooter.DAY_KEY] value of a day file built from sources with [footers],
+     * null when no source says anything. It holds only what the app reads back. The shortest positive
      * interval, as a tier bucket keeps it, and each digest only when every source names the same one.
-     * A day mixing dictionaries or templates carries none, and its rows go back to the raw files.
+     * A day mixing dictionaries or templates carries none, and its rows go back to the raw files. The
+     * day file never writes the `opensensor` key, because it cannot fill a value that validates
+     * against stac-opensensor `footer.json`.
      */
     internal fun dayFooter(footers: List<OpenSensorFooter?>): OpenSensorFooter? {
         fun <T> agreed(pick: (OpenSensorFooter?) -> T?): T? = footers.map(pick).distinct().singleOrNull()

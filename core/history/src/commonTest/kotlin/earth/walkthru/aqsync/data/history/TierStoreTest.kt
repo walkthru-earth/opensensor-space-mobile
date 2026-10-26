@@ -150,7 +150,7 @@ class TierStoreTest {
 
     private suspend fun archive(): Triple<Store, Index, String> {
         val bytes = fixtureBytes("parquet/device/v3-board-2rg-180rows.parquet")
-        val station = ParquetFile.wrap(bytes).metadata.stationId ?: "tier-station"
+        val station = ParquetFile.wrap(bytes).metadata.footer?.stationId ?: "tier-station"
         val store = Store()
         val index = Index()
         val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")

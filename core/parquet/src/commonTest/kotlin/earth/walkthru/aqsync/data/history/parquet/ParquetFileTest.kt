@@ -179,8 +179,9 @@ class ParquetFileTest {
     fun `real device file with unsynced rows has null UTC and a monotonic clock`() {
         val f = fixtures().first { it["label"]!!.jsonPrimitive.content == "v2-none-90rows-unsynced" }
         val pf = openFixture(f)
-        assertEquals("cores3-telemetry-v2", pf.metadata.schemaVersion)
-        assertEquals("53315f5f-cb85-4d8d-b623-d56266084189", pf.metadata.stationId)
+        // The parquet decoder reads the raw key-value list of this pre-JSON fixture as written.
+        assertEquals("cores3-telemetry-v2", pf.metadata.keyValueMetadata["schema_version"])
+        assertEquals("53315f5f-cb85-4d8d-b623-d56266084189", pf.metadata.keyValueMetadata["station_id"])
         val utc = pf.readColumn("event_time_utc_ns")
         assertEquals(90, utc.nullCount)
         val mono = pf.readColumn("monotonic_us") as ColumnValues.Int64

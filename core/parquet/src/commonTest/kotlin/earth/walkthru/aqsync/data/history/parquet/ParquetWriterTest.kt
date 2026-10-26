@@ -65,7 +65,7 @@ class ParquetWriterTest {
             assertEquals(4, md.columnOrders.size)
             assertEquals(ParquetLogicalType.TimeUnit.NANOS, pf.leaf("event_time_utc_ns").timestampUtcUnit)
             assertEquals(null, pf.leaf("sequence").timestampUtcUnit)
-            assertEquals("test", md.stationId)
+            assertEquals("test", md.keyValueMetadata["station_id"])
             assertEquals(listOf(0), md.rowGroups[0].sortingColumns.map { it.columnIdx })
             md.rowGroups.forEachIndexed { g, rg ->
                 assertEquals(g, rg.ordinal)

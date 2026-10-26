@@ -49,7 +49,7 @@ import java.security.MessageDigest
 /** The deriver over in-memory DAOs and a temp archive: staleness by source signature, tiers and daily files together. */
 class HistoryDeriverTest {
 
-    private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
+    private fun bytes(path: String) = migrateLegacyFooter(checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes())
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     @Test
@@ -276,6 +276,8 @@ class HistoryDeriverTest {
         assertEquals(1, daily.rowGroupCount) // 09:42–09:59Z is one UTC hour
         assertEquals(78, daily.leaves.size) // 77 + source_file_index
         assertEquals(ParquetLogicalType.TimeUnit.MICROS, daily.leaf("event_time_utc_us").timestampUtcUnit)
+        // A day file never carries the contract key an indexer reads.
+        assertTrue(OpenSensorFooter.KEY !in daily.metadata.keyValueMetadata)
         assertEquals("telemetry-derived-day", daily.metadata.keyValueMetadata["purpose"])
         assertTrue(daily.metadata.keyValueMetadata["complete"] in setOf("true", "false"))
         assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":105"))

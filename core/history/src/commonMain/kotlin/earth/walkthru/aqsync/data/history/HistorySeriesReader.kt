@@ -271,7 +271,7 @@ class HistorySeriesReader(
             val bootHi = long("boot_id_hi")
             val bootLo = long("boot_id_lo")
             val seq = long(ParquetIndexer.SEQ)
-            val anchor = if (f.hasEstimatedUtc) anchors[f.bootId]?.takeIf { it.boot == md.bootId } else null
+            val anchor = if (f.hasEstimatedUtc) anchors[f.bootId]?.takeIf { it.boot == md.footer?.bootId } else null
             val mono = if (anchor != null) long(ParquetIndexer.MONO) else null
             val file = templates.of(md.keyValueMetadata)
             // A file whose template lacks the metric, or stores it in another unit, gives it no values (rule 9).
@@ -328,7 +328,7 @@ class HistorySeriesReader(
             val staged = ParquetReader.open(source, footerCache = footers).use { reader ->
                 val keyValues = reader.metadata.keyValueMetadata
                 // A day file mixing dictionaries carries no digest, and its rows go back to the raw files.
-                val file = templates.of(keyValues)
+                val file = templates.ofDay(keyValues)
                 if (file.footer?.dictionarySha256 == null) return@use null
                 val spec = file.template?.let(metric::inTemplate)
                 val names = reader.leaves.mapTo(HashSet()) { it.name }

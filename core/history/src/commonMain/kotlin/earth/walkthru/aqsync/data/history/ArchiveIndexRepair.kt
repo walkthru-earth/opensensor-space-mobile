@@ -54,7 +54,7 @@ class ArchiveIndexRepair(
             )
         } else {
             val index = ParquetFile.open(reader(), record.name).use { file ->
-                val metadataStation = file.metadata.keyValueMetadata["station_id"]
+                val metadataStation = file.metadata.footer?.stationId
                 require(metadataStation == null || metadataStation == record.station) { "file metadata belongs to another station" }
                 ParquetIndexer.index(file, templates)
             }
@@ -142,8 +142,8 @@ class ArchiveIndexRepair(
 
     /**
      * §4.6, gives every unsynced file whose boot later received a clock an estimated UTC span, from
-     * indexed spans and persisted boot anchors. Footer evidence is imported once per file per
-     * process; measurement columns are not decoded. Records whose estimate is unchanged are not
+     * indexed spans and persisted boot anchors. The footer carries no clock anchor, the rows and
+     * the sync receipts do. Measurement columns are not decoded. Records whose estimate is unchanged are not
      * rewritten. Returns how many records changed.
      */
     suspend fun estimateTimes(): Int = mutex.withLock {
@@ -151,7 +151,6 @@ class ArchiveIndexRepair(
             var changed = 0
             for (station in index.stations()) {
                 val files = index.indexedForStation(station)
-                captureClockAnchors(files)
                 val anchors = TimeEstimate.anchors(files.map { it.info() }, clockAnchors.anchors(station))
                 for (f in files) {
                     val updated = estimated(f, anchors)
@@ -165,32 +164,6 @@ class ArchiveIndexRepair(
             }
             if (changed > 0) log("estimated time for $changed files")
             changed
-        }
-    }
-
-    private val scannedAnchors = HashSet<earth.walkthru.aqsync.archive.ArchiveKey>()
-
-    /** Imports firmware footer evidence without modifying any raw row or path. */
-    private suspend fun captureClockAnchors(files: List<ArchiveRecord>) {
-        for (record in files) {
-            if (record.key in scannedAnchors || !record.isTelemetry) continue
-            try {
-                val metadata = ParquetFile.open(store.reader(record.key), record.name).use { it.metadata }
-                val boot = metadata.bootId ?: continue
-                val producer = metadata.keyValueMetadata["station_id"]
-                if (producer != null && producer != record.station) continue
-                val values = metadata.keyValueMetadata
-                val utc = values["reconciliation_anchor_utc_ns"]?.toLongOrNull()
-                val mono = values["reconciliation_anchor_mono_us"]?.toLongOrNull()
-                if (utc != null && mono != null) {
-                    clockAnchors.put(earth.walkthru.aqsync.archive.ClockAnchor(record.station, boot, utc, mono, values["reconciliation_anchor_source"] ?: "firmware"))
-                }
-                scannedAnchors += record.key
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                log("clock evidence unavailable for ${record.name}: ${e.message}")
-            }
         }
     }
 

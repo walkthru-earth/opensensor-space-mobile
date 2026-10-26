@@ -9,7 +9,9 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import space.opensensor.model.BoardTemplate
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -44,7 +46,7 @@ class CurrentBoardFilesTest {
     /**
      * A current format telemetry file of [template], one row every 10 s from [startS] (shifted by
      * [offsetS]), every [stepRows] row, footer interval [intervalMs] and boot [boot]. [footer] is the
-     * whole key-value metadata after `schema_version`.
+     * whole key-value metadata.
      */
     private fun boardFile(
         template: BoardTemplate,
@@ -76,7 +78,7 @@ class CurrentBoardFilesTest {
                 ParquetWriter.Column("battery_percent", ParquetType.INT32),
             ),
             ParquetCodec.UNCOMPRESSED,
-            keyValueMetadata = mapOf("schema_version" to "5") + footer,
+            keyValueMetadata = footer,
         )
         w.begin()
         w.rowGroup(
@@ -217,21 +219,42 @@ class CurrentBoardFilesTest {
         for (order in listOf(arrayOf(fast, slow), arrayOf(slow, fast))) {
             val daily = dailyOf(*order)
             assertEquals(10_000L, interval(daily))
-            // Read back, the daily file gives the same interval as the tiers of its sources.
-            assertTrue(buckets(daily).all { it.sampleIntervalMs == 10_000L })
+            // Read back through its day key, the daily file gives the same interval as the tiers of its sources.
+            assertEquals(10_000L, FileTemplates.BUNDLED.ofDay(ParquetFile.wrap(daily).metadata.keyValueMetadata).sampleIntervalMs)
         }
     }
 
-    private fun footerOf(file: ByteArray): OpenSensorFooter? = OpenSensorFooter.of(ParquetFile.wrap(file).metadata.keyValueMetadata)
+    private fun footerOf(file: ByteArray): OpenSensorFooter? = OpenSensorFooter.ofDay(ParquetFile.wrap(file).metadata.keyValueMetadata)
 
     @Test
-    fun aDailyFileWritesOnlyTheOpensensorFooterOfItsSources() {
+    fun aDailyFileWritesTheAppDayKeyAndNoOpensensorFooter() {
         val daily = dailyOf(boardFile(coreS3Template), boardFile(coreS3Template, boot = 2, offsetS = 5))
         val keys = ParquetFile.wrap(daily).metadata.keyValueMetadata
         assertEquals(OpenSensorFooter(10_000, coreS3Template.dict, coreS3Template.key.desc), footerOf(daily))
+        // A day value fails footer.json, so an indexer must never find the contract key on it.
+        assertTrue(OpenSensorFooter.KEY !in keys, keys.keys.toString())
         assertTrue("dictionary_sha256" !in keys && "sample_interval_ms" !in keys, keys.keys.toString())
-        // Read back, the daily file resolves the same template as its sources.
-        assertEquals(buckets(boardFile(coreS3Template), boardFile(coreS3Template, boot = 2, offsetS = 5)), buckets(daily))
+        // Read back through its day key, the daily file resolves the same template as its sources.
+        assertSame(coreS3Template, FileTemplates.BUNDLED.ofDay(keys).template)
+    }
+
+    @Test
+    fun theStationAndPurposeComeFromTheFooterJsonAndNeverFromAnOldKey() {
+        val json = opensensorFooterJson(coreS3Template.dict, coreS3Template.key.desc, 10_000, station = station, boot = "0f3a")
+        val own = ParquetIndexer.index(ParquetFile.wrap(boardFile(coreS3Template, footer = mapOf(OpenSensorFooter.KEY to json))), templates = FileTemplates.BUNDLED)
+        assertEquals("telemetry", own.purpose)
+        assertEquals("0f3a", own.bootId)
+        assertEquals("cores3-telemetry-v5", own.schemaVersion)
+        // The old unprefixed keys alone are not read.
+        val old = mapOf("station_id" to "other", "purpose" to "telemetry", "boot_id" to "0f3a", "schema_version" to "cores3-telemetry-v3")
+        val legacy = ParquetIndexer.index(ParquetFile.wrap(boardFile(coreS3Template, footer = old)), templates = FileTemplates.BUNDLED)
+        assertEquals(null, legacy.purpose)
+        assertEquals(null, legacy.bootId)
+        assertEquals(null, legacy.schemaVersion)
+        dailyOf(boardFile(coreS3Template, footer = old))
+        // A source whose station.id names another station fails the day.
+        val foreign = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(coreS3Template.dict, null, 10_000, station = "other"))
+        assertFailsWith<IllegalArgumentException> { dailyOf(boardFile(coreS3Template, footer = foreign)) }
     }
 
     @Test
@@ -243,7 +266,8 @@ class CurrentBoardFilesTest {
     @Test
     fun aDailyFileOfSourcesWithoutAFooterWritesNone() {
         val daily = dailyOf(boardFile(coreS3Template, footer = emptyMap()))
-        assertEquals(null, ParquetFile.wrap(daily).metadata.keyValueMetadata[OpenSensorFooter.KEY])
+        val keys = ParquetFile.wrap(daily).metadata.keyValueMetadata
+        assertTrue(OpenSensorFooter.KEY !in keys && OpenSensorFooter.DAY_KEY !in keys, keys.keys.toString())
     }
 
     @Test

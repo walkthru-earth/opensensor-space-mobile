@@ -102,7 +102,7 @@ object PreStreamingDailyParquetBuilder {
                 require(src.station == station) { "source belongs to another station" }
                 source.open().use { pf ->
                     val md = pf.metadata
-                    require(md.stationId == null || md.stationId == station) { "Parquet source belongs to another station" }
+                    require(md.footer?.stationId == null || md.footer?.stationId == station) { "Parquet source belongs to another station" }
                     rowsRead += pf.numRows
                     val cache = HashMap<String, ColumnValues?>()
                     fun col(name: String): ColumnValues? = cache.getOrPut(name) { md.leaf(name)?.let { pf.readColumn(it) } }
@@ -110,7 +110,7 @@ object PreStreamingDailyParquetBuilder {
                     val bootHi = col("boot_id_hi")?.let(LongColumn::of)
                     val bootLo = col("boot_id_lo")?.let(LongColumn::of)
                     val seq = col(ParquetIndexer.SEQ)?.let(LongColumn::of)
-                    val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.bootId } else null
+                    val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.footer?.bootId } else null
                     val mono = if (anchor != null) col(ParquetIndexer.MONO)?.let(LongColumn::of) else null
                     val estimated = if (anchor != null && mono != null) estimates(utc.size, mono, anchor) else null
                     val tierColumns = aggregator?.columns(::col, md.keyValueMetadata)
@@ -165,7 +165,7 @@ object PreStreamingDailyParquetBuilder {
                             UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(values, leaf) else values
                         }
                     }
-                    Src(src, keepCount, estimated, decoded, md.keyValueMetadata, md.schemaVersion)
+                    Src(src, keepCount, estimated, decoded, md.keyValueMetadata, md.footer?.schema)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -217,7 +217,7 @@ object PreStreamingDailyParquetBuilder {
         val footer = DailyParquetBuilder.dayFooter(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
-            footer?.let { put(OpenSensorFooter.KEY, it.encode()) }
+            footer?.let { put(OpenSensorFooter.DAY_KEY, it.encode()) }
             put("station_id", station)
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)

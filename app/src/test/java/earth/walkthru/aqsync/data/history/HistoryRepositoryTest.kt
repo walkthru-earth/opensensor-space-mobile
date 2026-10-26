@@ -25,7 +25,7 @@ import java.time.ZoneOffset
 
 class HistoryRepositoryTest {
 
-    private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
+    private fun bytes(path: String) = migrateLegacyFooter(checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes())
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val dayStart = 1_789_603_200L // 2026-09-17T00:00Z
 

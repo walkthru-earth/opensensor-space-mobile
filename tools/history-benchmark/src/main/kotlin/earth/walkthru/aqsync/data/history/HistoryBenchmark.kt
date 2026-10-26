@@ -53,7 +53,7 @@ open class HistoryBenchmark {
                     ParquetWriter.Column(Metrics.PM25.column, ParquetType.INT32),
                     ParquetWriter.Column(Metrics.BOARD_TEMP.column, ParquetType.FLOAT),
                 ),
-                keyValueMetadata = mapOf("station_id" to station)
+                keyValueMetadata = mapOf(OpenSensorFooter.KEY to OpenSensorFooter(stationId = station).encode())
             )
             writer.begin()
             writer.rowGroup(

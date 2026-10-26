@@ -11,4 +11,4 @@ private val fixtureRoot: String
     get() = NSProcessInfo.processInfo.environment["PARQUET_FIXTURES"] as? String
         ?: error("PARQUET_FIXTURES is not set: run through ./gradlew :core:history:iosSimulatorArm64Test")
 
-actual fun fixtureBytes(path: String): ByteArray = LocalFileReader("$fixtureRoot/$path").use { reader -> reader.read(0, reader.size.toInt()) }
+actual fun rawFixtureBytes(path: String): ByteArray = LocalFileReader("$fixtureRoot/$path").use { reader -> reader.read(0, reader.size.toInt()) }

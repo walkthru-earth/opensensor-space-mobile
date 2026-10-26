@@ -53,7 +53,7 @@ class DerivedDayViewTest {
         // Actual all-null UTC device bytes. A durable same-boot receipt places these rows at noon.
         val bytes = withCoreS3Dict(fixtureBytes("parquet/device/v1-none-64rows-unsynced.parquet"))
         val (station, summary) = ParquetFile.wrap(bytes).use { file ->
-            (file.metadata.stationId ?: "estimated-station") to ParquetIndexer.index(file, templates = CoreS3Files)
+            (file.metadata.footer?.stationId ?: "estimated-station") to ParquetIndexer.index(file, templates = CoreS3Files)
         }
         assertEquals(0L, summary.utcRows)
         val startS = day * 86_400 + 12 * 3_600
@@ -168,7 +168,7 @@ class DerivedDayViewTest {
                 ParquetWriter.Column(ParquetIndexer.SEQ, ParquetType.INT64),
                 ParquetWriter.Column(Metrics.BOARD_TEMP.column, ParquetType.FLOAT),
             )
-            val writer = ParquetWriter(sink, columns, keyValueMetadata = mapOf("station_id" to station))
+            val writer = ParquetWriter(sink, columns, keyValueMetadata = mapOf(OpenSensorFooter.KEY to OpenSensorFooter(stationId = station).encode()))
             writer.begin()
             writer.rowGroup(
                 listOf(
@@ -274,7 +274,7 @@ class DerivedDayViewTest {
     @Test
     fun theDerivedDayGivesTheRawPointsWithoutOpeningARawFile() = runTest {
         val first = respread()
-        val station = ParquetFile.wrap(first).metadata.stationId ?: "derived-station"
+        val station = ParquetFile.wrap(first).metadata.footer?.stationId ?: "derived-station"
         val store = Store()
         val index = Index()
         for ((i, bytes) in listOf(first, respread(nullBefore = 70)).withIndex()) {
@@ -357,7 +357,7 @@ class DerivedDayViewTest {
     fun aRawMicrosDayGivesTheSamePointsAsItsNanosOriginal() = runTest {
         val nanos = respread()
         val micros = microsLayout(nanos)
-        val station = ParquetFile.wrap(nanos).metadata.stationId ?: "derived-station"
+        val station = ParquetFile.wrap(nanos).metadata.footer?.stationId ?: "derived-station"
         assertEquals(ParquetLogicalType.TimeUnit.MICROS, ParquetFile.wrap(micros).leaf(UtcColumns.EVENT_US).timestampUtcUnit)
         suspend fun reader(bytes: ByteArray): HistorySeriesReader {
             val store = Store()
@@ -384,7 +384,7 @@ class DerivedDayViewTest {
     @Test
     fun aDayWithoutADerivedFileReadsTheRawFiles() = runTest {
         val bytes = respread()
-        val station = ParquetFile.wrap(bytes).metadata.stationId ?: "derived-station"
+        val station = ParquetFile.wrap(bytes).metadata.footer?.stationId ?: "derived-station"
         val store = Store()
         val index = Index()
         val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
@@ -422,7 +422,7 @@ class DerivedDayViewTest {
     @Test
     fun aSecondReadOfADerivedDayReusesItsFooter() = runTest {
         val bytes = respread()
-        val station = ParquetFile.wrap(bytes).metadata.stationId ?: "derived-station"
+        val station = ParquetFile.wrap(bytes).metadata.footer?.stationId ?: "derived-station"
         val store = Store()
         val index = Index()
         val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")

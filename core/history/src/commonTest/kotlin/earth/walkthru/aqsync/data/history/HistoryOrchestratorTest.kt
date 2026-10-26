@@ -36,7 +36,7 @@ import kotlin.time.Duration.Companion.seconds
 /** The History pass order both phones share, over an in-memory archive and fake platform passes. */
 class HistoryOrchestratorTest {
     private val bytes = fixtureBytes("parquet/device/v3-board-2rg-180rows.parquet")
-    private val station = ParquetFile.wrap(bytes).metadata.stationId ?: "orchestrator-station"
+    private val station = ParquetFile.wrap(bytes).metadata.footer?.stationId ?: "orchestrator-station"
 
     private class Store : ArchiveStore {
         val files = HashMap<ArchiveKey, ByteArray>()

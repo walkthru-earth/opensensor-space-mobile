@@ -58,7 +58,7 @@ internal class LegacyAggregator(
         val md = file.metadata
         val utc = UtcColumns.readEventNs(file) ?: return
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
-        val applicable = anchor?.takeIf { it.boot == md.bootId }
+        val applicable = anchor?.takeIf { it.boot == md.footer?.bootId }
         val monoAll = col(ParquetIndexer.MONO)
         val mono = if (applicable != null) monoAll else null
         val bootHi = col("boot_id_hi")
@@ -145,12 +145,12 @@ internal object LegacyDailyParquetBuilder {
             require(src.station == station) { "source belongs to another station" }
             opened += source.open().use { pf ->
                 val md = pf.metadata
-                require(md.stationId == null || md.stationId == station) { "Parquet source belongs to another station" }
+                require(md.footer?.stationId == null || md.footer?.stationId == station) { "Parquet source belongs to another station" }
                 val utc = UtcColumns.readEventNs(pf) ?: return@use null
                 val bootHi = md.leaf("boot_id_hi")?.let { pf.readColumn(it) }
                 val bootLo = md.leaf("boot_id_lo")?.let { pf.readColumn(it) }
                 val seq = md.leaf(ParquetIndexer.SEQ)?.let { pf.readColumn(it) }
-                val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.bootId } else null
+                val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.footer?.bootId } else null
                 val mono = if (anchor != null) md.leaf(ParquetIndexer.MONO)?.let { pf.readColumn(it) } else null
                 val estimated = if (anchor != null && mono != null) LongArray(utc.size) { i -> mono.asLong(i)?.let(anchor::estimateNsOrNull) ?: Long.MIN_VALUE } else null
                 val keep = ArrayList<Int>()
@@ -171,7 +171,7 @@ internal object LegacyDailyParquetBuilder {
                 if (estimated != null && keep.isNotEmpty()) anyEstimated = true
                 // Decode every column of a contributing source once, while it is open.
                 val decoded = if (keep.isEmpty()) emptyMap() else pf.leaves.associate { leaf -> UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(pf.readColumn(leaf), leaf) else pf.readColumn(leaf) }
-                Src(src, keep.toIntArray(), estimated, decoded, md.keyValueMetadata, md.schemaVersion)
+                Src(src, keep.toIntArray(), estimated, decoded, md.keyValueMetadata, md.footer?.schema)
             } ?: continue
         }
         if (opened.isEmpty() || opened.all { it.keep.isEmpty() }) return null
@@ -198,7 +198,7 @@ internal object LegacyDailyParquetBuilder {
         val footer = DailyParquetBuilder.dayFooter(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
-            footer?.let { put(OpenSensorFooter.KEY, it.encode()) }
+            footer?.let { put(OpenSensorFooter.DAY_KEY, it.encode()) }
             put("station_id", station)
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)

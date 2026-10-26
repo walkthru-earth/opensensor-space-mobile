@@ -124,7 +124,7 @@ class UtcColumnsTest {
         val oldBytes = fixtureBytes(fixture)
         val newBytes = current(seqOffset = 1_000_000)
         val old = ParquetFile.wrap(oldBytes)
-        val station = old.metadata.stationId ?: "station-a"
+        val station = old.metadata.footer?.stationId ?: "station-a"
         val day = StationDays.dayOf(ParquetIndexer.index(old, templates = CoreS3Files).firstUtcNs!!)
         fun source(name: String, bytes: ByteArray, n: Long): DailyParquetSource {
             val index = ParquetIndexer.index(ParquetFile.wrap(bytes), templates = CoreS3Files)
