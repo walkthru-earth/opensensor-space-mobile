@@ -169,7 +169,8 @@ new session resume the run, and verified files already on the phone are never fe
 
 `GET_CONFIG` keeps its legacy empty body. Page byte `1` requests the `location`
 object with cell, maximum `resolution`, actual `cell_resolution`, derived
-center `lat`/`lon` and declared `country`. It uses the same CONFIG/CONFIG_CHUNK
+center `lat`/`lon` and declared `country`, plus the `thing` object with
+`mobility` (`fixed` or `moving`, default `fixed`). It uses the same CONFIG/CONFIG_CHUNK
 framing and 480-byte JSON limit. `Request.GetLocation` and `DeviceSession.getLocation`
 return unsupported when older firmware returns the legacy object or rejects
 that selector. A missing location object is not an unset supported location.
@@ -177,6 +178,10 @@ that selector. A missing location object is not an unset supported location.
 `ConfigPatch.location` sends only `location.cell`, `location.resolution` and
 `location.country`. SET_CONFIG acknowledges the legacy page; the app then reads
 page 1 and checks its saved values. No raw GPS coordinates cross this API.
+`ConfigPatch.Builder.thingMobility` sends `thing.mobility`, and the firmware splits the file on a
+change. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
+board keeps in RAM and writes with `location_source` 3. No released firmware accepts it, so the
+app names the key and never sends it.
 Pages 2–4 are firmware time policy/status and server configuration; this app
 currently exposes location provisioning. See [device-location.md](device-location.md)
 and the firmware-owned [wire contract](../../aq-parquet/docs/shared/ble-sync-protocol.md).
