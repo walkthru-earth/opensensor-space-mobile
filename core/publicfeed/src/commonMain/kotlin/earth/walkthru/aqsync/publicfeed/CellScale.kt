@@ -101,14 +101,30 @@ class StepScale private constructor(val propertyId: String, val scale: Scale) {
         private const val DARK_LUMINANCE = 0.179
 
         /**
-         * [scale] for [propertyId], or null when its steps cannot be read in order. The finite upper
-         * bounds must ascend strictly and only the last step may be open.
+         * The most steps a scale may have. WHO has 6, and the legend, the step bar and the chart bins
+         * walk every step, so a feed cannot make them draw thousands.
+         */
+        const val MAX_STEPS: Int = 12
+
+        /**
+         * The largest magnitude an edge or guideline may have. Sensor readings in the feed stay far
+         * below it (CO2 in ppm and pressure in Pa near 1e5, particle counts near 1e7), and it keeps
+         * every edge exact as a Long count of half units in [StepAxis.bins].
+         */
+        const val MAX_MAGNITUDE: Double = 1e9
+
+        /**
+         * [scale] for [propertyId], or null when the app cannot read it. It needs at most [MAX_STEPS]
+         * steps, finite upper bounds ascending strictly with only the last step open, and every edge
+         * and the guideline finite and within [MAX_MAGNITUDE].
          */
         fun of(propertyId: String, scale: Scale): StepScale? {
+            if (scale.steps.size > MAX_STEPS) return null
+            if (scale.guideline?.let { !it.isFinite() || abs(it) > MAX_MAGNITUDE } == true) return null
             val uppers = scale.steps.map { it.upper }
             if (uppers.dropLast(1).any { it == null || !it.isFinite() }) return null
             val edges = uppers.filterNotNull()
-            if (edges.any { !it.isFinite() } || edges.zipWithNext().any { (a, b) -> a >= b }) return null
+            if (edges.any { !it.isFinite() || abs(it) > MAX_MAGNITUDE } || edges.zipWithNext().any { (a, b) -> a >= b }) return null
             return StepScale(propertyId, scale)
         }
 
@@ -162,9 +178,8 @@ object StepAxis {
         val units = inside.map { it / unit }
         if (units.any { abs(it - it.roundToLong()) > EPS }) return null
         val top = units.last().roundToLong()
-        val fits = (1..top).filter { w -> units.all { it.roundToLong() % w == 0L } }
-            .map { w -> (top / w).toInt() }
-            .filter { it in MIN_BINS..MAX_BINS }
+        // Bounded by the bin counts and the steps, never by the size of [high].
+        val fits = (MIN_BINS..MAX_BINS).filter { n -> top % n == 0L && units.all { it.roundToLong() % (top / n) == 0L } }
         return fits.filter { it <= 24 }.maxOrNull() ?: fits.minOrNull()
     }
 

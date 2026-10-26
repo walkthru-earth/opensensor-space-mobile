@@ -89,7 +89,9 @@ class DiscoverCollectionTest {
         )
         // A root that is not https accepts no absolute href, only relative ones.
         val cleartext = DiscoverCollection.parse(
-            collection(""""h3_res=5":{"href":"http://example.test/r5.parquet"},"h3_res=6":{"href":"cells/r6.parquet"}"""),
+            collection(
+                """"h3_res=4":{"href":"https://u@evil.test/x"},"h3_res=5":{"href":"http://example.test/r5.parquet"},"h3_res=6":{"href":"cells/r6.parquet"}""",
+            ),
             "http://example.test",
         )
         assertEquals(mapOf(6 to "http://example.test/cells/r6.parquet"), cleartext.cells)
@@ -133,19 +135,40 @@ class DiscoverCollectionTest {
         assertNull(DiscoverCollection.parse(collection(""), root).resolutionNear(5))
     }
 
+    /** The fixture with [scale] as the soil property's scale. */
+    private fun withSoilScale(scale: String): DiscoverCollection {
+        val fixture = fixtureBytes(OpenAqFixture.STAC_COLLECTION).decodeToString()
+        val json = fixture.replace("\"opensensor:scales\": {", "\"opensensor:scales\":{\"soil-bad\":$scale,")
+            .replace("\"name\": \"soil_moisture__mean\"", "\"name\":\"soil_moisture__mean\",\"opensensor:scale\":\"soil-bad\"")
+        check(json.contains("\"soil-bad\":{") && json.contains("\"opensensor:scale\":\"soil-bad\"")) { "the fixture changed shape" }
+        return DiscoverCollection.parse(json, root)
+    }
+
+    private fun soilScale(uppers: List<String>, guideline: String = "null") =
+        """{"source":"https://example.test/soil","unit":"m³/m³","guideline":$guideline,"steps":[""" +
+            uppers.joinToString(",") { """{"upper":$it,"label":{"en":"s$it"}}""" } + "]}"
+
     @Test
     fun aScaleThatDoesNotParseIsDroppedAloneAndItsPropertyGoesNeutral() {
-        val fixture = fixtureBytes(OpenAqFixture.STAC_COLLECTION).decodeToString()
-        val broken = fixture.replace(
-            "\"opensensor:scales\": {",
-            "\"opensensor:scales\":{\"soil-broken\":{\"source\":\"https://example.test/soil\",\"steps\":[{\"upper\":\"high\"}]},",
-        ).replace("\"name\": \"soil_moisture__mean\"", "\"name\":\"soil_moisture__mean\",\"opensensor:scale\":\"soil-broken\"")
-        check(broken.contains("soil-broken\":{") && broken.contains("\"opensensor:scale\":\"soil-broken\"")) { "the fixture changed shape" }
-        val c = DiscoverCollection.parse(broken, root)
+        val c = withSoilScale("""{"source":"https://example.test/soil","steps":[{"upper":"high"}]}""")
         assertNull(c.scale("soil_moisture"))
         assertEquals("Soil moisture", c.title("soil_moisture"))
         assertEquals(WhoGuidelines.URL, c.scale("pm25")?.source)
         assertEquals(mapOf(5 to "$root/cells/h3_res=5/data.parquet"), c.cells)
+    }
+
+    @Test
+    fun aScaleTooLongOrTooLargeIsDroppedAloneAndItsPropertyGoesNeutral() {
+        val twelve = (1..StepScale.MAX_STEPS - 1).map { "$it" } + "null"
+        assertEquals(StepScale.MAX_STEPS, withSoilScale(soilScale(twelve)).scale("soil_moisture")?.steps?.size)
+        val thousands = (1..5000).map { "$it" } + "null"
+        val huge = listOf("1", "1e300", "null")
+        val hugeGuideline = soilScale(listOf("1", "2", "null"), guideline = "1e12")
+        for (bad in listOf(soilScale(thousands), soilScale(huge), hugeGuideline, soilScale(emptyList()))) {
+            val c = withSoilScale(bad)
+            assertNull(c.scale("soil_moisture"), bad.take(80))
+            assertEquals(WhoGuidelines.URL, c.scale("pm25")?.source)
+        }
     }
 
     @Test

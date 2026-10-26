@@ -574,7 +574,8 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
   `__mean`, `__min` and `__max` per property. The `__mean` column's `title` names the property
   for an id the app does not know, and its `opensensor:scale` is a key of the Collection's
   `opensensor:scales`, the legend's step scale. A column without one gets the neutral ramp, and so does one whose
-  scale does not parse, which is dropped alone while the rest of the Collection stands. The
+  scale does not parse or breaks a bound (more than 12 steps, or an edge or guideline that is not
+  finite or is beyond 1e9), which is dropped alone while the rest of the Collection stands. The
   end of `extent.temporal.interval` is `as_of`, `updated` is the generation. `latest()` answers
   `FeedPartition(as_of, 0, updated)`. A resolution without an asset answers an empty table with
   no request, so the controller asks the feed for the nearest listed resolution first.

@@ -80,8 +80,9 @@ class DiscoverCollection private constructor(
          * Parses [json], resolving relative asset hrefs against [root], the folder of the file. An
          * absolute href is kept only when it is https on the same host as an https [root], so a
          * Collection cannot send the app to another host, to cleartext or to a local address. Any
-         * other asset, and one whose key is not `h3_res=<n>`, is dropped alone. A scale in `opensensor:scales` that does not parse is dropped
-         * alone, so its property falls back to the neutral ramp and the rest of the Collection stands.
+         * other asset, and one whose key is not `h3_res=<n>`, is dropped alone. A scale in
+         * `opensensor:scales` that does not parse, or that [StepScale.of] refuses, is dropped alone,
+         * so its property falls back to the neutral ramp and the rest of the Collection stands.
          *
          * @throws IllegalArgumentException when [json] is not a Collection.
          */
@@ -107,8 +108,9 @@ class DiscoverCollection private constructor(
         }
 
         /**
-         * [json] without the scales that do not parse on their own. Each scale is tried in a copy of
-         * the Collection that holds only it. Any other fault is left for the full parse to report.
+         * [json] without the scales that do not parse on their own or that [StepScale.of] refuses (too
+         * many steps, edges out of order, out of bounds or not finite). Each scale is tried in a copy
+         * of the Collection that holds only it. Any other fault is left for the full parse to report.
          */
         private fun withoutBrokenScales(json: String): String {
             val tree = try {
@@ -119,8 +121,8 @@ class DiscoverCollection private constructor(
             val scales = tree[SCALES] as? JsonObject ?: return json
             val kept = scales.filter { (id, scale) ->
                 try {
-                    StationCollection.parse(JsonObject(tree + (SCALES to JsonObject(mapOf(id to scale)))).toString())
-                    true
+                    val alone = StationCollection.parse(JsonObject(tree + (SCALES to JsonObject(mapOf(id to scale)))).toString())
+                    alone.scales[id]?.let { StepScale.of(id, it) } != null
                 } catch (_: IllegalArgumentException) {
                     false
                 }

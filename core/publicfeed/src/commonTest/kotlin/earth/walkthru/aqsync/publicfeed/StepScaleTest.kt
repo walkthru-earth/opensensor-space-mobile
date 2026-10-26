@@ -54,6 +54,30 @@ class StepScaleTest {
     }
 
     @Test
+    fun aScaleTooLongOrOutOfBoundsIsRefused() {
+        val max = StepScale.MAX_STEPS
+        assertNotNull(StepScale.of("x", scale(*(1 until max).map { step(it.toDouble()) }.plus(step(null)).toTypedArray())))
+        assertNull(StepScale.of("x", scale(*(1..max).map { step(it.toDouble()) }.plus(step(null)).toTypedArray())))
+        val m = StepScale.MAX_MAGNITUDE
+        assertNotNull(StepScale.of("x", scale(step(-m), step(m), step(null), guideline = m)))
+        for (bad in listOf(m * 2, -m * 2, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            assertNull(StepScale.of("x", scale(step(0.0), step(bad), step(null))), "edge $bad")
+            assertNull(StepScale.of("x", scale(step(1.0), step(null), guideline = bad)), "guideline $bad")
+        }
+        // The last step may be closed, and then it is bounded too.
+        assertNull(StepScale.of("x", scale(step(1.0), step(Double.POSITIVE_INFINITY))))
+    }
+
+    @Test
+    fun binsStayBoundedForAHugeTop() {
+        val s = StepScale.of("pm25", DiscoverCollection.BUNDLED.scale("pm25")!!)!!
+        // The top comes from the data, not the scale. 2e15 half units would never finish if every
+        // width were tried, the 25 bin counts answer at once.
+        assertNull(StepAxis.bins(s, 1e15))
+        assertEquals(30, StepAxis.bins(s, 75.0))
+    }
+
+    @Test
     fun onlyASixStepOpenScaleCitedToWhoIsTheMoodScale() {
         val pm = DiscoverCollection.BUNDLED.scale("pm25")!!
         assertNotNull(StepScale.of("pm25", pm)!!.who)
