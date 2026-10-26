@@ -150,7 +150,8 @@ fun TodayContent(
 ) {
     val snapshot = state.snapshot
     val level = state.level
-    val profile = state.capabilities.liveProfile
+    val capabilities = state.capabilities
+    val reading = state.reading
     val live = snapshot.live
     val receivedAt = snapshot.liveAtEpochMs
     // Hoisted so the scroll position belongs to the screen. A clock refresh must never reset it.
@@ -239,10 +240,10 @@ fun TodayContent(
                     state.cards.forEach { card ->
                         item(key = card.key) {
                             when (card) {
-                                TodayCard.NOW_AIR -> MetricHeroCard(live, receivedAt, level)
-                                TodayCard.NOW_ENVIRONMENT -> EnvironmentCard(profile, live, receivedAt, hero = true)
+                                TodayCard.NOW_AIR -> MetricHeroCard(reading, receivedAt, level)
+                                TodayCard.NOW_ENVIRONMENT -> EnvironmentCard(state.liveSupport, capabilities, reading, receivedAt, hero = true)
                                 TodayCard.TODAY_SO_FAR -> TodaySoFarCard(snapshot.todaySoFar, clockMissing = snapshot.status?.utcSynced == false, level = level)
-                                TodayCard.ENVIRONMENT -> EnvironmentCard(profile, live, receivedAt, hero = false)
+                                TodayCard.ENVIRONMENT -> EnvironmentCard(state.liveSupport, capabilities, reading, receivedAt, hero = false)
                                 TodayCard.SMART_SYNC -> SmartSyncCard(
                                     sync = snapshot.sync,
                                     archive = snapshot.archive,
@@ -258,10 +259,10 @@ fun TodayContent(
                                     level = level,
                                     onFlush = onRequestFlush,
                                 )
-                                TodayCard.BATCH_ESTIMATE -> BatchEstimateCard(live, receivedAt, snapshot.config)
-                                TodayCard.READINGS -> ReadingsCard(live, receivedAt, level)
-                                TodayCard.PARTICLES -> ParticlesCard(live, profile)
-                                TodayCard.BOARD -> BoardCard(live, profile, level)
+                                TodayCard.BATCH_ESTIMATE -> BatchEstimateCard(reading, receivedAt, snapshot.config)
+                                TodayCard.READINGS -> ReadingsCard(reading, receivedAt, level)
+                                TodayCard.PARTICLES -> ParticlesCard(reading)
+                                TodayCard.BOARD -> BoardCard(reading, capabilities, level)
                                 TodayCard.STORAGE -> StorageCard(snapshot.status, snapshot.statusAtEpochMs, level)
                                 TodayCard.DEVICE_INFO -> DeviceInfoCard(
                                     name = snapshot.name,

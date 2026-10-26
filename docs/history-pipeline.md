@@ -235,7 +235,7 @@ Six moods, one per step of the WHO 2021 Air Quality Guidelines PM2.5 scale (`:co
 as WHO states them ("at or below 15 meets the guideline"): `FRESH` "Fresh air" (guideline) · `FAIR`
 (IT-4) · `HAZY` "Getting hazy" (IT-3) · `POOR` (IT-2) · `SMOKY` (IT-1) · `THICK` "Thick smoke" (above
 IT-1). The edges are never repeated in `:core:history` or the app. Each has a
-title, one line of advice and a comparison — colour is never the only carrier. `NowReading.of(live)`
+title, one line of advice and a comparison — colour is never the only carrier. `NowReading.of(reading)`
 puts the sensor state first (`pms_status ≠ 4` → words, never a number). "Right now" is a 10-second
 snapshot; "Today so far" is the **local** day folded from the hourly tier with its coverage.
 **No "AQI" anywhere** (a named index needs validated averaging rules). Live and archived mood

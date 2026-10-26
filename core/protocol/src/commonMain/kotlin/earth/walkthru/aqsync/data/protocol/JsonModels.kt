@@ -3,6 +3,11 @@ package earth.walkthru.aqsync.data.protocol
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.longOrNull
 
 /**
  * JSON characteristic payloads from ../aq-parquet/docs/shared/ble-sync-protocol.md.
@@ -125,62 +130,63 @@ enum class PmsStatus(val code: Int, val label: String) {
 }
 
 /**
- * `live` (read, notify). One snapshot per stored sample, PM keys appear only when `pms == 4`. The
- * keys come from the board's field table ([LiveProfile.keys]). Parsing ignores unknown keys and
- * reads a missing key as null, and the firmware omits a non-finite value instead of sending it.
+ * `live` (read, notify). One snapshot per stored sample, read as a map by key name. The board sends
+ * every key its field table declares, each as a number or `null`. `null` means no reading now, and an
+ * absent key means the board has no such field. A number may print as `1.0` or `1.00` and parses to
+ * the same value, the app keeps its own display rounding. When the board's buffer overflows it sends
+ * one object with every key `null` ([overflow]), which clears the live values.
+ *
+ * [seq], [mono] and [utc] are typed header fields. Every other key lands in [values] by its key name,
+ * a number as a [Double] and `null` as null. A value that is not a number is skipped. Keys mean
+ * nothing on their own, [LiveReading] maps them to template columns and ignores undeclared ones.
  */
-@Serializable
 data class LiveSample(
     val seq: Long? = null,
     /** monotonic_us */
     val mono: Long? = null,
-    /** UTC in nanoseconds (LIVE keeps ns while the Parquet column is in microseconds), omitted when unsynchronized. */
+    /** UTC in nanoseconds (LIVE keeps ns while the Parquet column is in microseconds), null when unsynchronized. */
     val utc: Long? = null,
-    /** pms_status code: 0 absent, 1 warming, 2 stale, 3 sensor error, 4 valid. */
-    val pms: Int? = null,
-    /** pm*_atmospheric_ug_m3 — the values to display. */
-    val pm1: Double? = null,
-    val pm25: Double? = null,
-    val pm10: Double? = null,
-    /** pm*_cf1_ug_m3 */
-    val c1: Double? = null,
-    val c25: Double? = null,
-    val c10: Double? = null,
-    /** particles_gt*_per_01l */
-    val n03: Long? = null,
-    val n05: Long? = null,
-    val n1: Long? = null,
-    val n25: Long? = null,
-    val n5: Long? = null,
-    val n10: Long? = null,
-    /** Waveshare ambient air temperature (`t`). Absent on CoreS3. */
-    val t: Double? = null,
-    /** CoreS3 IMU die temperature (`imu_t`), a board temperature, never air temperature. */
-    @SerialName("imu_t") val imuT: Double? = null,
-    /** Waveshare PMS5003T relative_humidity_percent; absent when unavailable. */
-    val rh: Double? = null,
-    /** battery_mv */
-    val bat: Int? = null,
-    /** battery_percent */
-    val pct: Int? = null,
-    /** charging_status */
-    val chg: Int? = null,
-    /** vbus_mv */
-    val vbus: Int? = null,
-    /** light_ch0_raw */
-    val als: Long? = null,
-    /**
-     * Waveshare v5 battery_health_state, inferred from cell voltage with uncalibrated thresholds.
-     * 0 unknown, 1 external power likely, 2 ok, 3 low, 4 critical, 5 settling after a gauge reset.
-     * Absent when no battery is installed. Parsed only, no screen shows it yet (#90).
-     */
-    val bstate: Int? = null,
+    /** Every other key by its key name. */
+    val values: Map<String, Double?> = emptyMap(),
+    /** True when every key of the object was `null`, the board's overflow sample. */
+    val overflow: Boolean = false,
 ) {
-    val pmsStatus: PmsStatus? get() = PmsStatus.fromCode(pms)
-    val pmValid: Boolean get() = pms == PmsStatus.VALID.code
-    val hasUtc: Boolean get() = utc != null
+    /** The value of the LIVE [key], null when the key is absent or carries no reading now. */
+    operator fun get(key: String): Double? = values[key]
+
+    /** True when the sample carries [key], even as `null`. */
+    fun has(key: String): Boolean = key in values
 
     companion object {
-        fun parse(text: String): LiveSample = AqJson.decodeFromString(serializer(), text)
+        const val SEQ = "seq"
+        const val MONO = "mono"
+        const val UTC = "utc"
+
+        /** The typed header fields, never read as values. */
+        val HEADER: Set<String> = setOf(SEQ, MONO, UTC)
+
+        /** @throws IllegalArgumentException when [text] is not a JSON object. */
+        fun parse(text: String): LiveSample {
+            val obj = AqJson.parseToJsonElement(text) as? JsonObject ?: throw IllegalArgumentException("LIVE is not a JSON object")
+            val values = LinkedHashMap<String, Double?>()
+            for ((key, element) in obj) {
+                if (key in HEADER) continue
+                when {
+                    element is JsonNull -> values[key] = null
+                    element is JsonPrimitive && !element.isString -> element.doubleOrNull?.let { values[key] = it }
+                }
+            }
+            return LiveSample(
+                seq = obj.header(SEQ),
+                mono = obj.header(MONO),
+                utc = obj.header(UTC),
+                values = values,
+                overflow = obj.isNotEmpty() && obj.values.all { it is JsonNull },
+            )
+        }
+
+        private fun JsonObject.header(key: String): Long? = (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.let {
+            it.longOrNull ?: it.doubleOrNull?.takeIf { d -> d.isFinite() && d == kotlin.math.floor(d) }?.toLong()
+        }
     }
 }

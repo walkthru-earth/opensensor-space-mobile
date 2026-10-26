@@ -101,21 +101,27 @@ Complete ⇔ byte count == `OPENED.size` **and** CRC-32 (IEEE, `java.util.zip.CR
 
 ## JSON (`JsonModels`)
 
-`info`, `status`, `live`, `CONFIG` payloads. **Absent keys are `null`, never `0`.** `bat`/`pct` in
+`info`, `status`, `live`, `CONFIG` payloads. **No reading is `null`, never `0`.** `bat`/`pct` in
 `live` are shown raw with a "board report, unqualified" label (16,372 → 23 mV seen with no battery).
 Feature gates use `info.proto` / `info.fw`, never guesses.
 
-LIVE keys come from each board's field table and are parsed in any order. Unknown keys are ignored,
-a missing key is null, and the firmware sends every declared key with null for no reading. Floats such as `1.00` and `1.0` parse as numbers. `utc` is nanoseconds.
-`LiveProfiles.resolve` reads the `info.dict` digest only, so a newer schema string over the same
-dictionary keeps its profile. It looks the digest up in the bundled board templates under
-`core/model/bundled/templates/` and joins the matching app profile under `core/model/bundled/profiles/`
-(`BundledCatalog.live`). Only the current digest of each board is bundled. CoreS3 v6.15 (`4f80c26c…`)
+`LiveSample` parses LIVE as a map by key name, in any order. `seq`, `mono` and `utc` are typed
+header fields, and `utc` is nanoseconds. Every other key is a number or null. Floats such as `1.00`
+and `1.0` parse as numbers, and the app keeps its own display rounding. The firmware sends every key
+the template declares in `live_keys`. A null key means no reading now, so the card shows a dash. An
+absent key means the board has no such field, so the card hides. A null never means unsupported. On
+overflow every key is null, and that sample replaces the last one, so every live value clears. A key
+the template does not declare is ignored, so a newer board adding a key breaks nothing.
+`LiveReading` reads a sample through the `Station` of the `info.dict` digest only, so a newer schema
+string over the same dictionary keeps its view. A column's value comes from its LIVE key, its unit
+from the column and its label from the app profile. The station joins the bundled board template
+under `core/model/bundled/templates/` with the app profile under `core/model/bundled/profiles/`
+(`BundledCatalog.station`). Only the current digest of each board is bundled. CoreS3 v6.15 (`4f80c26c…`)
 sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
 because they are always null on CoreS3. Waveshare v2.9 (`6f567b38…`) sends `t`, ambient air
 temperature, `rh` and `bstate`, the battery health code. A new firmware digest is a template and
 profile file swap plus a fixture refresh, with no code change. Any other digest, older ones included,
-has no LIVE profile. The station join (`BundledCatalog.station`) still shows such a board from a
+has no LIVE view, and Today says so only after `INFO` arrived. The station join (`BundledCatalog.station`) still shows such a board from a
 served template, with raw column names and raw units and no guessed label. `LiveKeyFixturesTest`
 holds every digest from aq-parquet `tools/fixtures/live_keys/`, checks the bundled template live keys
 against the current ones and lists the retired ones, and the weekly `live-key-drift` workflow fails

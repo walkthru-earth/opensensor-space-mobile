@@ -32,7 +32,8 @@ import kotlin.test.assertTrue
 class TodayCardsTest {
     private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = BundledCatalog.templates.first { it.schema.startsWith("waveshare-") }.dict)
     private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = BundledCatalog.templates.first { it.schema.startsWith("cores3-") }.dict)
-    private val particleSample = LiveSample(pms = 4, pm25 = 14.9)
+    private val particleSample = LiveSample.parse("""{"pms":4,"pm25":14.9}""")
+    private val absentSensor = LiveSample.parse("""{"pms":0,"pm25":null}""")
 
     private fun state(info: DeviceInfo?, live: LiveSample?, level: DetailLevel, batch: Int? = null) = TodayUiState(
         snapshot = TodaySnapshot(
@@ -69,17 +70,20 @@ class TodayCardsTest {
 
     @Test
     fun aBoardTemperatureDeviceGetsTheEnvironmentHeroAndNoParticleCards() {
-        // CoreS3 reports board temperature, so neither the mood nor the ambient card applies.
-        assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, LiveSample(imuT = 31.0), DetailLevel.SIMPLE).cards)
+        // A CoreS3 sample without a PM sensor reports board temperature only, so neither the mood nor the ambient card applies.
+        val boardOnly = LiveSample.parse("""{"pms":0,"imu_t":31.0}""")
+        assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, boardOnly, DetailLevel.SIMPLE).cards)
         assertEquals(
             listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK, BOARD, STORAGE, DEVICE_INFO),
-            state(cores3, LiveSample(imuT = 31.0), DetailLevel.DETAILED).cards,
+            state(cores3, boardOnly, DetailLevel.DETAILED).cards,
         )
+        // With its PM sensor the CoreS3 gets the mood but never the ambient card.
+        assertEquals(listOf(NOW_AIR, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, particleSample, DetailLevel.SIMPLE).cards)
     }
 
     @Test
     fun anAbsentParticleSensorNeverShowsAMood() {
-        val cards = state(waveshare, LiveSample(pms = 0), DetailLevel.DETAILED).cards
+        val cards = state(waveshare, absentSensor, DetailLevel.DETAILED).cards
         assertEquals(NOW_ENVIRONMENT, cards.first())
         assertFalse(NOW_AIR in cards)
         assertFalse(PARTICLES in cards)
@@ -108,7 +112,7 @@ class TodayCardsTest {
     @Test
     fun cardKeysAreUniqueWithinOneList() {
         for (level in DetailLevel.entries) {
-            for (live in listOf(particleSample, LiveSample(pms = 0), null)) {
+            for (live in listOf(particleSample, absentSensor, null)) {
                 val keys = state(waveshare, live, level, batch = 1).cards.map { it.key }
                 assertEquals(keys.size, keys.toSet().size, "duplicate key at $level with $live")
             }
@@ -164,8 +168,31 @@ class TodayCardsTest {
     @Test
     fun unknownDictionaryShowsNoLiveReadings() {
         val unknown = waveshare.copy(dict = "0".repeat(64))
-        val state = state(unknown, LiveSample(pms = 4, pm25 = 14.9, t = 22.5, imuT = 40.0, rh = 50.0), DetailLevel.SIMPLE)
-        assertNull(state.capabilities.liveProfile)
+        val state = state(unknown, LiveSample.parse("""{"pms":4,"pm25":14.9,"t":22.5,"imu_t":40.0,"rh":50.0}"""), DetailLevel.SIMPLE)
+        assertNull(state.capabilities.station)
+        assertNull(state.reading)
+        assertEquals(LiveSupport.UNSUPPORTED, state.liveSupport)
         assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), state.cards)
+    }
+
+    @Test
+    fun pendingInfoIsAQuietWaitNeverUnsupported() {
+        // #152. Before INFO arrives nothing says the board is unsupported.
+        assertEquals(LiveSupport.PENDING, state(null, null, DetailLevel.SIMPLE).liveSupport)
+        assertEquals(LiveSupport.PENDING, state(null, particleSample, DetailLevel.SIMPLE).liveSupport)
+        assertEquals(LiveSupport.READY, state(waveshare, null, DetailLevel.SIMPLE).liveSupport)
+        assertEquals(LiveSupport.UNSUPPORTED, state(DeviceInfo(proto = 3), null, DetailLevel.SIMPLE).liveSupport)
+    }
+
+    @Test
+    fun anOverflowSampleClearsEveryLiveValueAndKeepsTheCards() {
+        val overflow = LiveSample.parse("""{"seq":null,"mono":null,"utc":null,"pms":null,"pm25":null,"t":null,"rh":null}""")
+        val before = state(waveshare, particleSample, DetailLevel.DETAILED)
+        val after = state(waveshare, overflow, DetailLevel.DETAILED)
+        assertEquals(14.9, before.reading?.value("pm25_atmospheric_ug_m3"))
+        assertNull(after.reading?.value("pm25_atmospheric_ug_m3"))
+        assertNull(after.reading?.value("ambient_temperature_c"))
+        assertNull(after.reading?.pmsStatus)
+        assertEquals(before.cards, after.cards, "a null reading never hides a card")
     }
 }

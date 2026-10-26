@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import earth.walkthru.aqsync.collection.SyncEndReason
+import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.AqGatt
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
@@ -101,7 +102,9 @@ class CompanionState {
         private set
     internal var syncFinishedAtEpochMs by mutableStateOf<Long?>(null)
         private set
-    internal val reading: NowReading get() = NowReading.of(live)
+
+    /** The Now reading of [live], read through the bundled template of [info]. Waiting until both exist. */
+    internal val reading: NowReading get() = NowReading.of(DeviceCapabilities.from(info).reading(live))
 
     internal var lanDevices by mutableStateOf<List<String>>(emptyList())
         private set
@@ -366,7 +369,7 @@ class CompanionState {
         val sample = runCatching { LiveSample.parse(json) }.getOrNull()
         lanLive = if (sample == null) lanLive - name else lanLive + (name to sample)
         lanLiveAtEpochMs = if (sample == null) lanLiveAtEpochMs - name else lanLiveAtEpochMs + (name to clock())
-        lanReadings = lanReadings + (name to NowReading.of(sample))
+        lanReadings = lanReadings + (name to NowReading.of(DeviceCapabilities.from(lanInfo[name]).reading(sample)))
     }
 
     fun lanReadingExpired(name: String) {

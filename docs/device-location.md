@@ -36,9 +36,9 @@ things. See the firmware-owned [time/location contract](../../aq-parquet/docs/sh
 - `feature/device` owns shared draft/readback behavior and permission-triggered UI.
 - Its Android and iOS source sets own the temporary OS fix, cancellation and H3
   conversion. Android repository and iOS bridge retain their existing command guards.
-- `LiveProfiles` resolves LIVE from the `info.dict` digest through the bundled board
-  templates in `core/model/bundled`. Only the current digest of each board is bundled. An
-  older or unknown digest still syncs verified files but has no LIVE profile.
+- `DeviceCapabilities` reads LIVE through the station of the `info.dict` digest, from the
+  bundled board templates in `core/model/bundled`. Only the current digest of each board is
+  bundled. An older or unknown digest still syncs verified files but has no LIVE view.
 
 Cross-platform host and simulator gates verify parsing, old firmware behavior,
 coarsening, late-fix suppression and readback decisions. A phone run beside a

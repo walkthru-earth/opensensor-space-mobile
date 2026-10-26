@@ -71,28 +71,37 @@ class AirMoodTest {
     @Test
     fun `the sensor's own state comes before any number`() {
         assertEquals(NowReading.Waiting, NowReading.of(null))
-        val warming = LiveSample.parse("""{"seq":1,"mono":1,"pms":1,"pm25":40}""")
+        val warming = LiveFixtures.waveshare("""{"seq":1,"mono":1,"pms":1,"pm25":40}""")
         val r = NowReading.of(warming)
         assertTrue(r is NowReading.SensorNotReady && r.status == PmsStatus.WARMING)
-        val valid = LiveSample.parse("""{"seq":2,"mono":2,"pms":4,"pm25":22}""")
+        val valid = LiveFixtures.waveshare("""{"seq":2,"mono":2,"pms":4,"pm25":22}""")
         val v = NowReading.of(valid) as NowReading.Reading
         assertEquals(AirMood.FAIR, v.mood)
         assertEquals(22.0, v.pm25, 0.0)
-        // pms 4 but no pm25 key: absent means null, so nothing to show.
-        assertEquals(NowReading.Waiting, NowReading.of(LiveSample.parse("""{"seq":3,"mono":3,"pms":4}""")))
+        // pms 4 with a null pm25 is no reading now, so nothing to show.
+        assertEquals(NowReading.Waiting, NowReading.of(LiveFixtures.waveshare("""{"seq":3,"mono":3,"pms":4,"pm25":null}""")))
+        // An overflow sample has every key null, so the last reading is cleared.
+        assertEquals(NowReading.Waiting, NowReading.of(LiveFixtures.waveshare("""{"seq":null,"mono":null,"utc":null,"pms":null,"pm25":null}""")))
+        // An unknown dictionary has no LIVE reading.
+        assertEquals(NowReading.Waiting, NowReading.of(DeviceCapabilities.from(LiveFixtures.waveshare.copy(dict = "0".repeat(64))).reading(LiveSample.parse("""{"pms":4,"pm25":22}"""))))
     }
 
     @Test
     fun `the live reading shows corrected PM2_5 when the sample has a valid RH`() {
         // #92. CF=1 40 at 50 percent RH corrects to 27.64, from atmospheric 30.
-        val humid = NowReading.of(LiveSample.parse("""{"seq":4,"mono":4,"pms":4,"pm25":30,"c25":40,"rh":50}""")) as NowReading.Reading
+        val humid = NowReading.of(LiveFixtures.waveshare("""{"seq":4,"mono":4,"pms":4,"pm25":30,"c25":40,"rh":50}""")) as NowReading.Reading
         assertEquals(Pm25Basis.CORRECTED, humid.basis)
         assertEquals(27.64, humid.pm25, 1e-6)
         assertEquals(30.0, humid.raw!!, 0.0)
         assertEquals(AirMood.HAZY, humid.mood)
-        // No RH (CoreS3), or an RH outside 0 to 100, shows raw labelled raw.
-        for (json in listOf("""{"seq":5,"mono":5,"pms":4,"pm25":30,"c25":40}""", """{"seq":6,"mono":6,"pms":4,"pm25":30,"c25":40,"rh":104}""")) {
-            val dry = NowReading.of(LiveSample.parse(json)) as NowReading.Reading
+        // No RH (CoreS3 hides rh), a null RH, or an RH outside 0 to 100, shows raw labelled raw.
+        val dryReadings = listOf(
+            LiveFixtures.cores3("""{"seq":5,"mono":5,"pms":4,"pm25":30,"c25":40,"rh":50}"""),
+            LiveFixtures.waveshare("""{"seq":6,"mono":6,"pms":4,"pm25":30,"c25":40,"rh":null}"""),
+            LiveFixtures.waveshare("""{"seq":7,"mono":7,"pms":4,"pm25":30,"c25":40,"rh":104}"""),
+        )
+        for (live in dryReadings) {
+            val dry = NowReading.of(live) as NowReading.Reading
             assertEquals(Pm25Basis.RAW, dry.basis)
             assertEquals(30.0, dry.pm25, 0.0)
         }

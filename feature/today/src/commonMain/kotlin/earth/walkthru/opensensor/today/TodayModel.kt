@@ -11,8 +11,8 @@ import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
+import earth.walkthru.aqsync.data.protocol.LiveReading
 import earth.walkthru.aqsync.data.protocol.LiveSample
-import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.settings.DetailLevel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -119,7 +119,18 @@ data class TodayUiState(
     val level: DetailLevel = DetailLevel.SIMPLE,
 ) {
     /** What this device can do, from `INFO` and LIVE (shared mapping, no schema strings in the UI). */
-    val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(snapshot.info)
+    val capabilities: DeviceCapabilities = DeviceCapabilities.from(snapshot.info)
+
+    /** The live sample read through the bundled template and profile, null before both exist. */
+    val reading: LiveReading? = capabilities.reading(snapshot.live)
+
+    /** Whether the live values can show yet, see [LiveSupport]. */
+    val liveSupport: LiveSupport
+        get() = when {
+            snapshot.info == null -> LiveSupport.PENDING
+            capabilities.station == null -> LiveSupport.UNSUPPORTED
+            else -> LiveSupport.READY
+        }
 
     /** The particle reading (mood and PM2.5) applies to this device and sample. */
     val showsParticles: Boolean get() = capabilities.showsParticles(snapshot.live)
@@ -129,6 +140,12 @@ data class TodayUiState(
 
     val cards: List<TodayCard> get() = todayCards(this)
 }
+
+/**
+ * Whether Today can read LIVE. [PENDING] while `INFO` has not arrived, a quiet wait. [UNSUPPORTED]
+ * only once `INFO` arrived with a dictionary the app does not bundle. [READY] otherwise.
+ */
+enum class LiveSupport { PENDING, UNSUPPORTED, READY }
 
 /** The cards of Today, in screen order. Each one is a stable list key. */
 enum class TodayCard(val key: String) {
@@ -156,7 +173,7 @@ fun todayCards(state: TodayUiState): List<TodayCard> = buildList {
     val particles = state.showsParticles
     add(if (particles) TodayCard.NOW_AIR else TodayCard.NOW_ENVIRONMENT)
     add(TodayCard.TODAY_SO_FAR)
-    if (particles && state.capabilities.liveProfile?.temperature == TemperatureSource.AMBIENT) add(TodayCard.ENVIRONMENT)
+    if (particles && state.capabilities.ambientTemperature) add(TodayCard.ENVIRONMENT)
     add(TodayCard.SMART_SYNC)
     add(TodayCard.CLOCK)
     if (state.level.detailed) {

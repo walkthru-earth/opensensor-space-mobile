@@ -56,6 +56,9 @@ value class Family(val id: String) {
     companion object {
         /** The family of a profile derived from a template, no plugin. */
         val GENERIC = Family("generic")
+
+        /** Air quality, the particle family plugin. */
+        val AIR = Family("air")
     }
 }
 
