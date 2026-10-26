@@ -324,7 +324,9 @@ The rules for a new screen or component.
    the highest value and its WHO step, which Simple leaves out). Then the bar chart and the calendar give one node per bar or
    day with a reading, in time order, naming the time, the value with its unit, the mood and the WHO
    step (Simple leaves the step out). Each is a button, and activating a bar selects it, as a touch
-   does. These nodes are semantics only, laid over the canvas. Axis margins are measured from the
+   does. These nodes are semantics only, laid over the canvas, each exactly its bar slot or day cell.
+   `ExactTouchBounds` turns off the 48 dp minimum touch target for them, since a grown node would be
+   covered by the next one and shift a bar to the left (#141). Axis margins are measured from the
    labels with a `TextMeasurer`, so a large font never clips them. `layoutChartLabels` measures and
    places every label once and the canvas draws exactly those. `placeAxisLabels` keeps each axis
    label inside the canvas and skips one closer than the gap to its neighbour (its gridline stays).
