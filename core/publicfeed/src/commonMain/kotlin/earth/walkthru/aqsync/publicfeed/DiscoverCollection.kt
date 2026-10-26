@@ -109,8 +109,10 @@ class DiscoverCollection private constructor(
 
         /**
          * [json] without the scales that do not parse on their own or that [StepScale.of] refuses (too
-         * many steps, edges out of order, out of bounds or not finite). Each scale is tried in a copy
-         * of the Collection that holds only it. Any other fault is left for the full parse to report.
+         * many steps, edges out of order, out of bounds or not finite). Each scale is checked from the
+         * tree parsed once here, so the work grows with the number of scales, not its square. Only the
+         * first [MAX_SCALES] entries are read, the rest are dropped like broken ones. Any other fault
+         * is left for the full parse to report.
          */
         private fun withoutBrokenScales(json: String): String {
             val tree = try {
@@ -119,16 +121,23 @@ class DiscoverCollection private constructor(
                 throw IllegalArgumentException(e.message, e)
             } ?: return json
             val scales = tree[SCALES] as? JsonObject ?: return json
-            val kept = scales.filter { (id, scale) ->
+            val kept = scales.entries.take(MAX_SCALES).filter { (id, scale) ->
                 try {
-                    val alone = StationCollection.parse(JsonObject(tree + (SCALES to JsonObject(mapOf(id to scale)))).toString())
-                    alone.scales[id]?.let { StepScale.of(id, it) } != null
+                    StepScale.of(id, Scale.parse(id, scale)) != null
                 } catch (_: IllegalArgumentException) {
                     false
                 }
-            }
+            }.associate { it.key to it.value }
             return if (kept.size == scales.size) json else JsonObject(tree + (SCALES to JsonObject(kept))).toString()
         }
+
+        /**
+         * The most `opensensor:scales` entries read. A Collection has one per health scale, a handful
+         * (two for PM today), so 64 leaves room for every property while a feed listing thousands
+         * cannot stall the parse. Entries past it are dropped and their properties fall back to the
+         * neutral ramp.
+         */
+        const val MAX_SCALES: Int = 64
 
         private const val SCALES = "opensensor:scales"
 

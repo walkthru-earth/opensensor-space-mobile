@@ -7,6 +7,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTime
 
 class DiscoverCollectionTest {
     private val root = "https://example.test/discover"
@@ -136,9 +139,9 @@ class DiscoverCollectionTest {
     }
 
     /** The fixture with [scale] as the soil property's scale. */
-    private fun withSoilScale(scale: String): DiscoverCollection {
+    private fun withSoilScale(scale: String, before: String = ""): DiscoverCollection {
         val fixture = fixtureBytes(OpenAqFixture.STAC_COLLECTION).decodeToString()
-        val json = fixture.replace("\"opensensor:scales\": {", "\"opensensor:scales\":{\"soil-bad\":$scale,")
+        val json = fixture.replace("\"opensensor:scales\": {", "\"opensensor:scales\":{$before\"soil-bad\":$scale,")
             .replace("\"name\": \"soil_moisture__mean\"", "\"name\":\"soil_moisture__mean\",\"opensensor:scale\":\"soil-bad\"")
         check(json.contains("\"soil-bad\":{") && json.contains("\"opensensor:scale\":\"soil-bad\"")) { "the fixture changed shape" }
         return DiscoverCollection.parse(json, root)
@@ -169,6 +172,22 @@ class DiscoverCollectionTest {
             assertNull(c.scale("soil_moisture"), bad.take(80))
             assertEquals(WhoGuidelines.URL, c.scale("pm25")?.source)
         }
+    }
+
+    /** The fixture with [fillers] valid scales listed before the soil property's own. */
+    private fun withScalesBeforeSoil(fillers: Int): DiscoverCollection {
+        val fill = (1..fillers).joinToString("") { "\"fill-$it\":${soilScale(listOf("1", "null"))}," }
+        return withSoilScale(soilScale(listOf("1", "null")), before = fill)
+    }
+
+    @Test
+    fun onlyTheFirstSixtyFourScalesAreReadAndManyStayFast() {
+        assertEquals(2, withScalesBeforeSoil(DiscoverCollection.MAX_SCALES - 1).scale("soil_moisture")?.steps?.size)
+        assertNull(withScalesBeforeSoil(DiscoverCollection.MAX_SCALES).scale("soil_moisture"))
+        // Checked once each from one parsed tree, 5,000 scales parse at once. One full parse per
+        // scale took minutes.
+        val took = measureTime { assertNull(withScalesBeforeSoil(5000).scale("soil_moisture")) }
+        assertTrue(took < 5.seconds, "5,000 scales took $took")
     }
 
     @Test

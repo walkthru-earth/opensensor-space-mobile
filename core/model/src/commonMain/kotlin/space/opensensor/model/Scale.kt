@@ -1,5 +1,7 @@
 package space.opensensor.model
 
+import kotlinx.serialization.json.JsonElement
+
 /**
  * One step of a [Scale]. A value belongs to the first step whose [upper] it does not exceed. A null
  * [upper] is open ended. [colorHint] is `RRGGBB` hex.
@@ -32,4 +34,13 @@ data class Scale(
 
     /** The step of [value], or null when [stepIndexOf] finds none. */
     fun stepOf(value: Double): ScaleStep? = steps.getOrNull(stepIndexOf(value))
+
+    companion object {
+        /**
+         * One entry of `opensensor:scales`, already parsed as JSON, keyed by [id].
+         *
+         * @throws IllegalArgumentException when [element] is not a scale.
+         */
+        fun parse(id: String, element: JsonElement): Scale = ModelJson.parseScale(id, element)
+    }
 }
