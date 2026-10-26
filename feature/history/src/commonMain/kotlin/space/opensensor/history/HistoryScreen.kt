@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,8 +36,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -55,7 +58,9 @@ import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.localDateOf
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.Eyebrow
+import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
@@ -66,6 +71,7 @@ import space.opensensor.designsystem.SectionCard
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.metricLabel
 import space.opensensor.designsystem.pm25CorrectionInfo
+import space.opensensor.designsystem.touchTarget
 import space.opensensor.history.resources.Res
 import space.opensensor.history.resources.chart_touch
 import space.opensensor.history.resources.history_archive
@@ -115,6 +121,7 @@ import space.opensensor.history.resources.history_span_utc
 import space.opensensor.history.resources.history_tap_day
 import space.opensensor.history.resources.history_thing_chip
 import space.opensensor.history.resources.history_title
+import space.opensensor.history.resources.history_today
 import space.opensensor.history.resources.history_untimed
 import space.opensensor.history.resources.history_untimed_files
 import space.opensensor.history.resources.history_waiting_index
@@ -175,10 +182,36 @@ fun HistoryScreen(
                 }
             }
             item(key = "span") {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { controller.page(-1) }) { Icon(AppIcons.ChevronLeft, contentDescription = stringResource(Res.string.history_page_earlier)) }
-                    Text(spanLabel(state.range, state.window), Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-                    IconButton(onClick = { controller.page(1) }, enabled = state.canPageForward) { Icon(AppIcons.ChevronRight, contentDescription = stringResource(Res.string.history_page_later)) }
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        // Earlier stops at the first archived day, Later at the span that holds now.
+                        IconButton(onClick = { controller.page(-1) }, enabled = state.canPageBack) { Icon(AppIcons.ChevronLeft, contentDescription = stringResource(Res.string.history_page_earlier)) }
+                        Text(spanLabel(state.range, state.window), Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                        IconButton(onClick = { controller.page(1) }, enabled = state.canPageForward) { Icon(AppIcons.ChevronRight, contentDescription = stringResource(Res.string.history_page_later)) }
+                    }
+                    // One step back to now from any past span, a picked day included.
+                    if (state.canPageForward) {
+                        FilledTonalButton(onClick = controller::showNow, shape = FloatingControl.SmallShape, modifier = Modifier.touchTarget()) {
+                            FitText(stringResource(Res.string.history_today), style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+            }
+            if (state.availableMetrics.isNotEmpty()) {
+                item(key = "metric") {
+                    // One choice of many, so screen readers hear the chips as a group. Above the chart, so
+                    // the choice comes before what it changes.
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        pickable.forEach { m ->
+                            FilterChip(
+                                selected = state.metric.id == m.id,
+                                onClick = { controller.setMetric(m) },
+                                label = { Text(metricLabel(m)) },
+                                shape = FloatingControl.SmallShape,
+                                colors = FloatingControl.chipColors(),
+                            )
+                        }
+                    }
                 }
             }
             item(key = "chart") {
@@ -186,20 +219,6 @@ fun HistoryScreen(
                     HistoryStateMessage(stringResource(if (state.files.untimed > 0) Res.string.history_untimed else Res.string.history_nothing_indexed))
                 } else {
                     ChartCard(state, units, controller.nowS(), level, onOpenDay = controller::openDay)
-                }
-            }
-            item(key = "metric") {
-                // One choice of many, so screen readers hear the chips as a group.
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    pickable.forEach { m ->
-                        FilterChip(
-                            selected = state.metric.id == m.id,
-                            onClick = { controller.setMetric(m) },
-                            label = { Text(metricLabel(m)) },
-                            shape = FloatingControl.SmallShape,
-                            colors = FloatingControl.chipColors(),
-                        )
-                    }
                 }
             }
             item(key = "archive") { ArchiveCard(state, level) }
@@ -246,7 +265,7 @@ fun historyTitle(): String = stringResource(Res.string.history_title)
 
 /**
  * Thing generations as chips. The newest is "Current", older ones "Earlier", and Developer adds
- * the first characters of the thing id. The spoken label names the full thing.
+ * the first characters of the thing id and reads the full id. Simple and Detailed read the label only.
  */
 @Composable
 private fun ThingChips(state: HistoryUiState, level: DetailLevel, onSelect: (String) -> Unit) {
@@ -257,14 +276,14 @@ private fun ThingChips(state: HistoryUiState, level: DetailLevel, onSelect: (Str
                 val current = thing == state.things.last()
                 val base = stringResource(if (current) Res.string.history_current else Res.string.history_earlier)
                 val label = if (level.developer) "$base · ${thing.take(8)}" else base
-                val chipDescription = stringResource(Res.string.history_thing_chip, label, thing)
+                val chipDescription = if (level.developer) stringResource(Res.string.history_thing_chip, label, thing) else null
                 FilterChip(
                     selected = state.thing == thing,
                     onClick = { onSelect(thing) },
                     label = { Text(label) },
                     shape = FloatingControl.SmallShape,
                     colors = FloatingControl.chipColors(),
-                    modifier = Modifier.semantics { contentDescription = chipDescription },
+                    modifier = if (chipDescription != null) Modifier.semantics { contentDescription = chipDescription } else Modifier,
                 )
             }
         }
@@ -409,7 +428,7 @@ private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, l
     }
 }
 
-/** What the touched column says: slot, value with its mood and WHO step in words, peak, coverage, estimated or not. */
+/** What the touched column says: slot in local time, value with its mood and WHO step in words, peak, coverage, estimated or not. */
 @Composable
 private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, units: UnitFormatter, stepNamed: Boolean) {
     val zone = state.zone
@@ -417,8 +436,8 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, units: Unit
         stringResource(Res.string.chart_touch)
     } else {
         val pattern = when (state.range) {
-            HistoryRange.DAY -> "HH:mm XXX"
-            HistoryRange.WEEK -> "EEE HH:mm XXX"
+            HistoryRange.DAY -> "HH:mm"
+            HistoryRange.WEEK -> "EEE HH:mm"
             HistoryRange.MONTH -> "EEE d MMM"
             HistoryRange.YEAR -> "d MMM"
         }
@@ -426,7 +445,7 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, units: Unit
         val slot = when (state.range) {
             HistoryRange.MONTH -> start
             HistoryRange.YEAR -> stringResource(Res.string.history_week_of, start)
-            else -> start + " → " + formatEpoch(c.endS, zone, "HH:mm XXX")
+            else -> start + " → " + formatEpoch(c.endS, zone, "HH:mm")
         }
         val m = c.mean
         val unit = state.metric.unit
@@ -445,7 +464,13 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, units: Unit
             ).joinToString(" · ")
         }
     }
-    Text(text, style = MaterialTheme.typography.bodySmall, color = if (c == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 6.dp), maxLines = 2)
+    // Wraps between words at any size, and a new pick is read out without moving focus.
+    BodyText(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (c == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(top = 6.dp).semantics { liveRegion = LiveRegionMode.Polite },
+    )
 }
 
 @Composable

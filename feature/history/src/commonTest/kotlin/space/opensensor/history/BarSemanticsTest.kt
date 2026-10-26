@@ -92,6 +92,15 @@ class BarSemanticsTest {
         assertEquals(5f, at.y, "pulled up so its bottom is the canvas bottom")
     }
 
+    @Test
+    fun aDragScrubsOnlyWhenItLeavesTheSlopSideways() {
+        assertEquals(DragIntent.PENDING, dragIntent(3f, -3f, slop = 8f))
+        assertEquals(DragIntent.SCRUB, dragIntent(-12f, 5f, slop = 8f))
+        assertEquals(DragIntent.SCROLL, dragIntent(4f, -12f, slop = 8f))
+        // A perfect diagonal goes to the page, which keeps a scroll from being trapped.
+        assertEquals(DragIntent.SCROLL, dragIntent(10f, 10f, slop = 8f))
+    }
+
     private companion object {
         const val HOUR = 3_600L
     }

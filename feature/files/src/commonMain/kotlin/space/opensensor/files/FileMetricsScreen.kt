@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.InfoNote
 import space.opensensor.designsystem.PeacockExpression
@@ -255,7 +256,7 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                             null
                         },
                     )
-                    Text(parts.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    BodyText(parts.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -335,13 +336,10 @@ private fun RowsCard(state: RowsState, onPage: (Long) -> Unit) {
 
 @Composable
 private fun RowScope.Cell(text: String, weight: Float, mono: Boolean = false) {
-    Text(
+    // Wraps between words in its column instead of cutting a value off.
+    BodyText(
         text,
         modifier = Modifier.weight(weight),
-        style = MaterialTheme.typography.bodySmall,
-        fontFamily = if (mono) FontFamily.Monospace else null,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+        style = MaterialTheme.typography.bodySmall.copy(fontFamily = if (mono) FontFamily.Monospace else null),
     )
-    Spacer(Modifier.width(4.dp))
 }

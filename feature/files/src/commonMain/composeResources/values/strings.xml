@@ -20,7 +20,7 @@
     <string name="files_none_detailed">No finished files yet. Use Finalize on Today to make one.</string>
     <string name="files_connect_to_list">Connect to list the files on the sensor.</string>
     <string name="files_listing">Reading the file list…</string>
-    <string name="files_list_failed_simple">Could not read the file list. Try again.</string>
+    <string name="files_list_failed_simple">Could not read the file list.</string>
     <string name="files_in_archive">%1$d in archive, %2$s</string>
     <string name="files_refresh">Refresh list</string>
     <string name="files_more">More</string>
@@ -67,13 +67,14 @@
     <string name="file_mismatch">mismatch</string>
     <string name="file_invalid">invalid name</string>
     <string name="file_removed">removed from phone</string>
-    <string name="file_metrics">Metrics</string>
-    <string name="file_share">Share</string>
+    <!-- Files screen, file row buttons. The value is the file local time or name. -->
+    <string name="file_metrics_named">Metrics for %1$s</string>
+    <string name="file_share_named">Share %1$s</string>
     <string name="files_no_daily">No daily files yet. They need synced files with a time.</string>
     <string name="history_of">%1$d of %2$d</string>
     <string name="files_group_count">%1$d/%2$d · %3$s</string>
     <string name="files_group_utc_day">%1$s, UTC day</string>
-    <string name="files_group_unsynced">Unsynced, no UTC</string>
+    <string name="files_group_unsynced">Time not known</string>
     <string name="files_group_benchmarks">Benchmarks</string>
     <string name="files_group_legacy">Legacy Parquet</string>
     <string name="files_group_root">Archive root</string>
@@ -151,8 +152,8 @@
     </plurals>
     <!-- File metrics screen, spoken by the screen reader on the loading spinner. -->
     <string name="fm_loading">Reading this file…</string>
-    <!-- Files screen, the click label of a device file row that syncs it. -->
-    <string name="file_sync_one">Sync file</string>
+    <!-- Files screen, a device file row button that syncs that one file. The value is the file local time or name. -->
+    <string name="file_sync_named">Sync %1$s</string>
     <!-- File metrics screen, Developer level. The rows of the file, one page at a time. -->
     <string name="fm_rows_page">Rows</string>
     <!-- Row indexes, from 0, of the first and last row on the page, then the rows in the file. -->
@@ -161,4 +162,16 @@
     <string name="fm_rows_next">Next rows</string>
     <string name="fm_rows_unavailable">Rows could not be read</string>
     <string name="fm_rows_retry">Try again</string>
+    <!-- Files screen, the button on the failed file list that asks the sensor again. -->
+    <string name="files_retry">Try again</string>
+    <!-- Files screen, shown when the phone keeps no files yet. -->
+    <string name="files_empty_title">No files yet</string>
+    <string name="files_empty_body">Connect a sensor and sync to keep its files here.</string>
+    <!-- Byte counts and transfer rates. The value is the number. -->
+    <string name="unit_bytes">%1$s B</string>
+    <string name="unit_kilobytes">%1$s KB</string>
+    <string name="unit_megabytes">%1$s MB</string>
+    <string name="unit_gigabytes">%1$s GB</string>
+    <string name="unit_bytes_per_second">%1$s B/s</string>
+    <string name="unit_kilobytes_per_second">%1$s KB/s</string>
 </resources>

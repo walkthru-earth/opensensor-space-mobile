@@ -1,8 +1,6 @@
 package space.opensensor.files
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,8 +38,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -60,16 +58,18 @@ import space.opensensor.data.sync.FileSyncState
 import space.opensensor.data.sync.ManifestEntry
 import space.opensensor.data.sync.SyncPlan
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingTextButton
 import space.opensensor.designsystem.MascotGuide
-import space.opensensor.designsystem.Peacock
+import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockIcon
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.rememberNowMillis
 import space.opensensor.designsystem.spokenList
+import space.opensensor.designsystem.touchTarget
 import space.opensensor.files.resources.Res
 import space.opensensor.files.resources.action_back
 import space.opensensor.files.resources.ago_days
@@ -78,19 +78,21 @@ import space.opensensor.files.resources.ago_just_now
 import space.opensensor.files.resources.ago_minutes
 import space.opensensor.files.resources.ago_seconds
 import space.opensensor.files.resources.file_invalid
-import space.opensensor.files.resources.file_metrics
+import space.opensensor.files.resources.file_metrics_named
 import space.opensensor.files.resources.file_mismatch
 import space.opensensor.files.resources.file_not_synced
 import space.opensensor.files.resources.file_partial
 import space.opensensor.files.resources.file_removed
-import space.opensensor.files.resources.file_share
-import space.opensensor.files.resources.file_sync_one
+import space.opensensor.files.resources.file_share_named
+import space.opensensor.files.resources.file_sync_named
 import space.opensensor.files.resources.file_synced
 import space.opensensor.files.resources.file_syncing
 import space.opensensor.files.resources.files_all_synced_body
 import space.opensensor.files.resources.files_all_synced_title
 import space.opensensor.files.resources.files_bytes_of
 import space.opensensor.files.resources.files_dev_summary
+import space.opensensor.files.resources.files_empty_body
+import space.opensensor.files.resources.files_empty_title
 import space.opensensor.files.resources.files_export_failed
 import space.opensensor.files.resources.files_export_no_space
 import space.opensensor.files.resources.files_export_skipped
@@ -122,6 +124,7 @@ import space.opensensor.files.resources.files_refresh_failed
 import space.opensensor.files.resources.files_refresh_failed_simple
 import space.opensensor.files.resources.files_refreshing
 import space.opensensor.files.resources.files_resumed
+import space.opensensor.files.resources.files_retry
 import space.opensensor.files.resources.files_save_zip
 import space.opensensor.files.resources.files_share_all
 import space.opensensor.files.resources.files_share_daily
@@ -331,21 +334,26 @@ fun FilesScreen(
                     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             PeacockIcon(PeacockExpression.CONCERNED, Modifier.size(48.dp))
-                            Text(
-                                if (level.developer) stringResource(Res.string.files_list_failed_detail, manifest.message) else stringResource(Res.string.files_list_failed_simple),
-                                Modifier.weight(1f),
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                            )
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                // Announced once when the list fails, the retry button sits right under it.
+                                BodyText(
+                                    if (level.developer) stringResource(Res.string.files_list_failed_detail, manifest.message) else stringResource(Res.string.files_list_failed_simple),
+                                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                                OutlinePillButton(
+                                    stringResource(Res.string.files_retry),
+                                    onClick = { onDeviceAction(DeviceFilesAction.Refresh) },
+                                    enabled = ready,
+                                )
+                            }
                         }
                     }
                 }
             }
             if (listing == null && groups.isEmpty() && idleHint == null && manifest is ManifestState.Idle) {
                 item(key = "archive-empty") {
-                    // The archive count in the header names the empty state, the bird reinforces it.
-                    Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
-                        Peacock(size = 96.dp, expression = PeacockExpression.CONFUSED)
-                    }
+                    MascotGuide(title = stringResource(Res.string.files_empty_title), body = stringResource(Res.string.files_empty_body))
                 }
             }
             if (listing != null) {
@@ -535,7 +543,7 @@ private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
 }
 
 @Composable
-private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean, showDetail: Boolean, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)?) {
+internal fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean, showDetail: Boolean, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)?) {
     val scheme = MaterialTheme.colorScheme
     val (icon, tint, label) = when (entry.state) {
         FileSyncState.SYNCED -> Triple(AppIcons.CheckCircle, scheme.secondary, stringResource(Res.string.file_synced))
@@ -546,23 +554,15 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
         FileSyncState.INVALID_NAME -> Triple(AppIcons.Error, scheme.error, stringResource(Res.string.file_invalid))
         FileSyncState.REMOVED -> Triple(AppIcons.CloudOff, scheme.onSurfaceVariant, stringResource(Res.string.file_removed))
     }
-    val clickable = when (entry.state) {
-        FileSyncState.SYNCED -> true
-        FileSyncState.NOT_SYNCED, FileSyncState.PARTIAL, FileSyncState.MISMATCH -> canSync
-        else -> false
-    }
+    // Each action is its own 48 dp button that names the file it acts on, the row itself does nothing on tap.
+    val which = localTime ?: entry.name.substringAfterLast('/')
+    val syncable = canSync && entry.state in SYNCABLE
     Surface(
         shape = MaterialTheme.shapes.large,
         color = if (entry.state == FileSyncState.SYNCING) scheme.surfaceContainerHigh else scheme.surfaceContainerLow,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                enabled = clickable,
-                role = Role.Button,
-                onClickLabel = stringResource(if (entry.state == FileSyncState.SYNCED) Res.string.file_share else Res.string.file_sync_one),
-            ) { if (entry.state == FileSyncState.SYNCED) onShare() else onSync() },
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (icon == null) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -571,7 +571,7 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
                     Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
                     FitText(
                         if (showName) entry.name.substringAfterLast('/') else localTime.orEmpty(),
                         style = if (showName) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleSmall,
@@ -579,7 +579,7 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
                         maxLines = 1,
                     )
                     // The name's HHMM is the UTC window start. The phone's local time goes first so the two never get confused.
-                    Text(
+                    BodyText(
                         (localTime?.takeIf { showName }?.let { "$it · " } ?: "") + "${formatBytes(entry.bytes)} · $label",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (entry.state == FileSyncState.MISMATCH || entry.state == FileSyncState.INVALID_NAME) scheme.error else scheme.onSurfaceVariant,
@@ -587,13 +587,12 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
                 }
                 if (entry.state == FileSyncState.SYNCED) {
                     if (onInspect != null) {
-                        IconButton(onClick = onInspect, modifier = Modifier.size(32.dp)) {
-                            Icon(AppIcons.TableChart, contentDescription = stringResource(Res.string.file_metrics), tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(Modifier.width(4.dp))
+                        RowAction(AppIcons.TableChart, stringResource(Res.string.file_metrics_named, which), onInspect)
                     }
-                    // A hint of the row's action, which the row already names through its click label.
-                    Icon(AppIcons.IosShare, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    RowAction(AppIcons.IosShare, stringResource(Res.string.file_share_named, which), onShare)
+                }
+                if (syncable) {
+                    RowAction(AppIcons.Download, stringResource(Res.string.file_sync_named, which), onSync)
                 }
             }
             if (entry.state == FileSyncState.SYNCING) {
@@ -603,9 +602,20 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
                 )
             }
             entry.detail?.takeIf { showDetail }?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.error, modifier = Modifier.padding(top = 4.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.error, modifier = Modifier.padding(top = 4.dp, end = 12.dp))
             }
         }
+    }
+}
+
+/** The states a file row offers to sync, a fresh file, a partial copy, or one whose checksum did not match. */
+private val SYNCABLE = setOf(FileSyncState.NOT_SYNCED, FileSyncState.PARTIAL, FileSyncState.MISMATCH)
+
+/** One compact action on a file row, a 48 dp target around an 18 dp icon, spoken by [label]. */
+@Composable
+private fun RowAction(icon: ImageVector, label: String, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.touchTarget()) {
+        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
     }
 }
 

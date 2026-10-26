@@ -71,6 +71,8 @@
     <string name="debug_log_title">سجل الجهاز</string>
     <string name="debug_log_fetch">جلب</string>
     <string name="debug_log_refresh">تحديث</string>
+    <!-- Debug log card button after the log could not be read. -->
+    <string name="debug_log_retry">أعد المحاولة</string>
     <string name="debug_log_idle">يجلب أحدث 8 KiB من السجل التسلسلي للجهاز. نص للبشر، وليس واجهة برمجية.</string>
     <string name="debug_log_loading">جارٍ الجلب…</string>
     <string name="debug_log_failed">تعذّرت قراءة سجل الجهاز. %1$s</string>

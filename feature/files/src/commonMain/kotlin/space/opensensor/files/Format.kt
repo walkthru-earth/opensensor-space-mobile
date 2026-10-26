@@ -1,7 +1,16 @@
 package space.opensensor.files
 
+import androidx.compose.runtime.Composable
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.compose.resources.stringResource
+import space.opensensor.files.resources.Res
+import space.opensensor.files.resources.unit_bytes
+import space.opensensor.files.resources.unit_bytes_per_second
+import space.opensensor.files.resources.unit_gigabytes
+import space.opensensor.files.resources.unit_kilobytes
+import space.opensensor.files.resources.unit_kilobytes_per_second
+import space.opensensor.files.resources.unit_megabytes
 import space.opensensor.units.formatFixed
 import kotlin.math.abs
 import kotlin.math.floor
@@ -13,17 +22,38 @@ import kotlin.time.Instant
 /** Shown where a value is missing or not read yet. Never a long dash (copy rules). */
 internal const val NO_VALUE = "n/a"
 
-/** Byte counts as the Android app always printed them, binary units with a dot separator. */
-internal fun formatBytes(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> formatFixed(bytes / 1024.0, 1) + " KiB"
-    bytes < 1024L * 1024 * 1024 -> formatFixed(bytes / 1048576.0, 2) + " MiB"
-    else -> formatFixed(bytes / 1073741824.0, 2) + " GiB"
+/** The unit a byte count prints in, each with its localized word in the catalogue. */
+internal enum class ByteUnit { B, KB, MB, GB }
+
+/** A byte count split into its number and unit, steps of 1024 like the Settings storage card. */
+internal data class ByteSize(val number: String, val unit: ByteUnit)
+
+internal fun byteSize(bytes: Long): ByteSize = when {
+    bytes < 1024 -> ByteSize(bytes.toString(), ByteUnit.B)
+    bytes < 1024 * 1024 -> ByteSize(formatFixed(bytes / 1024.0, 1), ByteUnit.KB)
+    bytes < 1024L * 1024 * 1024 -> ByteSize(formatFixed(bytes / 1048576.0, 1), ByteUnit.MB)
+    else -> ByteSize(formatFixed(bytes / 1073741824.0, 2), ByteUnit.GB)
 }
 
+/** A byte count in plain words, `1.5 KB` or `1.5 كيلوبايت`. */
+@Composable
+internal fun formatBytes(bytes: Long): String {
+    val size = byteSize(bytes)
+    return stringResource(
+        when (size.unit) {
+            ByteUnit.B -> Res.string.unit_bytes
+            ByteUnit.KB -> Res.string.unit_kilobytes
+            ByteUnit.MB -> Res.string.unit_megabytes
+            ByteUnit.GB -> Res.string.unit_gigabytes
+        },
+        size.number,
+    )
+}
+
+@Composable
 internal fun formatRate(bytesPerSecond: Double): String = when {
-    bytesPerSecond < 1024 -> formatFixed(bytesPerSecond, 0) + " B/s"
-    else -> formatFixed(bytesPerSecond / 1024.0, 1) + " KiB/s"
+    bytesPerSecond < 1024 -> stringResource(Res.string.unit_bytes_per_second, formatFixed(bytesPerSecond, 0))
+    else -> stringResource(Res.string.unit_kilobytes_per_second, formatFixed(bytesPerSecond / 1024.0, 1))
 }
 
 private fun pad(v: Int, width: Int = 2) = v.toString().padStart(width, '0')

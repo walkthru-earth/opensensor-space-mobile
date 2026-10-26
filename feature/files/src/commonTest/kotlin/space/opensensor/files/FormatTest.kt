@@ -25,7 +25,9 @@ class FormatTest {
     fun uptimeAndBytes() {
         assertEquals("2m 03s", formatMonoUs(123_000_000L))
         assertEquals("1h 02m 03s", formatMonoUs(3_723_000_000L))
-        assertEquals("512 B", formatBytes(512))
-        assertEquals("1.5 KiB", formatBytes(1536))
+        assertEquals(ByteSize("512", ByteUnit.B), byteSize(512))
+        assertEquals(ByteSize("1.5", ByteUnit.KB), byteSize(1536))
+        assertEquals(ByteSize("2.5", ByteUnit.MB), byteSize(2_621_440))
+        assertEquals(ByteSize("1.50", ByteUnit.GB), byteSize(1_610_612_736))
     }
 }

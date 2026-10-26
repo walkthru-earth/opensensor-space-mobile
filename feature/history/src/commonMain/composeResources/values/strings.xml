@@ -13,6 +13,8 @@
     <string name="history_range_year">Year</string>
     <string name="history_page_earlier">Earlier</string>
     <string name="history_page_later">Later</string>
+    <!-- History, the button that jumps from a past span back to the one holding now. -->
+    <string name="history_today">Today</string>
     <string name="history_untimed">Readings have no time yet. See them in Files.</string>
     <string name="history_nothing_indexed">No readings indexed yet.</string>
     <string name="history_archive">On this phone</string>
