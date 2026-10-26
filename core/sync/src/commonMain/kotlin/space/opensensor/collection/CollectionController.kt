@@ -309,9 +309,9 @@ class CollectionController(
         onListed(link, files, end)
         advance(run, CollectionState.Preparing(intent, PrepareStep.PLAN, attempt), link.kind)
         val onlyName = (intent.scope as? CollectionScope.One)?.name
-        val planned = planFrom(link.station, files, onlyName)
+        val planned = planFrom(link.thing, files, onlyName)
         note("collection ${intent.id} planned ${planned.plan.missingCount} of ${planned.plan.entries.size} file(s)")
-        val summary = collector.transfer(link.session, planned, link.station, device, link.maxRead, onOutcome = { outcome ->
+        val summary = collector.transfer(link.session, planned, link.thing, device, link.maxRead, onOutcome = { outcome ->
             val previous = run.outcomes[outcome.name]
             // Repaired receipts may re-plan a committed file. Reuse must not erase this run's
             // earlier new success when adapters derive partial-run counts from these outcomes.
@@ -330,8 +330,8 @@ class CollectionController(
     }
 
     /** The plan touches only this phone's archive, so a fault there is a storage fault. */
-    private suspend fun planFrom(station: String, files: List<Frame.File>, onlyName: String?): PlannedCollection = try {
-        collector.plan(station, files, onlyName)
+    private suspend fun planFrom(thing: String, files: List<Frame.File>, onlyName: String?): PlannedCollection = try {
+        collector.plan(thing, files, onlyName)
     } catch (e: CancellationException) {
         throw e
     } catch (e: InsufficientSpaceException) {

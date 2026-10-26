@@ -17,8 +17,8 @@ import space.opensensor.storage.AtomicFiles
  * class, backup exclusion, symlink checks), which keeps the finals of earlier iPhone builds in place.
  */
 interface ArchiveStore {
-    /** Byte counts of the resumable partials of [station], keyed by Hive name, for the planner. */
-    suspend fun partialLengths(station: String): Map<String, Long>
+    /** Byte counts of the resumable partials of [thing], keyed by Hive name, for the planner. */
+    suspend fun partialLengths(thing: String): Map<String, Long>
 
     /**
      * Opens or resumes the partial of a file the device just OPENED. A partial written against another
@@ -42,8 +42,8 @@ interface ArchiveStore {
      */
     suspend fun commit(key: ArchiveKey)
 
-    /** Every final file, of one station or of all. Partials, metas and legacy receipts are never listed. */
-    suspend fun listFinal(station: String? = null): List<ArchiveKey>
+    /** Every final file, of one thing or of all. Partials, metas and legacy receipts are never listed. */
+    suspend fun listFinal(thing: String? = null): List<ArchiveKey>
 }
 
 /** Writes CHUNK payloads at their absolute offsets. Closing syncs to storage. */
@@ -60,15 +60,15 @@ interface PartialWriter : AutoCloseable {
 }
 
 /**
- * The records of the archive, one per verified file, keyed by (station, name). Both phones adapt the
+ * The records of the archive, one per verified file, keyed by (thing, name). Both phones adapt the
  * Room `archived_file` table through `RoomArchiveIndex` in `:core:database`.
  */
 interface ArchiveIndex {
     /** Every record, ordered by name. */
     fun observeAll(): Flow<List<ArchiveRecord>>
 
-    /** The records of one station, ordered by name. */
-    fun observeStation(station: String): Flow<List<ArchiveRecord>>
+    /** The records of one thing, ordered by name. */
+    fun observeThing(thing: String): Flow<List<ArchiveRecord>>
 
     /**
      * True while some record was never indexed, for the repair watcher. It may repeat a value after
@@ -78,18 +78,18 @@ interface ArchiveIndex {
     fun observeNeverIndexed(): Flow<Boolean> = observeAll().map { rows -> rows.any { it.awaitsIndex } }
 
     /**
-     * [latestTimedEnds] of every record, which History uses to pick the station it opens on. The
+     * [latestTimedEnds] of every record, which History uses to pick the thing it opens on. The
      * default reads every record. An adapter with a grouped query overrides it.
      */
     fun observeLatestTimed(): Flow<Map<String, Long?>> = observeAll().map(::latestTimedEnds)
 
     suspend fun get(key: ArchiveKey): ArchiveRecord?
 
-    /** Inserts or replaces the record of (station, name). */
+    /** Inserts or replaces the record of (thing, name). */
     suspend fun put(record: ArchiveRecord)
 
     /**
-     * Inserts [record] only when (station, name) has none, and returns whether it did. A writer that
+     * Inserts [record] only when (thing, name) has none, and returns whether it did. A writer that
      * must never replace another's record (the janitor adopting an orphan) uses it. The default reads
      * then writes. An adapter shared across processes or threads overrides it to do both atomically.
      */
@@ -116,18 +116,18 @@ interface ArchiveIndex {
     suspend fun unindexed(limit: Int): List<ArchiveRecord>
 
     /** Records with [ArchiveRecord.onTimeline] in `[fromNs, toNs)`, in [ArchiveRecord.TIMELINE_ORDER]. */
-    suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord>
+    suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord>
 
-    /** Indexed records of one station, for the time-estimate pass. */
-    suspend fun indexedForStation(station: String): List<ArchiveRecord>
+    /** Indexed records of one thing, for the time-estimate pass. */
+    suspend fun indexedForThing(thing: String): List<ArchiveRecord>
 
-    suspend fun stations(): List<String>
+    suspend fun things(): List<String>
 
     companion object {
         /**
-         * Per station, the latest real or estimated end among its indexed telemetry files that have a
-         * time ([ArchiveRecord.hasHistoryTime]), as SQL `MAX` gives it. A station without such a file is
-         * absent. A station whose timed files have no end maps to null, never to a sentinel, so a real
+         * Per thing, the latest real or estimated end among its indexed telemetry files that have a
+         * time ([ArchiveRecord.hasHistoryTime]), as SQL `MAX` gives it. A thing without such a file is
+         * absent. A thing whose timed files have no end maps to null, never to a sentinel, so a real
          * end at `Long.MIN_VALUE` stays a real end.
          */
         fun latestTimedEnds(records: Iterable<ArchiveRecord>): Map<String, Long?> {
@@ -135,8 +135,8 @@ interface ArchiveIndex {
             for (r in records) {
                 if (!r.hasHistoryTime) continue
                 val end = r.timelineLastNs
-                val seen = latest[r.station]
-                latest[r.station] = when {
+                val seen = latest[r.thing]
+                latest[r.thing] = when {
                     seen == null -> end
                     end == null -> seen
                     else -> maxOf(seen, end)

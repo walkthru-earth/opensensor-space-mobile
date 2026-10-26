@@ -27,7 +27,7 @@ data class OldFilesRange(val fromEpochDay: Long, val toEpochDay: Long) {
 data class OldFilesPlan(
     val files: Int,
     val bytes: Long,
-    val stations: Int,
+    val things: Int,
     val range: OldFilesRange?,
     val skipped: Int = 0,
     val handle: Any? = null,

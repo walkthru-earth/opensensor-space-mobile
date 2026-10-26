@@ -10,11 +10,11 @@ import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 /** Phone-local record of which replaceable PM module was fitted to a logger and when. */
-@Entity(tableName = "sensor_installation", indices = [Index("address"), Index("station")])
+@Entity(tableName = "sensor_installation", indices = [Index("address"), Index("thing")])
 data class SensorInstallation(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val address: String,
-    val station: String,
+    val thing: String,
     val deviceId: String?,
     val vendor: String,
     val model: String,
@@ -46,7 +46,7 @@ interface SensorInstallationDao {
     @Transaction
     suspend fun record(installation: SensorInstallation) {
         val old = current(installation.address)
-        if (old?.station == installation.station && old.serial == installation.serial &&
+        if (old?.thing == installation.thing && old.serial == installation.serial &&
             old.model == installation.model && old.vendor == installation.vendor
         ) {
             return

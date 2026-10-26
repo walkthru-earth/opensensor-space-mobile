@@ -19,13 +19,13 @@ import space.opensensor.data.history.parquet.ParquetWriter
  */
 object PreStreamingDailyParquetBuilder {
     fun build(
-        station: String,
+        thing: String,
         epochDay: Long,
         sources: List<DailyParquetSource>,
         sink: ParquetSink,
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long,
-    ): DailyParquetResult? = pass(station, epochDay, sources, sink, anchors, nowEpochS, aggregator = null, strict = true).daily
+    ): DailyParquetResult? = pass(thing, epochDay, sources, sink, anchors, nowEpochS, aggregator = null, strict = true).daily
 
     /**
      * The estimated instant of each of [rows] rows from [mono] and [anchor]. A row without a monotonic
@@ -58,7 +58,7 @@ object PreStreamingDailyParquetBuilder {
      * did. Otherwise a failing source is skipped for the tiers and recorded, and the daily file is dropped.
      */
     internal fun pass(
-        station: String,
+        thing: String,
         epochDay: Long,
         sources: List<DailyParquetSource>,
         sink: ParquetSink?,
@@ -67,9 +67,9 @@ object PreStreamingDailyParquetBuilder {
         aggregator: Aggregator?,
         strict: Boolean,
     ): DayPassResult {
-        require(ArchiveLayout.isSafeStation(station)) { "unsafe station id" }
-        val dayStartNs = epochDay * StationDays.DAY_NS
-        val dayEndNs = dayStartNs + StationDays.DAY_NS
+        require(ArchiveLayout.isSafeThing(thing)) { "unsafe thing id" }
+        val dayStartNs = epochDay * ThingDays.DAY_NS
+        val dayEndNs = dayStartNs + ThingDays.DAY_NS
         var writing = sink != null
         var dailyError: Exception? = null
         val failed = ArrayList<ArchiveRecord>()
@@ -98,10 +98,10 @@ object PreStreamingDailyParquetBuilder {
             val src = source.record
             val first = kept
             val one = try {
-                require(src.station == station) { "source belongs to another station" }
+                require(src.thing == thing) { "source belongs to another thing" }
                 source.open().use { pf ->
                     val md = pf.metadata
-                    require(md.footer?.stationId == null || md.footer?.stationId == station) { "Parquet source belongs to another station" }
+                    require(md.footer?.thingId == null || md.footer?.thingId == thing) { "Parquet source belongs to another thing" }
                     rowsRead += pf.numRows
                     val cache = HashMap<String, ColumnValues?>()
                     fun col(name: String): ColumnValues? = cache.getOrPut(name) { md.leaf(name)?.let { pf.readColumn(it) } }

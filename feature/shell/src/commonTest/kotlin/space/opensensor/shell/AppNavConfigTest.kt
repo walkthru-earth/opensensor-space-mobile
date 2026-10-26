@@ -20,7 +20,7 @@ class AppNavConfigTest {
         FilesKey("AA:BB"),
         DeviceKey("AA:BB"),
         DebugKey("AA:BB"),
-        FileMetricsKey("station", "2026-10-09.parquet"),
+        FileMetricsKey("thing", "2026-10-09.parquet"),
     )
 
     @Test

@@ -14,14 +14,14 @@ import space.opensensor.data.DeviceConnectionManager
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.history.HistoryRepository
 import space.opensensor.data.local.database.KnownDeviceDao
-import space.opensensor.data.local.database.StationEpochDao
+import space.opensensor.data.local.database.ThingEpochDao
 import space.opensensor.data.settings.AppSettings
 import space.opensensor.history.HistoryController
 import space.opensensor.settings.DetailLevel
 
 /**
  * The Android host of the shared [HistoryController]: Room's index and tiers through
- * [HistoryRepository], the station from the known device and its generations from the epoch table.
+ * [HistoryRepository], the thing from the known device and its generations from the epoch table.
  * History works from the archive alone, no session needed, and shows the link chip when one exists.
  */
 @HiltViewModel(assistedFactory = HistoryViewModel.Factory::class)
@@ -30,7 +30,7 @@ class HistoryViewModel @AssistedInject constructor(
     @Assisted deviceAddress: String,
     history: HistoryRepository,
     knownDeviceDao: KnownDeviceDao,
-    epochDao: StationEpochDao,
+    epochDao: ThingEpochDao,
     settings: AppSettings,
 ) : ViewModel() {
     @AssistedFactory
@@ -43,8 +43,8 @@ class HistoryViewModel @AssistedInject constructor(
         reader = history.reader,
         tiers = history.tiers,
         index = history.index,
-        currentStation = knownDeviceDao.observeAll().map { list -> list.firstOrNull { it.address == deviceAddress }?.station },
-        stations = epochDao.observeForDevice(deviceAddress).map { epochs -> epochs.map { it.station } },
+        currentThing = knownDeviceDao.observeAll().map { list -> list.firstOrNull { it.address == deviceAddress }?.thing },
+        things = epochDao.observeForDevice(deviceAddress).map { epochs -> epochs.map { it.thing } },
     )
 
     val transport: StateFlow<TransportKind?> = manager.controller(deviceAddress).activeTransport

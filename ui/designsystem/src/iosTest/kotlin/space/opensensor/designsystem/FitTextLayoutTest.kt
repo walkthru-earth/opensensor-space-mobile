@@ -143,8 +143,8 @@ class FitTextLayoutTest {
     }
 
     @Test
-    fun aStationTitleOrAScreenTitleNeverSplitsAWord() {
-        // The station name beside the header actions (#143) and the Arabic My devices title (#144).
+    fun aThingTitleOrAScreenTitleNeverSplitsAWord() {
+        // The thing name beside the header actions (#143) and the Arabic My devices title (#144).
         for (setup in setups) {
             val title = if (setup.arabic) "أجهزتي" else "OS-7500"
             runComposeUiTest {
@@ -252,7 +252,7 @@ class FitTextLayoutTest {
 
     @Test
     fun noLineEverEndsInsideAWordAtAnyWidth() {
-        val texts = listOf("Synchronisation", "Archive synchronisation", "OS-7500 station", "المزامنة والمسؤوليات")
+        val texts = listOf("Synchronisation", "Archive synchronisation", "OS-7500 thing", "المزامنة والمسؤوليات")
         val widths = (24..360 step 8).map { it.dp }
         for (scale in listOf(1f, 2f)) {
             for (text in texts) {

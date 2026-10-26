@@ -46,8 +46,8 @@ internal class IosDeviceFiles(
     private val listing = MutableStateFlow<ManifestState>(ManifestState.Idle)
     private val listMutex = Mutex()
     private fun currentLink(): SensorFilesLink {
-        val station = devices.stationFor(address)
-        val lan = devices.state.connectedLanForStation(station)
+        val thing = devices.thingFor(address)
+        val lan = devices.state.connectedLanForThing(thing)
         val ble = devices.state.connected && devices.state.selectedId.equals(address, ignoreCase = true)
         val connected = lan != null || ble
         val device = lan?.let { devices.state.lanInfo[it]?.dev }
@@ -59,7 +59,7 @@ internal class IosDeviceFiles(
         val progress = if (ble || reconnecting) devices.state.syncProgress else null
         val result = run?.result ?: devices.state.lastSyncResult.takeIf { ble }
         return SensorFilesLink(
-            station,
+            thing,
             device,
             connected,
             run?.running == true || (ble && devices.state.syncBusy) || reconnecting,
@@ -75,9 +75,9 @@ internal class IosDeviceFiles(
     val state = combine(selected, listing, IosArchive.index.observeAll(), IosArchive.pruned.observeAll()) { link, manifest, records, removed ->
         Inputs(link, manifest, records, removed)
     }.mapLatest { (link, manifest, records, removed) ->
-        val plan = if (link.station != null && manifest.last != null) {
-            val archived = records.map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
-            SyncPlanner.plan(link.station, manifest.last!!.files, archived, IosArchive.store.partialLengths(link.station), removed)
+        val plan = if (link.thing != null && manifest.last != null) {
+            val archived = records.map { ArchivedIdentity(it.thing, it.name, it.bytes, it.crc32) }
+            SyncPlanner.plan(link.thing, manifest.last!!.files, archived, IosArchive.store.partialLengths(link.thing), removed)
         } else {
             null
         }
@@ -100,16 +100,16 @@ internal class IosDeviceFiles(
 
     init {
         scope.launch {
-            var priorStation: String? = null
+            var priorThing: String? = null
             var priorReady = false
             var priorRunning = false
             selected.collect { link ->
-                if (link.station != priorStation) {
+                if (link.thing != priorThing) {
                     listing.value = ManifestState.Idle
-                    priorStation = link.station
+                    priorThing = link.thing
                     priorReady = false
                 }
-                if (link.connected && !priorReady && link.station != null) refresh()
+                if (link.connected && !priorReady && link.thing != null) refresh()
                 // The sync's lease ended before Swift heard its result, so LIST can go at once.
                 if (link.connected && priorRunning && !link.running) refresh()
                 priorReady = link.connected
@@ -132,7 +132,7 @@ internal class IosDeviceFiles(
             if (!listMutex.tryLock()) return@launch
             try {
                 val linkState = selected.first()
-                val station = linkState.station ?: return@launch
+                val thing = linkState.thing ?: return@launch
                 val hardware = linkState.device ?: return@launch
                 if (!linkState.connected || linkState.running) return@launch
                 listing.value = listing.value.refreshing()
@@ -142,7 +142,7 @@ internal class IosDeviceFiles(
                         return@launch
                     }
                 val (files, end) = link.leased(LeaseKind.FILES) { it.list() }
-                if (selected.first().station == station) {
+                if (selected.first().thing == thing) {
                     listing.value = listing.value.loaded(files, end, Clock.System.now().toEpochMilliseconds())
                 }
             } catch (e: CancellationException) {
@@ -158,7 +158,7 @@ internal class IosDeviceFiles(
     }
 
     private data class SensorFilesLink(
-        val station: String?,
+        val thing: String?,
         val device: String?,
         val connected: Boolean,
         val running: Boolean,

@@ -33,7 +33,7 @@ import space.opensensor.data.sync.FileOutcome
 import space.opensensor.data.sync.SyncEngine
 import space.opensensor.data.sync.SyncPlanner
 import space.opensensor.data.sync.androidSyncEngine
-import space.opensensor.data.sync.stationParquetFixture
+import space.opensensor.data.sync.thingParquetFixture
 import java.io.File
 import java.io.IOException
 import java.net.InetAddress
@@ -64,11 +64,11 @@ class AutoSyncRunnerTest {
         tmp.deleteRecursively()
     }
 
-    private fun device(address: String = bleAddr, token: String? = TOKEN, autoSync: Boolean = true, station: String? = gateway.fake.station) =
-        KnownDevice(address, "OS-6b40", station, "441bf6e26b40", "v5", 1L, 1L, lanToken = token, lanPort = 47390, autoSync = autoSync)
+    private fun device(address: String = bleAddr, token: String? = TOKEN, autoSync: Boolean = true, thing: String? = gateway.fake.thing) =
+        KnownDevice(address, "OS-6b40", thing, "441bf6e26b40", "v5", 1L, 1L, lanToken = token, lanPort = 47390, autoSync = autoSync)
 
-    private fun onLan(station: String = gateway.fake.station) = mapOf(
-        station to LanDevice("OS-6b40", InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 1, 42)), 47390, mapOf(LanFraming.TXT_STATION to station), 0L)
+    private fun onLan(thing: String = gateway.fake.thing) = mapOf(
+        thing to LanDevice("OS-6b40", InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 1, 42)), 47390, mapOf(LanFraming.TXT_THING to thing), 0L)
     )
 
     private fun run(onlyAddress: String? = null, allKnown: Boolean = false, lanOnly: Boolean = false): AutoSyncReport {
@@ -86,7 +86,7 @@ class AutoSyncRunnerTest {
     // ------------------------------------------------------------------ policy
 
     @Test
-    fun `policy - LAN first when the station is discovered and a token is stored, then Bluetooth when bonded`() {
+    fun `policy - LAN first when the thing is discovered and a token is stored, then Bluetooth when bonded`() {
         val links = BackgroundSyncPolicy.linksFor(device(), onLan(), bonded = true)
         assertEquals(2, links.size)
         assertTrue(links[0] is BackgroundSyncLink.Lan)
@@ -97,10 +97,10 @@ class AutoSyncRunnerTest {
     fun `policy - no token means no LAN even when discovered, no bond means no Bluetooth`() {
         assertEquals(listOf<AutoSyncLink>(BackgroundSyncLink.Ble), BackgroundSyncPolicy.linksFor(device(token = null), onLan(), bonded = true))
         assertTrue(BackgroundSyncPolicy.linksFor(device(token = null), onLan(), bonded = false).isEmpty())
-        // Discovered under another station: not this device.
-        assertEquals(listOf<AutoSyncLink>(BackgroundSyncLink.Ble), BackgroundSyncPolicy.linksFor(device(), onLan("other-station"), bonded = true))
+        // Discovered under another thing: not this device.
+        assertEquals(listOf<AutoSyncLink>(BackgroundSyncLink.Ble), BackgroundSyncPolicy.linksFor(device(), onLan("other-thing"), bonded = true))
         // Unresolved address: not connectable.
-        val unresolved = mapOf(gateway.fake.station to LanDevice("OS-6b40", null, 47390, mapOf(LanFraming.TXT_STATION to gateway.fake.station), 0L))
+        val unresolved = mapOf(gateway.fake.thing to LanDevice("OS-6b40", null, 47390, mapOf(LanFraming.TXT_THING to gateway.fake.thing), 0L))
         assertTrue(BackgroundSyncPolicy.linksFor(device(), unresolved, bonded = false).isEmpty())
     }
 
@@ -305,7 +305,7 @@ class AutoSyncRunnerTest {
         assertEquals(listOf(bleAddr to "Bluetooth"), gateway.calls)
         assertEquals(1, report.devices.size)
         assertEquals(1, gateway.browses)
-        assertEquals(setOf(gateway.fake.station), gateway.lastBrowseStations)
+        assertEquals(setOf(gateway.fake.thing), gateway.lastBrowseThings)
     }
 
     @Test
@@ -357,14 +357,14 @@ class AutoSyncRunnerTest {
     @Test
     fun `collect all transfers distinct devices simultaneously using real sessions and engine`() = runTest(gateway.dispatcher) {
         val payload = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/device/v1-none-90rows-dated.parquet")).use { it.readBytes() }
-        val second = FakeTransport(address = otherAddr, chunkDelayMs = 0, liveIntervalMs = 3_600_000, station = "station-b", deviceId = "441bf6e26b41", dispatcher = gateway.dispatcher)
+        val second = FakeTransport(address = otherAddr, chunkDelayMs = 0, liveIntervalMs = 3_600_000, thing = "thing-b", deviceId = "441bf6e26b41", dispatcher = gateway.dispatcher)
         gateway.peers[otherAddr] = second
         listOf(gateway.fake, second).forEach { fake ->
             fake.files.clear()
-            fake.files += FakeTransport.FakeFile("legacy-parquet/readings.parquet", stationParquetFixture(payload, fake.station))
+            fake.files += FakeTransport.FakeFile("legacy-parquet/readings.parquet", thingParquetFixture(payload, fake.thing))
         }
         gateway.devices += device(token = null)
-        gateway.devices += device(address = otherAddr, token = null, station = second.station)
+        gateway.devices += device(address = otherAddr, token = null, thing = second.thing)
         gateway.bonded += listOf(bleAddr, otherAddr)
         val bothEntered = CompletableDeferred<Unit>()
         var entered = 0
@@ -377,7 +377,7 @@ class AutoSyncRunnerTest {
         assertEquals(2, report.newFiles)
         assertEquals(0, report.failures)
         assertEquals(2, gateway.dao.rows.size)
-        assertEquals(setOf(gateway.fake.station, second.station), gateway.dao.rows.map { it.station }.toSet())
+        assertEquals(setOf(gateway.fake.thing, second.thing), gateway.dao.rows.map { it.thing }.toSet())
         assertTrue(gateway.dao.rows.all { it.isIndexed })
     }
 
@@ -414,15 +414,15 @@ class AutoSyncRunnerTest {
         val calls = java.util.Collections.synchronizedList(ArrayList<Pair<String, String>>())
         val log = java.util.Collections.synchronizedList(ArrayList<String>())
         var browses = 0
-        var lastBrowseStations: Set<String> = emptySet()
+        var lastBrowseThings: Set<String> = emptySet()
 
         override suspend fun autoSyncDevices() = devices.filter { it.autoSync }.sortedByDescending { it.lastConnectedEpochMs }
         override suspend fun knownDevice(address: String) = devices.firstOrNull { it.address == address }
         override suspend fun allKnownDevices() = devices.sortedByDescending { it.lastConnectedEpochMs }
         override fun interactiveSessionAddress() = session
-        override suspend fun browseLan(stations: Set<String>, timeoutMs: Long): Map<String, LanDevice> {
+        override suspend fun browseLan(things: Set<String>, timeoutMs: Long): Map<String, LanDevice> {
             browses++
-            lastBrowseStations = stations
+            lastBrowseThings = things
             return lan
         }
 
@@ -441,12 +441,12 @@ class AutoSyncRunnerTest {
             s.link.open()
             try {
                 val (files, _) = s.list()
-                val archived = dao.rows.map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
-                val plan = SyncPlanner.plan(fake.station, files, archived)
+                val archived = dao.rows.map { ArchivedIdentity(it.thing, it.name, it.bytes, it.crc32) }
+                val plan = SyncPlanner.plan(fake.thing, files, archived)
                 val outcomes = ArrayList<FileOutcome>()
                 for (entry in plan.toDownload) {
                     if (cutAfterFiles != null && outcomes.size >= cutAfterFiles!!) break
-                    outcomes += engine.download(s, fake.station, device.address, entry.name, entry.bytes, fake.maxRead) {}
+                    outcomes += engine.download(s, fake.thing, device.address, entry.name, entry.bytes, fake.maxRead) {}
                 }
                 val synced = outcomes.filterIsInstance<FileOutcome.Synced>()
                 return BackgroundSyncResult(
@@ -470,28 +470,28 @@ class AutoSyncRunnerTest {
     private class InMemoryDao : DerivedArchivedFileQueries {
         val rows = java.util.concurrent.CopyOnWriteArrayList<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows)
-        override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows)
-        override suspend fun forStation(station: String) = rows.filter { it.station == station }
-        override suspend fun get(station: String, name: String) = rows.firstOrNull { it.station == station && it.name == name }
+        override fun observeForThing(thing: String): Flow<List<ArchivedFile>> = flowOf(rows)
+        override suspend fun forThing(thing: String) = rows.filter { it.thing == thing }
+        override suspend fun get(thing: String, name: String) = rows.firstOrNull { it.thing == thing && it.name == name }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override fun observeTotalBytes(): Flow<Long> = flowOf(rows.sumOf { it.bytes })
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
-        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
-            rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs }
-        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.isIndexed }
-        override suspend fun stations() = rows.map { it.station }.distinct()
+        override suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long) =
+            rows.filter { it.thing == thing && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs }
+        override suspend fun indexedForThing(thing: String) = rows.filter { it.thing == thing && it.isIndexed }
+        override suspend fun things() = rows.map { it.thing }.distinct()
         override suspend fun upsert(file: ArchivedFile) {
-            rows.removeAll { it.station == file.station && it.name == file.name }
+            rows.removeAll { it.thing == file.thing && it.name == file.name }
             rows += file
         }
         override suspend fun insertIfAbsent(file: ArchivedFile): Long {
-            if (rows.any { it.station == file.station && it.name == file.name }) return -1L
+            if (rows.any { it.thing == file.thing && it.name == file.name }) return -1L
             rows += file
             return rows.size.toLong()
         }
-        override suspend fun delete(station: String, name: String) {
-            rows.removeAll { it.station == station && it.name == name }
+        override suspend fun delete(thing: String, name: String) {
+            rows.removeAll { it.thing == thing && it.name == name }
         }
     }
 

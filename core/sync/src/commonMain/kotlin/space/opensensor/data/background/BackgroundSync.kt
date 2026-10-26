@@ -22,7 +22,7 @@ interface BackgroundSyncDevice {
     /** Bluetooth address on Android, peripheral identifier on iOS. */
     val address: String
     val name: String?
-    val station: String?
+    val thing: String?
 
     /** Whether a LAN token is stored, so a LAN connect can authenticate. */
     val hasLanToken: Boolean
@@ -36,7 +36,7 @@ interface BackgroundLanTarget {
 
 /** One way the run may reach a logger, in the order [BackgroundSyncPolicy.linksFor] returns them. */
 sealed interface BackgroundSyncLink<out T : BackgroundLanTarget> {
-    /** TCP to the address mDNS just resolved for the device's station, with the stored token. */
+    /** TCP to the address mDNS just resolved for the device's thing, with the stored token. */
     data class Lan<out T : BackgroundLanTarget>(val target: T) : BackgroundSyncLink<T>
 
     /** Direct connect to the bonded peripheral, no scan, no pairing dialog. */
@@ -64,10 +64,10 @@ interface BackgroundSyncGateway<D : BackgroundSyncDevice, T : BackgroundLanTarge
     fun isDeviceOwned(address: String): Boolean = interactiveSessionAddress() == address
 
     /**
-     * Browse `_ossync._tcp` for up to [timeoutMs] (return early once every station in [stations]
-     * is resolved). Empty when the LAN permission is missing or discovery fails. Keyed by station.
+     * Browse `_ossync._tcp` for up to [timeoutMs] (return early once every thing in [things]
+     * is resolved). Empty when the LAN permission is missing or discovery fails. Keyed by thing.
      */
-    suspend fun browseLan(stations: Set<String>, timeoutMs: Long): Map<String, T>
+    suspend fun browseLan(things: Set<String>, timeoutMs: Long): Map<String, T>
 
     /** Whether this phone holds a Bluetooth bond for [address]. */
     fun isBonded(address: String): Boolean
@@ -94,22 +94,22 @@ object BackgroundSyncPolicy {
     const val MAX_CONCURRENT_DEVICES = 2
 
     /**
-     * LAN first when the device's station is on the network *and* a token is stored (the same rule
+     * LAN first when the device's thing is on the network *and* a token is stored (the same rule
      * the interactive connect uses), then Bluetooth if, and only if, the phone is bonded. An
      * unbonded device would need the passkey dialog, which does not exist in the background.
      */
     fun <T : BackgroundLanTarget> linksFor(device: BackgroundSyncDevice, lan: Map<String, T>, bonded: Boolean, lanOnly: Boolean = false): List<BackgroundSyncLink<T>> {
         val links = ArrayList<BackgroundSyncLink<T>>(2)
-        val station = device.station
-        if (station != null && device.hasLanToken) {
-            lan[station]?.takeIf { it.isConnectable }?.let { links += BackgroundSyncLink.Lan(it) }
+        val thing = device.thing
+        if (thing != null && device.hasLanToken) {
+            lan[thing]?.takeIf { it.isConnectable }?.let { links += BackgroundSyncLink.Lan(it) }
         }
         if (bonded && !lanOnly) links += BackgroundSyncLink.Ble
         return links
     }
 
-    /** Stations worth browsing for: devices that could authenticate a LAN connect. */
-    fun lanStations(devices: List<BackgroundSyncDevice>): Set<String> = devices.mapNotNull { d -> d.station?.takeIf { d.hasLanToken } }.toSet()
+    /** Things worth browsing for: devices that could authenticate a LAN connect. */
+    fun lanThings(devices: List<BackgroundSyncDevice>): Set<String> = devices.mapNotNull { d -> d.thing?.takeIf { d.hasLanToken } }.toSet()
 
     /** Whether a run that ended with [report] deserves a backed-off retry after [attempt] tries. */
     fun shouldRetry(report: BackgroundSyncReport<*>, attempt: Int): Boolean = report.transientFailure && attempt < MAX_RETRIES
@@ -210,8 +210,8 @@ class BackgroundSyncRunner<D : BackgroundSyncDevice, T : BackgroundLanTarget>(
         }
         if (chosen.isEmpty()) return BackgroundSyncReport(emptyList())
 
-        val stations = BackgroundSyncPolicy.lanStations(chosen)
-        val lan = if (stations.isEmpty()) emptyMap() else gateway.browseLan(stations, lanBrowseMs)
+        val things = BackgroundSyncPolicy.lanThings(chosen)
+        val lan = if (things.isEmpty()) emptyMap() else gateway.browseLan(things, lanBrowseMs)
 
         require(maxConcurrentDevices > 0)
         val permits = Semaphore(maxConcurrentDevices)

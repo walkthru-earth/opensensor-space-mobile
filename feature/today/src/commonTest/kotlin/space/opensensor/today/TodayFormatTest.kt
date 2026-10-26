@@ -73,9 +73,9 @@ class TodayFormatTest {
     }
 
     @Test
-    fun todaySoFarComesFromTheHourlyDayAndIsNullWithoutAStation() = runTest {
+    fun todaySoFarComesFromTheHourlyDayAndIsNullWithoutAThing() = runTest {
         val zone = TimeZone.UTC
-        val station = MutableStateFlow<String?>(null)
+        val thing = MutableStateFlow<String?>(null)
         val seen = mutableListOf<String>()
         val observe = { id: String, metric: MetricSpec, window: HistoryWindow ->
             seen += id
@@ -83,10 +83,10 @@ class TodayFormatTest {
                 HistorySeries(metric, HistoryRange.DAY, window.fromS, window.toS, emptyList(), validRows = 30, expectedRows = 60, mean = 12.5f, max = 20f, binned = false),
             ) as Flow<HistorySeries>
         }
-        assertNull(todaySoFar(station, observe, zone, flowOf(1_767_225_600L)).take(1).toList().single())
+        assertNull(todaySoFar(thing, observe, zone, flowOf(1_767_225_600L)).take(1).toList().single())
 
-        station.value = "st-1"
-        val value = todaySoFar(station, observe, zone, flowOf(1_767_225_600L)).filterNotNull().first()
+        thing.value = "st-1"
+        val value = todaySoFar(thing, observe, zone, flowOf(1_767_225_600L)).filterNotNull().first()
         assertEquals(TodaySoFar(12.5f, 30, 0.5f, Pm25Basis.CORRECTED), value)
         assertEquals(listOf("st-1", "st-1"), seen)
     }

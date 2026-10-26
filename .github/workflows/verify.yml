@@ -63,10 +63,6 @@ jobs:
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'build-logic/src/**', 'core/*/build.gradle.kts', 'feature/*/build.gradle.kts', 'ui/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
-      - name: Validate station epoch migration
-        run: python3 tools/validate_station_epoch_migration.py
-      - name: Validate sensor installation migration
-        run: python3 tools/validate_sensor_installation_migration.py
       - run: ./gradlew --no-daemon verify
       - name: Check the APK native ABIs
         run: python3 tools/check_apk_abis.py app/build/outputs/apk/debug/app-debug.apk

@@ -59,11 +59,11 @@ class SyncWireTest {
         assertNull(wire.identity(json.replace("\"proto\":3", "\"proto\":2")), "proto 2 needs a firmware update")
     }
 
-    @Test fun stationIdAllowsDotButNoPathTraversal() {
-        val json = "{\"proto\":3,\"station\":\"STATION\",\"dev\":\"AABBCCDDEEFF\"}"
-        assertEquals("aq.lab_1-b", wire.identity(json.replace("STATION", "aq.lab_1-b"))!!.station)
+    @Test fun thingIdAllowsDotButNoPathTraversal() {
+        val json = "{\"proto\":3,\"station\":\"THING\",\"dev\":\"AABBCCDDEEFF\"}"
+        assertEquals("aq.lab_1-b", wire.identity(json.replace("THING", "aq.lab_1-b"))!!.thing)
         for (unsafe in listOf(".", "..", "a/b", "../x", "a\\\\b", "", "a b")) {
-            assertNull(wire.identity(json.replace("STATION", unsafe)), unsafe)
+            assertNull(wire.identity(json.replace("THING", unsafe)), unsafe)
         }
     }
 

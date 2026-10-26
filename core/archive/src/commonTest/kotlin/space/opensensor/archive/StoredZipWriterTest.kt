@@ -243,13 +243,13 @@ class ArchiveExportTest {
     }
 
     @Test
-    fun dailyEntriesKeepOnlyTheGivenStations() {
+    fun dailyEntriesKeepOnlyTheGivenThings() {
         val derived = listOf(
             entry("derived/v1/A/day=2026-10-01.parquet"),
             entry("derived/v1/A/day=2026-10-01.manifest.json"),
             entry("derived/v1/B/day=2026-10-01.parquet"),
             entry("derived/v1/B/day=2026-10-01.manifest.json"),
-            // Outside any station directory.
+            // Outside any thing directory.
             entry("derived/v1/loose.parquet"),
         )
         assertEquals(
@@ -257,19 +257,19 @@ class ArchiveExportTest {
             ArchiveExport.dailyEntries(derived, setOf("A"))?.map { it.path },
         )
         assertEquals(4, ArchiveExport.dailyEntries(derived, setOf("A", "B"))?.size)
-        // Only another station's day files is nothing to share.
+        // Only another thing's day files is nothing to share.
         assertEquals(null, ArchiveExport.dailyEntries(derived, setOf("C")))
     }
 
     @Test
-    fun aFileRightUnderDerivedBelongsToNoStation() {
-        // Its own name is no station folder, even when a station has that name.
+    fun aFileRightUnderDerivedBelongsToNoThing() {
+        // Its own name is no thing folder, even when a thing has that name.
         val loose = listOf(entry("derived/v1/loose.parquet"), entry("derived/v1/loose.manifest.json"))
         assertEquals(null, ArchiveExport.dailyEntries(loose, setOf("loose.parquet", "loose.manifest.json")))
     }
 
     @Test
-    fun copiesOfTheSameNameFromTwoStationsStayApart() {
+    fun copiesOfTheSameNameFromTwoThingsStayApart() {
         val space = MemoryExportSpace()
         val staged = ArchiveExport.stageCopies(space, listOf(entry("A/x.parquet"), entry("B/x.parquet"), entry("A/y.parquet")))
         assertEquals(listOf("A-x.parquet", "B-x.parquet", "y.parquet"), staged.map { it.name })
@@ -368,11 +368,11 @@ class ArchiveExportTest {
         assertTrue(opened.all { it.closes == 1 })
     }
 
-    private fun record(station: String, name: String, syncedAt: Long) =
-        ArchiveRecord(station = station, name = name, bytes = 1, crc32 = 1, sha256 = "x", syncedAtEpochMs = syncedAt, sourceDevice = station)
+    private fun record(thing: String, name: String, syncedAt: Long) =
+        ArchiveRecord(thing = thing, name = name, bytes = 1, crc32 = 1, sha256 = "x", syncedAtEpochMs = syncedAt, sourceDevice = thing)
 
-    /** Two stations' verified finals plus a PAR1-invalid final no record vouches for. */
-    private fun twoStationsAndAnOrphan(): InMemoryArchiveStore = InMemoryArchiveStore().apply {
+    /** Two things' verified finals plus a PAR1-invalid final no record vouches for. */
+    private fun twoThingsAndAnOrphan(): InMemoryArchiveStore = InMemoryArchiveStore().apply {
         files["${ArchiveLayout.ARCHIVE}/B/b.parquet"] = byteArrayOf(9)
         files["${ArchiveLayout.ARCHIVE}/A/a.parquet"] = byteArrayOf(8)
         files["${ArchiveLayout.ARCHIVE}/A/orphan.parquet"] = "not parquet".encodeToByteArray()
@@ -385,8 +385,8 @@ class ArchiveExportTest {
     }
 
     @Test
-    fun aStationZipHoldsOnlyThatStationsVerifiedFiles() = kotlinx.coroutines.test.runTest {
-        val store = twoStationsAndAnOrphan()
+    fun aThingZipHoldsOnlyThatThingsVerifiedFiles() = kotlinx.coroutines.test.runTest {
+        val store = twoThingsAndAnOrphan()
         val a = record("A", "a.parquet", syncedAt = 42)
         val entries = ArchiveExport.archiveEntries(store, listOf(a))
         assertEquals(listOf("A/a.parquet"), zipNames(entries))
@@ -396,7 +396,7 @@ class ArchiveExportTest {
 
     @Test
     fun aFinalRemovedAfterTheListingIsSkippedAndCounted() = kotlinx.coroutines.test.runTest {
-        val store = twoStationsAndAnOrphan()
+        val store = twoThingsAndAnOrphan()
         val entries = ArchiveExport.archiveEntries(store, listOf(record("A", "a.parquet", 1), record("B", "b.parquet", 2)))
         // The old format cleanup removes a listed final before the zip is written.
         store.files.remove("${ArchiveLayout.ARCHIVE}/A/a.parquet")
@@ -453,7 +453,7 @@ class ArchiveExportTest {
 
     @Test
     fun theWholePhoneZipHoldsEveryVerifiedFileAndNoOrphan() = kotlinx.coroutines.test.runTest {
-        val store = twoStationsAndAnOrphan()
+        val store = twoThingsAndAnOrphan()
         val records = listOf(record("B", "b.parquet", 2), record("A", "a.parquet", 1), record("A", "a.parquet", 1))
         assertEquals(listOf("A/a.parquet", "B/b.parquet"), zipNames(ArchiveExport.archiveEntries(store, records)))
     }

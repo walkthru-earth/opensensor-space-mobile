@@ -60,7 +60,7 @@ class CopyRulesTest {
 
     /**
      * Discover names WHO steps from the PM scales the app ships (`DiscoverCollection.BUNDLED`), the
-     * stations from the Android step strings. Both say the same in English and Arabic.
+     * things from the Android step strings. Both say the same in English and Arabic.
      */
     @Test
     fun `bundled WHO step names match the Android step strings`() {

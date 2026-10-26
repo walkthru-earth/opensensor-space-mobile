@@ -42,27 +42,27 @@ class HistoryRepository internal constructor(
     private val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
     val reader = HistorySeriesReader(store, index, tiers, Dispatchers.IO, clockAnchors, derived, nowEpochS = nowEpochS, templates = templates)
 
-    fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> =
-        reader.observe(station, metric, range, window)
+    fun observe(thing: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> =
+        reader.observe(thing, metric, range, window)
 
     /** Today card, the same exact local-day bounds from hourly tiers plus raw boundary rows. */
-    fun observeHourlyDay(station: String, metric: MetricSpec, window: HistoryWindow): Flow<HistorySeries> =
-        reader.observeHourlyDay(station, metric, window)
+    fun observeHourlyDay(thing: String, metric: MetricSpec, window: HistoryWindow): Flow<HistorySeries> =
+        reader.observeHourlyDay(thing, metric, window)
 
     /**
-     * "Chart by file", one [FileSummary] per archived telemetry file of [station], oldest first. Timed
+     * "Chart by file", one [FileSummary] per archived telemetry file of [thing], oldest first. Timed
      * files by their (real or estimated) first row, then the untimed ones by name. Reads every file
      * once (about 40 KB each, footer and a few columns). Files are immutable, so the result is cached
-     * by `(station, name, crc32)` for the life of the process.
+     * by `(thing, name, crc32)` for the life of the process.
      */
-    suspend fun fileSummaries(station: String, files: List<ArchivedFile>): List<FileSummary> = withContext(Dispatchers.IO) {
+    suspend fun fileSummaries(thing: String, files: List<ArchivedFile>): List<FileSummary> = withContext(Dispatchers.IO) {
         val telemetry = files.filter { it.isIndexed && (it.purpose == null || it.purpose == "telemetry") }
-        val anchors = if (telemetry.any { it.hasEstimatedUtc }) TimeEstimate.anchors(telemetry.map { it.info() }, clockAnchors.anchors(station)) else emptyMap()
+        val anchors = if (telemetry.any { it.hasEstimatedUtc }) TimeEstimate.anchors(telemetry.map { it.info() }, clockAnchors.anchors(thing)) else emptyMap()
         val ordered = telemetry.sortedWith(compareBy<ArchivedFile> { it.timelineFirstNs == null }.thenBy { it.timelineFirstNs ?: 0L }.thenBy { it.name })
         ordered.mapNotNull { f ->
-            val key = Triple(f.station, f.name, f.crc32) to f.estFirstUtcNs
+            val key = Triple(f.thing, f.name, f.crc32) to f.estFirstUtcNs
             synchronized(summaryCache) { summaryCache[key] }?.let { return@mapNotNull it }
-            val file = archive.fileFor(f.station, f.name)
+            val file = archive.fileFor(f.thing, f.name)
             if (!file.isFile) return@mapNotNull null
             try {
                 ParquetFile.open(file).use { FileSummary.of(f.name, it, if (f.hasEstimatedUtc) anchors[f.bootId] else null, templates = templates) }

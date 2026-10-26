@@ -32,10 +32,10 @@ import space.opensensor.devices.WifiSensor
 internal data class KnownRecord(
     val peripheral: String,
     val name: String?,
-    val station: String,
+    val thing: String,
     val device: String,
     val lastSeenMs: Long?,
-    val olderStations: List<String> = emptyList(),
+    val olderThings: List<String> = emptyList(),
 )
 
 /** Narrow result for the native BLE adapter. No secret material crosses this boundary. */
@@ -58,11 +58,11 @@ internal object IosKnown {
      * a credential is held for its hardware id.
      */
     fun merge(records: List<KnownRecord>, credentials: List<KnownRecord>): List<KnownSensor> {
-        val access = credentials.map { it.device.lowercase() to it.station }.toSet()
+        val access = credentials.map { it.device.lowercase() to it.thing }.toSet()
         val byPeripheral = LinkedHashMap<String, KnownRecord>()
         for (c in credentials) byPeripheral[c.peripheral.uppercase()] = c
         for (r in records) byPeripheral[r.peripheral.uppercase()] = r
-        return byPeripheral.map { (id, r) -> KnownSensor(id, r.name, r.station, r.lastSeenMs, (r.device.lowercase() to r.station) in access) }
+        return byPeripheral.map { (id, r) -> KnownSensor(id, r.name, r.thing, r.lastSeenMs, (r.device.lowercase() to r.thing) in access) }
     }
 
     /** Adds or refreshes [record], newest first. */
@@ -72,9 +72,9 @@ internal object IosKnown {
     fun forget(records: List<KnownRecord>, peripheral: String): List<KnownRecord> =
         records.filterNot { it.peripheral.equals(peripheral, ignoreCase = true) }
 
-    /** Files and the newest sync per station, as Android reads its Room index. iOS has no day mean yet. */
+    /** Files and the newest sync per thing, as Android reads its Room index. iOS has no day mean yet. */
     fun glance(records: List<ArchiveRecord>): Map<String, ArchiveGlance> =
-        records.groupBy { it.station }.mapValues { (_, list) ->
+        records.groupBy { it.thing }.mapValues { (_, list) ->
             ArchiveGlance(
                 files = list.size,
                 lastSyncedMs = list.maxOfOrNull { it.syncedAtEpochMs },
@@ -82,32 +82,32 @@ internal object IosKnown {
             )
         }
 
-    /** One record per line, tab separated. The sixth field records older station epochs. */
+    /** One record per line, tab separated. The sixth field records older thing epochs. */
     fun encode(records: List<KnownRecord>): String = records.joinToString("\n") { r ->
-        listOf(r.peripheral, r.name?.replace(Regex("[\\t\\r\\n]"), " ").orEmpty(), r.station, r.device, r.lastSeenMs?.toString().orEmpty(), r.olderStations.joinToString(","))
+        listOf(r.peripheral, r.name?.replace(Regex("[\\t\\r\\n]"), " ").orEmpty(), r.thing, r.device, r.lastSeenMs?.toString().orEmpty(), r.olderThings.joinToString(","))
             .joinToString("\t")
     }
 
     /** Lines that do not parse are dropped, so a damaged entry costs one sensor, not the list. */
     fun decode(text: String?): List<KnownRecord> = text.orEmpty().lineSequence().mapNotNull { line ->
         val f = line.split('\t')
-        if (f.size !in 5..6 || f[0].isBlank() || !SyncWire.isStationId(f[2]) || !Regex("[0-9a-fA-F]{12}").matches(f[3])) return@mapNotNull null
-        val older = f.getOrNull(5).orEmpty().split(',').filter { SyncWire.isStationId(it) && it != f[2] }.distinct()
+        if (f.size !in 5..6 || f[0].isBlank() || !SyncWire.isThingId(f[2]) || !Regex("[0-9a-fA-F]{12}").matches(f[3])) return@mapNotNull null
+        val older = f.getOrNull(5).orEmpty().split(',').filter { SyncWire.isThingId(it) && it != f[2] }.distinct()
         KnownRecord(f[0], f[1].ifBlank { null }, f[2], f[3], f[4].toLongOrNull(), older)
     }.distinctBy { it.peripheral.uppercase() }.toList()
 
     /**
      * The known ids Collect all must skip because a link the user holds already reaches them. A
      * Bluetooth link names its peripheral id. A Wi-Fi link names its service name, which maps to a
-     * known sensor through the TXT station in [lanStations]. Ids compare without case.
+     * known sensor through the TXT thing in [lanThings]. Ids compare without case.
      */
-    fun busyIds(active: List<ActiveLink>, lanStations: Map<String, String>, known: List<KnownSensor>): Set<String> {
+    fun busyIds(active: List<ActiveLink>, lanThings: Map<String, String>, known: List<KnownSensor>): Set<String> {
         val busy = HashSet<String>()
         for (link in active) {
             busy += link.id
             if (link.id.startsWith(WIFI_PREFIX)) {
-                val station = lanStations[link.id.removePrefix(WIFI_PREFIX)] ?: continue
-                known.filter { it.station == station }.forEach { busy += it.id }
+                val thing = lanThings[link.id.removePrefix(WIFI_PREFIX)] ?: continue
+                known.filter { it.thing == thing }.forEach { busy += it.id }
             } else {
                 known.filter { it.id.equals(link.id, ignoreCase = true) }.forEach { busy += it.id }
             }
@@ -182,7 +182,7 @@ internal object IosKnown {
 /**
  * The iOS side of My devices. It turns the Swift adapters' state ([CompanionState]), the saved
  * known records, the Keychain credential list and the Room index into the three ports of
- * `:feature:devices`. Swift supplies plain callbacks and reports back. Only ids, names, stations
+ * `:feature:devices`. Swift supplies plain callbacks and reports back. Only ids, names, things
  * and hardware ids cross, never a PIN or token. Call everything on the main thread.
  *
  * Collect all runs one sensor at a time, because the Bluetooth adapter holds one link. [collect]
@@ -223,15 +223,15 @@ class DevicesBridge internal constructor(
 
     /**
      * Validate BLE INFO before a link may expose readings, credentials or archive operations.
-     * A new station on the same hardware starts a new archive epoch; old files keep their station.
+     * A new thing on the same hardware starts a new archive epoch; old files keep their thing.
      */
-    fun sensorOpened(peripheral: String, name: String?, station: String, device: String): SensorOpenResult {
+    fun sensorOpened(peripheral: String, name: String?, thing: String, device: String): SensorOpenResult {
         val previous = records.value.firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }
         val credential = credentials.value.firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }
         val expected = previous ?: credential
         val decision = DeviceContinuityPolicy.evaluate(
-            expected?.let { DeviceContinuityPolicy.Identity(it.peripheral, it.device, it.station) },
-            DeviceContinuityPolicy.Identity(peripheral, device, station),
+            expected?.let { DeviceContinuityPolicy.Identity(it.peripheral, it.device, it.thing) },
+            DeviceContinuityPolicy.Identity(peripheral, device, thing),
             authenticatedBle = true,
         )
         if (decision is DeviceContinuityPolicy.Decision.Reject) {
@@ -242,17 +242,17 @@ class DevicesBridge internal constructor(
             return SensorOpenResult(false, notice, null)
         }
         decision as DeviceContinuityPolicy.Decision.Accept
-        val staleCredential = credential?.takeIf { it.device != device.lowercase() || it.station != station || decision.invalidateLanToken }
-        val older = (listOfNotNull(expected?.station?.takeIf { it != station }) + previous?.olderStations.orEmpty())
-            .filter { it != station }.distinct()
-        save(IosKnown.remember(records.value, KnownRecord(peripheral, name?.takeIf { it.isNotBlank() } ?: previous?.name, station, device.lowercase(), now(), older)))
+        val staleCredential = credential?.takeIf { it.device != device.lowercase() || it.thing != thing || decision.invalidateLanToken }
+        val older = (listOfNotNull(expected?.thing?.takeIf { it != thing }) + previous?.olderThings.orEmpty())
+            .filter { it != thing }.distinct()
+        save(IosKnown.remember(records.value, KnownRecord(peripheral, name?.takeIf { it.isNotBlank() } ?: previous?.name, thing, device.lowercase(), now(), older)))
         return SensorOpenResult(true, null, staleCredential?.device)
     }
 
     /** The Keychain credentials, as three lists of the same length. Never the token. */
-    fun credentialsChanged(peripherals: List<String>, stations: List<String>, devices: List<String>) {
-        credentials.value = peripherals.indices.filter { it < stations.size && it < devices.size }.map {
-            KnownRecord(peripherals[it], null, stations[it], devices[it].lowercase(), null)
+    fun credentialsChanged(peripherals: List<String>, things: List<String>, devices: List<String>) {
+        credentials.value = peripherals.indices.filter { it < things.size && it < devices.size }.map {
+            KnownRecord(peripherals[it], null, things[it], devices[it].lowercase(), null)
         }
     }
 
@@ -319,14 +319,14 @@ class DevicesBridge internal constructor(
     fun peripheralFor(device: String): String? =
         (records.value + credentials.value).firstOrNull { it.device.equals(device, ignoreCase = true) }?.peripheral
 
-    /** The verified station for a previously opened peripheral. This is only a discovery hint. */
-    fun stationFor(peripheral: String): String? =
-        (records.value + credentials.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.station
+    /** The verified thing for a previously opened peripheral. This is only a discovery hint. */
+    fun thingFor(peripheral: String): String? =
+        (records.value + credentials.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.thing
 
-    /** Current and earlier authenticated BLE station epochs for this saved sensor's archive. */
-    fun stationsFor(peripheral: String): List<String> {
+    /** Current and earlier authenticated BLE thing epochs for this saved sensor's archive. */
+    fun thingsFor(peripheral: String): List<String> {
         val record = records.value.firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }
-        return if (record != null) listOf(record.station) + record.olderStations else listOfNotNull(stationFor(peripheral))
+        return if (record != null) listOf(record.thing) + record.olderThings else listOfNotNull(thingFor(peripheral))
     }
 
     /** Resolve an active Wi-Fi service back to its enrolled sensor's navigation id. */
@@ -336,8 +336,8 @@ class DevicesBridge internal constructor(
                 it.device.equals(verified, ignoreCase = true)
             }?.peripheral
         }
-        val station = state.lanInfo[name]?.station ?: state.lanStations[name] ?: return null
-        return (credentials.value + records.value).firstOrNull { it.station == station }?.peripheral
+        val thing = state.lanInfo[name]?.thing ?: state.lanThings[name] ?: return null
+        return (credentials.value + records.value).firstOrNull { it.thing == thing }?.peripheral
     }
 
     private val openRequests = MutableStateFlow(false)
@@ -356,7 +356,7 @@ class DevicesBridge internal constructor(
 
     internal fun knownNow(): List<KnownSensor> = IosKnown.merge(records.value, credentials.value)
 
-    internal fun wifiNow(): List<WifiSensor> = state.lanDevices.map { WifiSensor(it, state.lanStations[it]) }
+    internal fun wifiNow(): List<WifiSensor> = state.lanDevices.map { WifiSensor(it, state.lanThings[it]) }
 
     internal fun activeNow(): List<ActiveLink> {
         val name = (state.selectedId ?: state.reconnectingId ?: state.failedId)?.let { id ->
@@ -376,7 +376,7 @@ class DevicesBridge internal constructor(
     internal fun startCollectAll() {
         if (queue?.active == true) return
         val known = knownNow()
-        val plan = CollectAllPlan.plan(known, wifiNow(), IosKnown.busyIds(activeNow(), state.lanStations, known))
+        val plan = CollectAllPlan.plan(known, wifiNow(), IosKnown.busyIds(activeNow(), state.lanThings, known))
         if (plan.isEmpty()) return
         val q = CollectAllQueue(plan)
         queue = q

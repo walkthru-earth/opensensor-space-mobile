@@ -170,14 +170,14 @@ object StorageModule {
         index = index,
         io = io,
         indexer = historyIndexer.asRecordIndexer(archive),
-        knownStations = { knownDevices.allByLastConnected().mapNotNull { it.station } },
+        knownThings = { knownDevices.allByLastConnected().mapNotNull { it.thing } },
         clock = clock::nowEpochMs,
         quota = quota,
         coordinator = coordinator,
         log = { Log.i("StorageJanitor", it) },
     )
 
-    /** The shared order of the History passes (#100). It logs class names only, never paths or station ids. */
+    /** The shared order of the History passes (#100). It logs class names only, never paths or thing ids. */
     @Provides
     @Singleton
     fun provideHistoryOrchestrator(historyIndexer: HistoryIndexer, index: ArchiveIndex): HistoryOrchestrator =

@@ -37,7 +37,7 @@ interface DeviceRadio {
     fun stopScan()
 }
 
-/** One pass over every known sensor, one link per station. */
+/** One pass over every known sensor, one link per thing. */
 interface CollectAllPort {
     val running: Flow<Boolean>
     fun collectAll()

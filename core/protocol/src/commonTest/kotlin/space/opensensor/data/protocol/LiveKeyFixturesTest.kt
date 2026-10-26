@@ -51,17 +51,17 @@ class LiveKeyFixturesTest {
     @Test
     fun `every current digest shows the fixture LIVE keys of its board`() {
         current.forEach { build ->
-            val station = assertNotNull(BundledCatalog.station("station", build.digest), "${build.board} has no LIVE station")
+            val thing = assertNotNull(BundledCatalog.thing("thing", build.digest), "${build.board} has no LIVE thing")
             val expected = if (build.board == "cores3") build.keys.toSet() - cores3AlwaysNull else build.keys.toSet()
-            assertEquals(expected, station.live.keys, build.board)
+            assertEquals(expected, thing.live.keys, build.board)
         }
     }
 
     @Test
-    fun `a retired digest has no template and no LIVE station`() {
+    fun `a retired digest has no template and no LIVE thing`() {
         retired.forEach { digest ->
             assertNull(BundledCatalog.template(digest), digest)
-            assertNull(BundledCatalog.station("station", digest), digest)
+            assertNull(BundledCatalog.thing("thing", digest), digest)
         }
     }
 }

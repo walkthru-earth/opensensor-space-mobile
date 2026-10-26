@@ -12,18 +12,18 @@ import kotlin.test.Test
 class TimeEstimateTest {
 
     private fun bytes(path: String) = fixtureBytes("parquet/$path")
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     private fun indexedRow(resource: String, name: String): IndexedFileInfo {
         val i = ParquetIndexer.index(ParquetFile.wrap(bytes(resource)), templates = CoreS3Files)
         return IndexedFileInfo(name, i.bootId, i.purpose, true, i.rows, i.utcRows, i.firstUtcNs, i.lastUtcNs, i.firstMonoUs, i.lastMonoUs)
     }
 
-    private val anchorFile = indexedRow("device/v1-lz4-90rows-dated.parquet", "station=$station/year=2026/month=09/day=08/data_1845_e452563e96c72ca057a48924550779b6_26-79-5.parquet")
-    private val laterTimed = indexedRow("device/v1-lz4-2rows-dated.parquet", "station=$station/year=2026/month=09/day=08/data_2015_e452563e96c72ca057a48924550779b6_348-349-14.parquet")
-    private val unsynced64 = indexedRow("device/v1-none-64rows-unsynced.parquet", "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_0-63-6.parquet")
-    private val unsynced1 = indexedRow("device/v1-lz4-1row-unsynced.parquet", "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_64-64-7.parquet")
-    private val otherBoot = indexedRow("device/v2-none-90rows-unsynced.parquet", "station=$station/unsynced/boot=16201de72e4422d744b04fddf23eec41/data_unsynced_16201de72e4422d744b04fddf23eec41_0-89-0.parquet")
+    private val anchorFile = indexedRow("device/v1-lz4-90rows-dated.parquet", "station=$thing/year=2026/month=09/day=08/data_1845_e452563e96c72ca057a48924550779b6_26-79-5.parquet")
+    private val laterTimed = indexedRow("device/v1-lz4-2rows-dated.parquet", "station=$thing/year=2026/month=09/day=08/data_2015_e452563e96c72ca057a48924550779b6_348-349-14.parquet")
+    private val unsynced64 = indexedRow("device/v1-none-64rows-unsynced.parquet", "station=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_0-63-6.parquet")
+    private val unsynced1 = indexedRow("device/v1-lz4-1row-unsynced.parquet", "station=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_64-64-7.parquet")
+    private val otherBoot = indexedRow("device/v2-none-90rows-unsynced.parquet", "station=$thing/unsynced/boot=16201de72e4422d744b04fddf23eec41/data_unsynced_16201de72e4422d744b04fddf23eec41_0-89-0.parquet")
 
     @Test
     fun `invalid monotonic values and overflowing estimates never create dates`() {
@@ -38,12 +38,12 @@ class TimeEstimateTest {
 
     @Test
     fun `receipt dates raw microseconds immediately without a timed file and never another boot`() {
-        val receipt = ClockAnchor(station, unsynced64.bootId!!, 1_788_912_000_123_456_000L, unsynced64.lastMonoUs!!)
+        val receipt = ClockAnchor(thing, unsynced64.bootId!!, 1_788_912_000_123_456_000L, unsynced64.lastMonoUs!!)
         val anchors = TimeEstimate.anchors(listOf(unsynced64, otherBoot), listOf(receipt))
         val span = TimeEstimate.span(unsynced64, anchors)!!
         assertEquals(receipt.utcNs, span.second)
         assertEquals(receipt.utcNs - (receipt.monoUs - unsynced64.firstMonoUs!!) * 1000L, span.first)
-        assertTrue(StationDays.dayOf(span.first) < StationDays.dayOf(span.second))
+        assertTrue(ThingDays.dayOf(span.first) < ThingDays.dayOf(span.second))
         assertNull(TimeEstimate.span(otherBoot, anchors))
         assertEquals(0L, unsynced64.utcRows)
         assertNull(unsynced64.firstUtcNs)
@@ -80,7 +80,7 @@ class TimeEstimateTest {
     @Test
     fun `aggregator dates the unsynced rows with the anchor and counts them as estimated`() {
         val a = TimeEstimate.anchors(listOf(anchorFile))["e452563e96c72ca057a48924550779b6"]!!
-        val agg = Aggregator(station, setOf(Resolution.HOUR, Resolution.DAY), templates = CoreS3Files)
+        val agg = Aggregator(thing, setOf(Resolution.HOUR, Resolution.DAY), templates = CoreS3Files)
         agg.add(ParquetFile.wrap(bytes("device/v1-none-64rows-unsynced.parquet")), a)
         agg.add(ParquetFile.wrap(bytes("device/v1-lz4-1row-unsynced.parquet")), a)
         agg.add(ParquetFile.wrap(bytes("device/v1-lz4-90rows-dated.parquet")), a) // has UTC: anchor ignored

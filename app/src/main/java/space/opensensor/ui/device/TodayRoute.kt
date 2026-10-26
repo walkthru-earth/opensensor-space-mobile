@@ -28,8 +28,8 @@ internal fun canReconnectLanOnly(bluetoothReady: Boolean, localNetworkReady: Boo
     !bluetoothReady && localNetworkReady && enrolledLanSeen
 
 internal fun hasLanReconnectTarget(known: KnownDevice?, discovered: Map<String, LanDevice>): Boolean {
-    val station = known?.station ?: return false
-    return known.hasLanToken && discovered[station]?.isConnectable == true
+    val thing = known?.thing ?: return false
+    return known.hasLanToken && discovered[thing]?.isConnectable == true
 }
 
 /**

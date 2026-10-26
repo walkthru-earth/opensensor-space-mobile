@@ -20,7 +20,7 @@ class IosMissingFileTest {
     private val base = NSTemporaryDirectory().trimEnd('/') + "/missing-file-test-" + NSUUID().UUIDString()
     private val finals = "$base/SensorArchive"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Unconfined)
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val locked = mutableListOf<String>()
 
     @AfterTest
@@ -30,14 +30,14 @@ class IosMissingFileTest {
     }
 
     private fun record(day: Int): ArchiveRecord {
-        val name = "station=$station/year=2026/month=09/day=$day/data_0930_a_2-106-2.parquet"
-        val path = "$finals/$station/$name"
+        val name = "station=$thing/year=2026/month=09/day=$day/data_0930_a_2-106-2.parquet"
+        val path = "$finals/$thing/$name"
         IosFiles.mkdirs(path.substringBeforeLast('/'))
         IosFiles.writeAtomically(path, "PAR1 $day".encodeToByteArray())
-        return ArchiveRecord(station = station, name = name, bytes = 6, crc32 = 1, sha256 = "x", syncedAtEpochMs = 1, sourceDevice = station)
+        return ArchiveRecord(thing = thing, name = name, bytes = 6, crc32 = 1, sha256 = "x", syncedAtEpochMs = 1, sourceDevice = thing)
     }
 
-    private fun pathOf(r: ArchiveRecord) = "$finals/$station/${r.name}"
+    private fun pathOf(r: ArchiveRecord) = "$finals/$thing/${r.name}"
 
     private fun lock(path: String) {
         chmod(path, 0.convert())

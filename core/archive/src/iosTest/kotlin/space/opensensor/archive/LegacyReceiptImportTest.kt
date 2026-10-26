@@ -26,12 +26,12 @@ class LegacyReceiptImportTest {
     private val settled = "$base/database/receipts-settled"
     private val prunedFile = "$finals-pruned/pruned.v1"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Unconfined)
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
     private val crc = ParquetVerify.crc32(bytes)
 
-    private fun name(day: Int) = "station=$station/year=2026/month=09/day=$day/data_0930.parquet"
-    private fun final(day: Int) = "$finals/$station/${name(day)}"
+    private fun name(day: Int) = "station=$thing/year=2026/month=09/day=$day/data_0930.parquet"
+    private fun final(day: Int) = "$finals/$thing/${name(day)}"
     private fun receipt(day: Int) = final(day) + ArchiveLayout.LEGACY_RECEIPT_SUFFIX
     private fun importer() = LegacyReceiptImport(store, marker, settled, Dispatchers.Unconfined)
     private fun kind(path: String) = IosFiles.kind(path)
@@ -52,11 +52,11 @@ class LegacyReceiptImportTest {
     }
 
     private fun writePruned(vararg days: Int) {
-        val lines = days.joinToString("") { "$station\t${name(it)}\t46\t5\t11\n" }
+        val lines = days.joinToString("") { "$thing\t${name(it)}\t46\t5\t11\n" }
         writeFile(prunedFile, "${PrunedFilesCodec.VERSION}\n$lines".encodeToByteArray())
     }
 
-    private fun mark(day: Int) = PrunedFile(station, name(day), 46, 5, 11)
+    private fun mark(day: Int) = PrunedFile(thing, name(day), 46, 5, 11)
 
     /** A later pass must not checkpoint, so a busy database cannot break startup. */
     private val noCheckpoint: suspend () -> Unit = { error("checkpoint after the first pass") }
@@ -76,8 +76,8 @@ class LegacyReceiptImportTest {
         assertEquals(LegacyReceiptImport.Result(2, 1), importer().run(index, pruned) { markerAtDurable += kind(marker) })
 
         assertEquals(listOf(IosFiles.Kind.ABSENT), markerAtDurable)
-        assertEquals(ArchiveRecord(station, name(1), bytes.size.toLong(), crc, "", 0, ""), index.get(ArchiveKey(station, name(1))))
-        val full = index.get(ArchiveKey(station, name(2)))!!
+        assertEquals(ArchiveRecord(thing, name(1), bytes.size.toLong(), crc, "", 0, ""), index.get(ArchiveKey(thing, name(1))))
+        val full = index.get(ArchiveKey(thing, name(2)))!!
         assertEquals("ab", full.sha256)
         assertEquals(9L, full.indexedAtEpochMs)
         assertEquals(listOf(mark(3)), pruned.observeAll().first())
@@ -90,7 +90,7 @@ class LegacyReceiptImportTest {
 
         assertEquals(emptyList(), legacyFiles())
         assertEquals(IosFiles.Kind.FILE, kind(settled))
-        assertEquals(listOf(ArchiveKey(station, name(1)), ArchiveKey(station, name(2))), store.listFinal(station).sortedBy { it.name })
+        assertEquals(listOf(ArchiveKey(thing, name(1)), ArchiveKey(thing, name(2))), store.listFinal(thing).sortedBy { it.name })
         assertEquals(2, index.observeAll().first().size)
         assertEquals(listOf(mark(3)), pruned.observeAll().first())
 
@@ -98,7 +98,7 @@ class LegacyReceiptImportTest {
         synced(4)
         assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned, noCheckpoint))
         assertEquals(IosFiles.Kind.FILE, kind(receipt(4)))
-        assertNull(index.get(ArchiveKey(station, name(4))))
+        assertNull(index.get(ArchiveKey(thing, name(4))))
     }
 
     @Test
@@ -176,7 +176,7 @@ class LegacyReceiptImportTest {
         val pruned = MemoryPruned()
         importer().run(index, pruned)
         // Removed on purpose before the next launch, as when the device stops listing a file or a delete is undone.
-        index.remove(ArchiveKey(station, name(1)))
+        index.remove(ArchiveKey(thing, name(1)))
         pruned.remove(mark(3).key)
 
         assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned, noCheckpoint))
@@ -210,7 +210,7 @@ class LegacyReceiptImportTest {
         importer().run(index, pruned)
         // The app died after deleting receipt 1, and the rows went since.
         NSFileManager.defaultManager.removeItemAtPath(receipt(1), null)
-        index.remove(ArchiveKey(station, name(2)))
+        index.remove(ArchiveKey(thing, name(2)))
         pruned.remove(mark(3).key)
 
         assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned, noCheckpoint))
@@ -276,7 +276,7 @@ class LegacyReceiptImportTest {
     fun aRunCutShortKeepsWhatTheIndexAlreadyHolds() = runTest {
         synced(1)
         val index = InMemoryArchiveIndex()
-        val engine = ArchiveRecord(station, name(1), bytes.size.toLong(), crc, "cd", 5, "engine")
+        val engine = ArchiveRecord(thing, name(1), bytes.size.toLong(), crc, "cd", 5, "engine")
         index.put(engine)
 
         assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, MemoryPruned()))
@@ -288,17 +288,17 @@ class LegacyReceiptImportTest {
     fun anOlderLayoutReceiptWithoutUtcRowsReadsAsNeverIndexed() {
         val noUtc = """{"size":1,"crc":2,"indexedAtEpochMs":9,"rows":3,"utcRows":0,"purpose":"telemetry"}"""
         val dated = """{"size":1,"crc":2,"indexedAtEpochMs":9,"rows":3,"utcRows":3,"firstUtcNs":1,"lastUtcNs":2}"""
-        assertNull(LegacyReceiptImport.decode(station, name(1), noUtc)!!.indexedAtEpochMs)
-        assertEquals(9L, LegacyReceiptImport.decode(station, name(1), dated)!!.indexedAtEpochMs)
-        assertEquals(9L, LegacyReceiptImport.decode(station, name(1), noUtc.replace("}", ""","indexLayout":${ArchiveRecord.INDEX_LAYOUT}}"""))!!.indexedAtEpochMs)
-        assertNull(LegacyReceiptImport.decode(station, name(1), """{"size":-1,"crc":2}"""))
-        assertNull(LegacyReceiptImport.decode(station, name(1), """{"size":1,"crc":4294967296}"""))
+        assertNull(LegacyReceiptImport.decode(thing, name(1), noUtc)!!.indexedAtEpochMs)
+        assertEquals(9L, LegacyReceiptImport.decode(thing, name(1), dated)!!.indexedAtEpochMs)
+        assertEquals(9L, LegacyReceiptImport.decode(thing, name(1), noUtc.replace("}", ""","indexLayout":${ArchiveRecord.INDEX_LAYOUT}}"""))!!.indexedAtEpochMs)
+        assertNull(LegacyReceiptImport.decode(thing, name(1), """{"size":-1,"crc":2}"""))
+        assertNull(LegacyReceiptImport.decode(thing, name(1), """{"size":1,"crc":4294967296}"""))
     }
 
     private class MemoryPruned : PrunedFiles {
         private val rows = MutableStateFlow<List<PrunedFile>>(emptyList())
         override fun observeAll(): Flow<List<PrunedFile>> = rows
-        override suspend fun forStation(station: String): List<PrunedFile> = rows.value.filter { it.station == station }
+        override suspend fun forThing(thing: String): List<PrunedFile> = rows.value.filter { it.thing == thing }
         override suspend fun put(file: PrunedFile) {
             rows.value = rows.value.filterNot { it.key == file.key } + file
         }

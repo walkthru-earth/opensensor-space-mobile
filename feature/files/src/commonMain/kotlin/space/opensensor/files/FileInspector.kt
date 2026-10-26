@@ -73,7 +73,7 @@ sealed interface FileMetricsState {
     /** [detail] is the reader's technical message, shown at Developer level only. */
     data class Failed(val reason: FailReason, val detail: String? = null) : FileMetricsState
     data class Loaded(
-        val station: String,
+        val thing: String,
         val name: String,
         val sizeBytes: Long,
         val index: ParquetIndex,
@@ -102,8 +102,8 @@ object FileInspector {
      * Rows [from] until `from + size` of the file, or null when it cannot be read. [from] is clamped
      * into the file, so a page past the end shows the last rows.
      */
-    suspend fun page(store: ArchiveStore, station: String, name: String, from: Long, size: Int = PAGE_ROWS): RowPage? {
-        val key = runCatching { ArchiveKey(station, name) }.getOrNull() ?: return null
+    suspend fun page(store: ArchiveStore, thing: String, name: String, from: Long, size: Int = PAGE_ROWS): RowPage? {
+        val key = runCatching { ArchiveKey(thing, name) }.getOrNull() ?: return null
         return try {
             if (!store.exists(key)) return null
             ParquetFile.open(store.reader(key), name).use { page(it, from, size) }
@@ -142,8 +142,8 @@ object FileInspector {
         return RowPage(start, total, leaves.map { it.name }, cells.map { row -> row.map { it ?: NO_VALUE } })
     }
 
-    suspend fun describe(store: ArchiveStore, station: String, name: String): FileMetricsState {
-        val key = runCatching { ArchiveKey(station, name) }.getOrNull()
+    suspend fun describe(store: ArchiveStore, thing: String, name: String): FileMetricsState {
+        val key = runCatching { ArchiveKey(thing, name) }.getOrNull()
             ?: return FileMetricsState.Failed(FailReason.NOT_IN_ARCHIVE, name)
         return try {
             if (!store.exists(key)) return FileMetricsState.Failed(FailReason.NOT_IN_ARCHIVE, name)
@@ -174,7 +174,7 @@ object FileInspector {
                     )
                 }
                 FileMetricsState.Loaded(
-                    station = station,
+                    thing = thing,
                     name = name,
                     sizeBytes = reader.size,
                     index = index,
@@ -280,24 +280,24 @@ class FileMetricsController(
     private var loaded: Pair<String, String>? = null
     private var paging: Job? = null
 
-    fun load(station: String, name: String) {
-        if (loaded == station to name) return
-        loaded = station to name
+    fun load(thing: String, name: String) {
+        if (loaded == thing to name) return
+        loaded = thing to name
         _state.value = FileMetricsState.Loading
         paging?.cancel()
         _rows.value = RowsState.Idle
         scope.launch {
-            _state.value = withContext(io) { FileInspector.describe(store, station, name) }
+            _state.value = withContext(io) { FileInspector.describe(store, thing, name) }
         }
     }
 
     /** Reads the page of rows starting at row [from] of the loaded file. A newer request replaces an older one. */
     fun page(from: Long) {
-        val (station, name) = loaded ?: return
+        val (thing, name) = loaded ?: return
         paging?.cancel()
         _rows.value = RowsState.Loading
         paging = scope.launch {
-            val page = withContext(io) { FileInspector.page(store, station, name, from) }
+            val page = withContext(io) { FileInspector.page(store, thing, name, from) }
             _rows.value = page?.let(RowsState::Shown) ?: RowsState.Unavailable(from)
         }
     }

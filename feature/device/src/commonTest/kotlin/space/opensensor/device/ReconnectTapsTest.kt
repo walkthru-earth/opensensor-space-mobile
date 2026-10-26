@@ -6,7 +6,7 @@ import space.opensensor.permissions.RuntimeAccess
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Device settings asks for Bluetooth from its own Reconnect taps, since opening a station no longer does (#147). */
+/** Device settings asks for Bluetooth from its own Reconnect taps, since opening a thing no longer does (#147). */
 class ReconnectTapsTest {
     private class Setup(var granted: Boolean) {
         var prompts = 0

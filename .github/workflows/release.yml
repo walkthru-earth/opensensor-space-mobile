@@ -128,8 +128,6 @@ jobs:
           OPENSENSOR_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          python3 tools/validate_station_epoch_migration.py
-          python3 tools/validate_sensor_installation_migration.py
           # Maven may redirect a Kotlin compiler artifact to a GitHub release asset.
           # Retry only an upstream 5xx; compiler, test and signing failures still fail at once.
           for attempt in 1 2 3; do

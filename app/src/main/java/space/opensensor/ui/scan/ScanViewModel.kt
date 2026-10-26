@@ -57,17 +57,17 @@ import space.opensensor.ui.permissions.hasBluetoothPermissions
 import javax.inject.Inject
 
 /**
- * The newest PM2.5 day of each station, both lists newest first. The corrected day wins when it is
+ * The newest PM2.5 day of each thing, both lists newest first. The corrected day wins when it is
  * the newest day with readings, otherwise the raw day shows, labelled raw (#92).
  */
 internal fun latestPm25Days(corrected: List<MetricBucket>, raw: List<MetricBucket>): Map<String, Pair<MetricBucket, Pm25Basis>> {
     val out = HashMap<String, Pair<MetricBucket, Pm25Basis>>()
-    for (b in raw) if (b.validRows > 0 && b.station !in out) out[b.station] = b to Pm25Basis.RAW
+    for (b in raw) if (b.validRows > 0 && b.thing !in out) out[b.thing] = b to Pm25Basis.RAW
     val seen = HashSet<String>()
     for (b in corrected) {
-        if (b.validRows <= 0 || !seen.add(b.station)) continue
-        val rawDay = out[b.station]?.first
-        if (rawDay == null || b.startEpochS >= rawDay.startEpochS) out[b.station] = b to Pm25Basis.CORRECTED
+        if (b.validRows <= 0 || !seen.add(b.thing)) continue
+        val rawDay = out[b.thing]?.first
+        if (rawDay == null || b.startEpochS >= rawDay.startEpochS) out[b.thing] = b to Pm25Basis.CORRECTED
     }
     return out
 }
@@ -83,16 +83,16 @@ class ScanViewModel @Inject constructor(
     settings: AppSettings,
 ) : ViewModel() {
 
-    /** Per-station totals come from one grouped query, so the list never loads every archived row (#63). */
+    /** Per-thing totals come from one grouped query, so the list never loads every archived row (#63). */
     private val summaries: Flow<Map<String, ArchiveGlance>> = combine(
-        archivedFileDao.observeStationGlances(),
+        archivedFileDao.observeThingGlances(),
         bucketDao.observeAllDays(Metrics.PM25_CORRECTED.id),
         bucketDao.observeAllDays(Metrics.PM25.id),
     ) { glances, corrected, raw ->
         val latestDay = latestPm25Days(corrected, raw)
         glances.associate { g ->
-            val (day, basis) = latestDay[g.station] ?: (null to Pm25Basis.RAW)
-            g.station to ArchiveGlance(
+            val (day, basis) = latestDay[g.thing] ?: (null to Pm25Basis.RAW)
+            g.thing to ArchiveGlance(
                 files = g.files,
                 lastSyncedMs = g.lastSyncedMs,
                 lastDataUtcNs = g.lastDataUtcNs,
@@ -117,7 +117,7 @@ class ScanViewModel @Inject constructor(
     /** Room behind the shared known-device port. The token ciphertext never leaves this class. */
     private val knownStore = object : KnownDeviceStore {
         override val devices: Flow<List<KnownSensor>> = knownDeviceDao.observeAll().map { rows ->
-            rows.map { KnownSensor(it.address, it.name, it.station, it.lastSeenEpochMs, hasWifiAccess = it.hasLanToken) }
+            rows.map { KnownSensor(it.address, it.name, it.thing, it.lastSeenEpochMs, hasWifiAccess = it.hasLanToken) }
         }
 
         override suspend fun forget(id: String) = manager.controller(id).forget(id)
@@ -127,7 +127,7 @@ class ScanViewModel @Inject constructor(
         override val nearby: Flow<List<NearbySensor>> = seen.map { m -> m.values.map { NearbySensor(it.address, it.name, it.rssi, it.bonded) } }
         override val scanning: Flow<Boolean> = this@ScanViewModel.scanning
         override val scanProblem: Flow<ScanProblem?> = this@ScanViewModel.scanProblem
-        override val wifi: Flow<List<WifiSensor>> = manager.lanDevices.map { m -> m.values.map { WifiSensor(it.serviceName, it.station) } }
+        override val wifi: Flow<List<WifiSensor>> = manager.lanDevices.map { m -> m.values.map { WifiSensor(it.serviceName, it.thing) } }
         override val active: Flow<List<ActiveLink>> = manager.snapshots.map { list -> list.filter { it.isActive() }.map { it.toActiveLink() } }
         override fun startScan() = this@ScanViewModel.startScan()
         override fun stopScan() = this@ScanViewModel.stopScan()
@@ -236,8 +236,8 @@ class ScanViewModel @Inject constructor(
         if (!LanPermission.isGranted(context)) return
         viewModelScope.launch {
             val known = knownDeviceDao.get(address) ?: return@launch
-            val station = known.station ?: return@launch
-            if (!known.hasLanToken || station !in manager.lanDevices.value) return@launch
+            val thing = known.thing ?: return@launch
+            if (!known.hasLanToken || thing !in manager.lanDevices.value) return@launch
             connectIfIdle(address, name, fake = false, preference = TransportPreference.LAN_ONLY)
         }
     }

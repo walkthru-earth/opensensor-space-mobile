@@ -28,8 +28,6 @@ kotlin {
         androidHostTest.dependencies {
             // The bundled driver's natives for the host JVM, as the Android unit tests use.
             implementation(libs.androidx.sqlite.bundled.jvm)
-            // AndroidV12OpenTest builds a v12 file from the exported 12.json.
-            implementation(libs.kotlinx.serialization.json)
         }
     }
 }

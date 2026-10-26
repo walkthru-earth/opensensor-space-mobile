@@ -8,21 +8,21 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ArchiveLayoutTest {
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
-    private val dated = "station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
-    private val unsynced = "station=$station/unsynced/boot=x/data_unsynced_x_0-89-0.parquet"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val dated = "station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
+    private val unsynced = "station=$thing/unsynced/boot=x/data_unsynced_x_0-89-0.parquet"
     private val bench = "benchmarks/codec/lz4.parquet"
 
     @Test
-    fun `final and partial paths keep the Hive name verbatim below the station`() {
-        val key = ArchiveKey(station, dated)
-        assertEquals("archive/$station/$dated", ArchiveLayout.finalPath(key))
-        assertEquals("archive-partial/$station/$dated.partial", ArchiveLayout.partialPath(key))
-        assertEquals("archive-partial/$station/$dated.partial.meta", ArchiveLayout.partialMetaPath(key))
-        assertEquals("archive/$station/$unsynced", ArchiveLayout.finalPath(ArchiveKey(station, unsynced)))
-        assertEquals("archive/$station/$bench", ArchiveLayout.finalPath(ArchiveKey(station, bench)))
-        assertEquals("archive/$station", ArchiveLayout.stationDir(station))
-        assertEquals("archive-partial/$station", ArchiveLayout.partialStationDir(station))
+    fun `final and partial paths keep the Hive name verbatim below the thing`() {
+        val key = ArchiveKey(thing, dated)
+        assertEquals("archive/$thing/$dated", ArchiveLayout.finalPath(key))
+        assertEquals("archive-partial/$thing/$dated.partial", ArchiveLayout.partialPath(key))
+        assertEquals("archive-partial/$thing/$dated.partial.meta", ArchiveLayout.partialMetaPath(key))
+        assertEquals("archive/$thing/$unsynced", ArchiveLayout.finalPath(ArchiveKey(thing, unsynced)))
+        assertEquals("archive/$thing/$bench", ArchiveLayout.finalPath(ArchiveKey(thing, bench)))
+        assertEquals("archive/$thing", ArchiveLayout.thingDir(thing))
+        assertEquals("archive-partial/$thing", ArchiveLayout.partialThingDir(thing))
     }
 
     @Test
@@ -30,16 +30,16 @@ class ArchiveLayoutTest {
         assertEquals("2026-09-17", ArchiveLayout.dayLabel(20713))
         assertEquals("1970-01-01", ArchiveLayout.dayLabel(0))
         assertEquals("1969-12-31", ArchiveLayout.dayLabel(-1))
-        assertEquals("derived/v1/$station/day=2026-09-17.parquet", ArchiveLayout.derivedDayPath(station, 20713))
-        assertEquals("derived/v1/$station/day=2026-09-17.manifest.json", ArchiveLayout.derivedManifestPath(station, 20713))
+        assertEquals("derived/v1/$thing/day=2026-09-17.parquet", ArchiveLayout.derivedDayPath(thing, 20713))
+        assertEquals("derived/v1/$thing/day=2026-09-17.manifest.json", ArchiveLayout.derivedManifestPath(thing, 20713))
     }
 
     @Test
-    fun `station ids are one safe directory name and may contain a dot`() {
-        for (ok in listOf(station, "OS-6b40", "board.v2", "a_b", "x")) assertTrue(ArchiveLayout.isSafeStation(ok), ok)
-        for (bad in listOf("", ".", "..", "a/b", "a\\b", "a b", "a\u0000b", "é", "a:b")) assertFalse(ArchiveLayout.isSafeStation(bad), bad)
+    fun `thing ids are one safe directory name and may contain a dot`() {
+        for (ok in listOf(thing, "OS-6b40", "board.v2", "a_b", "x")) assertTrue(ArchiveLayout.isSafeThing(ok), ok)
+        for (bad in listOf("", ".", "..", "a/b", "a\\b", "a b", "a\u0000b", "é", "a:b")) assertFalse(ArchiveLayout.isSafeThing(bad), bad)
         assertFailsWith<IllegalArgumentException> { ArchiveKey("..", dated) }
-        assertFailsWith<IllegalArgumentException> { ArchiveLayout.stationDir("a/b") }
+        assertFailsWith<IllegalArgumentException> { ArchiveLayout.thingDir("a/b") }
     }
 
     @Test
@@ -52,7 +52,7 @@ class ArchiveLayoutTest {
         )
         for (name in unsafe) {
             assertFalse(ArchiveLayout.isArchiveName(name), name)
-            assertFailsWith<IllegalArgumentException> { ArchiveKey(station, name) }
+            assertFailsWith<IllegalArgumentException> { ArchiveKey(thing, name) }
         }
         // Exactly 399 bytes is the contract maximum, with no segment over 241 bytes (#60).
         assertTrue(ArchiveLayout.isArchiveName("a".repeat(200) + "/" + "a".repeat(190) + ".parquet"))

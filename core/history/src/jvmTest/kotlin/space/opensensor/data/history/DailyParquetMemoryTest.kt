@@ -11,7 +11,7 @@ import space.opensensor.data.history.parquet.ParquetSink
 import space.opensensor.data.history.parquet.ParquetWriter
 
 /**
- * #98. Peak heap of one station-day build, the streaming [DailyParquetBuilder] against the builder
+ * #98. Peak heap of one thing-day build, the streaming [DailyParquetBuilder] against the builder
  * that held every decoded column of the day ([PreStreamingDailyParquetBuilder]). The heap is probed
  * after a full GC at every source open and every sink write, so the peak is what the build keeps
  * reachable, not what it allocates on the way. A JVM measurement, the 2 GB phone is still to measure.
@@ -22,7 +22,7 @@ class DailyParquetMemoryTest {
     /** [files] files of [rowsPerFile] rows over [fileSeconds] each, every column of the board file, one UTC day. */
     private fun day(epochDay: Long, rowsPerFile: Int, files: Int = 96, fileSeconds: Long = 900L): List<Pair<ArchiveRecord, ByteArray>> {
         val raw = ParquetFile.wrap(board)
-        val station = raw.metadata.footer?.stationId ?: "memory-station"
+        val thing = raw.metadata.footer?.thingId ?: "memory-thing"
         val base = raw.leaves.map { raw.readColumn(it) }
         return (0 until files).map { f ->
             val values = raw.leaves.mapIndexed { c, leaf ->
@@ -41,7 +41,7 @@ class DailyParquetMemoryTest {
             val bytes = sink.toByteArray()
             val index = ParquetIndexer.index(ParquetFile.wrap(bytes), templates = CoreS3Files)
             ArchiveRecord(
-                station, "memory/$f.parquet", bytes.size.toLong(), f.toLong(), "sha-$f", 1, "fixture",
+                thing, "memory/$f.parquet", bytes.size.toLong(), f.toLong(), "sha-$f", 1, "fixture",
                 indexedAtEpochMs = 1, rows = index.rows, bootId = index.bootId, utcRows = index.utcRows,
                 firstUtcNs = index.firstUtcNs, lastUtcNs = index.lastUtcNs, firstSeq = index.firstSeq, lastSeq = index.lastSeq,
             ) to bytes
@@ -95,13 +95,13 @@ class DailyParquetMemoryTest {
         var opens = 0
         val out = MemorySinkProbe { if (probed && writes++ % 16 == 0) probe.sample() }
         val sources = files.map { (record, bytes) -> DailyParquetSource(record) { if (probed && opens++ % 4 == 0) probe.sample(); ParquetFile.wrap(bytes, record.name) } }
-        val station = files.first().first.station
+        val thing = files.first().first.thing
         val baseline = if (probed) probe.used() else 0L
         val start = System.nanoTime()
         if (streaming) {
-            DailyParquetBuilder.build(station, epochDay, sources, out, emptyMap(), 0)
+            DailyParquetBuilder.build(thing, epochDay, sources, out, emptyMap(), 0)
         } else {
-            PreStreamingDailyParquetBuilder.build(station, epochDay, sources, out, emptyMap(), 0)
+            PreStreamingDailyParquetBuilder.build(thing, epochDay, sources, out, emptyMap(), 0)
         }
         val millis = (System.nanoTime() - start) / 1_000_000
         if (probed) probe.sample()
@@ -153,7 +153,7 @@ class DailyParquetMemoryTest {
         val opens = IntArray(files.size)
         val sources = files.mapIndexed { s, (record, bytes) -> DailyParquetSource(record) { opens[s]++; ParquetFile.wrap(bytes, record.name) } }
         val out = MemorySink()
-        DailyParquetBuilder.build(files.first().first.station, epochDay, sources, out, emptyMap(), 0)
+        DailyParquetBuilder.build(files.first().first.thing, epochDay, sources, out, emptyMap(), 0)
         assertEquals(24, ParquetFile.wrap(out.toByteArray()).metadata.rowGroups.size)
         assertEquals(List(files.size) { 2 }, opens.toList())
     }

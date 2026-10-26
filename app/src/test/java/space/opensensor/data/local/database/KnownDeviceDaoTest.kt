@@ -25,7 +25,7 @@ class KnownDeviceDaoTest {
     private fun device(token: String?) = KnownDevice(
         address = ADDRESS,
         name = "OS-test",
-        station = "old-station",
+        thing = "old-thing",
         deviceId = "old-device",
         firmware = "old-fw",
         lastSeenEpochMs = 1,
@@ -54,7 +54,7 @@ class KnownDeviceDaoTest {
     fun `insertIfAbsent leaves an existing row untouched`() = runBlocking {
         dao.upsert(device("enc1:kept"))
 
-        val result = dao.insertIfAbsent(KnownDevice(ADDRESS, "OS-new", "station", "device", "fw", 50, 50))
+        val result = dao.insertIfAbsent(KnownDevice(ADDRESS, "OS-new", "thing", "device", "fw", 50, 50))
 
         assertEquals(-1L, result)
         assertEquals(device("enc1:kept"), dao.get(ADDRESS))
@@ -64,13 +64,13 @@ class KnownDeviceDaoTest {
     fun `recording a connection keeps settings and the credential`() = runBlocking {
         dao.upsert(device("enc1:kept"))
 
-        dao.recordConnection(ADDRESS, null, "station", "device", "fw", 50)
+        dao.recordConnection(ADDRESS, null, "thing", "device", "fw", 50)
 
         assertEquals(
-            device("enc1:kept").copy(station = "station", deviceId = "device", firmware = "fw", lastSeenEpochMs = 50, lastConnectedEpochMs = 50),
+            device("enc1:kept").copy(thing = "thing", deviceId = "device", firmware = "fw", lastSeenEpochMs = 50, lastConnectedEpochMs = 50),
             dao.get(ADDRESS),
         )
-        dao.recordConnection(ADDRESS, "OS-new", "station", "device", "fw", 60)
+        dao.recordConnection(ADDRESS, "OS-new", "thing", "device", "fw", 60)
         assertEquals("OS-new", dao.get(ADDRESS)!!.name)
     }
 

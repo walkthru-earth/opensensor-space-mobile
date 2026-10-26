@@ -11,8 +11,8 @@ app types or `R.string`.
   only a scan result. Forget must stay forgotten until explicit reconnection.
 - One bottom bar (Discover, My devices, Settings) lives in the shared `AppShell` (`:feature:shell`),
   which `Navigation.kt` hosts with the Android entries, and Discover is always the start tab.
-  Screens never draw a bottom bar. Device sections use `DeviceSectionTabs` from `StationChrome` (`:feature:today`)
-  under the top bar. Each station action has one home (see `docs/screens.md`), never a second button.
+  Screens never draw a bottom bar. Device sections use `DeviceSectionTabs` from `ThingChrome` (`:feature:today`)
+  under the top bar. Each thing action has one home (see `docs/screens.md`), never a second button.
   Keys (`AppKey`) and per-tab back stack rules (`TabNavigator`) live in `:feature:shell`. A screen
   that takes Back first uses `NavigationBackHandler`, never `BackHandler`.
 - Navigation 3 entries own screen ViewModels. Load once when an entry opens;

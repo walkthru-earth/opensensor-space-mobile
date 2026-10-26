@@ -41,7 +41,7 @@ class TemplateIndex(bundled: Iterable<BoardTemplate>, served: Iterable<BoardTemp
 /**
  * What a firmware build knows about its columns, parsed from a stac-opensensor v0.1.0 board template
  * (`"type": "OpenSensorTemplate"`). It carries only template facts, see [AppProfile] for the app's
- * presentation choices and [Station] for the join.
+ * presentation choices and [Thing] for the join.
  */
 data class BoardTemplate(
     val key: TemplateKey,
@@ -54,7 +54,7 @@ data class BoardTemplate(
     val instruments: List<String>,
     /**
      * `opensensor:sample_interval_s`, only a default. The runtime interval from `info` or a file
-     * footer wins, see [Station.sampleIntervalFor].
+     * footer wins, see [Thing.sampleIntervalFor].
      */
     val defaultSampleIntervalS: Double,
     /** Lowest sync protocol the board speaks, `firmware.proto_min`. */

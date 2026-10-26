@@ -29,7 +29,7 @@ fun interface LinkProvider {
 }
 
 /**
- * A ready link lent to one collection. [station] is the validated station id of the device, and
+ * A ready link lent to one collection. [thing] is the validated thing id of the device, and
  * [maxRead] its advertised read window. [release] hands the link back once, after which the
  * provider may keep it open for the UI or close it. Stopping a collection never closes a link the
  * provider still uses.
@@ -37,7 +37,7 @@ fun interface LinkProvider {
 @OptIn(ExperimentalAtomicApi::class)
 class CollectionLink(
     val session: DeviceSession,
-    val station: String,
+    val thing: String,
     val maxRead: Int,
     private val onRelease: () -> Unit = {},
 ) {

@@ -43,7 +43,7 @@ class SecureKnownDeviceDaoTest {
         secure.get(ADDRESS)
         secure.autoSyncDevices()
         secure.allByLastConnected()
-        secure.findByStation("station")
+        secure.findByThing("thing")
 
         assertEquals(0, cipher.decrypts)
     }
@@ -187,7 +187,7 @@ class SecureKnownDeviceDaoTest {
     ) = KnownDevice(
         address = address,
         name = "OS-test",
-        station = "station",
+        thing = "thing",
         deviceId = "device",
         firmware = "firmware",
         lastSeenEpochMs = 1,
@@ -260,12 +260,12 @@ class SecureKnownDeviceDaoTest {
             return 1
         }
 
-        override suspend fun recordConnection(address: String, name: String?, station: String?, deviceId: String?, firmware: String?, epochMs: Long) = Unit
+        override suspend fun recordConnection(address: String, name: String?, thing: String?, deviceId: String?, firmware: String?, epochMs: Long) = Unit
 
         fun renew(address: String, tokenHex: String?, port: Int?) {
             state.value = rows.map { if (it.address == address) it.copy(lanToken = tokenHex, lanPort = port) else it }
         }
-        override suspend fun findByStation(station: String): KnownDevice? = rows.firstOrNull { it.station == station }
+        override suspend fun findByThing(thing: String): KnownDevice? = rows.firstOrNull { it.thing == thing }
         override suspend fun setAutoSync(address: String, enabled: Boolean) = Unit
         override suspend fun autoSyncDevices(): List<KnownDevice> = rows.filter { it.autoSync }
         override suspend fun allByLastConnected(): List<KnownDevice> = rows

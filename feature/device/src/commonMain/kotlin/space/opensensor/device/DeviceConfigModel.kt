@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import space.opensensor.data.WifiScanState
 import space.opensensor.data.ble.ConfigSnapshot
 import space.opensensor.data.ble.ConnectionState
-import space.opensensor.data.ble.StationStatus
+import space.opensensor.data.ble.ThingStatus
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.protocol.ConfigPatch
@@ -39,12 +39,12 @@ data class DeviceConfigSnapshot(
     val busy: Boolean = false,
     /** A file transfer is running on this link. */
     val syncRunning: Boolean = false,
-    /** A background worker or Collect all holds this device, see [StationStatus]. */
+    /** A background worker or Collect all holds this device, see [ThingStatus]. */
     val heldInBackground: Boolean = false,
     val sensorRecord: SensorRecord? = null,
 ) {
-    /** The status every station page reads, so Device gates exactly like Today. */
-    val station: StationStatus get() = StationStatus(connection, syncRunning = syncRunning, heldInBackground = heldInBackground)
+    /** The status every thing page reads, so Device gates exactly like Today. */
+    val thing: ThingStatus get() = ThingStatus(connection, syncRunning = syncRunning, heldInBackground = heldInBackground)
 }
 
 /** The state the Device section draws: the snapshot, the detail level, and what follows from both. */
@@ -63,7 +63,7 @@ data class DeviceConfigUiState(
      * Actions that drop the link (reboot, rotate token, forget bonds) are also refused while a
      * transfer runs. A `REBOOT` mid-sync would kill the download and finalize the RAM batch under it.
      */
-    val canDisrupt: Boolean get() = canEdit && !snapshot.station.busy
+    val canDisrupt: Boolean get() = canEdit && !snapshot.thing.busy
     val overBle: Boolean get() = snapshot.transport == TransportKind.BLE || snapshot.transport == TransportKind.FAKE
 
     /** Simple still shows the pairing card for a default PIN in fixed mode or a pending restart. */

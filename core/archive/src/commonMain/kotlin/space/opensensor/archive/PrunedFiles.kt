@@ -6,17 +6,17 @@ import kotlinx.coroutines.flow.flowOf
 
 /**
  * A sensor file the user removed from this phone in Settings (`LegacyFileCleanup`). The planner treats
- * a listed file with the same station, name and size as done, so the next sync does not download it
+ * a listed file with the same thing, name and size as done, so the next sync does not download it
  * again. The device `FILE` frame has no CRC, so [crc32] is kept for the record only.
  */
 data class PrunedFile(
-    val station: String,
+    val thing: String,
     val name: String,
     val bytes: Long,
     val crc32: Long,
     val prunedAtEpochMs: Long,
 ) {
-    val key: ArchiveKey get() = ArchiveKey(station, name)
+    val key: ArchiveKey get() = ArchiveKey(thing, name)
 }
 
 /**
@@ -26,7 +26,7 @@ data class PrunedFile(
 interface PrunedFiles {
     fun observeAll(): Flow<List<PrunedFile>>
 
-    suspend fun forStation(station: String): List<PrunedFile> = observeAll().first().filter { it.station == station }
+    suspend fun forThing(thing: String): List<PrunedFile> = observeAll().first().filter { it.thing == thing }
 
     /** Adds or replaces the record of [file]. */
     suspend fun put(file: PrunedFile)
@@ -66,7 +66,7 @@ internal object PrunedFilesCodec {
             val size = parts[2].toLongOrNull() ?: return null
             val crc = parts[3].toLongOrNull() ?: return null
             val at = parts[4].toLongOrNull() ?: return null
-            if (!ArchiveLayout.isSafeStation(parts[0]) || !ArchiveLayout.isArchiveName(parts[1]) || size < 0) return null
+            if (!ArchiveLayout.isSafeThing(parts[0]) || !ArchiveLayout.isArchiveName(parts[1]) || size < 0) return null
             PrunedFile(parts[0], parts[1], size, crc, at)
         }
     }

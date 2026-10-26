@@ -77,13 +77,13 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, develop
             onOpenToday = { nav.openSection(TodayKey(key.address)) },
             onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
             onOpenDevice = { nav.openSection(DeviceKey(key.address)) },
-            onOpenFileMetrics = { station, name -> nav.push(FileMetricsKey(station, name)) },
+            onOpenFileMetrics = { thing, name -> nav.push(FileMetricsKey(thing, name)) },
             onDisconnected = { nav.toMyDevicesRoot() },
         )
     }
     entry<FileMetricsKey> { key ->
         FileMetricsRoute(
-            station = key.station,
+            thing = key.thing,
             name = key.name,
             onBack = { nav.popIfTop { it is FileMetricsKey } },
         )

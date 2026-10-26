@@ -73,9 +73,9 @@ sealed interface FilesMessage {
 }
 
 data class FilesState(
-    /** The verified files of [owner] when known, else of every station. */
+    /** The verified files of [owner] when known, else of every thing. */
     val records: List<ArchiveRecord> = emptyList(),
-    /** The connected sensor's station, from its INFO or enrolment. Null when there is none. */
+    /** The connected sensor's thing, from its INFO or enrolment. Null when there is none. */
     val owner: String? = null,
     val exporting: Boolean = false,
     /** Daily files can be exported on this platform (Android derives them, iOS not yet). */
@@ -84,7 +84,7 @@ data class FilesState(
     val archivedBytes: Long get() = shown.sumOf { it.bytes }
 
     /** The records the list shows without a device listing, the owner's when known, else all. */
-    val shown: List<ArchiveRecord> get() = owner?.let { o -> records.filter { it.station == o } } ?: records
+    val shown: List<ArchiveRecord> get() = owner?.let { o -> records.filter { it.thing == o } } ?: records
 }
 
 /**
@@ -109,10 +109,10 @@ class FilesController(
 ) {
     private val exporting = MutableStateFlow(false)
 
-    /** The owner's records only when there is an owner, so another station's write does not reach the list. */
+    /** The owner's records only when there is an owner, so another thing's write does not reach the list. */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val listed: Flow<Pair<String?, List<ArchiveRecord>>> = owner.distinctUntilChanged().flatMapLatest { o ->
-        (if (o == null) index.observeAll() else index.observeStation(o)).map { records -> o to records }
+        (if (o == null) index.observeAll() else index.observeThing(o)).map { records -> o to records }
     }
 
     val state: StateFlow<FilesState> = combine(listed, exporting) { (o, records), busy ->
@@ -123,13 +123,13 @@ class FilesController(
     val messages: SharedFlow<FilesMessage> = _messages.asSharedFlow()
 
     /**
-     * The verified copy of a listed [name]. A relative path can occur on several sensors or station
+     * The verified copy of a listed [name]. A relative path can occur on several sensors or thing
      * generations, so without a known owner this fails closed.
      */
     fun archived(name: String): ArchiveRecord? {
         val s = state.value
         val o = s.owner ?: return null
-        return s.records.firstOrNull { it.station == o && it.name == name }
+        return s.records.firstOrNull { it.thing == o && it.name == name }
     }
 
     fun shareFile(record: ArchiveRecord, presenter: ExportPresenter) = run(presenter) {
@@ -165,12 +165,12 @@ class FilesController(
 
     fun shareDaily(presenter: ExportPresenter) = run(presenter) {
         val list = daily ?: return@run null
-        // The stations the archive zip covers, the owner's alone when there is one (#156).
-        val stations = state.value.shown.mapTo(HashSet()) { it.station }
+        // The things the archive zip covers, the owner's alone when there is one (#156).
+        val things = state.value.shown.mapTo(HashSet()) { it.thing }
         var zip: StagedFile? = null
         try {
             holdDaily {
-                val entries = withContext(io) { ArchiveExport.dailyEntries(list(), stations) }
+                val entries = withContext(io) { ArchiveExport.dailyEntries(list(), things) }
                 if (entries != null) {
                     val check = cancelCheck()
                     zip = stage { listOf(ArchiveExport.stageZip(space, entries, ArchiveExport.dailyZipName(now()), check)) }.single()
@@ -273,7 +273,7 @@ class FilesController(
     companion object {
         /** The archive alone as list entries, every one synced, for the screen without a device listing. */
         fun archiveItems(records: List<ArchiveRecord>): List<Pair<ManifestEntry, String?>> = records.map { r ->
-            ManifestEntry(r.name, r.bytes, HivePartition.of(r.name), FileSyncState.SYNCED) to r.station
+            ManifestEntry(r.name, r.bytes, HivePartition.of(r.name), FileSyncState.SYNCED) to r.thing
         }
     }
 }

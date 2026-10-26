@@ -45,5 +45,5 @@ The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads throug
 - Network use outside BLE and LAN is limited to the planned anonymous, read-only
   discover feed and basemap GETs, and per-device opt-in uploads
   (`docs/devices-and-discovery.md`). No other remote call belongs in this layer.
-- Preserve immutable Hive paths and station epochs. Room migrations must keep
+- Preserve immutable Hive paths and thing epochs. Room migrations must keep
   old archives and be validated against exported schemas.

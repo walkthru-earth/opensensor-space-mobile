@@ -57,8 +57,8 @@ data class CellStat(val n: Int?, val mean: Double?, val min: Double?, val max: D
 data class CellRow(
     val h3: Long,
     /**
-     * Stations or devices behind the row. 3 or more for opensensor cells (the publisher applies the
-     * crowd rule), 1 or more for public licensed stations such as OpenAQ, which carry no crowd rule.
+     * Things or devices behind the row. 3 or more for opensensor cells (the publisher applies the
+     * crowd rule), 1 or more for public licensed things such as OpenAQ, which carry no crowd rule.
      */
     val devices: Int,
     /**
@@ -67,7 +67,7 @@ data class CellRow(
      */
     val updatedEpochMs: Long,
     val stats: Map<String, CellStat>,
-    /** The station local day of a daily file row, null for an hourly cells file and for a folded cell. */
+    /** The thing local day of a daily file row, null for an hourly cells file and for a folded cell. */
     val date: LocalDate? = null,
     /**
      * For a cell folded from daily rows, whose properties can be measured on different days. Per

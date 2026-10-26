@@ -5,7 +5,7 @@ import kotlinx.coroutines.sync.withLock
 import space.opensensor.sync.SyncLock
 
 /**
- * One archive mutation per station at a time. Sync adds rows, the storage janitor adopts files,
+ * One archive mutation per thing at a time. Sync adds rows, the storage janitor adopts files,
  * `ArchiveIndexRepair` updates rows, and `LegacyFileCleanup` removes rows and files. Each takes the
  * gate only around its short index and file change, so a row it reads is still live when it writes.
  * Readers never take it.
@@ -20,18 +20,18 @@ internal class ArchiveMutationGate {
     private val lock = SyncLock()
     private val slots = HashMap<String, Slot>()
 
-    suspend fun <T> withStation(station: String, block: suspend () -> T): T {
-        val slot = lock.withLock { slots.getOrPut(station) { Slot() }.also { it.users++ } }
+    suspend fun <T> withThing(thing: String, block: suspend () -> T): T {
+        val slot = lock.withLock { slots.getOrPut(thing) { Slot() }.also { it.users++ } }
         try {
             return slot.mutex.withLock { block() }
         } finally {
             lock.withLock {
                 slot.users--
-                if (slot.users == 0) slots.remove(station)
+                if (slot.users == 0) slots.remove(thing)
             }
         }
     }
 
-    /** Stations held or waited for, for tests. */
+    /** Things held or waited for, for tests. */
     internal fun activeCount(): Int = lock.withLock { slots.size }
 }

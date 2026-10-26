@@ -75,7 +75,7 @@ class SyncEngine(
     private val clock: () -> Long = ::nowEpochMs,
     /**
      * The archive's one [DeviceCoordinator], shared with every writer there: its writer lease per file,
-     * its station gate around each index write, and its tombstones of files the user removed.
+     * its thing gate around each index write, and its tombstones of files the user removed.
      */
     val coordinator: DeviceCoordinator = DeviceCoordinator(),
     /** One line per file this phone failed to store, file name and error class and message only. */
@@ -85,13 +85,13 @@ class SyncEngine(
 ) {
     suspend fun download(
         session: DeviceSession,
-        station: String,
+        thing: String,
         sourceDevice: String,
         name: String,
         expectedBytes: Long,
         maxRead: Int,
         onProgress: (FileProgress) -> Unit,
-    ): FileOutcome = download(session, station, sourceDevice, name, expectedBytes, maxRead, onSettled = {}, onProgress = onProgress)
+    ): FileOutcome = download(session, thing, sourceDevice, name, expectedBytes, maxRead, onSettled = {}, onProgress = onProgress)
 
     /**
      * Reports each settled file once, before the cancellable CLOSE. A Synced result means verified
@@ -100,7 +100,7 @@ class SyncEngine(
      */
     suspend fun download(
         session: DeviceSession,
-        station: String,
+        thing: String,
         sourceDevice: String,
         name: String,
         expectedBytes: Long,
@@ -109,8 +109,8 @@ class SyncEngine(
         onProgress: (FileProgress) -> Unit,
     ): FileOutcome {
         if (!ArchiveLayout.isArchiveName(name)) return FileOutcome.Failed(name, "refusing unsafe name").also(onSettled)
-        // An unsafe station is a caller bug (the device identity was validated), so it throws.
-        val key = ArchiveKey(station, name)
+        // An unsafe thing is a caller bug (the device identity was validated), so it throws.
+        val key = ArchiveKey(thing, name)
         return coordinator.withWriter(key) {
             // The old file cleanup writes its tombstone under this same lease. A run planned before the
             // user removed the file finds it here and opens nothing, the planner's REMOVED rule again.
@@ -169,7 +169,7 @@ class SyncEngine(
             } catch (e: StorageFault) {
                 // This phone's archive failed for this file. The link and the session are fine, so the
                 // collector decides whether the next file runs. Only a StorageException message is known
-                // to be free of paths and station ids, so any other cause reports its class alone.
+                // to be free of paths and thing ids, so any other cause reports its class alone.
                 val cause = e.cause ?: e
                 val reason = if (cause is StorageException) "storage ${cause::class.simpleName}: ${cause.message}" else "storage ${cause::class.simpleName}"
                 log("$name not saved, $reason")
@@ -263,7 +263,7 @@ class SyncEngine(
             }
             if (!committed) return storage { adoptExisting(key, meta, sourceDevice, onProgress) }
             val record = ArchiveRecord(
-                station = key.station,
+                thing = key.thing,
                 name = name,
                 bytes = opened.size,
                 crc32 = opened.crc32,
@@ -275,7 +275,7 @@ class SyncEngine(
             // A file the reader refuses keeps its record with `indexError`. The archive copy is untouched.
             storage {
                 val indexed = indexer.indexed(record)
-                coordinator.withStation(key.station) { index.put(indexed) }
+                coordinator.withThing(key.thing) { index.put(indexed) }
             }
             return FileOutcome.Synced(name, opened.size, sha256)
         }
@@ -386,7 +386,7 @@ class SyncEngine(
         val (verdict, sha256) = store.reader(key).use { verifyAndHash(it, meta) }
         if (!verdict.ok) return FileOutcome.Mismatch(name, "existing archive conflicts with device: ${verdict.describe()}")
         val fresh = ArchiveRecord(
-            station = key.station,
+            thing = key.thing,
             name = name,
             bytes = meta.size,
             crc32 = meta.crc32,
@@ -396,12 +396,12 @@ class SyncEngine(
         )
         // The footer is read before the gate, as on the commit path, so the gate is held only for the row.
         val indexed = if (index.get(key) == null) indexer.indexed(fresh) else null
-        val conflict = coordinator.withStation(key.station) {
+        val conflict = coordinator.withThing(key.thing) {
             val row = index.get(key)
             // An older iOS receipt holds size and CRC only. Its empty fingerprint is filled, never compared.
             val knownSha = row?.sha256?.takeIf { it.isNotEmpty() }
             if (row != null && (row.bytes != meta.size || row.crc32 != meta.crc32 || (knownSha != null && knownSha != sha256))) {
-                return@withStation true
+                return@withThing true
             }
             if (row != null && knownSha == null) {
                 index.put(row.copy(sha256 = sha256))

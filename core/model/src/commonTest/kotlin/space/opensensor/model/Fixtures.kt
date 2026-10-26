@@ -300,13 +300,13 @@ internal fun template(
 }
 """
 
-/** A station Collection for the CoreS3 template, with titles, one scale and a runtime interval of 30 s. */
+/** A thing Collection for the CoreS3 template, with titles, one scale and a runtime interval of 30 s. */
 internal val CORES3_COLLECTION = """
 {
   "type": "Collection",
   "stac_version": "1.1.0",
-  "id": "station-3f2b9c1e",
-  "title": "Osu station",
+  "id": "thing-3f2b9c1e",
+  "title": "Osu thing",
   "license": "CC-BY-4.0",
   "opensensor:sample_interval_s": 30,
   "opensensor:scales": {

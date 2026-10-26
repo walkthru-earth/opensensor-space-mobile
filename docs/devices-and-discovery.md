@@ -24,7 +24,7 @@ phone, the firmware and a future host API agree.
 
 | Concept | Meaning in the app | Today |
 | --- | --- | --- |
-| `Device` (Thing) | A station with a persistent UUID. The MAC address is separate | Station UUID and known device row |
+| `Device` (Thing) | A thing with a persistent UUID. The MAC address is separate | Thing UUID and known device row |
 | `DeviceFamily` | Hardware plus firmware line, with its transports, capabilities and dictionary | Implied by `cores3-*` schema prefixes |
 | `Capability` | What a device can do (BLE sync, LAN sync, live stream, config, reboot) | Schema prefix checks in screens |
 | `ObservedProperty` | One exact quantity, for example atmospheric PM2.5 or air temperature | `MetricSpec` in `Metrics.kt` |
@@ -109,14 +109,14 @@ What comparable apps do, and what we take from them.
 | App | First screen | Detail | Notes |
 | --- | --- | --- | --- |
 | PurpleAir map | Map, no sign-in | Popup with value, recent averages, a multi-sensor chart, status | Metric and averaging live behind a gear. Grey means stale and also "metric not measured". Name search only covers sensors on screen. Web app only |
-| IQAir AirVisual | City cards, location asked early | Station page with last update time | The map shows only PM2.5 stations so values compare like for like |
+| IQAir AirVisual | City cards, location asked early | Thing page with last update time | The map shows only PM2.5 things so values compare like for like |
 | Sensor.Community | Hexagon map, no sign-in | Tap a hex for count, median and one row per sensor with 24 hour and 7 day means | Metric dropdown, collapsible legend per metric, indoor and reference toggles, a visible sensor counter |
 | Apple Weather | Location prompt, then forecast | Air quality map overlay with a compact gradient legend | Overlay switch for temperature, precipitation and air quality |
 | Google Maps AQ layer | Layers, Map details, Air quality | Coloured AQI bubbles, zooms out to an overview | Nested menu, hard to find |
 | Eufy | Login and email verification before anything | n/a | Account wall |
 | Google Home | Get started, Google account, location | n/a | Permission and account up front |
-| Netatmo Weathermap | Map of user stations, clustered averages when zoomed out | Station values | Only outdoor modules are shared, opt in |
-| Ambient Weather | Network map with layer toggles | Station page | Stale styling undocumented |
+| Netatmo Weathermap | Map of user things, clustered averages when zoomed out | Thing values | Only outdoor modules are shared, opt in |
+| Ambient Weather | Network map with layer toggles | Thing page | Stale styling undocumented |
 | Windy | Map, layer picker with favourites | Thin colour bar legend, timeline at the bottom | Strong legend and time model |
 | BreezoMeter | Now inside Google Maps Platform | n/a | Consumer app status unclear |
 
@@ -466,8 +466,8 @@ treat each public series as personal data until it is aggregated.
    the phone and signs each upload. The public ID is a truncated SHA-256 of the public key, and
    the public name is derived from the same hash as two words and a number (for example "Blue
    Heron 41"), so there is no free text and nothing to moderate. Turning sharing on again later
-   makes a new key, ID and name. Nothing is derived from the station UUID, MAC address, serial
-   or the owner. The station UUID, MAC, BLE name, Wi-Fi and LAN token never leave the phone.
+   makes a new key, ID and name. Nothing is derived from the thing UUID, MAC address, serial
+   or the owner. The thing UUID, MAC, BLE name, Wi-Fi and LAN token never leave the phone.
    If the firmware later uploads by itself, the key moves to the board through an
    `aq-parquet` contract change.
 8. **Opt in per device, with an open licence.** Reading the feed is anonymous and read-only.
@@ -576,7 +576,7 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
 `https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/`.
 
 - **Discover Collection (#189).** `collection.json` at the root is a STAC Collection read with
-  `StationCollection` from `:core:model` (`DiscoverCollection`). H3 only. One asset per
+  `ThingCollection` from `:core:model` (`DiscoverCollection`). H3 only. One asset per
   resolution, keyed `h3_res=<n>`, with a relative href (no `..`, no absolute path, no scheme) or an https
   URL on the same host as the feed root. Any other asset, such as cleartext, another host or a
   local address, is dropped alone and the rest of the Collection stands. The zoom picks the resolution. A zoom whose resolution has no asset reads the
@@ -602,8 +602,8 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
   written by DuckDB. Verified on 2026-10-12 against `h3_res=3` (250 KB, 3,131 rows, generation
   `007d89a5...`): one row group, SNAPPY, dictionary encoded, min and max statistics, no page
   index, every column optional. Columns `h3_index` INT64, `date` INT32 with the DATE converted
-  type (days since 1970-01-01, the station local day), `devices` INT32 (stations, 1 or more, no
-  crowd rule, key `crowd_rule = none, public licensed stations`), then `<id>__n` INT32 and
+  type (days since 1970-01-01, the thing local day), `devices` INT32 (things, 1 or more, no
+  crowd rule, key `crowd_rule = none, public licensed things`), then `<id>__n` INT32 and
   `<id>__mean`, `__min`, `__max` DOUBLE, null when not measured. Rows sort by `h3_index` then
   `date`. Key value metadata `feed = openaq-aggregates`, `window = 1d`, `h3_res`, `generation`
   and `dictionary` (`pm25`, `pm10`, `pm1`, `no2`, `temperature`, `humidity`, `um003`). Only
@@ -726,7 +726,7 @@ starts with the target layout from the producer guidance.
 
 | Module | Owns |
 | --- | --- |
-| `:core:model` | `BoardTemplate`, `TemplateKey`, `TemplateIndex`, `Datastream`, `ObservedProperty`, `Sensor`, `AppProfile`, `Family`, `StationCollection`, `Scale`, `ValidityGate`, `Aggregate`, `Role` and the `Station` join, parsed from stac-opensensor v0.1.0 JSON (#183). `BundledCatalog` and `LiveColumns` read the bundled templates and profiles in `core/model/bundled/` (#184). `LiveReading`, `DeviceCapabilities` and the batch estimate use them, `Metrics` still drives the screens |
+| `:core:model` | `BoardTemplate`, `TemplateKey`, `TemplateIndex`, `Datastream`, `ObservedProperty`, `Sensor`, `AppProfile`, `Family`, `ThingCollection`, `Scale`, `ValidityGate`, `Aggregate`, `Role` and the `Thing` join, parsed from stac-opensensor v0.1.0 JSON (#183). `BundledCatalog` and `LiveColumns` read the bundled templates and profiles in `core/model/bundled/` (#184). `LiveReading`, `DeviceCapabilities` and the batch estimate use them, `Metrics` still drives the screens |
 | `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `DiscoverCollection` (the discover STAC Collection and the bundled WHO PM scales), `CellScale` (`StepScale` from the property's published scale, else `PercentileScale`), `StepAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. `OpenAqAggregatesFeed` over `:core:net`, the daily schema in `ParquetFeedReader` and `DailyCellFold`, built 2026-10-12 (host and simulator tests only). Its reads go through the `:core:net` block cache (#94). Planned here: S3 listing for the opensensor feed |
 | `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, used by `OpenAqAggregatesFeed` in both apps |
 | `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |

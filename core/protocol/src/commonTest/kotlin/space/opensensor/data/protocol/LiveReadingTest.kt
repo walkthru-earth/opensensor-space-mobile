@@ -1,7 +1,7 @@
 package space.opensensor.data.protocol
 
 import space.opensensor.model.BundledCatalog
-import space.opensensor.model.Station
+import space.opensensor.model.Thing
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -11,13 +11,13 @@ import kotlin.test.assertTrue
 
 /** Contract fixtures from the bundled board templates, not phone captures or hardware verification. */
 class LiveReadingTest {
-    private fun station(prefix: String): Station {
+    private fun thing(prefix: String): Thing {
         val dict = BundledCatalog.templates.first { it.schema.startsWith(prefix) }.dict
-        return assertNotNull(BundledCatalog.station("station", dict))
+        return assertNotNull(BundledCatalog.thing("thing", dict))
     }
 
-    private val cores3 = station("cores3-")
-    private val waveshare = station("waveshare-")
+    private val cores3 = thing("cores3-")
+    private val waveshare = thing("waveshare-")
 
     @Test
     fun `CoreS3 reads its board temperature from imu_t and hides the always null t and rh`() {
@@ -79,8 +79,8 @@ class LiveReadingTest {
     }
 
     @Test
-    fun `an unknown dictionary has no station and so no LIVE reading`() {
-        assertNull(BundledCatalog.station("station", "0".repeat(64)))
+    fun `an unknown dictionary has no thing and so no LIVE reading`() {
+        assertNull(BundledCatalog.thing("thing", "0".repeat(64)))
         assertNull(LiveReading.of(LiveSample.parse("""{"pm25":3}"""), null))
         assertNull(LiveReading.of(null, cores3))
     }

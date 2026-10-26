@@ -59,7 +59,7 @@ class ScanClearanceTest {
             DeviceRow(
                 id = "AA:BB:CC:DD:EE:" + it.toString().padStart(2, '0'),
                 name = "OS-$it",
-                station = null,
+                thing = null,
                 rssi = null,
                 bonded = true,
                 known = true,

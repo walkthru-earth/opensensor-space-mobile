@@ -12,8 +12,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class HistoryPresentationTest {
-    private fun file(station: String, producer: String, dated: Boolean, indexed: Boolean = true, lastUtcNs: Long = 1_800_000_000_000_000_000): ArchiveRecord = ArchiveRecord(
-        station = station,
+    private fun file(thing: String, producer: String, dated: Boolean, indexed: Boolean = true, lastUtcNs: Long = 1_800_000_000_000_000_000): ArchiveRecord = ArchiveRecord(
+        thing = thing,
         name = if (dated) "station=$producer/year=2026/month=09/day=29/sample.parquet" else "station=$producer/unsynced/boot=one/sample.parquet",
         bytes = 10,
         crc32 = 1,
@@ -21,25 +21,25 @@ class HistoryPresentationTest {
         syncedAtEpochMs = 1,
         sourceDevice = "device",
         indexedAtEpochMs = if (indexed) 1 else null,
-        indexError = if (producer != station) "File belongs to station $producer" else null,
-        utcRows = if (dated && producer == station) 1 else 0,
-        lastUtcNs = if (dated && producer == station) lastUtcNs else null,
+        indexError = if (producer != thing) "File belongs to thing $producer" else null,
+        utcRows = if (dated && producer == thing) 1 else 0,
+        lastUtcNs = if (dated && producer == thing) lastUtcNs else null,
     )
 
     @Test
-    fun earlierTimedStationOpensByDefaultButAnExplicitCurrentSelectionStays() {
+    fun earlierTimedThingOpensByDefaultButAnExplicitCurrentSelectionStays() {
         val earlier = file("earlier", "earlier", dated = true)
         val current = file("current", "current", dated = false)
-        assertEquals("earlier", preferredHistoryStation("current", listOf("earlier", "current"), ArchiveIndex.latestTimedEnds(listOf(earlier, current)), null))
-        assertEquals("current", preferredHistoryStation("current", listOf("earlier", "current"), ArchiveIndex.latestTimedEnds(listOf(earlier, current)), "current"))
+        assertEquals("earlier", preferredHistoryThing("current", listOf("earlier", "current"), ArchiveIndex.latestTimedEnds(listOf(earlier, current)), null))
+        assertEquals("current", preferredHistoryThing("current", listOf("earlier", "current"), ArchiveIndex.latestTimedEnds(listOf(earlier, current)), "current"))
     }
 
     @Test
-    fun aStationWhoseTimedFilesHaveNoEndRanksBelowAnyRealEnd() {
+    fun aThingWhoseTimedFilesHaveNoEndRanksBelowAnyRealEnd() {
         val latest = mapOf<String, Long?>("noEnd" to null, "lowEnd" to Long.MIN_VALUE)
-        assertEquals("lowEnd", preferredHistoryStation("current", listOf("noEnd", "lowEnd", "current"), latest, null))
-        assertEquals("lowEnd", preferredHistoryStation("current", listOf("lowEnd", "noEnd", "current"), latest, null))
-        assertEquals("noEnd", preferredHistoryStation("current", listOf("noEnd", "current"), latest, null))
+        assertEquals("lowEnd", preferredHistoryThing("current", listOf("noEnd", "lowEnd", "current"), latest, null))
+        assertEquals("lowEnd", preferredHistoryThing("current", listOf("lowEnd", "noEnd", "current"), latest, null))
+        assertEquals("noEnd", preferredHistoryThing("current", listOf("noEnd", "current"), latest, null))
     }
 
     @Test
@@ -49,14 +49,14 @@ class HistoryPresentationTest {
         val pending = file("current", "current", dated = false, indexed = false).copy(name = "station=current/unsynced/boot=one/pending.parquet")
         val counts = countHistoryFiles(listOf(own, retained, pending))
         assertEquals(2, counts.total)
-        assertEquals(1, counts.otherStation)
+        assertEquals(1, counts.otherThing)
         assertEquals(1, counts.untimed)
         assertEquals(1, counts.pending)
         assertEquals(0, counts.failed)
     }
 
     @Test
-    fun latestDayFollowsThePhoneCalendarForAnEarlierStation() {
+    fun latestDayFollowsThePhoneCalendarForAnEarlierThing() {
         val zone = TimeZone.of("Africa/Cairo")
         // 2026-09-29T13:00Z is the afternoon of 29 September in Cairo, so the day ends at local midnight of the 30th.
         val earlier = file("earlier", "earlier", dated = true, lastUtcNs = 1_790_686_800L * 1_000_000_000L)
@@ -64,19 +64,19 @@ class HistoryPresentationTest {
     }
 
     @Test
-    fun archiveStationsListTheMostRecentLast() {
+    fun archiveThingsListTheMostRecentLast() {
         val old = file("old", "old", dated = true, lastUtcNs = 1_000)
         val recent = file("recent", "recent", dated = true, lastUtcNs = 2_000)
         val untimed = file("untimed", "untimed", dated = false)
-        assertEquals(listOf("untimed", "old", "recent"), archiveStations(listOf(recent, untimed, old)))
+        assertEquals(listOf("untimed", "old", "recent"), archiveThings(listOf(recent, untimed, old)))
     }
 
     @Test
-    fun aStationWithNoTimedReadingRanksBelowEvenTheLowestRealEnd() {
+    fun aThingWithNoTimedReadingRanksBelowEvenTheLowestRealEnd() {
         // A sentinel low end would tie with a real one and fall back to the name order.
         val lowest = file("a", "a", dated = true, lastUtcNs = Long.MIN_VALUE)
         val untimed = file("b", "b", dated = false)
-        assertEquals(listOf("b", "a"), archiveStations(listOf(lowest, untimed)))
+        assertEquals(listOf("b", "a"), archiveThings(listOf(lowest, untimed)))
     }
 
     @Test

@@ -19,8 +19,8 @@ import java.io.File
 
 /** Android's adapters behind the shared ports: same paths as [ArchiveLayout], same partial rules as the in-memory contract store. */
 class FileArchiveStoreTest {
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
-    private val key = ArchiveKey(station, "station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val key = ArchiveKey(thing, "station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
     private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
     private val meta = PartialMeta(bytes.size.toLong(), ParquetVerify.crc32(bytes))
 
@@ -36,7 +36,7 @@ class FileArchiveStoreTest {
         }
         assertTrue(File(base, ArchiveLayout.partialPath(key)).isFile)
         assertEquals(ArchiveLayout.encodeMeta(meta), File(base, ArchiveLayout.partialMetaPath(key)).readText())
-        assertEquals(mapOf(key.name to 10L), store.partialLengths(station))
+        assertEquals(mapOf(key.name to 10L), store.partialLengths(thing))
         store.openPartial(key, meta).use { w ->
             assertEquals(10L, w.resumeFrom)
             w.writeAt(10, bytes.copyOfRange(10, bytes.size))
@@ -46,7 +46,7 @@ class FileArchiveStoreTest {
         assertTrue(File(base, ArchiveLayout.finalPath(key)).isFile)
         assertFalse(File(base, ArchiveLayout.partialMetaPath(key)).exists())
         assertTrue(store.exists(key))
-        assertEquals(listOf(key), store.listFinal(station))
+        assertEquals(listOf(key), store.listFinal(thing))
         assertEquals(ParquetVerify.Result.Ok, ArchiveVerifier.verify(store.reader(key), meta))
         // Never replaces an archived file.
         store.openPartial(key, meta).use { w -> w.writeAt(0, bytes) }
@@ -63,7 +63,7 @@ class FileArchiveStoreTest {
     @Test
     fun `entity and record carry every column both ways`() {
         val entity = ArchivedFile(
-            id = 9, station = station, name = key.name, bytes = 1, crc32 = 2, sha256 = "s", syncedAtEpochMs = 3, sourceDevice = "d",
+            id = 9, thing = thing, name = key.name, bytes = 1, crc32 = 2, sha256 = "s", syncedAtEpochMs = 3, sourceDevice = "d",
             indexedAtEpochMs = 4, indexError = null, rows = 5, rowGroups = 6, bootId = "b", purpose = "telemetry",
             utcRows = 7, firstUtcNs = 8, lastUtcNs = 9, firstMonoUs = 10, lastMonoUs = 11, firstSeq = 12, lastSeq = 13,
             estFirstUtcNs = 15, estLastUtcNs = 16, estAnchorFile = "a",

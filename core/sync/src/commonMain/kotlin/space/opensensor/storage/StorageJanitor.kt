@@ -26,15 +26,15 @@ import space.opensensor.sync.nowEpochMs
  *
  * 1. Temp files of [AtomicFiles] older than [TEMP_AGE_MS], and the older builds' derived temps.
  * 2. Released export runs older than [ExportRuns.MAX_AGE_MS]. A run a live export still leases stays.
- * 3. Partials of a station the phone does not know, after [UNKNOWN_STATION_AGE_MS], and any partial
- *    untouched for [STALE_PARTIAL_AGE_MS]. A fresh partial of a known station is kept for resume.
+ * 3. Partials of a thing the phone does not know, after [UNKNOWN_THING_AGE_MS], and any partial
+ *    untouched for [STALE_PARTIAL_AGE_MS]. A fresh partial of a known thing is kept for resume.
  * 4. Final files without an index record, left by a crash between the commit and the record. Each is
  *    hashed (size, CRC-32, SHA-256) and checked for `PAR1`, then indexed as adopted.
  * 5. The pre #61 `derived/v1` in app files ([StorageRole.LegacyDerived]), removed whole, and the
  *    derived day files over the quota, through [quota] (#61).
  *
  * It never deletes anything under a [StorageClass.Durable] root: [sweep] refuses any path not under
- * a Scratch or Rebuildable root. It logs counts only, never paths or station ids.
+ * a Scratch or Rebuildable root. It logs counts only, never paths or thing ids.
  */
 class StorageJanitor(
     private val roots: StorageRoots,
@@ -43,15 +43,15 @@ class StorageJanitor(
     private val index: ArchiveIndex,
     private val io: CoroutineDispatcher,
     private val indexer: ArchiveRecordIndexer = ArchiveRecordIndexer.None,
-    /** Stations the phone knows besides those in the index (paired devices), whose partials are kept. */
-    private val knownStations: suspend () -> Collection<String> = { emptyList() },
+    /** Things the phone knows besides those in the index (paired devices), whose partials are kept. */
+    private val knownThings: suspend () -> Collection<String> = { emptyList() },
     private val clock: () -> Long = ::nowEpochMs,
     private val log: (String) -> Unit = {},
     /** Evicts derived day files over the quota. Null skips the quota step. */
     private val quota: DerivedQuota? = null,
     /**
      * The archive's one coordinator, shared with the sync engine. Its writer lease keeps a partial a
-     * resume writes from being swept, its station gate covers each adopted record's insert, and an
+     * resume writes from being swept, its thing gate covers each adopted record's insert, and an
      * adopted file is on the phone again, so its tombstone goes.
      */
     private val coordinator: DeviceCoordinator = DeviceCoordinator(),
@@ -134,13 +134,13 @@ class StorageJanitor(
 
     private suspend fun sweepPartials(now: Long) {
         val dir = roots[StorageRole.Partials] ?: return
-        val known = (index.stations() + knownStations()).toSet()
+        val known = (index.things() + knownThings()).toSet()
         // A partial and its meta form one download. Its age is the newest of the two.
         val downloads = list(dir).filter { !it.isDirectory }.groupBy { it.path.removeSuffix(".meta") }
         fun isStale(download: String, files: List<StorageEntry>): Boolean {
-            val station = download.substringBefore('/', missingDelimiterValue = "")
+            val thing = download.substringBefore('/', missingDelimiterValue = "")
             val age = now - files.maxOf { it.modifiedEpochMs }
-            return age >= STALE_PARTIAL_AGE_MS || (station !in known && age >= UNKNOWN_STATION_AGE_MS)
+            return age >= STALE_PARTIAL_AGE_MS || (thing !in known && age >= UNKNOWN_THING_AGE_MS)
         }
         for ((download, files) in downloads) {
             if (!isStale(download, files)) {
@@ -164,7 +164,7 @@ class StorageJanitor(
         }
     }
 
-    /** Runs [block] under the lease of the file behind a `<station>/<name>.partial` path. A stray name no engine writes needs none. */
+    /** Runs [block] under the lease of the file behind a `<thing>/<name>.partial` path. A stray name no engine writes needs none. */
     private suspend fun withLease(download: String, block: suspend () -> Unit) {
         val key = runCatching {
             ArchiveKey(download.substringBefore('/'), download.substringAfter('/').removeSuffix(ArchiveLayout.PARTIAL_SUFFIX))
@@ -189,8 +189,8 @@ class StorageJanitor(
     }
 
     private suspend fun adoptOrphans() {
-        for ((station, keys) in store.listFinal().groupBy { it.station }) {
-            val indexed = index.observeStation(station).first().mapTo(HashSet()) { it.name }
+        for ((thing, keys) in store.listFinal().groupBy { it.thing }) {
+            val indexed = index.observeThing(thing).first().mapTo(HashSet()) { it.name }
             for (key in keys) {
                 if (key.name in indexed) continue
                 step { coordinator.withWriter(key) { adopt(key) } }
@@ -199,7 +199,7 @@ class StorageJanitor(
     }
 
     /**
-     * Under the lease of [key], and the insert under the station's gate, so a file the old file
+     * Under the lease of [key], and the insert under the thing's gate, so a file the old file
      * cleanup just deleted is never adopted back. A file left by a crash inside that cleanup still has
      * its removed record, which is dropped with the insert, since the file is on the phone again.
      */
@@ -223,7 +223,7 @@ class StorageJanitor(
         if (index.get(key) != null) return
         val (bytes, crc32, sha256) = hashed
         val record = ArchiveRecord(
-            station = key.station,
+            thing = key.thing,
             name = key.name,
             bytes = bytes,
             crc32 = crc32,
@@ -232,7 +232,7 @@ class StorageJanitor(
             sourceDevice = ADOPTED_SOURCE,
         )
         val indexed = indexer.indexed(record)
-        val adopted = coordinator.withStation(key.station) {
+        val adopted = coordinator.withThing(key.thing) {
             val inserted = store.exists(key) && index.putIfAbsent(indexed)
             if (inserted) forgetRemoved(key)
             inserted
@@ -286,8 +286,8 @@ class StorageJanitor(
         /** A temp file this old belongs to no live write. Derived builds stream into theirs for minutes. */
         const val TEMP_AGE_MS: Long = 60L * 60_000L
 
-        /** A partial of a station the phone does not know is kept this long, in case its first sync is running. */
-        const val UNKNOWN_STATION_AGE_MS: Long = 60L * 60_000L
+        /** A partial of a thing the phone does not know is kept this long, in case its first sync is running. */
+        const val UNKNOWN_THING_AGE_MS: Long = 60L * 60_000L
 
         /** A partial untouched this long will not be resumed. The device still has the file. */
         const val STALE_PARTIAL_AGE_MS: Long = 30L * 24L * 60L * 60_000L

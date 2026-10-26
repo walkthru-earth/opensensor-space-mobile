@@ -73,7 +73,7 @@ fun <T> CollectEvents(events: Flow<T>, onEvent: suspend (T) -> Unit) {
     }
 }
 
-/** The data layer's reconnect attempt as the shared station banner reads it. */
+/** The data layer's reconnect attempt as the shared thing banner reads it. */
 fun ReconnectState.toShared(): TodayReconnect = TodayReconnect(attempt, maxAttempts, reason)
 
 /** Opens Android's Bluetooth settings, for the shared banner's pairing repair link. */
@@ -84,7 +84,7 @@ fun rememberOpenBluetoothSettings(): () -> Unit {
 }
 
 /**
- * The shared station banner for an Android link state. The pairing repair decision is Android's,
+ * The shared thing banner for an Android link state. The pairing repair decision is Android's,
  * from its own failure codes.
  */
 @Composable

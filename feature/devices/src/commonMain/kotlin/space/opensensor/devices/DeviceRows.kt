@@ -172,7 +172,7 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, o
                     val ago = agoFormatter()
                     TickingText({ now -> DeviceText.fill(seenTemplate, ago(now - seen)) }, style = MaterialTheme.typography.bodySmall)
                 }
-                if (level.developer && row.archive == null) row.station?.let { Mono(it.take(8)) }
+                if (level.developer && row.archive == null) row.thing?.let { Mono(it.take(8)) }
                 ArchiveLine(row.archive, level)
             }
             Icon(AppIcons.Link, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -200,7 +200,7 @@ internal fun WifiOnlyRow(sensor: WifiSensor, level: DetailLevel) {
             Column(Modifier.weight(1f)) {
                 Text(sensor.name, style = MaterialTheme.typography.titleMedium)
                 Tag(stringResource(Res.string.scan_tag_on_lan_no_token))
-                if (level.developer) sensor.station?.let { Mono(it.take(8)) }
+                if (level.developer) sensor.thing?.let { Mono(it.take(8)) }
             }
             InfoButton(InfoContent(stringResource(Res.string.devices_on_wifi), stringResource(Res.string.info_wifi_only)))
         }

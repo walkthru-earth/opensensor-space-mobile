@@ -52,11 +52,11 @@ class StopAndBackpressureTest {
     private fun TestScope.engine(archive: ArchiveStore = store) =
         SyncEngine(archive, index, windowRetryBackoffMs = 5, clock = { 1_000L }, io = StandardTestDispatcher(testScheduler))
 
-    private fun finalBytes(station: String, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(station, name))]
+    private fun finalBytes(thing: String, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(thing, name))]
 
     private suspend fun SyncEngine.pull(session: DeviceSession, fake: FakeArchiveDevice, at: Int, progress: (FileProgress) -> Unit = {}): FileOutcome {
         val f = fake.files[at]
-        return download(session, fake.station, fake.address, f.name, f.bytes.size.toLong(), fake.maxRead, progress)
+        return download(session, fake.thing, fake.address, f.name, f.bytes.size.toLong(), fake.maxRead, progress)
     }
 
     @Test
@@ -78,7 +78,7 @@ class StopAndBackpressureTest {
         delay(1_000)
         val afterRead = fake.requests.drop(fake.requests.indexOf(Opcode.READ) + 1)
         assertEquals(listOf(Opcode.ABORT, Opcode.CLOSE), afterRead, "requests ${fake.requests}")
-        val held = assertNotNull(store.partialLengths(fake.station)[file.name], "the partial stays for resume")
+        val held = assertNotNull(store.partialLengths(fake.thing)[file.name], "the partial stays for resume")
         assertTrue(held > 0, "bytes written before Stop are kept")
 
         fake.chunkDelayMs = 0
@@ -88,7 +88,7 @@ class StopAndBackpressureTest {
 
         assertEquals(held, fake.readOffsets[1], "the second view resumes from the partial, reads ${fake.readOffsets}")
         assertEquals(held, progress.first().resumedFrom)
-        assertContentEquals(file.bytes, finalBytes(fake.station, file.name))
+        assertContentEquals(file.bytes, finalBytes(fake.thing, file.name))
         assertEquals(Opcode.CLOSE, fake.requests.last())
     }
 
@@ -102,7 +102,7 @@ class StopAndBackpressureTest {
         val first = DeviceSession.over(fake, backgroundScope, log = events::add).also { it.link.open() }
         val collector = ArchiveCollector(store, index, engine(), FakeStorageBudget(), testTimeSource)
 
-        val runA = launch { collector.collect(first, fake.station, fake.address, fake.maxRead) {} }
+        val runA = launch { collector.collect(first, fake.thing, fake.address, fake.maxRead) {} }
         advanceTimeBy(20)
         runCurrent()
         assertEquals(1, fake.readCount, "run A is inside its first READ")
@@ -111,13 +111,13 @@ class StopAndBackpressureTest {
         fake.chunkDelayMs = 0
         val second = DeviceSession(first.link, first.transport)
         val startB = currentTime
-        val summary = collector.collect(second, fake.station, fake.address, fake.maxRead) {}
+        val summary = collector.collect(second, fake.thing, fake.address, fake.maxRead) {}
 
         assertEquals(3, summary.files)
         assertTrue(summary.complete)
         assertEquals(3, summary.newFiles)
         assertEquals(fake.files.sumOf { it.bytes.size.toLong() }, summary.newBytes)
-        fake.files.forEach { assertContentEquals(it.bytes, finalBytes(fake.station, it.name)) }
+        fake.files.forEach { assertContentEquals(it.bytes, finalBytes(fake.thing, it.name)) }
         // Run B's LIST queued behind the owed CLOSE, whose CLOSED came 1.5 s later.
         assertTrue(currentTime - startB >= 1_500, "run B waited ${currentTime - startB} ms")
         val tail = fake.requests.drop(fake.requests.indexOf(Opcode.ABORT))
@@ -178,7 +178,7 @@ class StopAndBackpressureTest {
         gated.passes.close()
         assertIs<FileOutcome.Synced>(download.await())
         val file = fake.files[0]
-        assertContentEquals(file.bytes, finalBytes(fake.station, file.name))
+        assertContentEquals(file.bytes, finalBytes(fake.thing, file.name))
         val windows = (0 until file.bytes.size step fake.maxRead).map { minOf(fake.maxRead, file.bytes.size - it) }
         assertEquals(windows.sumOf { ((it + chunk - 1) / chunk).toInt() }, gated.entered.load(), "one writeAt per CHUNK")
         assertEquals(2, fake.readCount)

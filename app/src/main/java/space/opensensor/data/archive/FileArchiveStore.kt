@@ -28,12 +28,12 @@ class FileArchiveStore @Inject constructor(
     /** The directory both `archive/` and `archive-partial/` live in (`filesDir`). */
     private val base: File get() = checkNotNull(archive.root.parentFile)
 
-    override suspend fun partialLengths(station: String): Map<String, Long> = withContext(io) {
-        archive.partialLengths(station).filterKeys(ArchiveLayout::isArchiveName)
+    override suspend fun partialLengths(thing: String): Map<String, Long> = withContext(io) {
+        archive.partialLengths(thing).filterKeys(ArchiveLayout::isArchiveName)
     }
 
     override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = withContext(io) {
-        val (writer, resumeFrom) = archive.openPartial(key.station, key.name, meta.size, meta.crc32)
+        val (writer, resumeFrom) = archive.openPartial(key.thing, key.name, meta.size, meta.crc32)
         object : PartialWriter {
             override val resumeFrom: Long = resumeFrom
             override fun writeAt(offset: Long, payload: ByteArray) = writer.writeAt(offset, payload)
@@ -43,21 +43,21 @@ class FileArchiveStore @Inject constructor(
         }
     }
 
-    override suspend fun discardPartial(key: ArchiveKey) = withContext(io) { archive.discardPartial(key.station, key.name) }
+    override suspend fun discardPartial(key: ArchiveKey) = withContext(io) { archive.discardPartial(key.thing, key.name) }
 
-    override suspend fun exists(key: ArchiveKey): Boolean = withContext(io) { archive.exists(key.station, key.name) }
+    override suspend fun exists(key: ArchiveKey): Boolean = withContext(io) { archive.exists(key.thing, key.name) }
 
     override fun reader(key: ArchiveKey, partial: Boolean): ByteReader =
         openArchiveFile(File(base, if (partial) ArchiveLayout.partialPath(key) else ArchiveLayout.finalPath(key)))
 
     override suspend fun commit(key: ArchiveKey) {
-        withContext(io) { archive.commit(key.station, key.name) }
+        withContext(io) { archive.commit(key.thing, key.name) }
     }
 
-    override suspend fun listFinal(station: String?): List<ArchiveKey> = withContext(io) {
+    override suspend fun listFinal(thing: String?): List<ArchiveKey> = withContext(io) {
         archive.listAll().mapNotNull { (s, name, _) ->
-            if (station != null && s != station) return@mapNotNull null
-            if (ArchiveLayout.isSafeStation(s) && ArchiveLayout.isArchiveName(name)) ArchiveKey(s, name) else null
+            if (thing != null && s != thing) return@mapNotNull null
+            if (ArchiveLayout.isSafeThing(s) && ArchiveLayout.isArchiveName(name)) ArchiveKey(s, name) else null
         }
     }
 }

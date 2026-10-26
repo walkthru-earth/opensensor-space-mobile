@@ -99,7 +99,7 @@
     <string name="msg_busy_before_sync">انتظر حتى تنتهي مهمة المستشعر الحالية قبل المزامنة.</string>
     <string name="msg_verification_failed">تعذّر التحقق من المستشعر. حاول مرة أخرى.</string>
     <string name="msg_identity_enroll_ble">اتصل بهذا المستشعر عبر Bluetooth أولًا.</string>
-    <string name="msg_identity_station_ble">تغيّرت محطة المستشعر. أعد الاتصال عبر Bluetooth للتحقق منها.</string>
+    <string name="msg_identity_thing_ble">تغيّر معرّف المستشعر. أعد الاتصال عبر Bluetooth للتحقق منه.</string>
     <string name="msg_identity_hardware_changed">هذا عتاد مختلف. أقرنه كمستشعر جديد.</string>
     <string name="msg_lan_token_stored">حُفظ رمز الوصول عبر Wi-Fi على هذا الهاتف.</string>
     <string name="msg_failed_get_token">تعذّر الحصول على رمز الوصول عبر Wi-Fi. حاول مرة أخرى.</string>

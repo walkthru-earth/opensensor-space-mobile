@@ -19,7 +19,7 @@ import space.opensensor.data.history.parquet.ScanRequest
  * the live feed over HTTP ranges, with no other change.
  *
  * Two schemas are read. The hourly cells file has `updated` (a TIMESTAMP). The daily cells file (the
- * OpenAQ aggregates) has no `updated` but a `date` (DATE, INT32 days since 1970-01-01, the station
+ * OpenAQ aggregates) has no `updated` but a `date` (DATE, INT32 days since 1970-01-01, the thing
  * local day), one row per cell and day. Each daily row keeps its [CellRow.date], and its
  * [CellRow.updatedEpochMs] is the UTC midnight after that date. [DailyCellFold] turns those rows into
  * one cell per window.

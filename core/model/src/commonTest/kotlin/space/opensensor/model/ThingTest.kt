@@ -8,10 +8,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-class StationTest {
+class ThingTest {
     private val cores3 = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
     private val profile = AppProfile.parse(CORES3_PROFILE)
-    private val collection = StationCollection.parse(CORES3_COLLECTION)
+    private val collection = ThingCollection.parse(CORES3_COLLECTION)
 
     @Test
     fun parsesTheAppProfile() {
@@ -24,8 +24,8 @@ class StationTest {
     }
 
     @Test
-    fun parsesTheStationCollection() {
-        assertEquals("station-3f2b9c1e", collection.id)
+    fun parsesTheThingCollection() {
+        assertEquals("thing-3f2b9c1e", collection.id)
         assertEquals("CC-BY-4.0", collection.license)
         assertEquals(30.0, collection.sampleIntervalS)
         assertEquals(CORES3_DICT, collection.dict)
@@ -43,27 +43,27 @@ class StationTest {
 
     @Test
     fun joinUsesTheBundledProfile() {
-        val station = Station.join("3f2b9c1e", cores3, profile, collection, deviceId = 7, h3Cell = "887576970bfffff")
-        assertSame(profile, station.profile)
-        assertEquals(CORES3_DICT, station.dict)
+        val thing = Thing.join("3f2b9c1e", cores3, profile, collection, deviceId = 7, h3Cell = "887576970bfffff")
+        assertSame(profile, thing.profile)
+        assertEquals(CORES3_DICT, thing.dict)
         // Primary columns the template lacks are dropped, the order stays.
-        assertEquals(listOf("pm25_atmospheric_ug_m3", "pm10_atmospheric_ug_m3"), station.primary.map { it.name })
-        val pm25 = station.datastream("pm25_atmospheric_ug_m3")!!
+        assertEquals(listOf("pm25_atmospheric_ug_m3", "pm10_atmospheric_ug_m3"), thing.primary.map { it.name })
+        val pm25 = thing.datastream("pm25_atmospheric_ug_m3")!!
         assertEquals("جسيمات 2.5", pm25.label("ar"))
         assertEquals("PM2.5", pm25.title)
         assertEquals("who-2021-pm25", pm25.scale?.id)
         assertEquals(1.0, pm25.displayStep)
-        assertEquals(0.5, station.datastream("imu_temperature_c")!!.displayStep)
-        // No profile label, so the station title, then the column name.
-        assertEquals("Particle sensor status", station.datastream("pms_status")!!.label("en"))
-        assertEquals("accel_z_g", station.datastream("accel_z_g")!!.label("en"))
-        assertNull(station.datastream("pm10_atmospheric_ug_m3")!!.scale)
-        assertEquals("pm25_atmospheric_ug_m3", station.datastreamForLiveKey("pm25")?.name)
-        assertNull(station.datastreamForLiveKey("zzz"))
+        assertEquals(0.5, thing.datastream("imu_temperature_c")!!.displayStep)
+        // No profile label, so the thing title, then the column name.
+        assertEquals("Particle sensor status", thing.datastream("pms_status")!!.label("en"))
+        assertEquals("accel_z_g", thing.datastream("accel_z_g")!!.label("en"))
+        assertNull(thing.datastream("pm10_atmospheric_ug_m3")!!.scale)
+        assertEquals("pm25_atmospheric_ug_m3", thing.datastreamForLiveKey("pm25")?.name)
+        assertNull(thing.datastreamForLiveKey("zzz"))
     }
 
     @Test
-    fun aTemplateWithoutACelsiusColumnStillResolvesAStation() {
+    fun aTemplateWithoutACelsiusColumnStillResolvesAThing() {
         val kelvin = BoardTemplate.parse(
             template(
                 """{"name": "air_temperature_k", "type": "float", "unit": "K", "roles": ["physicalMeasurement"]},
@@ -71,29 +71,29 @@ class StationTest {
                 liveKeys = """{"air_temperature_k": "tk", "pm25_atmospheric_ug_m3": "pm25"}""",
             ),
         )
-        val station = Station.join("3f2b9c1e", kelvin)
-        assertEquals(setOf("tk", "pm25"), station.live.keys)
-        assertNull(station.live.temperature, "only a Cel column is the temperature card")
-        assertEquals("K", station.datastream("air_temperature_k")!!.datastream.unit)
+        val thing = Thing.join("3f2b9c1e", kelvin)
+        assertEquals(setOf("tk", "pm25"), thing.live.keys)
+        assertNull(thing.live.temperature, "only a Cel column is the temperature card")
+        assertEquals("K", thing.datastream("air_temperature_k")!!.datastream.unit)
     }
 
     @Test
     fun derivedProfileWhenNoneIsBundled() {
-        val station = Station.join("3f2b9c1e", cores3)
-        assertTrue(station.profile.isDerived)
-        assertEquals(Family.GENERIC, station.profile.family)
-        assertNull(station.profile.hero)
+        val thing = Thing.join("3f2b9c1e", cores3)
+        assertTrue(thing.profile.isDerived)
+        assertEquals(Family.GENERIC, thing.profile.family)
+        assertNull(thing.profile.hero)
         // The first physicalMeasurement column of the template.
-        assertEquals(listOf("pm1_atmospheric_ug_m3"), station.primary.map { it.name })
-        assertEquals("pm1_atmospheric_ug_m3", station.datastream("pm1_atmospheric_ug_m3")!!.label("ar"))
+        assertEquals(listOf("pm1_atmospheric_ug_m3"), thing.primary.map { it.name })
+        assertEquals("pm1_atmospheric_ug_m3", thing.datastream("pm1_atmospheric_ug_m3")!!.label("ar"))
     }
 
     @Test
-    fun derivedProfileLabelsComeFromStationTitles() {
-        val station = Station.join("3f2b9c1e", cores3, collection = collection)
-        assertTrue(station.profile.isDerived)
-        assertEquals("PM2.5", station.datastream("pm25_atmospheric_ug_m3")!!.label("en"))
-        assertEquals("pm10_atmospheric_ug_m3", station.datastream("pm10_atmospheric_ug_m3")!!.label("en"))
+    fun derivedProfileLabelsComeFromThingTitles() {
+        val thing = Thing.join("3f2b9c1e", cores3, collection = collection)
+        assertTrue(thing.profile.isDerived)
+        assertEquals("PM2.5", thing.datastream("pm25_atmospheric_ug_m3")!!.label("en"))
+        assertEquals("pm10_atmospheric_ug_m3", thing.datastream("pm10_atmospheric_ug_m3")!!.label("en"))
     }
 
     @Test
@@ -115,40 +115,40 @@ class StationTest {
     @Test
     fun profileForAnotherDictionaryIsNotUsed() {
         val other = BoardTemplate.parse(template("""{"name": "pm25_atmospheric_ug_m3", "type": "int32", "roles": ["physicalMeasurement"]}"""))
-        val station = Station.join("s", other, profile)
-        assertTrue(station.profile.isDerived)
-        assertEquals(OTHER_DICT, station.profile.dict)
+        val thing = Thing.join("s", other, profile)
+        assertTrue(thing.profile.isDerived)
+        assertEquals(OTHER_DICT, thing.profile.dict)
     }
 
     @Test
     fun profileWithNoKnownPrimaryColumnFallsBackToDerived() {
         val bare = profile.copy(primary = listOf("no_such_column"))
-        assertTrue(Station.join("s", cores3, bare).profile.isDerived)
+        assertTrue(Thing.join("s", cores3, bare).profile.isDerived)
     }
 
     @Test
     fun runtimeSampleIntervalWins() {
-        assertEquals(10.0, Station.join("s", cores3).sampleIntervalS)
-        assertEquals(30.0, Station.join("s", cores3, collection = collection).sampleIntervalS)
-        assertEquals(60.0, Station.join("s", cores3, collection = collection, runtimeSampleIntervalS = 60.0).sampleIntervalS)
-        assertEquals(30.0, Station.join("s", cores3, collection = collection, runtimeSampleIntervalS = 0.0).sampleIntervalS)
+        assertEquals(10.0, Thing.join("s", cores3).sampleIntervalS)
+        assertEquals(30.0, Thing.join("s", cores3, collection = collection).sampleIntervalS)
+        assertEquals(60.0, Thing.join("s", cores3, collection = collection, runtimeSampleIntervalS = 60.0).sampleIntervalS)
+        assertEquals(30.0, Thing.join("s", cores3, collection = collection, runtimeSampleIntervalS = 0.0).sampleIntervalS)
     }
 
     @Test
     fun fileFooterSampleIntervalWinsForThatFile() {
-        val station = Station.join("s", cores3, collection = collection, runtimeSampleIntervalS = 60.0)
-        assertEquals(5.0, station.sampleIntervalFor(footerSampleIntervalMs = 5_000))
-        assertEquals(0.5, station.sampleIntervalFor(footerSampleIntervalMs = 500))
-        assertEquals(60.0, station.sampleIntervalFor(footerSampleIntervalMs = 0))
-        assertEquals(60.0, station.sampleIntervalFor(footerSampleIntervalMs = null))
+        val thing = Thing.join("s", cores3, collection = collection, runtimeSampleIntervalS = 60.0)
+        assertEquals(5.0, thing.sampleIntervalFor(footerSampleIntervalMs = 5_000))
+        assertEquals(0.5, thing.sampleIntervalFor(footerSampleIntervalMs = 500))
+        assertEquals(60.0, thing.sampleIntervalFor(footerSampleIntervalMs = 0))
+        assertEquals(60.0, thing.sampleIntervalFor(footerSampleIntervalMs = null))
     }
 
     @Test
-    fun stationKeepsEveryDatastreamWhateverItsRole() {
-        val station = Station.join("s", cores3)
-        assertEquals(cores3.datastreams.map { it.name }, station.datastreams.map { it.name })
-        assertTrue(station.datastream("battery_percent") != null)
-        assertTrue(station.datastream("imu_temperature_c") != null)
+    fun thingKeepsEveryDatastreamWhateverItsRole() {
+        val thing = Thing.join("s", cores3)
+        assertEquals(cores3.datastreams.map { it.name }, thing.datastreams.map { it.name })
+        assertTrue(thing.datastream("battery_percent") != null)
+        assertTrue(thing.datastream("imu_temperature_c") != null)
     }
 
     @Test
@@ -175,6 +175,6 @@ class StationTest {
         assertFailsWith<IllegalArgumentException> {
             AppProfile.parse("""{"dict": "$CORES3_DICT", "family": "air", "display_step": {"x": 0}}""")
         }
-        assertFailsWith<IllegalArgumentException> { StationCollection.parse("""{"type": "Feature", "id": "x"}""") }
+        assertFailsWith<IllegalArgumentException> { ThingCollection.parse("""{"type": "Feature", "id": "x"}""") }
     }
 }

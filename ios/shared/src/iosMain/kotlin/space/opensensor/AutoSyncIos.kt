@@ -39,7 +39,7 @@ fun autoSyncSettings(
 fun backgroundSyncBridge(
     devices: DevicesBridge,
     settings: AutoSyncSettings,
-    browse: (timeoutMs: Long, done: (names: List<String>, stations: List<String>) -> Unit) -> Unit,
+    browse: (timeoutMs: Long, done: (names: List<String>, things: List<String>) -> Unit) -> Unit,
     sync: (id: String, wifiName: String?, done: (BackgroundStepResult) -> Unit) -> Unit,
     isOwned: (id: String) -> Boolean,
     log: (String) -> Unit,

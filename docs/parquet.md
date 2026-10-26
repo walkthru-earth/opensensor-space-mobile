@@ -200,7 +200,7 @@ span overlaps it. A file the timeline cannot place is included only when no rang
 `remove` may run while a sync runs. Each file is handled under its writer lease of the archive's one
 `DeviceCoordinator` (`:core:sync`), so a sync of the same file waits, and a sync that waited finds
 the tombstone under the lease and skips the file. It checks the file is still old, then takes the
-coordinator's station gate, the one sync, `ArchiveIndexRepair` and the startup janitor take for
+coordinator's thing gate, the one sync, `ArchiveIndexRepair` and the startup janitor take for
 every archive write. Readers never take it. Under the gate it reads the live record again
 and keeps the file when the record is gone or its size or CRC-32 changed. Then it writes a
 `PrunedFile` record, removes the index record and deletes the final file, only below the Durable
@@ -211,13 +211,13 @@ again under the same gate and drops its `PrunedFile`, so the index never points 
 a held file is never marked removed. Cancellation is honoured between files only. Each file's steps, from the record check to the re-adopt check, run under
 `NonCancellable`. The derived days of the removed files are rebuilt after, also when the caller was
 cancelled (Android `HistoryDeriver.deriveStale`, iOS `rebuildDerived`, which also rebuilds a
-station whose files all went from no sources, so its stale day files are removed). A rebuild that
+thing whose files all went from no sources, so its stale day files are removed). A rebuild that
 throws is logged and reported as `rebuildFailed`, the files stay removed. The report counts
 removed, kept (no longer old, changed, gone already or unreadable) and failed. Logs carry counts and
 exception class names only. Nothing is sent to a device.
 
-`PrunedFiles` (`:core:archive`, Room `pruned_file` on both phones) keeps the station, name, size and CRC-32 of each removed file. The FILE frame carries no CRC,
-so `SyncPlanner` matches on station, name and size. A listed file with such a record and no phone
+`PrunedFiles` (`:core:archive`, Room `pruned_file` on both phones) keeps the thing, name, size and CRC-32 of each removed file. The FILE frame carries no CRC,
+so `SyncPlanner` matches on thing, name and size. A listed file with such a record and no phone
 copy plans as `REMOVED`. It is not downloaded and counts as done, so the device card can still read
 as all synced. A phone copy always wins over the record. A whole LIST that no longer names the file
 drops the record, so a later file under the same name and size, after a card reset, downloads.

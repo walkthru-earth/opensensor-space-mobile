@@ -323,7 +323,7 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
  * Android draws the same cards inside its Device screen with the device header and Auto-sync.
  * [lanAccess] reflects the platform's local network permission, [onPlatformAction] gets the two
  * actions the controller leaves to the platform. [lead] is the platform's first card, the iOS
- * Auto-sync switch. Reconnect sits in the top bar, the station header of this page. With
+ * Auto-sync switch. Reconnect sits in the top bar, the thing header of this page. With
  * [bluetooth] both reconnect taps ask for Bluetooth first, see [ReconnectTaps].
  */
 @Composable
@@ -365,7 +365,7 @@ fun DeviceConfigScreen(
                     }
                 },
                 actions = {
-                    if (state.snapshot.station.offersReconnect) {
+                    if (state.snapshot.thing.offersReconnect) {
                         TextButton(onClick = taps::reconnect) { Text(stringResource(Res.string.action_reconnect)) }
                     }
                     IconButton(onClick = { onAction(DeviceConfigAction.Refresh) }, enabled = state.ready && state.isV2) {

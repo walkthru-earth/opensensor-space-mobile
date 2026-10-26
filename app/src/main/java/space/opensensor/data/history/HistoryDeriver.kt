@@ -27,10 +27,10 @@ fun interface HistoryRefresher {
     suspend fun deriveAfterSync(sinceEpochMs: Long): HistoryDeriver.Result = deriveStale()
 
     /** Persist an accepted collection clock receipt without starting a history pass. */
-    suspend fun persistClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {}
+    suspend fun persistClockAnchor(thing: String, boot: String, utcNs: Long, monotonicUs: Long) {}
 
-    /** Re-dates and derives [station] in one History pass, after a clock receipt was persisted. */
-    suspend fun deriveStation(station: String) {}
+    /** Re-dates and derives [thing] in one History pass, after a clock receipt was persisted. */
+    suspend fun deriveThing(thing: String) {}
 }
 
 /** Queues the stale days a post-sync pass skipped for a full pass under a charging constraint. */
@@ -39,7 +39,7 @@ fun interface DeriveBackfill {
 }
 
 /**
- * Keeps the aggregate tiers (`aggregate_bucket`) in step with the archive, one UTC station-day at a
+ * Keeps the aggregate tiers (`aggregate_bucket`) in step with the archive, one UTC thing-day at a
  * time. A day is (re)built when the set of verified, indexed, telemetry files that carry UTC rows
  * overlapping it differs from the set recorded in `derived_day` — so a late-arriving file rebuilds
  * exactly its day, and an unchanged day costs one string comparison.
@@ -64,43 +64,43 @@ class HistoryDeriver @Inject constructor(
     /** [daysDeferred] counts stale days a post-sync pass left to [DeriveBackfill]. */
     data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long, val daysDeferred: Int = 0)
 
-    private val dailyBuilder = DailyDerivedBuilder(store, indexer.templates) { station, name -> archive.fileFor(station, name) }
+    private val dailyBuilder = DailyDerivedBuilder(store, indexer.templates) { thing, name -> archive.fileFor(thing, name) }
 
-    /** Which station-days a set of indexed files touches, by real UTC or by the estimated span (§4.6). */
-    fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> = StationDays.of(files.map { it.toRecord() })
+    /** Which thing-days a set of indexed files touches, by real UTC or by the estimated span (§4.6). */
+    fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> = ThingDays.of(files.map { it.toRecord() })
 
     /** [signatureOf] for Room rows. */
     fun signature(files: List<ArchivedFile>): String = signatureOf(files.map { it.toRecord() })
 
     /** Only the accepted receipt; collection reconciliation runs in its cancellable finalization. */
-    override suspend fun persistClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
-        indexer.persistClockAnchor(station, boot, utcNs, monotonicUs)
+    override suspend fun persistClockAnchor(thing: String, boot: String, utcNs: Long, monotonicUs: Long) {
+        indexer.persistClockAnchor(thing, boot, utcNs, monotonicUs)
     }
 
     /**
-     * Re-dates and derives [station] in one pass. The re-dating runs inside the pass ([deriveStale]
+     * Re-dates and derives [thing] in one pass. The re-dating runs inside the pass ([deriveStale]
      * estimates first), never beside a derive or a backfill that reads the estimates.
      */
-    override suspend fun deriveStation(station: String) {
-        deriveStale(listOf(station))
+    override suspend fun deriveThing(thing: String) {
+        deriveStale(listOf(thing))
     }
 
     override suspend fun deriveStale(): Result = deriveStale(null)
 
     /**
      * Rebuilds the days that files synced since [sinceEpochMs] touch, so a sync never pays for a
-     * backfill. Any other stale day of those stations goes to [backfill].
+     * backfill. Any other stale day of those things goes to [backfill].
      */
     override suspend fun deriveAfterSync(sinceEpochMs: Long): Result {
         val result = deriveStale(null, touchedSinceEpochMs = sinceEpochMs)
         if (result.daysDeferred > 0) {
-            Log.i(TAG, "deferred ${result.daysDeferred} stale station-days to the charging backfill")
+            Log.i(TAG, "deferred ${result.daysDeferred} stale thing-days to the charging backfill")
             backfill.schedule()
         }
         return result
     }
 
-    suspend fun deriveStale(stations: Collection<String>? = null, touchedSinceEpochMs: Long? = null): Result = orchestrator.derivePass {
+    suspend fun deriveStale(things: Collection<String>? = null, touchedSinceEpochMs: Long? = null): Result = orchestrator.derivePass {
         withContext(Dispatchers.IO) {
             var checked = 0
             var rebuilt = 0
@@ -110,17 +110,17 @@ class HistoryDeriver @Inject constructor(
             indexer.estimateTimes()
             val all = archivedFileDao.observeAll().first()
             val wanted = daysOf(all)
-            val byStation = all.groupBy { it.station }
-            val anchorsByStation = byStation.mapValues { (_, files) -> TimeEstimate.anchors(files.map { it.info() }, indexer.clockAnchors.anchors(files.first().station)) }
-            // Stations that only have derived days left (every dated file gone) must be visited too, to drop them.
+            val byThing = all.groupBy { it.thing }
+            val anchorsByThing = byThing.mapValues { (_, files) -> TimeEstimate.anchors(files.map { it.info() }, indexer.clockAnchors.anchors(files.first().thing)) }
+            // Things that only have derived days left (every dated file gone) must be visited too, to drop them.
             // Read after the re-dating above, so a file that just got its time counts on its real days.
             val touched = touchedSinceEpochMs?.let { since -> daysOf(all.filter { it.syncedAtEpochMs >= since }) }
-            val allStations = (wanted.keys + dayDao.stations()).filter { (stations == null || it in stations) && (touched == null || it in touched) }
-            for (station in allStations) {
-                val days = wanted[station] ?: emptySet()
-                val known = dayDao.forStation(station).associateBy { it.epochDay }
-                // One listing for every day of the station, not a time query per day (#63).
-                val sourcesByDay = sourcesByDay(byStation[station].orEmpty())
+            val allThings = (wanted.keys + dayDao.things()).filter { (things == null || it in things) && (touched == null || it in touched) }
+            for (thing in allThings) {
+                val days = wanted[thing] ?: emptySet()
+                val known = dayDao.forThing(thing).associateBy { it.epochDay }
+                // One listing for every day of the thing, not a time query per day (#63).
+                val sourcesByDay = sourcesByDay(byThing[thing].orEmpty())
                 for (day in days.sorted()) {
                     checked++
                     val sources = sourcesByDay[day].orEmpty()
@@ -129,29 +129,29 @@ class HistoryDeriver @Inject constructor(
                     // A missing day file with a current signature was evicted by the quota or the OS. It is a
                     // cache miss, rebuilt when the export reads it, not here, so eviction never churns.
                     if (cached?.sourceSignature == sig && cached.dailyFile != null) continue
-                    if (touched != null && day !in touched.getValue(station)) {
+                    if (touched != null && day !in touched.getValue(thing)) {
                         deferred++
                         continue
                     }
-                    val built = buildDay(station, day, sources, anchorsByStation[station] ?: emptyMap())
+                    val built = buildDay(thing, day, sources, anchorsByThing[thing] ?: emptyMap())
                     rebuilt++
                     rows += built
                 }
                 // Days that no longer have any source (files deleted) lose their tiers too. A day a file
-                // still waiting for its index holds stays in History, the shared rule of StationDays.kept.
-                val held = StationDays.held(byStation[station].orEmpty().map { it.toRecord() })
-                val kept = StationDays.kept(known.keys, days, held)
+                // still waiting for its index holds stays in History, the shared rule of ThingDays.kept.
+                val held = ThingDays.held(byThing[thing].orEmpty().map { it.toRecord() })
+                val kept = ThingDays.kept(known.keys, days, held)
                 for (stale in known.keys - days - kept) {
-                    bucketDao.replaceDay(station, stale * 86_400, emptyList())
-                    dayDao.delete(station, stale)
-                    store.dayFile(station, stale).delete()
-                    store.manifestFile(station, stale).delete()
+                    bucketDao.replaceDay(thing, stale * 86_400, emptyList())
+                    dayDao.delete(thing, stale)
+                    store.dayFile(thing, stale).delete()
+                    store.manifestFile(thing, stale).delete()
                     rebuilt++
                 }
             }
             // "derived 0 of N" (debug) is the healthy line after a pass with nothing new — a rebuild on
             // every pass was the symptom of the @Upsert bug (README decisions, 2026-09-18).
-            if (rebuilt > 0) Log.i(TAG, "derived $rebuilt of $checked station-days ($rows rows)") else Log.d(TAG, "derived 0 of $checked station-days (nothing changed)")
+            if (rebuilt > 0) Log.i(TAG, "derived $rebuilt of $checked thing-days ($rows rows)") else Log.d(TAG, "derived 0 of $checked thing-days (nothing changed)")
             if (rebuilt > 0) enforceQuota()
             Result(checked, rebuilt, rows, deferred)
         }
@@ -163,14 +163,14 @@ class HistoryDeriver @Inject constructor(
      * enforced here, so the export sees every day, the next derive pass or janitor run trims it again.
      * Returns how many files it rebuilt.
      */
-    suspend fun ensureDailyFiles(station: String? = null): Int = orchestrator.derivePass {
+    suspend fun ensureDailyFiles(thing: String? = null): Int = orchestrator.derivePass {
         withContext(Dispatchers.IO) {
             var rebuilt = 0
-            val stations = if (station != null) listOf(station) else dayDao.stations()
-            for (s in stations) {
-                val missing = dayDao.forStation(s).filter { it.dailyFile != null && !store.dayFile(s, it.epochDay).isFile }
+            val things = if (thing != null) listOf(thing) else dayDao.things()
+            for (s in things) {
+                val missing = dayDao.forThing(s).filter { it.dailyFile != null && !store.dayFile(s, it.epochDay).isFile }
                 if (missing.isEmpty()) continue
-                val files = archivedFileDao.forStation(s)
+                val files = archivedFileDao.forThing(s)
                 val anchors = TimeEstimate.anchors(files.map { it.info() }, indexer.clockAnchors.anchors(s))
                 val sourcesByDay = sourcesByDay(files)
                 for (day in missing) {
@@ -205,25 +205,25 @@ class HistoryDeriver @Inject constructor(
     }
 
     /**
-     * Aggregates one station-day from [sources], replaces its tiers and writes its daily file, from one
+     * Aggregates one thing-day from [sources], replaces its tiers and writes its daily file, from one
      * decode of each source (#63). Returns rows aggregated.
      */
-    suspend fun buildDay(station: String, epochDay: Long, sources: List<ArchivedFile>, anchors: Map<String, TimeEstimate.Anchor> = emptyMap()): Long {
+    suspend fun buildDay(thing: String, epochDay: Long, sources: List<ArchivedFile>, anchors: Map<String, TimeEstimate.Anchor> = emptyMap()): Long {
         val dayStartS = epochDay * 86_400
         val sig = signature(sources)
-        val run = withContext(cpu) { dailyBuilder.pass(station, epochDay, sources, sig, anchors) }
+        val run = withContext(cpu) { dailyBuilder.pass(thing, epochDay, sources, sig, anchors) }
         val pass = run.pass
         if (pass.failedSources.isNotEmpty()) Log.w(TAG, "${pass.failedSources.size} source reads failed")
         // The pass keeps only buckets that start inside this day: a file straddling midnight contributes
         // its other rows when the neighbouring day is built (it is in that day's source set too).
         val dayBuckets = pass.buckets
-        bucketDao.replaceDay(station, dayStartS, dayBuckets.flatMap { it.toEntities() })
+        bucketDao.replaceDay(thing, dayStartS, dayBuckets.flatMap { it.toEntities() })
         // A failed daily file keeps the tiers and leaves `dailyFile` null, the next derive pass retries it.
         val daily = run.daily
         pass.dailyError?.let { Log.w(TAG, "daily file retry needed (${it::class.simpleName})") }
         dayDao.upsert(
             DerivedDay(
-                station = station,
+                thing = thing,
                 epochDay = epochDay,
                 // A missing daily file marks the day stale so it is retried on the next pass.
                 sourceSignature = if (daily != null) sig else "$sig:no-daily-file",
@@ -239,7 +239,7 @@ class HistoryDeriver @Inject constructor(
     /** One row per metric that had values in the bucket. */
     private fun Bucket.toEntities(): List<MetricBucket> = metrics.map { (metricId, a) ->
         MetricBucket(
-            station = station,
+            thing = thing,
             metricId = metricId,
             resolution = resolution.seconds,
             startEpochS = startEpochS,
@@ -284,11 +284,11 @@ class HistoryDeriver @Inject constructor(
             return out.concatToString()
         }
 
-        /** Each day's sources from one station listing, the same files and order as `withUtcBetween`. */
-        fun sourcesByDay(files: List<ArchivedFile>): Map<Long, List<ArchivedFile>> = StationDays.sourcesByDay(files) { it.toRecord() }
+        /** Each day's sources from one thing listing, the same files and order as `withUtcBetween`. */
+        fun sourcesByDay(files: List<ArchivedFile>): Map<Long, List<ArchivedFile>> = ThingDays.sourcesByDay(files) { it.toRecord() }
 
         /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order, 6 = MICROS UTC and field_id in the daily file, 7 = EPA corrected PM2.5 tier, 8 = template datastreams and the footer sample interval, 9 = the app_day entry in the daily file. */
         const val DERIVE_VERSION = 9
-        const val DAY_NS = StationDays.DAY_NS
+        const val DAY_NS = ThingDays.DAY_NS
     }
 }

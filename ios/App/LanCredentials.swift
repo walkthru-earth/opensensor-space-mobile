@@ -3,7 +3,7 @@ import Security
 
 /// Device-only bearer credentials and the identity established over encrypted BLE.
 struct LanCredential: Codable {
-    let station: String
+    let thing: String
     let device: String
     let peripheral: String
     let token: Data
@@ -13,7 +13,7 @@ struct LanCredential: Codable {
 /// A saved credential without its token or port.
 struct LanCredentialEntry {
     let peripheral: String
-    let station: String
+    let thing: String
     let device: String
 }
 
@@ -62,7 +62,7 @@ final class LanCredentials {
             return []
         }
         return all.compactMap(Self.decode).map {
-            LanCredentialEntry(peripheral: $0.peripheral, station: $0.station, device: $0.device.lowercased())
+            LanCredentialEntry(peripheral: $0.peripheral, thing: $0.thing, device: $0.device.lowercased())
         }
     }
 
@@ -70,7 +70,7 @@ final class LanCredentials {
         guard let value = try? JSONDecoder().decode(LanCredential.self, from: data), value.token.count == 32,
             value.device.count == 12, value.device.allSatisfy({ $0.isHexDigit }),
             UUID(uuidString: value.peripheral) != nil, (1...65535).contains(value.port),
-            SensorArchive.isStationId(value.station)
+            SensorArchive.isThingId(value.thing)
         else { return nil }
         return value
     }

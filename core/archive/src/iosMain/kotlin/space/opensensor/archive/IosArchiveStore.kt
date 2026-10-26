@@ -31,9 +31,9 @@ import space.opensensor.storage.StorageException
 
 /**
  * The iOS [ArchiveStore]. Verified copies stay where the iPhone app always kept them,
- * `Application Support/SensorArchive/<station>/<hive name>`, so archives collected by earlier builds
+ * `Application Support/SensorArchive/<thing>/<hive name>`, so archives collected by earlier builds
  * still read. In-progress downloads use the shared [ArchiveLayout] partial format, `<name>.partial`
- * and `<name>.partial.meta`, under `Application Support/archive-partial/<station>/`.
+ * and `<name>.partial.meta`, under `Application Support/archive-partial/<thing>/`.
  *
  * Both roots carry the `completeUntilFirstUserAuthentication` protection class and are excluded from
  * backups. Symlinks are refused at every level below a root. An older build's partial beside the final
@@ -71,15 +71,15 @@ class IosArchiveStore(
     private fun partialFile(key: ArchiveKey): String = resolve(ArchiveLayout.partialPath(key)).also { IosFiles.checkNoLinks(it, partialRoot) }
     private fun metaFile(key: ArchiveKey): String = resolve(ArchiveLayout.partialMetaPath(key)).also { IosFiles.checkNoLinks(it, partialRoot) }
 
-    override suspend fun partialLengths(station: String): Map<String, Long> = withContext(io) {
-        val dir = resolve(ArchiveLayout.partialStationDir(station))
+    override suspend fun partialLengths(thing: String): Map<String, Long> = withContext(io) {
+        val dir = resolve(ArchiveLayout.partialThingDir(thing))
         val lengths = LinkedHashMap<String, Long>()
         for (relative in IosFiles.walk(dir)) {
             val name = ArchiveLayout.nameOfPartial(relative) ?: continue
             val path = "$dir/$relative"
             if (IosFiles.kind(path) == Kind.FILE) lengths[name] = IosFiles.size(path)
         }
-        val legacyDir = "$finalRoot/$station"
+        val legacyDir = "$finalRoot/$thing"
         for (relative in IosFiles.walk(legacyDir)) {
             val legacy = LegacyPartial.parse(relative) ?: continue
             val path = "$legacyDir/$relative"
@@ -168,19 +168,19 @@ class IosArchiveStore(
         val final = finalFile(key)
         val partial = partialFile(key)
         check(IosFiles.kind(partial) == Kind.FILE) { "no partial to commit" }
-        // AtomicFiles creates the station and day directories and syncs each new level into its parent.
+        // AtomicFiles creates the thing and day directories and syncs each new level into its parent.
         // Throws AlreadyCommitted when the final is there, whatever it is. Nothing is replaced.
         atomic.commitNoReplace(partial, final, StorageClass.Durable)
         IosFiles.remove(metaFile(key))
     }
 
-    override suspend fun listFinal(station: String?): List<ArchiveKey> = withContext(io) {
-        val stations = if (station != null) {
-            listOf(station).filter(ArchiveLayout::isSafeStation)
+    override suspend fun listFinal(thing: String?): List<ArchiveKey> = withContext(io) {
+        val things = if (thing != null) {
+            listOf(thing).filter(ArchiveLayout::isSafeThing)
         } else {
-            IosFiles.walk(finalRoot).filter { '/' !in it && ArchiveLayout.isSafeStation(it) }
+            IosFiles.walk(finalRoot).filter { '/' !in it && ArchiveLayout.isSafeThing(it) }
         }
-        stations.flatMap { s ->
+        things.flatMap { s ->
             val dir = "$finalRoot/$s"
             if (IosFiles.kind(dir) != Kind.DIRECTORY) return@flatMap emptyList()
             IosFiles.walk(dir)

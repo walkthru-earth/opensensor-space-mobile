@@ -25,7 +25,7 @@ class BoardDescriptorsTest {
     private val dict = "0a024b85c632f621c0e1223f1ecafe3a9c4524a1ec3c0d03d910d191aaee2f82"
     private val bytes = template(dict).encodeToByteArray()
     private val sha = ParquetVerify.sha256Hex(bytes)
-    private val info = DeviceInfo(proto = 3, dict = dict, desc = sha.take(16), station = "s")
+    private val info = DeviceInfo(proto = 3, dict = dict, desc = sha.take(16), thing = "s")
 
     /** A [MemoryBlockStore] whose next [failDeletes] deletes throw, as a cache directory the OS locked. */
     private class FlakyStore(private val inner: MemoryBlockStore = MemoryBlockStore()) : BlockStore by inner {
@@ -57,8 +57,8 @@ class BoardDescriptorsTest {
         assertEquals(listOf("$sha.json"), h.store.list().map { it.name })
         assertEquals(listOf(fetched.template), h.served.all.value)
         // The capabilities resolve the unbundled dict through the served template.
-        assertNotNull(DeviceCapabilities.from(info, h.served.all.value).station)
-        assertEquals(null, DeviceCapabilities.from(info, emptyList()).station)
+        assertNotNull(DeviceCapabilities.from(info, h.served.all.value).thing)
+        assertEquals(null, DeviceCapabilities.from(info, emptyList()).thing)
     }
 
     @Test

@@ -59,14 +59,14 @@ class SyncEngineTest {
     private suspend fun SyncEngine.pull(
         device: Pair<FakeArchiveDevice, DeviceSession>,
         index: Int,
-        station: String = device.first.station,
+        thing: String = device.first.thing,
         progress: (FileProgress) -> Unit = {},
     ): FileOutcome {
         val f = device.first.files[index]
-        return download(device.second, station, device.first.address, f.name, f.bytes.size.toLong(), device.first.maxRead, progress)
+        return download(device.second, thing, device.first.address, f.name, f.bytes.size.toLong(), device.first.maxRead, progress)
     }
 
-    private fun finalBytes(station: String, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(station, name))]
+    private fun finalBytes(thing: String, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(thing, name))]
 
     private fun hasPartials(): Boolean = store.files.keys.any { it.startsWith(ArchiveLayout.PARTIAL + "/") }
 
@@ -80,12 +80,12 @@ class SyncEngineTest {
         val settle: (FileOutcome) -> Unit = { outcome ->
             outcomes += outcome
             closesAtSettlement += fake.requests.count { it == Opcode.CLOSE }
-            assertContentEquals(file.bytes, finalBytes(fake.station, file.name))
+            assertContentEquals(file.bytes, finalBytes(fake.thing, file.name))
             assertEquals(file.name, index.records.single().name, "verified bytes and their receipt exist before callback")
         }
 
-        val first = engine().download(d.second, fake.station, fake.address, file.name, file.bytes.size.toLong(), fake.maxRead, onSettled = settle) {}
-        val second = engine().download(d.second, fake.station, fake.address, file.name, file.bytes.size.toLong(), fake.maxRead, onSettled = settle) {}
+        val first = engine().download(d.second, fake.thing, fake.address, file.name, file.bytes.size.toLong(), fake.maxRead, onSettled = settle) {}
+        val second = engine().download(d.second, fake.thing, fake.address, file.name, file.bytes.size.toLong(), fake.maxRead, onSettled = settle) {}
 
         assertEquals(listOf(first, second), outcomes)
         assertEquals(listOf(0, 1), closesAtSettlement)
@@ -126,7 +126,7 @@ class SyncEngineTest {
         assertEquals(listOf(16384L, 8112L, 8112L, 4056L) + List(8) { 2028L }, d.first.readLengths)
         assertEquals(2, progress.last().windowsRecovered)
         assertTrue(progress.zipWithNext().all { (a, b) -> b.bytesDone >= a.bytesDone }, "progress never goes backwards")
-        assertContentEquals(file.bytes, finalBytes(d.first.station, file.name))
+        assertContentEquals(file.bytes, finalBytes(d.first.thing, file.name))
         assertEquals(synced.sha256, index.records.single().sha256)
         assertEquals("fake-0", index.records.single().sourceDevice)
         assertTrue(foreignDropped().isEmpty(), foreignDropped().toString())
@@ -146,7 +146,7 @@ class SyncEngineTest {
 
         assertIs<FileOutcome.Synced>(engine().pull(d, 1))
         assertEquals(d.first.files[1].name, index.records.single().name)
-        assertContentEquals(d.first.files[1].bytes, finalBytes(d.first.station, d.first.files[1].name))
+        assertContentEquals(d.first.files[1].bytes, finalBytes(d.first.thing, d.first.files[1].name))
     }
 
     @Test
@@ -159,18 +159,18 @@ class SyncEngineTest {
 
         assertIs<FileOutcome.Synced>(engine().pull(d, 0))
         assertEquals(listOf(16384L, 8112L, 4056L), fake.readLengths.take(3))
-        assertContentEquals(fake.files[0].bytes, finalBytes(fake.station, fake.files[0].name))
+        assertContentEquals(fake.files[0].bytes, finalBytes(fake.thing, fake.files[0].name))
 
         val before = fake.readLengths.size
         assertIs<FileOutcome.Synced>(engine().pull(d, 1))
         assertTrue(fake.readLengths.drop(before).all { it <= 6084L }, "the link remembers it is weak: ${fake.readLengths}")
-        assertContentEquals(fake.files[1].bytes, finalBytes(fake.station, fake.files[1].name))
+        assertContentEquals(fake.files[1].bytes, finalBytes(fake.thing, fake.files[1].name))
     }
 
     /** A file long enough for the window to climb from 8 frames back to max_read, 8 clean windows per step. */
     private fun FakeArchiveDevice.addLongFile(): Int {
         files += FakeArchiveDevice.FakeFile(
-            "station=$station/year=2026/month=09/day=15/data_1030_b41d_15180-15269-90.parquet",
+            "station=$thing/year=2026/month=09/day=15/data_1030_b41d_15180-15269-90.parquet",
             FakeArchiveDevice.fakeParquet(4, 540_000),
         )
         return files.lastIndex
@@ -193,7 +193,7 @@ class SyncEngineTest {
         // Eight clean windows at each step add one 4-frame step, until the cap.
         assertEquals(climbBack, lengths.subList(1, 1 + climbBack.size), lengths.toString())
         assertTrue(lengths.drop(1 + climbBack.size).let { it.isNotEmpty() && it.all { l -> l == 16384L } }, lengths.toString())
-        assertContentEquals(fake.files[long].bytes, finalBytes(fake.station, fake.files[long].name))
+        assertContentEquals(fake.files[long].bytes, finalBytes(fake.thing, fake.files[long].name))
     }
 
     @Test
@@ -211,11 +211,11 @@ class SyncEngineTest {
         // The timeout never counted as clean, the window grows after 8 windows that landed.
         assertEquals(climbBack, fake.readLengths.subList(1, 1 + climbBack.size), fake.readLengths.toString())
         // Size, CRC-32 and PAR1 still gate the commit.
-        assertContentEquals(fake.files[long].bytes, finalBytes(fake.station, fake.files[long].name))
+        assertContentEquals(fake.files[long].bytes, finalBytes(fake.thing, fake.files[long].name))
     }
 
     /** The partial bytes on disk for [name], or null when there is none. */
-    private fun partialBytes(station: String, name: String): ByteArray? = store.files[ArchiveLayout.partialPath(ArchiveKey(station, name))]
+    private fun partialBytes(thing: String, name: String): ByteArray? = store.files[ArchiveLayout.partialPath(ArchiveKey(thing, name))]
 
     @Test
     fun aReadThatKeepsTimingOutEndsTheAttemptAtTheFloorAndKeepsThePartial() = runTest {
@@ -229,9 +229,9 @@ class SyncEngineTest {
         assertEquals(TimeoutPhase.FIRST_FRAME, e.timeout.phase)
         assertEquals(2 + WindowRetryPolicy.RETRIES, fake.readCount)
         assertEquals(listOf(16384L, 16384L, 8112L, 4056L, 2028L, 2028L, 2028L), fake.readLengths)
-        assertNull(finalBytes(fake.station, file.name))
+        assertNull(finalBytes(fake.thing, file.name))
         // The verified first window stays on disk, so the next attempt resumes from it.
-        assertContentEquals(file.bytes.copyOfRange(0, 16_384), partialBytes(fake.station, file.name))
+        assertContentEquals(file.bytes.copyOfRange(0, 16_384), partialBytes(fake.thing, file.name))
         assertEquals(0, store.openWriters)
     }
 
@@ -248,7 +248,7 @@ class SyncEngineTest {
         // The retry starts where the delivered CHUNKs ended, with a half window.
         assertEquals(listOf(0L, 3L * 507), fake.readOffsets.take(2))
         assertEquals(listOf(16384L, 8112L), fake.readLengths.take(2))
-        assertContentEquals(file.bytes, finalBytes(fake.station, file.name))
+        assertContentEquals(file.bytes, finalBytes(fake.thing, file.name))
         assertFalse(hasPartials())
     }
 
@@ -264,8 +264,8 @@ class SyncEngineTest {
         assertEquals(TimeoutPhase.SEND, e.timeout.phase)
         assertEquals(2, fake.writes.count { it == Opcode.READ }, fake.writes.toString())
         assertEquals(1, fake.readCount)
-        assertNull(finalBytes(fake.station, file.name))
-        assertContentEquals(file.bytes.copyOfRange(0, 16_384), partialBytes(fake.station, file.name))
+        assertNull(finalBytes(fake.thing, file.name))
+        assertContentEquals(file.bytes.copyOfRange(0, 16_384), partialBytes(fake.thing, file.name))
     }
 
     @Test
@@ -307,27 +307,27 @@ class SyncEngineTest {
     }
 
     @Test
-    fun differentStationsTransferTheSameNameAtTheSameTime() = runTest {
+    fun differentThingsTransferTheSameNameAtTheSameTime() = runTest {
         val a = device(backgroundScope, "fake-a").also { it.first.chunkDelayMs = 1 }
         val b = device(backgroundScope, "fake-b").also { it.first.chunkDelayMs = 1 }
         val events = ArrayList<String>()
-        val first = async { engine().pull(a, 2, station = "station-a") { if (it.bytesDone == 0L) events += "a started" } }
-        val second = async { engine().pull(b, 2, station = "station-b") { if (it.bytesDone == 0L) events += "b started" } }
+        val first = async { engine().pull(a, 2, thing = "thing-a") { if (it.bytesDone == 0L) events += "a started" } }
+        val second = async { engine().pull(b, 2, thing = "thing-b") { if (it.bytesDone == 0L) events += "b started" } }
         val outcomes = listOf(first.await(), second.await())
         assertTrue(outcomes.all { it is FileOutcome.Synced && !it.alreadyArchived }, outcomes.toString())
         // Both started before either finished: distinct identities never wait on each other.
         assertEquals(listOf("a started", "b started"), events.take(2))
-        assertContentEquals(a.first.files[2].bytes, finalBytes("station-a", a.first.files[2].name))
-        assertContentEquals(b.first.files[2].bytes, finalBytes("station-b", b.first.files[2].name))
+        assertContentEquals(a.first.files[2].bytes, finalBytes("thing-a", a.first.files[2].name))
+        assertContentEquals(b.first.files[2].bytes, finalBytes("thing-b", b.first.files[2].name))
         assertEquals(2, index.records.size)
     }
 
     @Test
-    fun sameStationAndNameHasOneWriterAndTheWaiterRechecksVerifiedBytes() = runTest {
+    fun sameThingAndNameHasOneWriterAndTheWaiterRechecksVerifiedBytes() = runTest {
         val a = device(backgroundScope, "fake-a").also { it.first.chunkDelayMs = 1 }
         val b = device(backgroundScope, "fake-b").also { it.first.chunkDelayMs = 1 }
-        val first = async { engine().pull(a, 0, station = "station-a") }
-        val second = async { engine().pull(b, 0, station = "station-a") }
+        val first = async { engine().pull(a, 0, thing = "thing-a") }
+        val second = async { engine().pull(b, 0, thing = "thing-a") }
         val outcomes = listOf(first.await(), second.await())
         assertTrue(outcomes.all { it is FileOutcome.Synced }, outcomes.toString())
         assertEquals(1, outcomes.count { (it as FileOutcome.Synced).alreadyArchived })
@@ -349,7 +349,7 @@ class SyncEngineTest {
         b.first.files[0] = FakeArchiveDevice.FakeFile(original.name, changed)
         assertIs<FileOutcome.Mismatch>(engine().pull(b, 0))
         assertEquals(0, b.first.readCount)
-        assertContentEquals(original.bytes, finalBytes(a.first.station, original.name))
+        assertContentEquals(original.bytes, finalBytes(a.first.thing, original.name))
         assertEquals(1, index.puts)
     }
 
@@ -358,7 +358,7 @@ class SyncEngineTest {
         val a = device(backgroundScope)
         assertIs<FileOutcome.Synced>(engine().pull(a, 0))
         val file = a.first.files[0]
-        val path = ArchiveLayout.finalPath(ArchiveKey(a.first.station, file.name))
+        val path = ArchiveLayout.finalPath(ArchiveKey(a.first.thing, file.name))
         val corrupted = file.bytes.copyOf().also { it[100] = (it[100].toInt() xor 1).toByte() }
         store.files[path] = corrupted
         val b = device(backgroundScope, "fake-b")
@@ -371,7 +371,7 @@ class SyncEngineTest {
     fun aCorruptedResumablePrefixIsRetriedFromZeroInTheSameDownload() = runTest {
         val d = device(backgroundScope)
         val file = d.first.files[0]
-        val key = ArchiveKey(d.first.station, file.name)
+        val key = ArchiveKey(d.first.thing, file.name)
         val prefix = file.bytes.size / 2
         store.openPartial(key, PartialMeta(file.bytes.size.toLong(), file.crc32)).use { w ->
             w.writeAt(0, file.bytes.copyOfRange(0, prefix).also { it[100] = (it[100].toInt() xor 1).toByte() })
@@ -379,7 +379,7 @@ class SyncEngineTest {
 
         assertIs<FileOutcome.Synced>(engine().pull(d, 0))
 
-        assertContentEquals(file.bytes, finalBytes(key.station, key.name))
+        assertContentEquals(file.bytes, finalBytes(key.thing, key.name))
         assertFalse(hasPartials())
         val fullWindows = (file.bytes.size + d.first.maxRead - 1) / d.first.maxRead
         assertTrue(d.first.readCount > fullWindows, "a clean re-read must follow the corrupt resume")
@@ -390,7 +390,7 @@ class SyncEngineTest {
     fun aCleanPartialResumesFromItsLength() = runTest {
         val d = device(backgroundScope)
         val file = d.first.files[0]
-        val key = ArchiveKey(d.first.station, file.name)
+        val key = ArchiveKey(d.first.thing, file.name)
         store.openPartial(key, PartialMeta(file.bytes.size.toLong(), file.crc32)).use { w -> w.writeAt(0, file.bytes.copyOfRange(0, 16_384)) }
         val progress = ArrayList<FileProgress>()
 
@@ -398,7 +398,7 @@ class SyncEngineTest {
 
         assertEquals(1, d.first.readCount)
         assertEquals(16_384L, progress.first().resumedFrom)
-        assertContentEquals(file.bytes, finalBytes(key.station, key.name))
+        assertContentEquals(file.bytes, finalBytes(key.thing, key.name))
     }
 
     @Test
@@ -411,7 +411,7 @@ class SyncEngineTest {
         assertIs<FileOutcome.Mismatch>(engine().pull(b, 0))
         assertEquals(0, b.first.readCount)
         assertEquals(original.sourceDevice, index.records.single().sourceDevice)
-        assertContentEquals(a.first.files[0].bytes, finalBytes(original.station, original.name))
+        assertContentEquals(a.first.files[0].bytes, finalBytes(original.thing, original.name))
     }
 
     @Test
@@ -430,14 +430,14 @@ class SyncEngineTest {
     fun aFinalThatAppearsBeforeTheCommitIsAdoptedNotReplaced() = runTest {
         val a = device(backgroundScope)
         val file = a.first.files[0]
-        val key = ArchiveKey(a.first.station, file.name)
+        val key = ArchiveKey(a.first.thing, file.name)
         // Another writer committed the same verified bytes after the planner looked, and crashed before indexing.
         store.beforeCommit = { store.files[ArchiveLayout.finalPath(it)] = file.bytes.copyOf() }
 
         val outcome = assertIs<FileOutcome.Synced>(engine().pull(a, 0))
 
         assertTrue(outcome.alreadyArchived)
-        assertContentEquals(file.bytes, finalBytes(key.station, key.name))
+        assertContentEquals(file.bytes, finalBytes(key.thing, key.name))
         assertEquals(key, index.records.single().key)
         assertFalse(hasPartials())
     }
@@ -451,7 +451,7 @@ class SyncEngineTest {
 
         assertIs<FileOutcome.Mismatch>(engine().pull(a, 0))
 
-        assertContentEquals(other, finalBytes(a.first.station, file.name))
+        assertContentEquals(other, finalBytes(a.first.thing, file.name))
         assertTrue(index.records.isEmpty())
     }
 
@@ -482,13 +482,13 @@ class SyncEngineTest {
     }
 
     @Test
-    fun theFooterIsIndexedOutsideTheStationGateOnCommitAndAdopt() = runTest {
+    fun theFooterIsIndexedOutsideTheThingGateOnCommitAndAdopt() = runTest {
         // Gate holders seen by each footer read. The gate must cover only the short row write.
         val heldWhileIndexing = ArrayList<Int>()
         val engine = SyncEngine(
             store,
             index,
-            indexer = { heldWhileIndexing += coordinator.activeStations(); it.copy(rows = 90, indexedAtEpochMs = 2) },
+            indexer = { heldWhileIndexing += coordinator.activeThings(); it.copy(rows = 90, indexedAtEpochMs = 2) },
             windowRetryBackoffMs = 5,
             clock = { 1_000L },
             coordinator = coordinator,
@@ -507,7 +507,7 @@ class SyncEngineTest {
     @Test
     fun anUnsafeNameIsRefusedWithoutOpening() = runTest {
         val d = device(backgroundScope)
-        val outcome = engine().download(d.second, d.first.station, "fake", "../escape.parquet", 12, 4096) {}
+        val outcome = engine().download(d.second, d.first.thing, "fake", "../escape.parquet", 12, 4096) {}
         assertIs<FileOutcome.Failed>(outcome)
         assertEquals(0, d.first.readCount)
     }
@@ -515,7 +515,7 @@ class SyncEngineTest {
     @Test
     fun aCancelledWaiterDoesNotDropAWriterLeaseOrBlockLaterTransfers() = runTest {
         val d = device(backgroundScope)
-        val key = ArchiveKey(d.first.station, d.first.files[0].name)
+        val key = ArchiveKey(d.first.thing, d.first.files[0].name)
         val holding = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         val owner = launch { coordinator.withWriter(key) { holding.complete(Unit); release.await() } }

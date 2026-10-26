@@ -12,13 +12,13 @@ import space.opensensor.data.local.database.PrunedFileEntity
 class RoomPrunedFiles(private val dao: PrunedFileDao) : PrunedFiles {
     override fun observeAll(): Flow<List<PrunedFile>> = dao.observeAll().map { rows -> rows.map { it.toPruned() } }
 
-    override suspend fun forStation(station: String): List<PrunedFile> = dao.forStation(station).map { it.toPruned() }
+    override suspend fun forThing(thing: String): List<PrunedFile> = dao.forThing(thing).map { it.toPruned() }
 
-    override suspend fun put(file: PrunedFile) = dao.upsert(PrunedFileEntity(file.station, file.name, file.bytes, file.crc32, file.prunedAtEpochMs))
+    override suspend fun put(file: PrunedFile) = dao.upsert(PrunedFileEntity(file.thing, file.name, file.bytes, file.crc32, file.prunedAtEpochMs))
 
-    override suspend fun remove(key: ArchiveKey) = dao.delete(key.station, key.name)
+    override suspend fun remove(key: ArchiveKey) = dao.delete(key.thing, key.name)
 
     override suspend fun clear(): Int = dao.clear()
 }
 
-private fun PrunedFileEntity.toPruned() = PrunedFile(station, name, bytes, crc32, prunedAtEpochMs)
+private fun PrunedFileEntity.toPruned() = PrunedFile(thing, name, bytes, crc32, prunedAtEpochMs)

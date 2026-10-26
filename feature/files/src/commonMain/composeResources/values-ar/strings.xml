@@ -109,7 +109,7 @@
     <string name="files_group_benchmarks">اختبارات الأداء</string>
     <string name="files_group_legacy">Parquet قديمة</string>
     <string name="files_group_root">جذر الأرشيف</string>
-    <string name="files_group_station">المحطة %1$s</string>
+    <string name="files_group_thing">المستشعر %1$s</string>
     <string name="files_group_boot">الإقلاع %1$s</string>
     <plurals name="files_group_utc_folders">
         <item quantity="zero">مجلدات UTC %1$s</item>

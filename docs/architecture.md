@@ -12,7 +12,7 @@ flowchart TB
     PR[":core:protocol<br/>common wire rules + JVM adapters"]
     PQ[":core:parquet<br/>reader + writer, ByteReader, RangeSource, page index, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
     NT[":core:net<br/>HTTP range source, OkHttp and NSURLSession"]
-    MO1[":core:model<br/>board templates, app profiles, datastreams, scales, station join"]
+    MO1[":core:model<br/>board templates, app profiles, datastreams, scales, thing join"]
     AQ[":core:airquality<br/>WHO 2021 scales and palette, PM quality checks"]
     HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
     PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample, OpenAQ live feed"]
@@ -83,8 +83,8 @@ the same answer on both phones is shared and platform code only adapts OS servic
 sync engine and one shared collection controller per device (Android through `DeviceFacade`, iOS
 through `SensorCollections`, [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
 iOS Core Bluetooth runs on the `BlePhysicalLink` serial queue. Both phones keep the archive index and
-pruned marks in one Room KMP database, `:core:database`. `:core:model` holds what a station measures
-as data (board template, app profile, datastreams, scales and the station join, #183). No module
+pruned marks in one Room KMP database, `:core:database`. `:core:model` holds what a thing measures
+as data (board template, app profile, datastreams, scales and the thing join, #183). No module
 depends on it yet. History, sync and the screens move onto it from #184 onward.
 
 ```mermaid
@@ -179,7 +179,7 @@ flowchart LR
 | `data/sync/`, `data/archive/` | Android file and Room adapters for the shared planner, collector and engine | files + Room |
 | `data/background/` | `SyncForegroundService`, `SyncNotifications`, `SyncWorker`, `AutoSyncScheduler`, `AutoSyncRunner` (pure), `AppAutoSyncGateway`; triggers `CompanionPresence` + `CompanionPresenceService`, `AdvertFlagScan` + `AdvertScanReceiver`, `SyncTriggers` + `WifiArrivalReceiver` + `BootReceiver` | yes (runner: no) |
 | `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `parquet/AppParquetCodecs` (ZSTD) | Room + files |
-| `data/local/database/` | `AppDatabase` (v10), `KnownDevice`, `StationEpoch`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
+| `data/local/database/` | `AppDatabase` (v1), `KnownDevice`, `ThingEpoch`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
 | `data/settings/AppSettings.kt` | Android view of `:core:settings` (`DetailLevel` Simple · Detailed · Developer, units, public sensors) | yes |
 | `data/fake/FakeTransport.kt` | in-process proto 3 device with fault hooks | no (JVM) |
 | `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose. `ui/files` hosts the shared Files and inspector screens (`:feature:files`) with the Android slots and the chart by file. `Navigation.kt` supplies the Android entries to the shared `AppShell` (`:feature:shell`) | yes |
@@ -198,7 +198,7 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `units`, `airquality` | Display units, axis ticks, WHO 2021 scales and the PM quality checks (`QcRules`) |
 | `storage` | Durable/Derived/Scratch roots, atomic no-replace commits, free-space budget, quota and memory pressure |
 | `archive` | Layout, verifier, records and store/index ports. Android uses file adapters, iosMain supplies `IosArchiveStore` and `LegacyReceiptImport` |
-| `database` | Room KMP schema v12 (`AppDatabase`, entities, DAOs) on the bundled SQLite driver, `RoomArchiveIndex` and `RoomPrunedFiles` for both phones. iosMain opens `Application Support/database/opensensor.db` through `IosArchiveDatabase` |
+| `database` | Room KMP schema v1 (`AppDatabase`, entities, DAOs) on the bundled SQLite driver, `RoomArchiveIndex` and `RoomPrunedFiles` for both phones. iosMain opens `Application Support/database/opensensor.db` through `IosArchiveDatabase` |
 | `sync` | `LinkSession`, typed `DeviceSession` views, `SyncEngine`, `ArchiveCollector`, `CollectionController`, policies, progress and `StorageJanitor` |
 | `settings` | Shared DataStore preferences, keys and detail level. iOS supplies its Application Support path and one-time UserDefaults import |
 
@@ -270,7 +270,7 @@ the same phone. This phone policy is separate from firmware's independent peer h
 The owner contract is [`../aq-parquet/docs/shared/ble-sync-protocol.md`](../../aq-parquet/docs/shared/ble-sync-protocol.md).
 
 The archive's one `DeviceCoordinator` (`core/sync`), through its writer lease in `SyncEngine`, serializes the entire OPEN/read/verify/commit/index/CLOSE sequence for
-one `(station, name)`, with cancellable waiters; different identities transfer independently.
+one `(thing, name)`, with cancellable waiters; different identities transfer independently.
 An existing destination must verify against OPENED size/CRC/PAR1 and its recorded SHA-256 before
 reuse. A conflict preserves existing bytes and provenance; commit refuses to replace a destination.
 Reuse returns `alreadyArchived` so background summaries count only newly collected files. Hive
@@ -285,7 +285,7 @@ new Android plumbing have **not been verified on hardware**. Historical phone me
 in the [CoreS3 bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md).
 
 History derives a grouped day once with `DayPass`, producing tiers and daily Parquet.
-Android uses derive version 5. Its collection plans use projected station archive identities rather
+Android uses derive version 5. Its collection plans use projected thing archive identities rather
 than full history rows. iOS persists tiers and enforces the derived quota after building.
 The [host benchmark](perf/history-2026-10-11.md) measures allocation on a synthetic corpus,
 not phone cold-open latency or a qualified latency improvement.
@@ -302,7 +302,7 @@ not phone cold-open latency or a qualified latency improvement.
 | `CollectionState` / `SyncProgress` | facade UI projections, Files, service and worker | `CollectionControllerTest`, facade tests, lease accounting and notification text |
 | Manager/controller ownership, transfer budget | address-bound ViewModels, runner, worker, foreground service | `DeviceOwnershipTest`, `AutoSyncRunnerTest`, cancellation and per-device progress |
 | `DeviceCoordinator` admission and writer leases / immutable commit | `SyncEngine`, partial resume, janitor, index repair, old file cleanup, archive index and export | `DeviceCoordinatorTest`, `ConcurrentArchiveTest`, `SyncEngineTest`; preserve existing files on conflicts |
-| `HistoryStartup` and `HistoryOrchestrator` pass order | janitor, feed block quota, back-fill and its retry, time estimates and every derive pass on both phones | `HistoryOrchestratorTest`, `AppStartupTest`, `IosArchiveStartupTest`, `TierStoreTest`, `StationDaysTest` |
+| `HistoryStartup` and `HistoryOrchestrator` pass order | janitor, feed block quota, back-fill and its retry, time estimates and every derive pass on both phones | `HistoryOrchestratorTest`, `AppStartupTest`, `IosArchiveStartupTest`, `TierStoreTest`, `ThingDaysTest` |
 | LAN transfer leases / shared mDNS resolver | all interactive and worker LAN transfers | `LanTransferLeasesTest`; phone checks on API 31–33 and screen-off LAN |
 | `DetailLevel` | every screen's `detailed`/`advancedMode` gate, Debug destination | migration from `advanced_mode` |
 

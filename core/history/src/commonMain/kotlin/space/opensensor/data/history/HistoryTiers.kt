@@ -24,7 +24,7 @@ data class TierBucket(
     }
 }
 
-/** The UTC days that hold derived data for one station: how many, the first and the last (epoch seconds of UTC midnight). */
+/** The UTC days that hold derived data for one thing: how many, the first and the last (epoch seconds of UTC midnight). */
 data class DaySpan(val count: Int = 0, val firstDayS: Long? = null, val lastDayS: Long? = null)
 
 /**
@@ -34,13 +34,13 @@ data class DaySpan(val count: Int = 0, val firstDayS: Long? = null, val lastDayS
  */
 interface HistoryTiers {
     /** Buckets of [tier] for [metricId] whose start is in `[fromS, toS)`, oldest first. Re-emits when the tiers change. */
-    fun observe(station: String, metricId: String, tier: Resolution, fromS: Long, toS: Long): Flow<List<TierBucket>>
+    fun observe(thing: String, metricId: String, tier: Resolution, fromS: Long, toS: Long): Flow<List<TierBucket>>
 
-    /** Days with any day-tier bucket for [station]. */
-    fun observeDays(station: String): Flow<DaySpan>
+    /** Days with any day-tier bucket for [thing]. */
+    fun observeDays(thing: String): Flow<DaySpan>
 
-    /** Metric ids with at least one valid row in a day-tier bucket of [station]. */
-    fun observeMetricsWithData(station: String): Flow<Set<String>>
+    /** Metric ids with at least one valid row in a day-tier bucket of [thing]. */
+    fun observeMetricsWithData(thing: String): Flow<Set<String>>
 }
 
 /** The tier rows of one aggregated [Bucket], one per metric that had values. */

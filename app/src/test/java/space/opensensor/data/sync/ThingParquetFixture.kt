@@ -8,12 +8,12 @@ import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetWriter
 import java.io.ByteArrayOutputStream
 
-/** Rebuild a real telemetry fixture for a simulated producer, keeping its columns and readings. [station] goes in the `opensensor` footer. */
-internal fun stationParquetFixture(bytes: ByteArray, station: String): ByteArray {
+/** Rebuild a real telemetry fixture for a simulated producer, keeping its columns and readings. [thing] goes in the `opensensor` footer. */
+internal fun thingParquetFixture(bytes: ByteArray, thing: String): ByteArray {
     val source = ParquetFile.wrap(bytes)
     val kv = source.metadata.keyValueMetadata
     val own = OpenSensorFooter.of(kv)
-    val footer = opensensorFooterJson(own?.dictionarySha256, own?.templateSha256, own?.sampleIntervalMs, station = station, purpose = own?.purpose ?: "telemetry")
+    val footer = opensensorFooterJson(own?.dictionarySha256, own?.templateSha256, own?.sampleIntervalMs, thing = thing, purpose = own?.purpose ?: "telemetry")
     val output = ByteArrayOutputStream()
     val writer = ParquetWriter(
         output,

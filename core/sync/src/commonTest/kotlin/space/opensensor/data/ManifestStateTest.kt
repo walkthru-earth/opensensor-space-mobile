@@ -71,8 +71,8 @@ class ManifestStateTest {
 
     @Test
     fun retainedOrLaggingPlansCannotConfirmAllFilesSynced() {
-        val archived = files.map { ArchivedIdentity("station", it.name, it.bytes, 0) }
-        val plan = SyncPlanner.plan("station", files, archived)
+        val archived = files.map { ArchivedIdentity("thing", it.name, it.bytes, 0) }
+        val plan = SyncPlanner.plan("thing", files, archived)
         assertTrue(loaded.confirmsAllSynced(plan))
         assertFalse(loaded.refreshing().confirmsAllSynced(plan))
         assertFalse(loaded.failed("card scan failed").confirmsAllSynced(plan))
@@ -85,19 +85,19 @@ class ManifestStateTest {
 
     @Test
     fun noDownloadableFilesDoesNotMeanEveryFileIsVerified() {
-        val plan = SyncPlanner.plan("station", files, emptyList())
+        val plan = SyncPlanner.plan("thing", files, emptyList())
         val invalid = plan.copy(entries = plan.entries.map { it.copy(state = FileSyncState.INVALID_NAME) }, toDownload = emptyList())
         val mismatch = plan.copy(entries = plan.entries.map { it.copy(state = FileSyncState.MISMATCH) }, toDownload = emptyList())
         assertFalse(loaded.confirmsAllSynced(invalid))
         assertFalse(loaded.confirmsAllSynced(mismatch))
         val empty = ManifestState.Loaded(emptyList(), end.copy(count = 0), 2_000L)
-        assertFalse(empty.confirmsAllSynced(SyncPlanner.plan("station", emptyList(), emptyList())))
+        assertFalse(empty.confirmsAllSynced(SyncPlanner.plan("thing", emptyList(), emptyList())))
     }
 
     @Test
     fun filesRemovedFromThePhoneCountAsDone() {
-        val pruned = files.map { PrunedFile("station", it.name, it.bytes, 0, 1) }
-        val plan = SyncPlanner.plan("station", files, emptyList(), pruned = pruned)
+        val pruned = files.map { PrunedFile("thing", it.name, it.bytes, 0, 1) }
+        val plan = SyncPlanner.plan("thing", files, emptyList(), pruned = pruned)
         assertTrue(plan.entries.all { it.state == FileSyncState.REMOVED })
         assertTrue(loaded.confirmsAllSynced(plan))
     }

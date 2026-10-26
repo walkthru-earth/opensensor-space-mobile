@@ -43,11 +43,11 @@ class CompanionTodaySourceTest {
         calls: Calls,
         notices: MutableList<TodayNotice>,
         todaySoFar: Flow<TodaySoFar?> = flowOf(null),
-        stationFor: (String) -> String? = { null },
+        thingFor: (String) -> String? = { null },
     ): CompanionTodaySource {
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
         state.clock = { 1_000L }
-        val source = CompanionTodaySource(scope, state, "device", MutableStateFlow(emptyList()), todaySoFar, calls.actions, stationFor)
+        val source = CompanionTodaySource(scope, state, "device", MutableStateFlow(emptyList()), todaySoFar, calls.actions, thingFor)
         scope.launch { source.notices.collect { notices += it } }
         return source
     }
@@ -73,7 +73,7 @@ class CompanionTodaySourceTest {
         assertEquals("OS-kitchen", snapshot.name)
         assertEquals(ConnectionState.Ready(0), snapshot.connection)
         assertEquals(TransportKind.BLE, snapshot.transport)
-        assertEquals("st", snapshot.info?.station)
+        assertEquals("st", snapshot.info?.thing)
         assertNull(snapshot.status)
         assertNull(snapshot.live)
         assertNull(snapshot.liveAtEpochMs)
@@ -90,7 +90,7 @@ class CompanionTodaySourceTest {
     @Test fun knownSensorUsesAuthenticatedLanSnapshotWithoutBluetooth() = runTest {
         val state = CompanionState()
         val calls = Calls()
-        val source = source(state, calls, mutableListOf(), stationFor = { "st" })
+        val source = source(state, calls, mutableListOf(), thingFor = { "st" })
         state.lanSessionNoticed("OS-kitchen", true, false, CompanionNotice.LAN_CONNECTED, 0, 0, 0, 0.0)
         state.lanInfoReceived("OS-kitchen", "{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}")
         state.lanStatusReceived("OS-kitchen", "{\"utc\":1,\"clk\":1}")
@@ -99,7 +99,7 @@ class CompanionTodaySourceTest {
 
         assertEquals(ConnectionState.Ready(0), source.snapshot.value.connection)
         assertEquals(TransportKind.LAN, source.snapshot.value.transport)
-        assertEquals("st", source.snapshot.value.info?.station)
+        assertEquals("st", source.snapshot.value.info?.thing)
         assertEquals(12.0, source.snapshot.value.live?.get("pm25"))
         source.sync()
         assertEquals(listOf("sync"), calls.list)
@@ -111,7 +111,7 @@ class CompanionTodaySourceTest {
 
     @Test fun lanHandshakeIsNotCollectionAndCompletionStaysOnToday() = runTest {
         val state = CompanionState()
-        val source = source(state, Calls(), mutableListOf(), stationFor = { "st" })
+        val source = source(state, Calls(), mutableListOf(), thingFor = { "st" })
         state.lanSessionNoticed("OS-kitchen", true, true, CompanionNotice.LAN_CONNECTING, 0, 0, 0, 0.0)
         state.lanInfoReceived("OS-kitchen", "{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}")
         settle(this)
@@ -133,7 +133,7 @@ class CompanionTodaySourceTest {
 
     @Test fun closedLanSyncNeverLooksCaughtUp() = runTest {
         val state = CompanionState()
-        val source = source(state, Calls(), mutableListOf(), stationFor = { "st" })
+        val source = source(state, Calls(), mutableListOf(), thingFor = { "st" })
         state.lanSessionNoticed("OS-kitchen", true, false, CompanionNotice.LAN_CONNECTED, 0, 0, 0, 0.0)
         state.lanInfoReceived("OS-kitchen", "{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}")
         state.lanSyncStarted("OS-kitchen")
@@ -231,7 +231,7 @@ class CompanionTodaySourceTest {
         val state = connected("{\"utc\":0,\"clk\":0}")
         state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
         val calls = Calls()
-        // The other sensor's day, as a station flow that is not guarded would read it.
+        // The other sensor's day, as a thing flow that is not guarded would read it.
         val source = source(state, calls, mutableListOf(), flowOf(TodaySoFar(30f, 12, 0.5f)))
         state.connectionStarted("other")
         assertTrue(state.receiveInfo("{\"proto\":3,\"dev\":\"665544332211\",\"station\":\"st2\"}"))

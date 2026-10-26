@@ -30,26 +30,26 @@ import space.opensensor.storage.StorageTree
  */
 class AppStartupTest {
     private object EmptyStore : ArchiveStore {
-        override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
+        override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = false
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader = error("no files")
         override suspend fun commit(key: ArchiveKey) = Unit
-        override suspend fun listFinal(station: String?): List<ArchiveKey> = emptyList()
+        override suspend fun listFinal(thing: String?): List<ArchiveKey> = emptyList()
     }
 
     private object EmptyIndex : ArchiveIndex {
         override fun observeAll(): Flow<List<ArchiveRecord>> = flowOf(emptyList())
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = flowOf(emptyList())
+        override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = flowOf(emptyList())
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = null
         override suspend fun put(record: ArchiveRecord) = Unit
         override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) = Unit
         override suspend fun remove(key: ArchiveKey) = Unit
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = emptyList()
-        override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = emptyList()
-        override suspend fun stations(): List<String> = emptyList()
+        override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
+        override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = emptyList()
+        override suspend fun things(): List<String> = emptyList()
     }
 
     private object NoTree : StorageTree {

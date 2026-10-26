@@ -23,10 +23,10 @@ internal class CompanionToday(val state: CompanionState, val actions: CompanionL
  * same reader History uses.
  */
 private class TodayHolder(today: CompanionToday, devices: DevicesBridge, address: String, settings: SettingsRepository) : ViewModel() {
-    // The one link may hold another sensor. Its station must not fill this sensor's Today so far.
-    private val station = snapshotFlow {
-        val lan = today.state.connectedLanForStation(devices.stationFor(address))
-        lan?.let(today.state.lanInfo::get)?.station ?: today.state.info?.station?.takeIf { today.state.selectedId == address }
+    // The one link may hold another sensor. Its thing must not fill this sensor's Today so far.
+    private val thing = snapshotFlow {
+        val lan = today.state.connectedLanForThing(devices.thingFor(address))
+        lan?.let(today.state.lanInfo::get)?.thing ?: today.state.info?.thing?.takeIf { today.state.selectedId == address }
     }
     val controller = TodayController(
         scope = viewModelScope,
@@ -35,9 +35,9 @@ private class TodayHolder(today: CompanionToday, devices: DevicesBridge, address
             state = today.state,
             address = address,
             archive = IosArchive.index.observeAll(),
-            todaySoFar = todaySoFar(station, IosArchive.reader::observeHourlyDay),
+            todaySoFar = todaySoFar(thing, IosArchive.reader::observeHourlyDay),
             actions = today.actions,
-            stationFor = devices::stationFor,
+            thingFor = devices::thingFor,
             nameFor = devices::nameFor,
         ),
         detailLevel = settings.detailLevel,

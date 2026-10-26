@@ -17,7 +17,7 @@ import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.local.database.MetricBucketDao
 import space.opensensor.data.local.database.PrunedFileDao
 import space.opensensor.data.local.database.SensorInstallationDao
-import space.opensensor.data.local.database.StationEpochDao
+import space.opensensor.data.local.database.ThingEpochDao
 import space.opensensor.data.local.database.openAppDatabase
 import space.opensensor.data.local.security.LanCredentialStore
 import space.opensensor.data.local.security.LanTokenCipher
@@ -57,7 +57,7 @@ class DatabaseModule {
     fun provideDerivedDayDao(db: AppDatabase): DerivedDayDao = db.derivedDayDao()
 
     @Provides
-    fun provideStationEpochDao(db: AppDatabase): StationEpochDao = db.stationEpochDao()
+    fun provideThingEpochDao(db: AppDatabase): ThingEpochDao = db.thingEpochDao()
 
     @Provides
     fun provideSensorInstallationDao(db: AppDatabase): SensorInstallationDao = db.sensorInstallationDao()

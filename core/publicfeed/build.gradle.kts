@@ -16,11 +16,11 @@ kotlin {
             api(project(":core:storage"))
             // The WHO 2021 HealthScale of a WHO cited step scale (StepScale.who) for the mood surfaces.
             api(project(":core:airquality"))
-            // The discover Collection is read with the shared STAC model (Scale, StationCollection).
+            // The discover Collection is read with the shared STAC model (Scale, ThingCollection).
             api(project(":core:model"))
             // OpenAqAggregatesFeed takes an HttpRangeEngine and reads through HttpRangeSource.
             api(project(":core:net"))
-            // Daily rows carry a station local date (CellRow.date, DailyCellFold).
+            // Daily rows carry a thing local date (CellRow.date, DailyCellFold).
             api(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
         }

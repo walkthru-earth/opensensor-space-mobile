@@ -12,31 +12,31 @@ import space.opensensor.data.local.database.ArchivedFileDao
 class RoomArchiveIndex(private val dao: ArchivedFileDao) : ArchiveIndex {
     override fun observeAll(): Flow<List<ArchiveRecord>> = dao.observeAll().map { rows -> rows.map { it.toRecord() } }
 
-    override fun observeStation(station: String): Flow<List<ArchiveRecord>> = dao.observeForStation(station).map { rows -> rows.map { it.toRecord() } }
+    override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = dao.observeForThing(thing).map { rows -> rows.map { it.toRecord() } }
 
     override fun observeNeverIndexed(): Flow<Boolean> = dao.observeAnyNeverIndexed().distinctUntilChanged()
 
     override fun observeLatestTimed(): Flow<Map<String, Long?>> =
-        dao.observeLatestTimed().map { rows -> rows.associate { it.station to it.lastNs } }.distinctUntilChanged()
+        dao.observeLatestTimed().map { rows -> rows.associate { it.thing to it.lastNs } }.distinctUntilChanged()
 
-    override suspend fun get(key: ArchiveKey): ArchiveRecord? = dao.get(key.station, key.name)?.toRecord()
+    override suspend fun get(key: ArchiveKey): ArchiveRecord? = dao.get(key.thing, key.name)?.toRecord()
 
     override suspend fun put(record: ArchiveRecord) = dao.upsert(record.toEntity())
 
-    /** One `INSERT OR IGNORE` on the unique (station, name) index, so a concurrent engine record wins (#60). */
+    /** One `INSERT OR IGNORE` on the unique (thing, name) index, so a concurrent engine record wins (#60). */
     override suspend fun putIfAbsent(record: ArchiveRecord): Boolean = dao.insertIfAbsent(record.toEntity()) != -1L
 
     /** Read and write in one Room transaction, not the port's default get then put (#60). */
     override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) =
-        dao.update(key.station, key.name) { row -> transform(row.toRecord()).toEntity(row.id) }
+        dao.update(key.thing, key.name) { row -> transform(row.toRecord()).toEntity(row.id) }
 
-    override suspend fun remove(key: ArchiveKey) = dao.delete(key.station, key.name)
+    override suspend fun remove(key: ArchiveKey) = dao.delete(key.thing, key.name)
 
     override suspend fun unindexed(limit: Int): List<ArchiveRecord> = dao.unindexed(limit).map { it.toRecord() }
 
-    override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = dao.withUtcBetween(station, fromNs, toNs).map { it.toRecord() }
+    override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = dao.withUtcBetween(thing, fromNs, toNs).map { it.toRecord() }
 
-    override suspend fun indexedForStation(station: String): List<ArchiveRecord> = dao.indexedForStation(station).map { it.toRecord() }
+    override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = dao.indexedForThing(thing).map { it.toRecord() }
 
-    override suspend fun stations(): List<String> = dao.stations()
+    override suspend fun things(): List<String> = dao.things()
 }

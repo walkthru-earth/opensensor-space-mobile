@@ -103,8 +103,8 @@ class ArchiveCollector(
     private val budget: StorageBudget,
     private val time: TimeSource.WithComparableMarks = TimeSource.Monotonic,
     /** A fresh planner snapshot. Adapters can project identity columns without loading history. */
-    private val archivedIdentities: suspend (String) -> List<ArchivedIdentity> = { station ->
-        index.observeStation(station).first().map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
+    private val archivedIdentities: suspend (String) -> List<ArchivedIdentity> = { thing ->
+        index.observeThing(thing).first().map { ArchivedIdentity(it.thing, it.name, it.bytes, it.crc32) }
     },
 ) {
     /** The engine's coordinator, the one owner of this archive's admission, locks and tombstones. */
@@ -113,15 +113,15 @@ class ArchiveCollector(
 
     suspend fun collect(
         session: DeviceSession,
-        station: String,
+        thing: String,
         sourceDevice: String,
         maxRead: Int,
         onlyName: String? = null,
         onProgress: (CollectionProgress) -> Unit,
     ): CollectionSummary {
         val (files, _) = session.list()
-        val planned = plan(station, files, onlyName)
-        return transfer(session, planned, station, sourceDevice, maxRead, onProgress = onProgress)
+        val planned = plan(thing, files, onlyName)
+        return transfer(session, planned, thing, sourceDevice, maxRead, onProgress = onProgress)
     }
 
     /**
@@ -129,13 +129,13 @@ class ArchiveCollector(
      * [onlyName] narrows the run to that listed file. Throws [InsufficientSpaceException] when
      * the missing bytes do not fit, before anything is opened.
      */
-    suspend fun plan(station: String, files: List<Frame.File>, onlyName: String? = null): PlannedCollection {
+    suspend fun plan(thing: String, files: List<Frame.File>, onlyName: String? = null): PlannedCollection {
         val scopedFiles = if (onlyName == null) files else files.filter { it.name == onlyName }
         if (onlyName != null && scopedFiles.isEmpty()) {
             return PlannedCollection(SyncPlan(emptyList(), emptyList()), listOf(FileNotSaved(onlyName, FileProblem.REFUSED)), unlisted = true)
         }
-        val archived = archivedIdentities(station)
-        val plan = SyncPlanner.plan(station, scopedFiles, archived, store.partialLengths(station), pruned.forStation(station))
+        val archived = archivedIdentities(thing)
+        val plan = SyncPlanner.plan(thing, scopedFiles, archived, store.partialLengths(thing), pruned.forThing(thing))
         // Only a whole listing proves a name is gone. A record that cannot be dropped stays until the
         // next run, which never stops this one, since the device does not list that file now.
         if (onlyName == null) plan.unlistedRemoved.forEach { forgetRemoved(it) }
@@ -167,7 +167,7 @@ class ArchiveCollector(
     suspend fun transfer(
         session: DeviceSession,
         planned: PlannedCollection,
-        station: String,
+        thing: String,
         sourceDevice: String,
         maxRead: Int,
         onOutcome: (FileOutcome) -> Unit = {},
@@ -186,7 +186,7 @@ class ArchiveCollector(
         onProgress(CollectionProgress(done, total, 0, 0, 0.0, bytesTotal))
         for ((at, entry) in plan.toDownload.withIndex()) {
             val before = received
-            val outcome = engine.download(session, station, sourceDevice, entry.name, entry.bytes, maxRead, onSettled = { settled ->
+            val outcome = engine.download(session, thing, sourceDevice, entry.name, entry.bytes, maxRead, onSettled = { settled ->
                 outcomes += settled
                 onOutcome(settled)
             }) { p ->

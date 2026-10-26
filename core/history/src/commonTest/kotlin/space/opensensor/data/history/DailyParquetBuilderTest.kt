@@ -21,7 +21,7 @@ internal fun dailyFixture(open: (ByteArray) -> ParquetFile = { ParquetFile.wrap(
     val index = ParquetIndexer.index(file, templates = CoreS3Files)
     val anchor = TimeEstimate.Anchor(index.bootId!!, 1_788_912_000_123_456_000L, index.lastMonoUs!!, "clock:receipt")
     val record = ArchiveRecord(
-        file.metadata.footer?.stationId ?: "station-a", "raw.parquet", 1, 123, "hash", 1, "device",
+        file.metadata.footer?.thingId ?: "thing-a", "raw.parquet", 1, 123, "hash", 1, "device",
         indexedAtEpochMs = 1, rows = index.rows, bootId = index.bootId, utcRows = 0,
         firstMonoUs = index.firstMonoUs, lastMonoUs = index.lastMonoUs,
         estFirstUtcNs = anchor.estimateNs(index.firstMonoUs!!), estLastUtcNs = anchor.utcNs, estAnchorFile = anchor.sourceFile,
@@ -79,16 +79,16 @@ class DailyParquetBuilderTest {
             override fun write(bytes: ByteArray): Unit = throw CancellationException("cancelled")
         }
         assertFailsWith<CancellationException> {
-            DayPass.run(source.record.station, StationDays.dayOf(anchor.utcNs), listOf(source), sink, mapOf(anchor.boot to anchor), 0, templates = CoreS3Files)
+            DayPass.run(source.record.thing, ThingDays.dayOf(anchor.utcNs), listOf(source), sink, mapOf(anchor.boot to anchor), 0, templates = CoreS3Files)
         }
     }
 
     @Test
     fun aFailedDailySinkKeepsTiersWithoutTimingAgain() {
         val (fixture, anchor) = dailyFixture()
-        val day = StationDays.dayOf(anchor.utcNs)
+        val day = ThingDays.dayOf(anchor.utcNs)
         val anchors = mapOf(anchor.boot to anchor)
-        val expected = DayPass.run(fixture.record.station, day, listOf(fixture), null, anchors, 0, templates = CoreS3Files).buckets
+        val expected = DayPass.run(fixture.record.thing, day, listOf(fixture), null, anchors, 0, templates = CoreS3Files).buckets
         for (failOnFlush in listOf(false, true)) {
             val counter = OpenSources()
             val (source, _) = dailyFixture { ParquetFile.open(counter.reader(it), "raw.parquet") }
@@ -97,7 +97,7 @@ class DailyParquetBuilderTest {
                 override fun write(bytes: ByteArray) { if (!failOnFlush) throw failure }
                 override fun flush(): Unit = throw failure
             }
-            val pass = DayPass.run(source.record.station, day, listOf(source), sink, anchors, 0, templates = CoreS3Files)
+            val pass = DayPass.run(source.record.thing, day, listOf(source), sink, anchors, 0, templates = CoreS3Files)
             assertEquals(expected, pass.buckets)
             assertNull(pass.daily)
             assertEquals(failure, pass.dailyError)
@@ -114,7 +114,7 @@ class DailyParquetBuilderTest {
         val (source, anchor) = dailyFixture { ParquetFile.open(counter.reader(it), "raw.parquet") }
         val sources = (0 until 12).map { n -> source.copy(record = source.record.copy(name = "raw-$n.parquet")) }
         val result = assertNotNull(
-            DailyParquetBuilder.build(source.record.station, StationDays.dayOf(anchor.utcNs), sources, DailyBuffer(), mapOf(anchor.boot to anchor), anchor.utcNs / 1_000_000_000L + 100_000L)
+            DailyParquetBuilder.build(source.record.thing, ThingDays.dayOf(anchor.utcNs), sources, DailyBuffer(), mapOf(anchor.boot to anchor), anchor.utcNs / 1_000_000_000L + 100_000L)
         )
         assertEquals(12, result.sources.size, "every source stays in the manifest")
         // The copies are duplicates, so only the first gives rows and is opened again for its columns.
@@ -134,7 +134,7 @@ class DailyParquetBuilderTest {
         }
         val sources = (0 until 5).map { n -> source.copy(record = source.record.copy(name = "raw-$n.parquet")) }
         assertFailsWith<ParquetFormatException> {
-            DailyParquetBuilder.build(source.record.station, StationDays.dayOf(anchor.utcNs), sources, DailyBuffer(), mapOf(anchor.boot to anchor), anchor.utcNs / 1_000_000_000L)
+            DailyParquetBuilder.build(source.record.thing, ThingDays.dayOf(anchor.utcNs), sources, DailyBuffer(), mapOf(anchor.boot to anchor), anchor.utcNs / 1_000_000_000L)
         }
         assertEquals(2, counter.opened)
         assertEquals(0, counter.open, "the sources read before the failure are closed")
@@ -143,15 +143,15 @@ class DailyParquetBuilderTest {
     @Test
     fun aSourceThatFailsToReopenForTheFileFailsTheFileButKeepsTheTiers() {
         val (fixture, anchor) = dailyFixture()
-        val day = StationDays.dayOf(anchor.utcNs)
+        val day = ThingDays.dayOf(anchor.utcNs)
         val anchors = mapOf(anchor.boot to anchor)
-        val expected = DayPass.run(fixture.record.station, day, listOf(fixture), null, anchors, 0, templates = CoreS3Files).buckets
+        val expected = DayPass.run(fixture.record.thing, day, listOf(fixture), null, anchors, 0, templates = CoreS3Files).buckets
         var calls = 0
         val (source, _) = dailyFixture { bytes ->
             if (++calls == 2) throw ParquetFormatException("gone")
             ParquetFile.wrap(bytes)
         }
-        val pass = DayPass.run(source.record.station, day, listOf(source), DailyBuffer(), anchors, 0, templates = CoreS3Files)
+        val pass = DayPass.run(source.record.thing, day, listOf(source), DailyBuffer(), anchors, 0, templates = CoreS3Files)
         assertEquals(expected, pass.buckets)
         assertNull(pass.daily)
         assertEquals(listOf(source.record), pass.failedSources, "the caller must not cache these tiers as current")
@@ -159,7 +159,7 @@ class DailyParquetBuilderTest {
 
         calls = 0
         assertFailsWith<ParquetFormatException> {
-            DailyParquetBuilder.build(source.record.station, day, listOf(source), DailyBuffer(), anchors, 0)
+            DailyParquetBuilder.build(source.record.thing, day, listOf(source), DailyBuffer(), anchors, 0)
         }
     }
 
@@ -169,7 +169,7 @@ class DailyParquetBuilderTest {
         val other = fixtureBytes("parquet/device/v1-none-90rows-dated.parquet")
         var calls = 0
         val source = DailyParquetSource(fixture.record) { if (++calls == 1) fixture.open() else ParquetFile.wrap(other) }
-        val pass = DayPass.run(source.record.station, StationDays.dayOf(anchor.utcNs), listOf(source), DailyBuffer(), mapOf(anchor.boot to anchor), 0, templates = CoreS3Files)
+        val pass = DayPass.run(source.record.thing, ThingDays.dayOf(anchor.utcNs), listOf(source), DailyBuffer(), mapOf(anchor.boot to anchor), 0, templates = CoreS3Files)
         assertNull(pass.daily)
         assertEquals(listOf(source.record), pass.failedSources)
         assertTrue(pass.dailyError?.message.orEmpty().contains("changed"), pass.dailyError.toString())
@@ -182,17 +182,17 @@ class DailyParquetBuilderTest {
         val bytes = fixtureBytes("parquet/device/v3-board-2rg-180rows.parquet")
         val file = ParquetFile.wrap(bytes)
         val index = ParquetIndexer.index(file, templates = CoreS3Files)
-        val station = file.metadata.footer?.stationId ?: "station-a"
+        val thing = file.metadata.footer?.thingId ?: "thing-a"
         fun record(name: String) = ArchiveRecord(
-            station, name, bytes.size.toLong(), 1, "sha-$name", 1, "fixture", indexedAtEpochMs = 1, rows = index.rows,
+            thing, name, bytes.size.toLong(), 1, "sha-$name", 1, "fixture", indexedAtEpochMs = 1, rows = index.rows,
             bootId = index.bootId, utcRows = index.utcRows, firstUtcNs = index.firstUtcNs, lastUtcNs = index.lastUtcNs,
         )
         val sources = listOf(DailyParquetSource(record("a.parquet")) { events += "open"; ParquetFile.wrap(bytes) })
         val sink = object : ParquetSink {
             override fun write(bytes: ByteArray) { events += "write" }
         }
-        val day = StationDays.dayOf(index.firstUtcNs!!)
-        assertNotNull(DailyParquetBuilder.build(station, day, sources, sink, emptyMap(), 0))
+        val day = ThingDays.dayOf(index.firstUtcNs!!)
+        assertNotNull(DailyParquetBuilder.build(thing, day, sources, sink, emptyMap(), 0))
         // Timing open, then the header, then the column decode, then the row groups.
         assertEquals("open", events.first())
         val second = events.indexOf("open").let { first -> events.withIndex().first { it.index > first && it.value == "open" }.index }
@@ -202,7 +202,7 @@ class DailyParquetBuilderTest {
     @Test
     fun realUnsyncedRowsRepartitionAcrossMidnightWithMicrosecondPrecisionAndNoDuplicates() {
         val (source, anchor) = dailyFixture()
-        val anchorDay = StationDays.dayOf(anchor.utcNs)
+        val anchorDay = ThingDays.dayOf(anchor.utcNs)
         var totalRows = 0L
         val expected = source.open().use { it.readColumn(ParquetIndexer.MONO) }.longValues().map(anchor::estimateNs).sorted()
         val actual = mutableListOf<Long>()
@@ -210,7 +210,7 @@ class DailyParquetBuilderTest {
             val sink = DailyBuffer()
             val result = assertNotNull(
                 DailyParquetBuilder.build(
-                    source.record.station,
+                    source.record.thing,
                     day,
                     listOf(source, source.copy(record = source.record.copy(name = "duplicate.parquet"))),
                     sink,
@@ -225,7 +225,7 @@ class DailyParquetBuilderTest {
             assertEquals(ParquetLogicalType.TimeUnit.MICROS, file.metadata.leaf(DailyParquetBuilder.ESTIMATED_UTC)!!.timestampUtcUnit)
             // Stored in microseconds, compared on the nanosecond timeline.
             val times = file.readColumn(DailyParquetBuilder.ESTIMATED_UTC).longValues().map { it * 1_000L }
-            assertTrue(times.all { StationDays.dayOf(it) == day })
+            assertTrue(times.all { ThingDays.dayOf(it) == day })
             assertEquals(times.sorted(), times)
             actual += times
             assertTrue(result.complete)
@@ -244,8 +244,8 @@ class DailyParquetBuilderTest {
         val wrongBoot = anchor.copy(boot = "0".repeat(32))
         assertNull(
             DailyParquetBuilder.build(
-                source.record.station,
-                StationDays.dayOf(anchor.utcNs),
+                source.record.thing,
+                ThingDays.dayOf(anchor.utcNs),
                 listOf(source),
                 DailyBuffer(),
                 mapOf(anchor.boot to wrongBoot),

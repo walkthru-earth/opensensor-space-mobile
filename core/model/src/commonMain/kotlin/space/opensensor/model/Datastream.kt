@@ -25,8 +25,8 @@ data class Sensor(val procedure: String, val board: String? = null) {
 
 /**
  * One column of a board template, or one datastream the phone derives from columns. It carries only
- * template facts. Titles and scales come from the station Collection and labels and display steps from
- * the app profile, see [StationDatastream].
+ * template facts. Titles and scales come from the thing Collection and labels and display steps from
+ * the app profile, see [ThingDatastream].
  *
  * [name] is the datastream id. For a stored column it is the column name. For a derived datastream
  * ([derived] set) it is its own id and [sourceColumns] lists the stored columns it reads.

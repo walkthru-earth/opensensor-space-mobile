@@ -92,10 +92,10 @@ internal class IosDeviceConfigSource(
     /** This sensor's hardware id from the authenticated LAN session or the open Bluetooth link. */
     private fun device(): String? =
         state.info?.dev?.takeIf { state.connected && state.selectedId.equals(address, ignoreCase = true) }
-            ?: state.connectedLanForStation(devices.stationFor(address))?.let { state.lanInfo[it]?.dev }
+            ?: state.connectedLanForThing(devices.thingFor(address))?.let { state.lanInfo[it]?.dev }
 
     private val companion = snapshotFlow {
-        val lan = state.connectedLanForStation(devices.stationFor(address))
+        val lan = state.connectedLanForThing(devices.thingFor(address))
         val lanInfo = lan?.let(state.lanInfo::get)
         val bleReady = state.connected && state.selectedId.equals(address, ignoreCase = true)
         val ready = lanInfo != null || bleReady
@@ -111,10 +111,10 @@ internal class IosDeviceConfigSource(
             },
             info = info,
             transport = if (bleReady) TransportKind.BLE else TransportKind.LAN,
-            lanSeen = lan != null || (info != null && info.station in state.lanStations.values),
+            lanSeen = lan != null || (info != null && info.thing in state.lanThings.values),
             busy = state.wifiAccessBusy || state.today.busy || (lan?.let { state.lanSessions[it]?.busy } == true),
             syncRunning = state.syncBusy || (lan?.let { state.lanSessions[it]?.busy } == true),
-            heldInBackground = state.heldInBackground(address, devices.stationFor(address)),
+            heldInBackground = state.heldInBackground(address, devices.thingFor(address)),
         )
     }
 

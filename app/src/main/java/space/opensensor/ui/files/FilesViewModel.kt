@@ -31,7 +31,7 @@ import space.opensensor.data.ManifestState
 import space.opensensor.data.ReconnectState
 import space.opensensor.data.SyncProgress
 import space.opensensor.data.ble.ConnectionState
-import space.opensensor.data.ble.StationStatus
+import space.opensensor.data.ble.ThingStatus
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.history.ArchiveQueryResult
 import space.opensensor.data.history.DerivedStore
@@ -65,17 +65,17 @@ data class FilesUiState(
     /** A transfer is running. */
     val syncRunning: Boolean = false,
     val reconnecting: ReconnectState? = null,
-    /** A background worker or Collect all holds this device right now, see [StationStatus]. */
+    /** A background worker or Collect all holds this device right now, see [ThingStatus]. */
     val heldInBackground: Boolean = false,
     /** Active pipe, for the top-bar chip (same source as Today / Device). */
     val transport: TransportKind? = null,
     /** Simple shows times, sizes and states in words. Detailed adds the chart and inspector, Developer file names and transfer internals. */
     val detailLevel: DetailLevel = DetailLevel.SIMPLE,
-    /** "Chart by file": one column per archived file of the connected station (null while off). */
+    /** "Chart by file": one column per archived file of the connected thing (null while off). */
     val fileChart: FileChartState? = null,
 ) {
-    /** The status every station page reads, the same rule Today and Device use. */
-    val station: StationStatus get() = StationStatus(connection, reconnecting != null, syncRunning, heldInBackground)
+    /** The status every thing page reads, the same rule Today and Device use. */
+    val thing: ThingStatus get() = ThingStatus(connection, reconnecting != null, syncRunning, heldInBackground)
 }
 
 /** The strip of per-file columns: the window shown, of how many files, for which metric. */
@@ -84,7 +84,7 @@ data class FileChartState(
     val metric: MetricSpec,
     /** The chips offered, from [fileChartMetrics]. */
     val metrics: List<MetricSpec> = Metrics.all,
-    /** Every telemetry file of the station, oldest first (timed by first row, then untimed by name). */
+    /** Every telemetry file of the thing, oldest first (timed by first row, then untimed by name). */
     val total: Int,
     /** Index of the first column shown into the full list. */
     val offset: Int,
@@ -96,7 +96,7 @@ data class FileChartState(
 }
 
 /** Ties an asynchronous chart read to both its storage owner and the exact archive snapshot. */
-internal data class FileSummaryRequest(val station: String, val files: List<ArchivedFile>)
+internal data class FileSummaryRequest(val thing: String, val files: List<ArchivedFile>)
 
 /**
  * #92. The metrics the Files chart offers, the same rule as History. Corrected PM2.5 comes first and
@@ -155,8 +155,8 @@ class FilesViewModel @AssistedInject constructor(
     private val repository = manager.controller(deviceAddress)
     private val enrolledDevice = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } }
 
-    /** Storage owner from INFO or enrollment, never the station embedded in a retained SD pathname. */
-    private val archiveStation = combine(repository.info, enrolledDevice) { info, enrolled -> info?.station ?: enrolled?.station }.distinctUntilChanged()
+    /** Storage owner from INFO or enrollment, never the thing embedded in a retained SD pathname. */
+    private val archiveThing = combine(repository.info, enrolledDevice) { info, enrolled -> info?.thing ?: enrolled?.thing }.distinctUntilChanged()
 
     @AssistedFactory
     interface Factory {
@@ -173,7 +173,7 @@ class FilesViewModel @AssistedInject constructor(
         store = store,
         index = index,
         space = FileExportSpace(File(context.cacheDir, "export")),
-        owner = archiveStation,
+        owner = archiveThing,
         daily = {
             deriver.ensureDailyFiles()
             directoryEntries(derived.root, "derived/v1")
@@ -192,16 +192,16 @@ class FilesViewModel @AssistedInject constructor(
     private val fileChartOffset = MutableStateFlow<Int?>(null)
 
     /**
-     * Summaries follow the archive: whenever the connected station's file list changes while the chart
+     * Summaries follow the archive: whenever the connected thing's file list changes while the chart
      * is on, the missing files are read (cached per `(name, crc32)` in the repository, so a new sync
      * costs only its new files).
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val fileSummaryRequest: StateFlow<FileSummaryRequest?> = combine(fileChartOn, archiveStation) { on, station -> station.takeIf { on } }
+    private val fileSummaryRequest: StateFlow<FileSummaryRequest?> = combine(fileChartOn, archiveThing) { on, thing -> thing.takeIf { on } }
         .distinctUntilChanged()
-        .flatMapLatest { station ->
-            // Only while the chart is on, and only the connected station's rows.
-            if (station == null) flowOf(null) else archivedFileDao.observeForStation(station).map { FileSummaryRequest(station, it) }
+        .flatMapLatest { thing ->
+            // Only while the chart is on, and only the connected thing's rows.
+            if (thing == null) flowOf(null) else archivedFileDao.observeForThing(thing).map { FileSummaryRequest(thing, it) }
         }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -210,7 +210,7 @@ class FilesViewModel @AssistedInject constructor(
         if (request == null) {
             flowOf<List<FileSummary>?>(null)
         } else {
-            flow<List<FileSummary>?> { emit(history.fileSummaries(request.station, request.files)) }
+            flow<List<FileSummary>?> { emit(history.fileSummaries(request.thing, request.files)) }
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(null, null))
 

@@ -28,12 +28,12 @@ internal const val PROGRESS_SAMPLE_MS = 250L
 
 /**
  * Manifest joined with the archive, with the running transfer on top. The base plan, which walks
- * the partial directory, is rebuilt only when the listing, the station, that station's archived
+ * the partial directory, is rebuilt only when the listing, the thing, that thing's archived
  * identities, the [pruned] files or the running flag changes. A progress tick only redoes the cheap overlay, at most
  * once per [sampleMs] (#57 and #63, performance audit B2).
  *
- * [archived] observes one station's identity columns ([ArchivedFileDao.observeIdentitiesForStation]),
- * so a write for another station or to the history index columns never replans.
+ * [archived] observes one thing's identity columns ([ArchivedFileDao.observeIdentitiesForThing]),
+ * so a write for another thing or to the history index columns never replans.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun planWithProgress(
@@ -46,26 +46,26 @@ internal fun planWithProgress(
     planner: (String, List<Frame.File>, List<ArchivedIdentity>, Map<String, Long>, List<PrunedFile>) -> SyncPlan = SyncPlanner::plan,
     sampleMs: Long = PROGRESS_SAMPLE_MS,
 ): Flow<SyncPlan?> {
-    // The station travels with its rows, so a station switch never plans new rows against the old station.
-    val identities = info.map { it?.station }.distinctUntilChanged().flatMapLatest { station ->
-        if (station == null) flowOf(null) else archived(station).distinctUntilChanged().map { station to it }
+    // The thing travels with its rows, so a thing switch never plans new rows against the old thing.
+    val identities = info.map { it?.thing }.distinctUntilChanged().flatMapLatest { thing ->
+        if (thing == null) flowOf(null) else archived(thing).distinctUntilChanged().map { thing to it }
     }
     val base = combine(
         manifest.map { it.last }.distinctUntilChanged(),
         identities,
         pruned.distinctUntilChanged(),
         sync.map { it.running }.distinctUntilChanged(),
-    ) { loaded, stationRows, removed, _ ->
+    ) { loaded, thingRows, removed, _ ->
         // The last successful listing, kept through a refresh or its failure (see ManifestState).
-        if (stationRows == null || loaded == null) return@combine null
-        val (station, rows) = stationRows
+        if (thingRows == null || loaded == null) return@combine null
+        val (thing, rows) = thingRows
         // Partials are read here only, never on a progress tick. The overlay shows the live byte count.
-        planner(station, loaded.files, rows.map { it.toIdentity() }, partialLengths(station), removed)
+        planner(thing, loaded.files, rows.map { it.toIdentity() }, partialLengths(thing), removed)
     }
     return combine(base, sync.sampleTicks(sampleMs)) { plan, progress -> plan?.let { overlayProgress(it, progress) } }
 }
 
-internal fun ArchivedFileIdentity.toIdentity() = ArchivedIdentity(station, name, bytes, crc32)
+internal fun ArchivedFileIdentity.toIdentity() = ArchivedIdentity(thing, name, bytes, crc32)
 
 /**
  * Progress at most once per [periodMs], keeping the newest tick of each window. A change of the

@@ -52,7 +52,7 @@ internal class CompanionTodaySource(
     archive: Flow<List<ArchiveRecord>>,
     todaySoFar: Flow<TodaySoFar?>,
     private val actions: CompanionLinkActions,
-    private val stationFor: (String) -> String? = { null },
+    private val thingFor: (String) -> String? = { null },
     private val nameFor: (String) -> String? = { null },
 ) : TodaySource {
     /** One read of the companion state. Compose state, so [snapshotFlow] sees every change. */
@@ -87,11 +87,11 @@ internal class CompanionTodaySource(
     private data class Stamped(val seen: Seen, val name: String?)
 
     private val stamped: Flow<Stamped> = snapshotFlow {
-        val station = stationFor(address)
-        val lanName = state.connectedLanForStation(station)
+        val thing = thingFor(address)
+        val lanName = state.connectedLanForThing(thing)
         val lanRun = lanName?.let(state.lanRuns::get)
-            ?: station?.let { wanted ->
-                state.lanRuns.values.filter { it.station == wanted }.maxByOrNull { it.startedAtEpochMs ?: Long.MIN_VALUE }
+            ?: thing?.let { wanted ->
+                state.lanRuns.values.filter { it.thing == wanted }.maxByOrNull { it.startedAtEpochMs ?: Long.MIN_VALUE }
             }
         Seen(
             selectedId = state.selectedId,
@@ -118,7 +118,7 @@ internal class CompanionTodaySource(
             lanLiveAt = lanName?.let(state.lanLiveAtEpochMs::get),
             lanSession = lanName?.let(state.lanSessions::get),
             lanRun = lanRun,
-            heldInBackground = state.heldInBackground(address, station),
+            heldInBackground = state.heldInBackground(address, thing),
         )
     }.runningFold<Seen, Stamped?>(null) { previous, seen ->
         // A new scan clears the nearby list, the name the user saw stays.
@@ -131,7 +131,7 @@ internal class CompanionTodaySource(
         val mine = seen.selectedId == address
         val overLan = seen.lanName != null && seen.lanSession?.connected == true && seen.lanInfo != null
         val connected = overLan || (mine && seen.connected)
-        val station = if (overLan) seen.lanInfo.station else seen.info?.station?.takeIf { mine } ?: stationFor(address)
+        val thing = if (overLan) seen.lanInfo.thing else seen.info?.thing?.takeIf { mine } ?: thingFor(address)
         TodaySnapshot(
             address = address,
             name = s.name,
@@ -156,7 +156,7 @@ internal class CompanionTodaySource(
                 mine || seen.reconnecting -> runProgress(seen)
                 else -> RunProgress()
             },
-            archive = if (station == null) TodayArchive() else TodayArchive.of(records.filter { it.station == station }),
+            archive = if (thing == null) TodayArchive() else TodayArchive.of(records.filter { it.thing == thing }),
             todaySoFar = today?.takeIf { connected },
             needsPairingRepair = !connected && !mine && seen.failed,
             heldInBackground = seen.heldInBackground,
@@ -168,7 +168,7 @@ internal class CompanionTodaySource(
     override val notices: Flow<TodayNotice> = merge(state.today.notices, local)
 
     /** The one Bluetooth link is open to this sensor. Nothing is sent to another one. */
-    private val linked: Boolean get() = state.connectedLanForStation(stationFor(address)) != null || (state.selectedId == address && state.connected)
+    private val linked: Boolean get() = state.connectedLanForThing(thingFor(address)) != null || (state.selectedId == address && state.connected)
 
     override fun sync() {
         // A closed link shows Reconnect, so a stale tap has nothing to send.
@@ -203,7 +203,7 @@ internal class CompanionTodaySource(
         if (linked) actions.disconnect(address)
     }
 
-    private val lanBusy: Boolean get() = state.connectedLanForStation(stationFor(address))?.let { state.lanSessions[it]?.busy } == true
+    private val lanBusy: Boolean get() = state.connectedLanForThing(thingFor(address))?.let { state.lanSessions[it]?.busy } == true
 
     private fun lanProgress(session: LanSessionState?, run: LanRunState?): RunProgress = RunProgress(
         running = run?.running == true,

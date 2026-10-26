@@ -39,13 +39,13 @@ class HistoryControllerTest {
     private val day = 86_400L
 
     private class Store : ArchiveStore {
-        override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
+        override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = false
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader = error("no file is read in this test")
         override suspend fun commit(key: ArchiveKey) = Unit
-        override suspend fun listFinal(station: String?): List<ArchiveKey> = emptyList()
+        override suspend fun listFinal(thing: String?): List<ArchiveKey> = emptyList()
     }
 
     private class Index(records: List<ArchiveRecord>) : ArchiveIndex {
@@ -55,7 +55,7 @@ class HistoryControllerTest {
         var allObserved = 0
         override fun observeAll(): Flow<List<ArchiveRecord>> = rows.also { allObserved++ }
         override fun observeLatestTimed(): Flow<Map<String, Long?>> = rows.map(ArchiveIndex::latestTimedEnds)
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station } }
+        override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.thing == thing } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) {
             rows.value = rows.value.filterNot { it.key == record.key } + record
@@ -66,24 +66,24 @@ class HistoryControllerTest {
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = emptyList()
 
         // No rows on the timeline, so the Day reader never opens a file.
-        override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
-        override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
+        override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
+        override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = rows.value.filter { it.thing == thing && it.isIndexed }
+        override suspend fun things(): List<String> = rows.value.map { it.thing }.distinct()
     }
 
     private class Tiers(private val metricIds: Set<String>) : HistoryTiers {
-        override fun observe(station: String, metricId: String, tier: Resolution, fromS: Long, toS: Long): Flow<List<TierBucket>> = flowOf(emptyList())
-        override fun observeDays(station: String): Flow<DaySpan> = flowOf(DaySpan(1, 1_789_862_400L, 1_789_862_400L))
-        override fun observeMetricsWithData(station: String): Flow<Set<String>> = flowOf(metricIds)
+        override fun observe(thing: String, metricId: String, tier: Resolution, fromS: Long, toS: Long): Flow<List<TierBucket>> = flowOf(emptyList())
+        override fun observeDays(thing: String): Flow<DaySpan> = flowOf(DaySpan(1, 1_789_862_400L, 1_789_862_400L))
+        override fun observeMetricsWithData(thing: String): Flow<Set<String>> = flowOf(metricIds)
     }
 
     private val clock = object : Clock {
         override fun now(): Instant = Instant.fromEpochSeconds(nowS)
     }
 
-    private fun record(station: String) = ArchiveRecord(
-        station = station,
-        name = "station=$station/year=2026/month=09/day=20/data_1300.parquet",
+    private fun record(thing: String) = ArchiveRecord(
+        thing = thing,
+        name = "station=$thing/year=2026/month=09/day=20/data_1300.parquet",
         bytes = 10,
         crc32 = 1,
         sha256 = "s",
@@ -99,7 +99,7 @@ class HistoryControllerTest {
         metricIds: Set<String> = setOf(Metrics.AMBIENT_TEMP.id, Metrics.HUMIDITY.id),
         index: Index = Index(listOf(record("s1"))),
         current: String = "s1",
-        stations: List<String> = listOf("s1"),
+        things: List<String> = listOf("s1"),
     ): HistoryController {
         val store = Store()
         val tiers = Tiers(metricIds)
@@ -109,8 +109,8 @@ class HistoryControllerTest {
             reader = reader,
             tiers = tiers,
             index = index,
-            currentStation = flowOf(current),
-            stations = flowOf(stations),
+            currentThing = flowOf(current),
+            things = flowOf(things),
             zone = TimeZone.UTC,
             clock = clock,
             tickMs = 3_600_000,
@@ -121,7 +121,7 @@ class HistoryControllerTest {
     fun opensOnTheLastDayWithReadingsAndAMetricThatHasData() = runTest {
         val c = controller()
         val s = c.state.first { !it.initializing && it.toS == lastDayEndS && it.metric == Metrics.AMBIENT_TEMP }
-        assertEquals("s1", s.station)
+        assertEquals("s1", s.thing)
         assertEquals(HistoryRange.DAY, s.range)
         assertEquals(todayEndS, s.nowToS)
         assertTrue(s.canPageForward)
@@ -139,14 +139,14 @@ class HistoryControllerTest {
     }
 
     @Test
-    fun aCurrentStationWithoutTimedReadingsOpensOnTheOneWithTheLatestWithoutReadingTheWholeIndex() = runTest {
+    fun aCurrentThingWithoutTimedReadingsOpensOnTheOneWithTheLatestWithoutReadingTheWholeIndex() = runTest {
         val untimed = record("s2").copy(utcRows = 0, firstUtcNs = null, lastUtcNs = null)
         val index = Index(listOf(record("s1"), untimed))
-        val c = controller(index = index, current = "s2", stations = listOf("s1", "s2"))
-        assertEquals("s1", c.state.first { !it.initializing && it.station != null }.station)
-        // A timed reading for the current station moves History back to it.
+        val c = controller(index = index, current = "s2", things = listOf("s1", "s2"))
+        assertEquals("s1", c.state.first { !it.initializing && it.thing != null }.thing)
+        // A timed reading for the current thing moves History back to it.
         index.rows.value = listOf(record("s1"), record("s2"))
-        assertEquals("s2", c.state.first { it.station == "s2" }.station)
+        assertEquals("s2", c.state.first { it.thing == "s2" }.thing)
         assertEquals(0, index.allObserved)
     }
 

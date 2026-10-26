@@ -12,7 +12,7 @@ import space.opensensor.airquality.Pm25Basis
 data class NearbySensor(val id: String, val name: String?, val rssi: Int, val bonded: Boolean = false)
 
 /**
- * A sensor this phone connected to before. [station] is the station id from its INFO, null until it
+ * A sensor this phone connected to before. [thing] is the thing id from its INFO, null until it
  * was read. [hasWifiAccess] says the phone holds its LAN token (the token itself never leaves the
  * platform store). [lastSeenMs] is null when the platform does not record it.
  */
@@ -20,14 +20,14 @@ data class NearbySensor(val id: String, val name: String?, val rssi: Int, val bo
 data class KnownSensor(
     val id: String,
     val name: String?,
-    val station: String?,
+    val thing: String?,
     val lastSeenMs: Long?,
     val hasWifiAccess: Boolean,
 )
 
-/** A sensor found on the local Wi-Fi through `_ossync._tcp`. [station] comes from its TXT record. */
+/** A sensor found on the local Wi-Fi through `_ossync._tcp`. [thing] comes from its TXT record. */
 @Immutable
-data class WifiSensor(val name: String, val station: String?)
+data class WifiSensor(val name: String, val thing: String?)
 
 /** Where an open link stands, in the words the list shows. */
 enum class LinkPhase { CONNECTING, PAIRING, CONNECTED, RECONNECTING, FAILED }
@@ -48,7 +48,7 @@ data class ActiveLink(
 )
 
 /**
- * What the archive on this phone says about one station, never a live link. The last UTC day with
+ * What the archive on this phone says about one thing, never a live link. The last UTC day with
  * valid readings, its PM2.5 mean and coverage when the platform computes them.
  */
 @Immutable
@@ -74,7 +74,7 @@ enum class WifiTag { WITH_ACCESS, NO_ACCESS }
 data class DeviceRow(
     val id: String,
     val name: String?,
-    val station: String?,
+    val thing: String?,
     /** Signal strength while it advertises nearby, null when only known. */
     val rssi: Int?,
     val bonded: Boolean,

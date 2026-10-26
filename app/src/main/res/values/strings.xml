@@ -48,7 +48,7 @@
     <string name="device_firmware">firmware</string>
     <string name="device_protocol">protocol</string>
     <string name="device_schema">schema</string>
-    <string name="device_station">station</string>
+    <string name="device_thing">sensor ID</string>
     <string name="device_id">device id</string>
     <string name="device_boot">boot</string>
     <string name="device_dictionary">dictionary</string>
@@ -177,7 +177,7 @@
     <string name="msg_firmware_update_required_unknown">Update the sensor firmware to connect. This app needs protocol %1$d.</string>
     <string name="msg_hardware_in_use">This sensor is already connected another way.</string>
     <string name="msg_verification_failed">Could not verify the sensor. Try again.</string>
-    <string name="msg_station_changed">The sensor was reset. Earlier history is kept and Wi-Fi access renews over Bluetooth.</string>
+    <string name="msg_thing_changed">The sensor was reset. Earlier history is kept and Wi-Fi access renews over Bluetooth.</string>
     <string name="msg_reconnecting">Link lost. Reconnecting, attempt %1$d of %2$d…</string>
     <plurals name="msg_reconnect_failed">
         <item quantity="one">Could not reconnect. Tap Reconnect when the sensor is back.</item>
@@ -190,7 +190,7 @@
     <string name="msg_token_rotated_stored">Token changed and the new one stored on this phone.</string>
     <string name="msg_token_rotated_fetch">Token changed. Use Fetch token to store the new one.</string>
     <string name="msg_file_list_not_ready">The file list is not ready yet. Try again in a moment.</string>
-    <string name="msg_no_station">The sensor did not report its station. Reconnect and try again.</string>
+    <string name="msg_no_thing">The sensor did not report its ID. Reconnect and try again.</string>
     <string name="msg_up_to_date">Everything is already on this phone.</string>
     <string name="msg_file_check_failed">%1$s failed the checks. It stays on the sensor.</string>
     <string name="msg_file_refused">The sensor refused to send %1$s.</string>
@@ -245,13 +245,13 @@
     <string name="msg_identity_hardware_changed">This is different hardware. Pair it as a new sensor.</string>
     <string name="msg_identity_hardware_missing">The sensor no longer reports its hardware ID.</string>
     <string name="msg_identity_hardware_malformed">The sensor reports an invalid hardware ID.</string>
-    <string name="msg_identity_station_missing">The sensor did not report its station.</string>
-    <string name="msg_identity_station_malformed">The sensor reports an invalid station.</string>
+    <string name="msg_identity_thing_missing">The sensor did not report its ID.</string>
+    <string name="msg_identity_thing_malformed">The sensor reports an invalid ID.</string>
     <string name="msg_identity_enroll_ble">Connect this sensor over Bluetooth first.</string>
-    <string name="msg_identity_station_ble">The sensor station changed. Reconnect over Bluetooth to check it.</string>
-    <string name="msg_identity_station_hardware">The sensor station changed without a matching hardware ID.</string>
+    <string name="msg_identity_thing_ble">The sensor ID changed. Reconnect over Bluetooth to check it.</string>
+    <string name="msg_identity_thing_hardware">The sensor ID changed without a matching hardware ID.</string>
 
-    <!-- Station label in the scan list. The Files screen strings live in :feature:files. -->
+    <!-- Sensor ID label in the scan list. The Files screen strings live in :feature:files. -->
 
     <!-- Scan archive line. Mood, metric, value, unit, day. -->
 

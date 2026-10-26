@@ -29,7 +29,7 @@ import kotlin.random.Random
 class FakeArchiveDevice(
     private val scope: CoroutineScope,
     override val address: String = "fake-0",
-    val station: String = "53315f5f-cb85-4d8d-b623-d56266084189",
+    val thing: String = "53315f5f-cb85-4d8d-b623-d56266084189",
     val maxRead: Int = 16_384,
     override val mtu: Int = 517,
     override val kind: TransportKind = TransportKind.FAKE,
@@ -39,9 +39,9 @@ class FakeArchiveDevice(
     }
 
     val files: MutableList<FakeFile> = mutableListOf(
-        FakeFile("station=$station/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet", fakeParquet(1, 24_000)),
-        FakeFile("station=$station/year=2026/month=09/day=15/data_1015_b41d_15090-15179-90.parquet", fakeParquet(2, 23_400)),
-        FakeFile("station=$station/unsynced/boot=b41d/data_0000_b41d_1-60-60.parquet", fakeParquet(3, 9_800)),
+        FakeFile("station=$thing/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet", fakeParquet(1, 24_000)),
+        FakeFile("station=$thing/year=2026/month=09/day=15/data_1015_b41d_15090-15179-90.parquet", fakeParquet(2, 23_400)),
+        FakeFile("station=$thing/unsynced/boot=b41d/data_0000_b41d_1-60-60.parquet", fakeParquet(3, 9_800)),
     )
 
     /** The offset of every `READ` handled, in order, so a test can see where a resume started. */
@@ -122,7 +122,7 @@ class FakeArchiveDevice(
 
     override suspend fun connect() = Unit
     override suspend fun disconnect() = Unit
-    override suspend fun readInfo(): ByteArray = """{"proto":3,"station":"$station","max_read":$maxRead}""".encodeToByteArray()
+    override suspend fun readInfo(): ByteArray = """{"proto":3,"station":"$thing","max_read":$maxRead}""".encodeToByteArray()
     override suspend fun readStatus(): ByteArray = "{}".encodeToByteArray()
     override suspend fun readLive(): ByteArray = "{}".encodeToByteArray()
     override fun close() {

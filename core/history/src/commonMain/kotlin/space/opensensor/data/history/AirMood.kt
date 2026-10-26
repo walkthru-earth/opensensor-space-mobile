@@ -65,7 +65,7 @@ sealed interface NowReading {
 
     companion object {
         /**
-         * The Now card for [live], read by column through the station template. No reading, an
+         * The Now card for [live], read by column through the thing template. No reading, an
          * overflow sample (every value null) or an unknown dictionary is [Waiting].
          */
         fun of(live: LiveReading?): NowReading {

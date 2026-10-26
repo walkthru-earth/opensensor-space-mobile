@@ -36,7 +36,7 @@ data class MetricAgg(val n: Int, val mean: Float, val min: Float, val max: Float
  * none said, so `coverage(metric)` = its valid rows over the rows that interval allows.
  */
 data class Bucket(
-    val station: String,
+    val thing: String,
     val resolution: Resolution,
     val startEpochS: Long,
     /** Every timed row in the slot, whatever its validity. */
@@ -69,7 +69,7 @@ data class Bucket(
  * [DayPass] feeds it rows it has already timed and de-duplicated, without a second decode.
  */
 class Aggregator(
-    private val station: String,
+    private val thing: String,
     resolutions: Set<Resolution> = Resolution.entries.toSet(),
     private val metrics: List<MetricSpec> = Metrics.all,
     private val templates: FileTemplates = FileTemplates.BUNDLED,
@@ -247,7 +247,7 @@ class Aggregator(
                 val at = base + k
                 if (n[at] > 0) per[metrics[k].id] = MetricAgg(n[at], rolled(k, at), min[at], max[at], settling[at])
             }
-            Bucket(station, res[slotRes[slot]], slotStart[slot], rows[slot], estimated[slot], per, slotInterval[slot])
+            Bucket(thing, res[slotRes[slot]], slotStart[slot], rows[slot], estimated[slot], per, slotInterval[slot])
         }
 
     private companion object {

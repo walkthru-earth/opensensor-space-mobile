@@ -12,7 +12,7 @@ class HistoryReadWindowTest {
     private val ns = 1_000_000_000L
 
     private fun record(n: Int, firstNs: Long?, lastNs: Long? = firstNs, indexed: Boolean = true) = ArchiveRecord(
-        station = "s", name = "f$n.parquet", bytes = 1, crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake",
+        thing = "s", name = "f$n.parquet", bytes = 1, crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake",
         indexedAtEpochMs = if (indexed) 1 else null, utcRows = if (firstNs == null) 0 else 1, firstUtcNs = firstNs, lastUtcNs = lastNs,
     )
 

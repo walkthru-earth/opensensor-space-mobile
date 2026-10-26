@@ -33,12 +33,12 @@ class IosArchiveLegacyTest {
     private val base = tempRoot()
     private val finals = "$base/SensorArchive"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Unconfined)
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
-    private val key = ArchiveKey(station, "station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val key = ArchiveKey(thing, "station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
     private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
     private val meta = PartialMeta(bytes.size.toLong(), ParquetVerify.crc32(bytes))
-    private val dir get() = "$finals/$station/" + key.name.substringBeforeLast('/')
-    private val final get() = "$finals/$station/${key.name}"
+    private val dir get() = "$finals/$thing/" + key.name.substringBeforeLast('/')
+    private val final get() = "$finals/$thing/${key.name}"
 
     @AfterTest
     fun cleanUp() {
@@ -54,7 +54,7 @@ class IosArchiveLegacyTest {
     fun aLegacyPartialWithTheSameMetaIsAdoptedAndResumes() = runTest {
         writeFile("$final.${meta.size}-${meta.crc32.toString(16)}.partial", bytes.copyOfRange(0, 10))
         writeFile("$final.99-abc.partial", ByteArray(3))
-        assertEquals(mapOf(key.name to 10L), store.partialLengths(station))
+        assertEquals(mapOf(key.name to 10L), store.partialLengths(thing))
         store.openPartial(key, meta).use { w ->
             assertEquals(10, w.resumeFrom)
             w.writeAt(10, bytes.copyOfRange(10, bytes.size))
@@ -68,9 +68,9 @@ class IosArchiveLegacyTest {
 
     @Test
     fun aSymlinkInTheArchiveIsRefused() = runTest {
-        IosFiles.mkdirs("$finals/$station")
+        IosFiles.mkdirs("$finals/$thing")
         IosFiles.mkdirs("$base/elsewhere")
-        NSFileManager.defaultManager.createSymbolicLinkAtPath("$finals/$station/station=$station", "$base/elsewhere", null)
+        NSFileManager.defaultManager.createSymbolicLinkAtPath("$finals/$thing/station=$thing", "$base/elsewhere", null)
         assertFailsWith<IllegalStateException> { store.exists(key) }
     }
 }

@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
  * An independent loop over the same rows is the oracle for every 15 minute, hourly and daily bucket.
  */
 class CurrentBoardFilesTest {
-    private val station = "board-station"
+    private val thing = "board-thing"
     private val day = 20_000L
 
     /** 10:40:00Z of [day], so the rows cross a 15 minute and an hour boundary. */
@@ -104,7 +104,7 @@ class CurrentBoardFilesTest {
     }
 
     private fun buckets(vararg files: ByteArray): List<Bucket> =
-        Aggregator(station, templates = FileTemplates.BUNDLED).apply { files.forEach { add(ParquetFile.wrap(it)) } }.buckets()
+        Aggregator(thing, templates = FileTemplates.BUNDLED).apply { files.forEach { add(ParquetFile.wrap(it)) } }.buckets()
 
     /** What one metric should hold in one bucket, from the rows alone. */
     private class Want(val values: List<Float>, val settling: Int, val point: Boolean = false) {
@@ -200,13 +200,13 @@ class CurrentBoardFilesTest {
         val sources = files.mapIndexed { k, bytes ->
             val index = ParquetIndexer.index(ParquetFile.wrap(bytes), templates = FileTemplates.BUNDLED)
             val record = ArchiveRecord(
-                station, "f$k.parquet", bytes.size.toLong(), 1, "sha-$k", 1, "fixture", indexedAtEpochMs = 1, rows = index.rows,
+                thing, "f$k.parquet", bytes.size.toLong(), 1, "sha-$k", 1, "fixture", indexedAtEpochMs = 1, rows = index.rows,
                 bootId = index.bootId, utcRows = index.utcRows, firstUtcNs = index.firstUtcNs, lastUtcNs = index.lastUtcNs,
             )
             DailyParquetSource(record) { ParquetFile.wrap(bytes) }
         }
         val sink = MemorySink()
-        assertNotNull(DailyParquetBuilder.build(station, day, sources, sink, emptyMap(), 0))
+        assertNotNull(DailyParquetBuilder.build(thing, day, sources, sink, emptyMap(), 0))
         return sink.toByteArray()
     }
 
@@ -239,19 +239,19 @@ class CurrentBoardFilesTest {
     }
 
     @Test
-    fun theStationAndPurposeComeFromTheFooterJsonAndTheBootFromTheRows() {
-        val json = opensensorFooterJson(coreS3Template.dict, coreS3Template.key.desc, 10_000, station = station)
+    fun theThingAndPurposeComeFromTheFooterJsonAndTheBootFromTheRows() {
+        val json = opensensorFooterJson(coreS3Template.dict, coreS3Template.key.desc, 10_000, thing = thing)
         val own = ParquetIndexer.index(ParquetFile.wrap(boardFile(coreS3Template, boot = 7, footer = mapOf(OpenSensorFooter.KEY to json))), templates = FileTemplates.BUNDLED)
         assertEquals("telemetry", own.purpose)
         // The boot comes from the rows, as firmware formats it, never from firmware.boot_id.
         assertEquals("0000000000000000" + "0000000000000007", own.bootId)
         // The old unprefixed keys alone are not read.
-        val old = LegacyFooterKeys.footer(station = "other", purpose = "telemetry", boot = "0f3a", schema = "cores3-telemetry-v3")
+        val old = LegacyFooterKeys.footer(thing = "other", purpose = "telemetry", boot = "0f3a", schema = "cores3-telemetry-v3")
         val legacy = ParquetIndexer.index(ParquetFile.wrap(boardFile(coreS3Template, footer = old)), templates = FileTemplates.BUNDLED)
         assertEquals(null, legacy.purpose)
         dailyOf(boardFile(coreS3Template, footer = old))
-        // A source whose station.id names another station fails the day.
-        val foreign = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(coreS3Template.dict, null, 10_000, station = "other"))
+        // A source whose thing.id names another thing fails the day.
+        val foreign = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(coreS3Template.dict, null, 10_000, thing = "other"))
         assertFailsWith<IllegalArgumentException> { dailyOf(boardFile(coreS3Template, footer = foreign)) }
     }
 

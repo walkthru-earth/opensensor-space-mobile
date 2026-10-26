@@ -71,8 +71,8 @@ import space.opensensor.data.local.database.ArchivedFile
 import space.opensensor.data.local.database.ArchivedFileDao
 import space.opensensor.data.local.database.KnownDevice
 import space.opensensor.data.local.database.KnownDeviceDao
-import space.opensensor.data.local.database.StationEpoch
-import space.opensensor.data.local.database.StationEpochDao
+import space.opensensor.data.local.database.ThingEpoch
+import space.opensensor.data.local.database.ThingEpochDao
 import space.opensensor.data.local.security.LanCredentialStore
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.DeviceInfo
@@ -119,8 +119,8 @@ data class ArchiveTimeSummary(
 )
 
 /**
- * [ArchiveTimeSummary] over one station's archive rows. [ArchiveTimeSummary.files] counts every
- * row, as the Stations list does. The time figures cover indexed telemetry files only.
+ * [ArchiveTimeSummary] over one thing's archive rows. [ArchiveTimeSummary.files] counts every
+ * row, as the Things list does. The time figures cover indexed telemetry files only.
  */
 internal fun summarizeArchive(rows: List<ArchivedFile>): ArchiveTimeSummary {
     val timed = rows.filter { it.isIndexed && (it.purpose == null || it.purpose == "telemetry") }
@@ -182,7 +182,7 @@ class DeviceLinkOwner @Inject constructor(
     private val historyDeriver: HistoryRefresher,
     private val companionPresence: CompanionUnlinker,
     private val identityClaims: DeviceIdentityClaims,
-    private val stationEpochDao: StationEpochDao,
+    private val thingEpochDao: ThingEpochDao,
     @ApplicationScope applicationScope: CoroutineScope,
     @IoDispatcher private val io: CoroutineDispatcher,
     private val clock: WallClock,
@@ -311,19 +311,19 @@ class DeviceLinkOwner @Inject constructor(
     val sync: StateFlow<SyncProgress> = _sync.asStateFlow()
 
     /**
-     * The station this owner's device archives into: the connected `info`, else the enrolled row,
+     * The thing this owner's device archives into: the connected `info`, else the enrolled row,
      * so the archive summary survives a disconnect.
      */
-    private val archiveStation: Flow<String?> = combine(_info, bound, knownDeviceDao.observeAll()) { info, address, known ->
-        info?.station ?: known.firstOrNull { it.address == address }?.station
+    private val archiveThing: Flow<String?> = combine(_info, bound, knownDeviceDao.observeAll()) { info, address, known ->
+        info?.thing ?: known.firstOrNull { it.address == address }?.thing
     }.distinctUntilChanged()
 
     /**
      * What is archived for this device, straight from Room. Counts the same rows as the
-     * Stations list, never resets on disconnect, and follows every commit and index pass.
+     * Things list, never resets on disconnect, and follows every commit and index pass.
      */
-    val archiveTimeSummary: StateFlow<ArchiveTimeSummary> = archiveStation.flatMapLatest { station ->
-        if (station == null) flowOf(ArchiveTimeSummary()) else archivedFileDao.observeForStation(station).map(::summarizeArchive)
+    val archiveTimeSummary: StateFlow<ArchiveTimeSummary> = archiveThing.flatMapLatest { thing ->
+        if (thing == null) flowOf(ArchiveTimeSummary()) else archivedFileDao.observeForThing(thing).map(::summarizeArchive)
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, ArchiveTimeSummary())
 
     private val _syncDiagnostics = MutableStateFlow<List<SyncDiagnostic>>(emptyList())
@@ -345,7 +345,7 @@ class DeviceLinkOwner @Inject constructor(
     val isFake: Boolean get() = _session.value?.transport?.let(transportFactory::isFake) == true
 
     /** Manifest joined with the archive, see [planWithProgress]. */
-    val plan: StateFlow<SyncPlan?> = planWithProgress(_manifest, _info, archivedFileDao::observeIdentitiesForStation, _sync, archive::partialLengths, pruned.observeAll())
+    val plan: StateFlow<SyncPlan?> = planWithProgress(_manifest, _info, archivedFileDao::observeIdentitiesForThing, _sync, archive::partialLengths, pruned.observeAll())
         .stateIn(scope, SharingStarted.Eagerly, null)
 
     private var notificationJob: Job? = null
@@ -376,7 +376,7 @@ class DeviceLinkOwner @Inject constructor(
     /**
      * Connect to [address] (or the fake device when [fake]). Safe to call while connected to the same peer.
      *
-     * Transport choice (contract, "LAN transport"): prefer LAN when the device's station is currently
+     * Transport choice (contract, "LAN transport"): prefer LAN when the device's thing is currently
      * discovered on the network *and* a token is stored, else BLE; if the LAN connect fails for any
      * reason fall back to BLE and say so. [preference] = [TransportPreference.BLE_ONLY] skips LAN
      * (needed for `GET_TOKEN`, which is BLE-only by contract). [TransportPreference.LAN_ONLY]
@@ -494,9 +494,9 @@ class DeviceLinkOwner @Inject constructor(
      * path, including an unexpected exception and cancellation.
      */
     private suspend fun tryLan(address: String, name: String?, known: KnownDevice?, fallbackToBle: Boolean = true, target: LanDevice? = null): LanAttempt {
-        val station = known?.station ?: return LanAttempt.Skipped
-        val seen = target ?: lanDevices.value[station] ?: return LanAttempt.Skipped
-        if (seen.station != station) return LanAttempt.Skipped
+        val thing = known?.thing ?: return LanAttempt.Skipped
+        val seen = target ?: lanDevices.value[thing] ?: return LanAttempt.Skipped
+        if (seen.thing != thing) return LanAttempt.Skipped
         val host = seen.host ?: return LanAttempt.Skipped
         val port = TransportSelector.lanPort(known.hasLanToken, known.deviceId, seen.dev, seen.port, known.lanPort) ?: return LanAttempt.Skipped
         val key = lanKey(address) ?: return LanAttempt.Skipped
@@ -674,11 +674,11 @@ class DeviceLinkOwner @Inject constructor(
             _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
         }
-        // Identity, epochs and archive paths all key on the station, so info without one is unusable.
-        val station = info.station ?: run {
-            Log.w(TAG, "device verification failed (info has no station)")
-            lastOpenFailure = DisconnectCause.FramingViolation("info without station")
-            connectionFailure.value = "verification failed (info has no station)"
+        // Identity, epochs and archive paths all key on the thing, so info without one is unusable.
+        val thing = info.thing ?: run {
+            Log.w(TAG, "device verification failed (info has no thing)")
+            lastOpenFailure = DisconnectCause.FramingViolation("info without thing")
+            connectionFailure.value = "verification failed (info has no thing)"
             _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
         }
@@ -691,8 +691,8 @@ class DeviceLinkOwner @Inject constructor(
             val now = clock.nowEpochMs()
             val previous = knownDeviceDao.get(address)
             val authenticatedBle = transport.kind == TransportKind.BLE || fake
-            val expected = previous?.let { DeviceContinuityPolicy.Identity(it.address, it.deviceId, it.station) }
-            val continuity = DeviceContinuityPolicy.evaluate(expected, DeviceContinuityPolicy.Identity(address, info.dev, info.station), authenticatedBle)
+            val expected = previous?.let { DeviceContinuityPolicy.Identity(it.address, it.deviceId, it.thing) }
+            val continuity = DeviceContinuityPolicy.evaluate(expected, DeviceContinuityPolicy.Identity(address, info.dev, info.thing), authenticatedBle)
             if (continuity is DeviceContinuityPolicy.Decision.Reject) {
                 Log.w(TAG, "identity rejected (${continuity.reason})")
                 lastOpenFailure = DisconnectCause.Rejected("identity ${continuity.reason.name}")
@@ -710,19 +710,19 @@ class DeviceLinkOwner @Inject constructor(
                     return false
                 }
             }
-            previous?.station?.let { station -> stationEpochDao.recordIfAbsent(StationEpoch(address, station, previous.deviceId, previous.lastConnectedEpochMs ?: now, false)) }
-            stationEpochDao.recordIfAbsent(StationEpoch(address, station, info.dev, now, authenticatedBle))
+            previous?.thing?.let { thing -> thingEpochDao.recordIfAbsent(ThingEpoch(address, thing, previous.deviceId, previous.lastConnectedEpochMs ?: now, false)) }
+            thingEpochDao.recordIfAbsent(ThingEpoch(address, thing, info.dev, now, authenticatedBle))
             if (continuity.invalidateLanToken) {
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.markStale(address)
-                _events.tryEmit(DeviceEvent.Info(DeviceMessage.StationChanged))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.ThingChanged))
             }
             // Enrollment writes identity fields only. Auto-sync, the companion association and the
             // credential keep whatever the row holds now, never the snapshot read above (#106).
             val displayName = name ?: transport.displayName
-            val enrolled = KnownDevice(address, displayName, info.station, info.dev, info.fw, now, now)
+            val enrolled = KnownDevice(address, displayName, info.thing, info.dev, info.fw, now, now)
             if (knownDeviceDao.insertIfAbsent(enrolled) == -1L) {
-                knownDeviceDao.recordConnection(address, displayName, info.station, info.dev, info.fw, now)
+                knownDeviceDao.recordConnection(address, displayName, info.thing, info.dev, info.fw, now)
             }
             verifiedSessionInfo = session to info
             _info.value = info
@@ -734,7 +734,7 @@ class DeviceLinkOwner @Inject constructor(
             identityReady.value = true
             suspendRunCatching { transport.readStatus() }.onSuccess { applyStatusRead(session, it) }
             suspendRunCatching { transport.readLive() }.onSuccess { applyLiveRead(session, it) }
-            info.station?.let { station -> scope.launch { if (_session.value === session) reportArchiveTimeline(station) } }
+            info.thing?.let { thing -> scope.launch { if (_session.value === session) reportArchiveTimeline(thing) } }
             recordDiagnostic("connect", "${transport.kind} ready")
 
             val v2 = (proto ?: 1) >= 2
@@ -968,12 +968,12 @@ class DeviceLinkOwner @Inject constructor(
             else -> throw LinkClosedException(DisconnectCause.Busy)
         }
         val maxRead: Int
-        val station: String
+        val thing: String
         try {
             // openSession swallows reads after verification, so the link may already be gone.
             val info = (session.link.state.value as? LinkState.Ready)?.info?.info
                 ?: throw LinkClosedException((session.link.state.value as? LinkState.Closed)?.cause ?: DisconnectCause.Unreachable)
-            station = info.station ?: throw LinkClosedException(DisconnectCause.FramingViolation("info without station"))
+            thing = info.thing ?: throw LinkClosedException(DisconnectCause.FramingViolation("info without thing"))
             maxRead = ReadWindow.forTransport(session.transport, info.maxRead)
         } catch (e: Throwable) {
             // Never counted, so no release will close it. Close a link this call opened now.
@@ -983,7 +983,7 @@ class DeviceLinkOwner @Inject constructor(
         // Nothing below suspends, so a lend counted here always reaches the caller's finally.
         lends.incrementAndGet()
         val returned = AtomicBoolean(false)
-        return CollectionLink(session, station, maxRead) {
+        return CollectionLink(session, thing, maxRead) {
             if (returned.compareAndSet(false, true)) returnLend(session)
         }
     }
@@ -1222,9 +1222,9 @@ class DeviceLinkOwner @Inject constructor(
     }
 
     /** Log the archive's timeline once per connect or collection, and say when readings have no time. */
-    private suspend fun reportArchiveTimeline(station: String) {
-        val summary = summarizeArchive(archivedFileDao.forStation(station))
-        if (_info.value?.station != station) return
+    private suspend fun reportArchiveTimeline(thing: String) {
+        val summary = summarizeArchive(archivedFileDao.forThing(thing))
+        if (_info.value?.thing != thing) return
         recordDiagnostic(
             "timeline",
             "${summary.files} file(s), ${summary.realTimeRows} UTC row(s), ${summary.estimatedRows} estimated row(s), ${summary.unplacedRows} unplaced row(s)",
@@ -1352,7 +1352,7 @@ class DeviceLinkOwner @Inject constructor(
         scope.launch {
             suspendRunCatching {
                 if (refresh) historyDeriver.deriveAfterSync(startedMs)
-                _info.value?.station?.let { reportArchiveTimeline(it) }
+                _info.value?.thing?.let { reportArchiveTimeline(it) }
             }.onFailure { Log.w(TAG, "derive after collection failed (${it::class.simpleName})") }
         }
     }
@@ -1398,13 +1398,13 @@ class DeviceLinkOwner @Inject constructor(
                 return true
             }
             val info = (session.link.state.value as? LinkState.Ready)?.info?.info
-            val station = info?.station
+            val thing = info?.thing
             val boot = info?.boot
-            if (station != null && boot != null) {
-                historyDeriver.persistClockAnchor(station, boot, r.epochNanos, r.monotonicMicros)
+            if (thing != null && boot != null) {
+                historyDeriver.persistClockAnchor(thing, boot, r.epochNanos, r.monotonicMicros)
                 // The re-dating derive waits for any History pass in flight, so it runs off the link (#125).
                 scope.launch {
-                    suspendRunCatching { historyDeriver.deriveStation(station) }
+                    suspendRunCatching { historyDeriver.deriveThing(thing) }
                         .onFailure { Log.w(TAG, "derive after clock receipt failed (${it::class.simpleName})") }
                 }
             }
@@ -1429,9 +1429,9 @@ class DeviceLinkOwner @Inject constructor(
     internal suspend fun collectionClockSet(session: DeviceSession, result: Frame.TimeSet) {
         check(_session.value === session) { "clock session replaced" }
         val info = verifiedSessionInfo?.takeIf { it.first === session }?.second ?: return
-        val station = info.station ?: return
+        val thing = info.thing ?: return
         val boot = info.boot ?: return
-        historyDeriver.persistClockAnchor(station, boot, result.epochNanos, result.monotonicMicros)
+        historyDeriver.persistClockAnchor(thing, boot, result.epochNanos, result.monotonicMicros)
     }
 
     /** FLUSH: finalize the RAM batch into a short file so it can be pulled now. */

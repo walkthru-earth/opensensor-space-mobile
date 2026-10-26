@@ -116,7 +116,7 @@ class DeviceFacade internal constructor(
             LinkProvider { device, preference ->
                 val active = lock.withLock { requireNotNull(request).also { it.replaced = null } }
                 // A run asks for a link only after the run it replaced cleaned up. The archive's shared
-                // coordinator admits one collection per station, as on iOS.
+                // coordinator admits one collection per thing, as on iOS.
                 collector.coordinator.admit(linkOwner.lendLink(device, preference, active.background, forCollection = true))
             },
             collector,

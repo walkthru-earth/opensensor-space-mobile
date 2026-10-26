@@ -42,7 +42,7 @@ import kotlin.test.assertTrue
  * leaves a [PrunedFile], so sync skips it.
  */
 class LegacyFileCleanupTest {
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val root = "/data/app/archive"
     private val roots = StorageRoots(
         mapOf(
@@ -52,7 +52,7 @@ class LegacyFileCleanupTest {
         ),
     )
     private val day = 20_000L
-    private val dayNs = StationDays.DAY_NS
+    private val dayNs = ThingDays.DAY_NS
 
     private val unannotated = fixtureBytes("parquet/device/v1-lz4-2rows-dated.parquet")
     private val nanos = fixtureBytes("parquet/device/v3-board-2rg-105rows.parquet")
@@ -100,13 +100,13 @@ class LegacyFileCleanupTest {
 
     private class Store : ArchiveStore {
         val files = HashMap<ArchiveKey, ByteArray>()
-        override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
+        override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = key in files
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader = ByteArrayReader(files[key] ?: throw NoSuchElementException(key.name))
         override suspend fun commit(key: ArchiveKey) = Unit
-        override suspend fun listFinal(station: String?): List<ArchiveKey> = files.keys.filter { station == null || it.station == station }
+        override suspend fun listFinal(thing: String?): List<ArchiveKey> = files.keys.filter { thing == null || it.thing == thing }
     }
 
     private class Index : ArchiveIndex {
@@ -130,7 +130,7 @@ class LegacyFileCleanupTest {
             return super.putIfAbsent(record)
         }
         override fun observeAll(): Flow<List<ArchiveRecord>> = rows.map { list -> list.sortedBy { it.name } }
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station } }
+        override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.thing == thing } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) {
             rows.value = rows.value.filterNot { it.key == record.key } + record
@@ -140,9 +140,9 @@ class LegacyFileCleanupTest {
             onRemove?.also { onRemove = null }?.invoke()
         }
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { it.indexedAtEpochMs == null }.take(limit)
-        override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
-        override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
+        override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
+        override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = rows.value.filter { it.thing == thing && it.isIndexed }
+        override suspend fun things(): List<String> = rows.value.map { it.thing }.distinct()
     }
 
     /** Deletes reach the [Store] when the path is a final file, like the real archive directory. */
@@ -153,7 +153,7 @@ class LegacyFileCleanupTest {
         override fun delete(path: String) {
             if (failOn(path)) throw IllegalStateException("busy")
             deleted += path
-            store.files.keys.removeAll { "$root/${it.station}/${it.name}" == path }
+            store.files.keys.removeAll { "$root/${it.thing}/${it.name}" == path }
         }
     }
 
@@ -181,12 +181,12 @@ class LegacyFileCleanupTest {
         val pruned: Pruned,
     )
 
-    private fun record(name: String, bytes: ByteArray, firstNs: Long?, lastNs: Long? = firstNs, owner: String = station) = ArchiveRecord(
-        station = owner, name = name, bytes = bytes.size.toLong(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake",
+    private fun record(name: String, bytes: ByteArray, firstNs: Long?, lastNs: Long? = firstNs, owner: String = thing) = ArchiveRecord(
+        thing = owner, name = name, bytes = bytes.size.toLong(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake",
         indexedAtEpochMs = 1, utcRows = if (firstNs == null) 0 else 1, firstUtcNs = firstNs, lastUtcNs = lastNs,
     )
 
-    private fun name(day: Long, n: Int) = "station=$station/year=2024/month=10/day=$day/file-$n.parquet"
+    private fun name(day: Long, n: Int) = "station=$thing/year=2024/month=10/day=$day/file-$n.parquet"
 
     private fun setup(
         vararg files: Pair<ArchiveRecord, ByteArray>,
@@ -245,7 +245,7 @@ class LegacyFileCleanupTest {
         val plan = s.cleanup.plan()
         assertEquals(listOf(old1.key, old2.key), plan.keys)
         assertEquals(old1.bytes + old2.bytes, plan.bytes)
-        assertEquals(1, plan.stations)
+        assertEquals(1, plan.things)
         assertEquals(1, plan.skipped)
         assertEquals(5, s.store.files.size)
         assertEquals(5, s.index.rows.value.size)
@@ -271,17 +271,17 @@ class LegacyFileCleanupTest {
     @Test
     fun removalDropsTheRecordThenTheFileAndRebuildsTheirDays() = runTest {
         val old = record(name(1, 1), nanos, day * dayNs, (day + 1) * dayNs)
-        val unplaced = record(name(1, 2), unannotated, null, owner = "other-station")
+        val unplaced = record(name(1, 2), unannotated, null, owner = "other-thing")
         val current = record(name(1, 3), micros, day * dayNs)
         val s = setup(files = arrayOf(old to nanos, unplaced to unannotated, current to micros))
         val report = s.cleanup.remove(s.cleanup.plan())
         assertEquals(LegacyFileCleanup.Report(removed = 2, bytes = old.bytes + unplaced.bytes), report)
         assertEquals(listOf(current.key), s.index.rows.value.map { it.key })
         assertEquals(setOf(current.key), s.store.files.keys)
-        assertEquals(listOf("$root/$station/${old.name}", "$root/other-station/${unplaced.name}"), s.tree.deleted)
-        assertEquals(listOf(mapOf(station to setOf(day, day + 1), "other-station" to emptySet())), s.rebuilt)
+        assertEquals(listOf("$root/$thing/${old.name}", "$root/other-thing/${unplaced.name}"), s.tree.deleted)
+        assertEquals(listOf(mapOf(thing to setOf(day, day + 1), "other-thing" to emptySet())), s.rebuilt)
         assertEquals(
-            listOf(PrunedFile(station, old.name, old.bytes, old.crc32, 42), PrunedFile("other-station", unplaced.name, unplaced.bytes, unplaced.crc32, 42)),
+            listOf(PrunedFile(thing, old.name, old.bytes, old.crc32, 42), PrunedFile("other-thing", unplaced.name, unplaced.bytes, unplaced.crc32, 42)),
             s.pruned.files.value,
         )
     }
@@ -324,7 +324,7 @@ class LegacyFileCleanupTest {
         val release = CompletableDeferred<Unit>()
         // Another writer holds the gate after the cleanup read the records, and changes both meanwhile.
         val writer = launch {
-            s.coordinator.withStation(station) {
+            s.coordinator.withThing(thing) {
                 held.complete(Unit)
                 release.await()
                 s.index.put(a.copy(crc32 = 2))
@@ -485,7 +485,7 @@ class LegacyFileCleanupTest {
         assertTrue(a.key in s.store.files)
         assertNull(s.index.get(a.key))
         assertEquals(listOf(b.key), s.pruned.files.value.map { it.key })
-        assertEquals(listOf(mapOf(station to setOf(day))), s.rebuilt)
+        assertEquals(listOf(mapOf(thing to setOf(day))), s.rebuilt)
     }
 
     @Test
@@ -505,7 +505,7 @@ class LegacyFileCleanupTest {
         assertFalse(a.key in s.store.files)
         assertNotNull(s.index.get(b.key))
         assertTrue(b.key in s.store.files)
-        assertEquals(listOf(mapOf(station to setOf(day))), s.rebuilt)
+        assertEquals(listOf(mapOf(thing to setOf(day))), s.rebuilt)
     }
 
     @Test

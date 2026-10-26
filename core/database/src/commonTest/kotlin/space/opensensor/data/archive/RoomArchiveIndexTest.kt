@@ -28,7 +28,7 @@ class RoomArchiveIndexTest {
     @Test
     fun concurrentUpdatesOfOneKeyLoseNoUpdate() = runTest {
         val key = ArchiveKey("11111111-2222-3333-4444-555555555555", "year=2026/month=10/day=01/data.parquet")
-        index.put(ArchiveRecord(key.station, key.name, 0L, 1L, "ab", 5L, "device"))
+        index.put(ArchiveRecord(key.thing, key.name, 0L, 1L, "ab", 5L, "device"))
         val writers = 64
 
         (1..writers).map { async(Dispatchers.Default) { index.update(key) { it.copy(bytes = it.bytes + 1) } } }.awaitAll()
@@ -46,13 +46,13 @@ class RoomArchiveIndexTest {
 
         assertEquals("device", index.get(engine.key)!!.sourceDevice)
         assertEquals(5L, index.get(engine.key)!!.syncedAtEpochMs)
-        assertEquals("adopted", index.get(ArchiveKey(engine.station, "year=2026/month=10/day=02/data.parquet"))!!.sourceDevice)
+        assertEquals("adopted", index.get(ArchiveKey(engine.thing, "year=2026/month=10/day=02/data.parquet"))!!.sourceDevice)
     }
 
     @Test
     fun theNarrowViewsFollowTheTable() = runTest {
-        val station = "11111111-2222-3333-4444-555555555555"
-        val pending = ArchiveRecord(station, "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device")
+        val thing = "11111111-2222-3333-4444-555555555555"
+        val pending = ArchiveRecord(thing, "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device")
         index.put(pending)
         assertTrue(index.observeNeverIndexed().first())
         assertEquals(emptyMap<String, Long?>(), index.observeLatestTimed().first())
@@ -60,36 +60,36 @@ class RoomArchiveIndexTest {
         index.update(pending.key) { it.copy(indexedAtEpochMs = 9L, utcRows = 3L, lastUtcNs = 42L) }
 
         assertFalse(index.observeNeverIndexed().first())
-        assertEquals(mapOf(station to 42L), index.observeLatestTimed().first())
+        assertEquals(mapOf(thing to 42L), index.observeLatestTimed().first())
     }
 
     @Test
     fun aTimedFileWithNoEndMatchesTheSharedRulesInSql() = runTest {
-        val station = "11111111-2222-3333-4444-555555555555"
-        val noEnd = ArchiveRecord(station, "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device", indexedAtEpochMs = 9L, utcRows = 3L, firstUtcNs = 100L)
+        val thing = "11111111-2222-3333-4444-555555555555"
+        val noEnd = ArchiveRecord(thing, "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device", indexedAtEpochMs = 9L, utcRows = 3L, firstUtcNs = 100L)
         index.put(noEnd)
 
-        assertEquals(mapOf<String, Long?>(station to null), index.observeLatestTimed().first())
-        assertEquals(emptyList(), index.timeline(station, Long.MIN_VALUE, Long.MAX_VALUE))
+        assertEquals(mapOf<String, Long?>(thing to null), index.observeLatestTimed().first())
+        assertEquals(emptyList(), index.timeline(thing, Long.MIN_VALUE, Long.MAX_VALUE))
         assertFalse(noEnd.onTimeline(Long.MIN_VALUE, Long.MAX_VALUE))
 
         val lowEnd = noEnd.copy(name = "year=2026/month=10/day=02/data.parquet", firstUtcNs = Long.MIN_VALUE, lastUtcNs = Long.MIN_VALUE)
         index.put(lowEnd)
-        assertEquals(mapOf<String, Long?>(station to Long.MIN_VALUE), index.observeLatestTimed().first())
-        assertEquals(listOf(lowEnd.name), index.timeline(station, Long.MIN_VALUE, Long.MIN_VALUE + 1).map { it.name })
+        assertEquals(mapOf<String, Long?>(thing to Long.MIN_VALUE), index.observeLatestTimed().first())
+        assertEquals(listOf(lowEnd.name), index.timeline(thing, Long.MIN_VALUE, Long.MIN_VALUE + 1).map { it.name })
     }
 
     @Test
-    fun removeForgetsOnlyThatRecordAndStationsAreDistinct() = runTest {
-        val a = ArchiveRecord("station-a", "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device")
+    fun removeForgetsOnlyThatRecordAndThingsAreDistinct() = runTest {
+        val a = ArchiveRecord("thing-a", "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device")
         val b = a.copy(name = "year=2026/month=10/day=02/data.parquet")
-        val c = a.copy(station = "station-b")
+        val c = a.copy(thing = "thing-b")
         listOf(a, b, c).forEach { index.put(it) }
 
         index.remove(a.key)
 
-        assertEquals(listOf(b), index.observeStation("station-a").first())
-        assertEquals(setOf("station-a", "station-b"), index.stations().toSet())
+        assertEquals(listOf(b), index.observeThing("thing-a").first())
+        assertEquals(setOf("thing-a", "thing-b"), index.things().toSet())
         assertEquals(listOf(b.name, c.name).sorted(), index.observeAll().first().map { it.name }.sorted())
     }
 }

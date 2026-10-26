@@ -32,20 +32,20 @@ fun localDayStarts(zone: TimeZone, periodMs: Long = 60_000): Flow<Long> = flow {
 }.distinctUntilChanged()
 
 /**
- * Today so far for the connected [station], the local calendar day like the History Day view, from
- * the hourly tier of the phone archive. The EPA corrected PM2.5 mean when the day has one, else raw. Null until the archive has a mean for this station and day.
- * A station or day change drops the old answer first, so a value never shows under the wrong device.
+ * Today so far for the connected [thing], the local calendar day like the History Day view, from
+ * the hourly tier of the phone archive. The EPA corrected PM2.5 mean when the day has one, else raw. Null until the archive has a mean for this thing and day.
+ * A thing or day change drops the old answer first, so a value never shows under the wrong device.
  * Both apps feed it their own [observeHourlyDay] (the shared `HistorySeriesReader`).
  */
 fun todaySoFar(
-    station: Flow<String?>,
-    observeHourlyDay: (station: String, metric: MetricSpec, window: HistoryWindow) -> Flow<HistorySeries>,
+    thing: Flow<String?>,
+    observeHourlyDay: (thing: String, metric: MetricSpec, window: HistoryWindow) -> Flow<HistorySeries>,
     zone: TimeZone = TimeZone.currentSystemDefault(),
     dayStarts: Flow<Long> = localDayStarts(zone),
 ): Flow<TodaySoFar?> =
-    combine(station.distinctUntilChanged(), dayStarts) { s, start -> ArchiveDayQuery(s, start, zone) }
+    combine(thing.distinctUntilChanged(), dayStarts) { s, start -> ArchiveDayQuery(s, start, zone) }
         .archiveQueryResults { query ->
-            val id = query.station
+            val id = query.thing
             if (id == null) {
                 flowOf(null)
             } else {

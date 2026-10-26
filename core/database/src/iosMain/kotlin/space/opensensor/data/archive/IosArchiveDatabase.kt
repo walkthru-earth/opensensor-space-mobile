@@ -51,7 +51,7 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
 
     val index: ArchiveIndex = object : ArchiveIndex {
         override fun observeAll(): Flow<List<ArchiveRecord>> = after { it.observeAll() }
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = after { it.observeStation(station) }
+        override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = after { it.observeThing(thing) }
         override fun observeNeverIndexed(): Flow<Boolean> = after { it.observeNeverIndexed() }
         override fun observeLatestTimed(): Flow<Map<String, Long?>> = after { it.observeLatestTimed() }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = room().get(key)
@@ -60,14 +60,14 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
         override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) = room().update(key, transform)
         override suspend fun remove(key: ArchiveKey) = room().remove(key)
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = room().unindexed(limit)
-        override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = room().timeline(station, fromNs, toNs)
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = room().indexedForStation(station)
-        override suspend fun stations(): List<String> = room().stations()
+        override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = room().timeline(thing, fromNs, toNs)
+        override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = room().indexedForThing(thing)
+        override suspend fun things(): List<String> = room().things()
     }
 
     val pruned: PrunedFiles = object : PrunedFiles {
         override fun observeAll(): Flow<List<PrunedFile>> = flow { emitAll(roomPruned().observeAll()) }
-        override suspend fun forStation(station: String): List<PrunedFile> = roomPruned().forStation(station)
+        override suspend fun forThing(thing: String): List<PrunedFile> = roomPruned().forThing(thing)
         override suspend fun put(file: PrunedFile) = roomPruned().put(file)
         override suspend fun remove(key: ArchiveKey) = roomPruned().remove(key)
         override suspend fun clear(): Int = roomPruned().clear()

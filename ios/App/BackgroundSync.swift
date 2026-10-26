@@ -101,8 +101,8 @@ final class AutoSync {
                 _ = done([], [])
                 return
             }
-            self.lan.backgroundBrowse(timeout: Double(timeoutMs.int64Value) / 1000) { names, stations in
-                _ = done(names, stations)
+            self.lan.backgroundBrowse(timeout: Double(timeoutMs.int64Value) / 1000) { names, things in
+                _ = done(names, things)
             }
         },
         sync: { [weak self] id, wifiName, done in

@@ -78,7 +78,7 @@ class IosLinkProvider internal constructor(
     /** The lent link and the [IosLink] under it. Nothing suspends after the lease is lent. */
     internal suspend fun lend(device: String, prefer: LinkPreference): Pair<IosLink, CollectionLink> {
         val link = ready(device, prefer)
-        val station = link.station ?: throw LinkClosedException(DisconnectCause.Unreachable)
+        val thing = link.thing ?: throw LinkClosedException(DisconnectCause.Unreachable)
         var lease: IosLink.Lease? = null
         try {
             withTimeout(timeout) { lease = link.acquire(LeaseKind.SYNC) }
@@ -94,7 +94,7 @@ class IosLinkProvider internal constructor(
             throw e
         }
         val held = checkNotNull(lease)
-        return link to CollectionLink(link.session, station, link.maxRead, onRelease = held::end)
+        return link to CollectionLink(link.session, thing, link.maxRead, onRelease = held::end)
     }
 
     /** An open, identified link of the preferred kind, dialled when Swift has none. */
@@ -164,7 +164,7 @@ class IosLinkProvider internal constructor(
     }
 
     private suspend fun usable(device: String, prefer: LinkPreference): IosLink? =
-        withContext(main) { pick?.invoke(device, prefer) ?: linkFor(device) }?.takeIf { it.isOpen && it.station != null && prefer.allows(it.kind) }
+        withContext(main) { pick?.invoke(device, prefer) ?: linkFor(device) }?.takeIf { it.isOpen && it.thing != null && prefer.allows(it.kind) }
 
     private fun LinkPreference.allows(kind: TransportKind) = when (this) {
         LinkPreference.ANY -> true

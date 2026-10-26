@@ -98,10 +98,10 @@ class LegacyReceiptImport(
     /** Every receipt below the archive, or null when the archive exists but cannot be listed. */
     private fun receipts(): List<Pair<ArchiveKey, String>>? = IosFiles.walkOrNull(finalRoot)?.mapNotNull { relative ->
         if (!relative.endsWith(ArchiveLayout.LEGACY_RECEIPT_SUFFIX)) return@mapNotNull null
-        val station = relative.substringBefore('/', missingDelimiterValue = "")
+        val thing = relative.substringBefore('/', missingDelimiterValue = "")
         val name = relative.substringAfter('/').removeSuffix(ArchiveLayout.LEGACY_RECEIPT_SUFFIX)
-        if (!ArchiveLayout.isSafeStation(station) || !ArchiveLayout.isArchiveName(name)) return@mapNotNull null
-        ArchiveKey(station, name) to "$finalRoot/$relative"
+        if (!ArchiveLayout.isSafeThing(thing) || !ArchiveLayout.isArchiveName(name)) return@mapNotNull null
+        ArchiveKey(thing, name) to "$finalRoot/$relative"
     }
 
     /** The receipt's record when its file passes the check, otherwise null, a throw included. */
@@ -110,7 +110,7 @@ class LegacyReceiptImport(
             null
         } else {
             IosFiles.readSmall(path, RECEIPT_MAX_BYTES)?.decodeToString()
-                ?.let { decode(key.station, key.name, it) }
+                ?.let { decode(key.thing, key.name, it) }
                 ?.takeIf { verifies(it) }
         }
     } catch (e: Exception) {
@@ -118,7 +118,7 @@ class LegacyReceiptImport(
     }
 
     private fun verifies(record: ArchiveRecord): Boolean {
-        val final = "$finalRoot/${record.station}/${record.name}"
+        val final = "$finalRoot/${record.thing}/${record.name}"
         IosFiles.checkNoLinks(final, finalRoot)
         if (IosFiles.kind(final) != Kind.FILE) return false
         return store.reader(record.key).use { ArchiveVerifier.verify(it, record.bytes, record.crc32) } == ParquetVerify.Result.Ok
@@ -151,7 +151,7 @@ class LegacyReceiptImport(
          * The record of one receipt, or null for anything without a valid `size` and `crc`. A receipt
          * from an older index layout with no UTC rows reads as never indexed, so repair indexes it again.
          */
-        fun decode(station: String, name: String, text: String): ArchiveRecord? {
+        fun decode(thing: String, name: String, text: String): ArchiveRecord? {
             val o = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
             fun long(key: String): Long? = o[key]?.let { runCatching { it.jsonPrimitive.longOrNull }.getOrNull() }
             fun int(key: String): Int? = o[key]?.let { runCatching { it.jsonPrimitive.intOrNull }.getOrNull() }
@@ -159,7 +159,7 @@ class LegacyReceiptImport(
             val size = long("size")?.takeIf { it >= 0 } ?: return null
             val crc = long("crc")?.takeIf { it in 0..0xFFFF_FFFFL } ?: return null
             val record = ArchiveRecord(
-                station = station,
+                thing = thing,
                 name = name,
                 bytes = size,
                 crc32 = crc,

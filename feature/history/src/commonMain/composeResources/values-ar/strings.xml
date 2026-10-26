@@ -6,7 +6,7 @@
     <string name="history_from">السجل من</string>
     <string name="history_current">الحالي</string>
     <string name="history_earlier">سابق</string>
-    <string name="history_station_chip">%1$s، المحطة %2$s</string>
+    <string name="history_thing_chip">%1$s، المستشعر %2$s</string>
     <string name="history_range_day">يوم</string>
     <string name="history_range_week">أسبوع</string>
     <string name="history_range_month">شهر</string>
@@ -25,13 +25,13 @@
     <string name="history_index_failed">تعذّرت الفهرسة</string>
     <string name="history_read_failed">تعذّرت القراءة</string>
     <string name="history_estimated">ملفات بوقت تقديري</string>
-    <plurals name="history_other_station">
-        <item quantity="zero">%1$d نسخة تتبع محطة أخرى</item>
-        <item quantity="one">نسخة واحدة (%1$d) تتبع محطة أخرى</item>
-        <item quantity="two">نسختان (%1$d) تتبعان محطة أخرى</item>
-        <item quantity="few">%1$d نسخ تتبع محطة أخرى</item>
-        <item quantity="many">%1$d نسخة تتبع محطة أخرى</item>
-        <item quantity="other">%1$d نسخة تتبع محطة أخرى</item>
+    <plurals name="history_other_thing">
+        <item quantity="zero">%1$d نسخة تتبع مستشعرًا آخر</item>
+        <item quantity="one">نسخة واحدة (%1$d) تتبع مستشعرًا آخر</item>
+        <item quantity="two">نسختان (%1$d) تتبعان مستشعرًا آخر</item>
+        <item quantity="few">%1$d نسخ تتبع مستشعرًا آخر</item>
+        <item quantity="many">%1$d نسخة تتبع مستشعرًا آخر</item>
+        <item quantity="other">%1$d نسخة تتبع مستشعرًا آخر</item>
     </plurals>
     <plurals name="history_untimed_files">
         <item quantity="zero">%1$d ملف بلا وقت</item>
@@ -72,7 +72,7 @@
     <string name="history_dev_raw">صفوف خام كل 10 ث</string>
     <string name="history_dev_points">النقاط</string>
     <string name="history_dev_valid_rows">الصفوف الصالحة</string>
-    <string name="history_dev_station">المحطة</string>
+    <string name="history_dev_thing">معرّف المستشعر</string>
     <string name="chart_touch">المس عمودًا لقراءته</string>
     <string name="chart_who_24h">إرشاد منظمة الصحة العالمية لمدة 24 ساعة</string>
     <string name="chart_mean_hourly">الأعمدة متوسطات كل ساعة.</string>
@@ -88,7 +88,7 @@
     <string name="info_history_body1">تستخدم المتوسطات فقط القراءات التي وسمها المستشعر بأنها صالحة، بعد الإحماء، وحديثة، وبلا خطأ.</string>
     <string name="info_history_body2">التغطية هي نسبة الفترة التي فيها مثل هذه القراءات. ثلاث قراءات في ساعة تعني 1 بالمئة، وليست متوسطًا للساعة.</string>
     <string name="info_history_body3">المقاطع المتقطعة سُجّلت قبل أن تكون للمستشعر ساعة. وقتها مقدَّر من وقت ضُبط لاحقًا خلال فترة التشغيل نفسها.</string>
-    <string name="info_history_body4">تبقى قراءات المحطة السابقة متاحة بعد إعادة ضبط الجهاز.</string>
+    <string name="info_history_body4">تبقى القراءات بمعرّف المستشعر السابق متاحة بعد إعادة ضبط الجهاز.</string>
     <string name="info_history_body5">تتبع ألوان PM2.5 وPM10 إرشادات منظمة الصحة العالمية لجودة الهواء لعام 2021. الإرشاد وأهدافه المرحلية الأربعة متوسطات على مدى 24 ساعة.</string>
     <!-- Screen reader summaries of the History charts (BandColumnChart, DayRing, CalendarHeatmap). -->
     <string name="chart_bars_title">مخطط أعمدة لـ %1$s</string>

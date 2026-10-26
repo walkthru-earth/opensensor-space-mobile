@@ -50,7 +50,7 @@ class DayPassResult(
 )
 
 /**
- * One pass over a station-day's sources feeds both the tier [Aggregator] and the derived daily file
+ * One pass over a thing-day's sources feeds both the tier [Aggregator] and the derived daily file
  * (#63). Each source is opened once to time its rows and feed the tiers. With a sink it is opened
  * once more and decoded only while its hourly row groups are written, then dropped, so the day's
  * columns are never all held at once (#98). Rows are timed (UTC or the same-boot estimate), kept when they fall in the UTC day, and
@@ -61,7 +61,7 @@ class DayPassResult(
  */
 object DayPass {
     fun run(
-        station: String,
+        thing: String,
         epochDay: Long,
         sources: List<DailyParquetSource>,
         sink: ParquetSink?,
@@ -70,13 +70,13 @@ object DayPass {
         tiers: Boolean = true,
         templates: FileTemplates = FileTemplates.BUNDLED,
     ): DayPassResult = DailyParquetBuilder.pass(
-        station,
+        thing,
         epochDay,
         sources,
         sink,
         anchors,
         nowEpochS,
-        if (tiers) Aggregator(station, templates = templates) else null,
+        if (tiers) Aggregator(thing, templates = templates) else null,
         strict = false,
     )
 }
@@ -92,13 +92,13 @@ object DayPass {
  */
 object DailyParquetBuilder {
     fun build(
-        station: String,
+        thing: String,
         epochDay: Long,
         sources: List<DailyParquetSource>,
         sink: ParquetSink,
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long,
-    ): DailyParquetResult? = pass(station, epochDay, sources, sink, anchors, nowEpochS, aggregator = null, strict = true).daily
+    ): DailyParquetResult? = pass(thing, epochDay, sources, sink, anchors, nowEpochS, aggregator = null, strict = true).daily
 
     /**
      * The estimated instant of each of [rows] rows from [mono] and [anchor]. A row without a monotonic
@@ -137,7 +137,7 @@ object DailyParquetBuilder {
      * did. Otherwise a failing source is skipped for the tiers and recorded, and the daily file is dropped.
      */
     internal fun pass(
-        station: String,
+        thing: String,
         epochDay: Long,
         sources: List<DailyParquetSource>,
         sink: ParquetSink?,
@@ -146,9 +146,9 @@ object DailyParquetBuilder {
         aggregator: Aggregator?,
         strict: Boolean,
     ): DayPassResult {
-        require(ArchiveLayout.isSafeStation(station)) { "unsafe station id" }
-        val dayStartNs = epochDay * StationDays.DAY_NS
-        val dayEndNs = dayStartNs + StationDays.DAY_NS
+        require(ArchiveLayout.isSafeThing(thing)) { "unsafe thing id" }
+        val dayStartNs = epochDay * ThingDays.DAY_NS
+        val dayEndNs = dayStartNs + ThingDays.DAY_NS
         var writing = sink != null
         var dailyError: Exception? = null
         val failed = ArrayList<ArchiveRecord>()
@@ -177,11 +177,11 @@ object DailyParquetBuilder {
             val src = source.record
             val first = kept
             val one = try {
-                require(src.station == station) { "source belongs to another station" }
+                require(src.thing == thing) { "source belongs to another thing" }
                 source.open().use { pf ->
                     val md = pf.metadata
                     val footer = md.footer
-                    require(footer?.stationId == null || footer.stationId == station) { "Parquet source belongs to another station" }
+                    require(footer?.thingId == null || footer.thingId == thing) { "Parquet source belongs to another thing" }
                     rowsRead += pf.numRows
                     val cache = HashMap<String, ColumnValues?>()
                     fun col(name: String): ColumnValues? = cache.getOrPut(name) { md.leaf(name)?.let { pf.readColumn(it) } }

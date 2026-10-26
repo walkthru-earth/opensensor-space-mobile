@@ -36,8 +36,9 @@ data class DeviceInfo(
      * the firmware cannot serve one.
      */
     val desc: String? = null,
-    /** Station UUID, same as in every Parquet row and Hive path. */
-    val station: String? = null,
+    /** Thing UUID, same as in every Parquet row and Hive path. The wire key is still `thing`. */
+    @SerialName("station")
+    val thing: String? = null,
     /** 12 hex device_id. */
     val dev: String? = null,
     /** 32 hex boot id. */

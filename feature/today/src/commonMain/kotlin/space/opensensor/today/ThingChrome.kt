@@ -38,7 +38,7 @@ import space.opensensor.today.resources.tab_files
 import space.opensensor.today.resources.tab_history
 import space.opensensor.today.resources.tab_today
 
-// The station chrome every section shares on both platforms: the link banner, the section tabs and
+// The thing chrome every section shares on both platforms: the link banner, the section tabs and
 // the transport chip. Android History, Files and Device and the iOS pages draw these, never copies.
 
 /** The link state as a banner, with the reconnect attempt and, when pairing broke, a Bluetooth settings link. */
@@ -100,12 +100,12 @@ fun ConnectionBanner(
     }
 }
 
-/** The four sections of one station. */
+/** The four sections of one thing. */
 enum class DeviceTab { TODAY, HISTORY, FILES, DEVICE }
 
 /**
- * The four sections of one station, as a tab row under the screen's top bar. The bottom bar stays
- * below with My devices selected, so a station never draws a second bottom bar.
+ * The four sections of one thing, as a tab row under the screen's top bar. The bottom bar stays
+ * below with My devices selected, so a thing never draws a second bottom bar.
  */
 @Composable
 fun DeviceSectionTabs(selected: DeviceTab, containerColor: Color = MaterialTheme.colorScheme.background, onSelect: (DeviceTab) -> Unit) {

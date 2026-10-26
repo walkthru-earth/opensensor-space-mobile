@@ -59,7 +59,7 @@ object TimeEstimate {
         fun uncertaintySeconds(monoUs: Long): Double = abs(monoUs - this.monoUs) / 1e6 * DRIFT_PPM / 1e6
     }
 
-    /** One anchor per boot. Callers must scope both files and receipts to the same producer station. */
+    /** One anchor per boot. Callers must scope both files and receipts to the same producer thing. */
     fun anchors(files: List<IndexedFileInfo>, receipts: List<ClockAnchor> = emptyList()): Map<String, Anchor> {
         val out = HashMap<String, Anchor>()
         for (f in files) {

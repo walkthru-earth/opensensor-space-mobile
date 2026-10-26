@@ -8,14 +8,14 @@ import space.opensensor.data.protocol.SafeName
  * `Application Support`). Both apps build every archive, partial and derived path here.
  *
  * ```
- * archive/<station>/<hive name>                         verified, immutable copies
- * archive-partial/<station>/<hive name>.partial         in-progress download, absolute offsets
- * archive-partial/<station>/<hive name>.partial.meta    "<size> <crc32 decimal>" from the OPENED frame
- * derived/v1/<station>/day=YYYY-MM-DD.parquet           derived daily file, a cache of the archive
- * derived/v1/<station>/day=YYYY-MM-DD.manifest.json     its manifest
+ * archive/<thing>/<hive name>                         verified, immutable copies
+ * archive-partial/<thing>/<hive name>.partial         in-progress download, absolute offsets
+ * archive-partial/<thing>/<hive name>.partial.meta    "<size> <crc32 decimal>" from the OPENED frame
+ * derived/v1/<thing>/day=YYYY-MM-DD.parquet           derived daily file, a cache of the archive
+ * derived/v1/<thing>/day=YYYY-MM-DD.manifest.json     its manifest
  * ```
  *
- * The Hive name is kept verbatim below the station directory, so the archive mirrors the microSD
+ * The Hive name is kept verbatim below the thing directory, so the archive mirrors the microSD
  * card and `tools/export_parquet.py`. A file reaches `archive/` only by an atomic rename after
  * [ArchiveVerifier] passed. The "is synced" receipt is the [ArchiveIndex] record, never a file.
  *
@@ -44,12 +44,12 @@ object ArchiveLayout {
     const val LEGACY_RECEIPT_SUFFIX: String = ".verified.json"
 
     /**
-     * Station ids become one directory name. `[0-9A-Za-z._-]+`, never `.` or `..`. The dot is allowed
+     * Thing ids become one directory name. `[0-9A-Za-z._-]+`, never `.` or `..`. The dot is allowed
      * because the firmware name whitelist has it (plan D2).
      */
-    fun isSafeStation(station: String): Boolean {
-        if (station.isEmpty() || station == "." || station == "..") return false
-        for (c in station) if (!(c in '0'..'9' || c in 'a'..'z' || c in 'A'..'Z' || c == '.' || c == '_' || c == '-')) return false
+    fun isSafeThing(thing: String): Boolean {
+        if (thing.isEmpty() || thing == "." || thing == "..") return false
+        for (c in thing) if (!(c in '0'..'9' || c in 'a'..'z' || c in 'A'..'Z' || c == '.' || c == '_' || c == '-')) return false
         return true
     }
 
@@ -60,14 +60,14 @@ object ArchiveLayout {
      */
     fun isArchiveName(name: String): Boolean = SafeName.isValid(name) && !name.startsWith("./") && !name.contains("/./")
 
-    fun stationDir(station: String): String = "$ARCHIVE/${checkedStation(station)}"
-    fun partialStationDir(station: String): String = "$PARTIAL/${checkedStation(station)}"
+    fun thingDir(thing: String): String = "$ARCHIVE/${checkedThing(thing)}"
+    fun partialThingDir(thing: String): String = "$PARTIAL/${checkedThing(thing)}"
 
-    fun finalPath(key: ArchiveKey): String = "$ARCHIVE/${key.station}/${key.name}"
-    fun partialPath(key: ArchiveKey): String = "$PARTIAL/${key.station}/${key.name}$PARTIAL_SUFFIX"
-    fun partialMetaPath(key: ArchiveKey): String = "$PARTIAL/${key.station}/${key.name}$META_SUFFIX"
+    fun finalPath(key: ArchiveKey): String = "$ARCHIVE/${key.thing}/${key.name}"
+    fun partialPath(key: ArchiveKey): String = "$PARTIAL/${key.thing}/${key.name}$PARTIAL_SUFFIX"
+    fun partialMetaPath(key: ArchiveKey): String = "$PARTIAL/${key.thing}/${key.name}$META_SUFFIX"
 
-    /** The Hive name of a partial, from its path relative to [partialStationDir], or null for anything else (a `.meta`, a stray file). */
+    /** The Hive name of a partial, from its path relative to [partialThingDir], or null for anything else (a `.meta`, a stray file). */
     fun nameOfPartial(relative: String): String? =
         relative.takeIf { it.endsWith(PARTIAL_SUFFIX) }?.removeSuffix(PARTIAL_SUFFIX)?.takeIf(::isArchiveName)
 
@@ -87,20 +87,20 @@ object ArchiveLayout {
     /** `YYYY-MM-DD` of a UTC epoch day, the label in derived file names and manifests. */
     fun dayLabel(epochDay: Long): String = LocalDate.fromEpochDays(epochDay).toString()
 
-    fun derivedStationDir(station: String): String = "$DERIVED/${checkedStation(station)}"
-    fun derivedDayPath(station: String, epochDay: Long): String = "${derivedStationDir(station)}/day=${dayLabel(epochDay)}.parquet"
-    fun derivedManifestPath(station: String, epochDay: Long): String = "${derivedStationDir(station)}/day=${dayLabel(epochDay)}.manifest.json"
+    fun derivedThingDir(thing: String): String = "$DERIVED/${checkedThing(thing)}"
+    fun derivedDayPath(thing: String, epochDay: Long): String = "${derivedThingDir(thing)}/day=${dayLabel(epochDay)}.parquet"
+    fun derivedManifestPath(thing: String, epochDay: Long): String = "${derivedThingDir(thing)}/day=${dayLabel(epochDay)}.manifest.json"
 
-    private fun checkedStation(station: String): String {
-        require(isSafeStation(station)) { "unsafe station id" }
-        return station
+    private fun checkedThing(thing: String): String {
+        require(isSafeThing(thing)) { "unsafe thing id" }
+        return thing
     }
 }
 
-/** One archive file: the station directory and the Hive name below it. Both are checked once, here. */
-data class ArchiveKey(val station: String, val name: String) {
+/** One archive file: the thing directory and the Hive name below it. Both are checked once, here. */
+data class ArchiveKey(val thing: String, val name: String) {
     init {
-        require(ArchiveLayout.isSafeStation(station)) { "unsafe station id" }
+        require(ArchiveLayout.isSafeThing(thing)) { "unsafe thing id" }
         require(ArchiveLayout.isArchiveName(name)) { "unsafe archive name" }
     }
 }

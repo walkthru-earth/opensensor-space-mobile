@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
  *
  * Only paths under a [StorageClass.Rebuildable] root are ever deleted. A path that classifies as
  * anything else is refused and counted. It blocks on disk I/O, so callers run it on their I/O
- * dispatcher. It logs counts only, never paths or station ids.
+ * dispatcher. It logs counts only, never paths or thing ids.
  */
 class QuotaEnforcer(
     private val roots: StorageRoots,

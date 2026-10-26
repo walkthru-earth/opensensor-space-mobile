@@ -121,7 +121,7 @@ class OpenAqAggregatesFeedTest {
         val (cairo, lagos, nairobi) = table.rows
         assertEquals(CellRow(CAIRO, 2, endOf(oct(8)), mapOf("pm25" to CellStat(2, 20.0, 12.0, 31.0), "temperature" to CellStat(2, 26.0, 21.0, 30.0))), cairo)
         assertEquals(CellRow(LAGOS, 1, endOf(oct(7)), mapOf("humidity" to CellStat(1, 70.0, 64.0, 77.0))), lagos)
-        // PM10 from the 5th and PM2.5 from the 7th, each with its own date. The 8th has stations but no value, so it is not used.
+        // PM10 from the 5th and PM2.5 from the 7th, each with its own date. The 8th has things but no value, so it is not used.
         assertEquals(CellRow(NAIROBI, 2, endOf(oct(7)), mapOf("pm10" to CellStat(1, 33.0, 25.0, 41.0), "pm25" to CellStat(2, 12.0, 8.0, 17.0)), updatedByProperty = mapOf("pm10" to endOf(oct(5)))), nairobi)
     }
 

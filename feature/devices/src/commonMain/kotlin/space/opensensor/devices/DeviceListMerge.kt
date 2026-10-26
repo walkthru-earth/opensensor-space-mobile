@@ -6,10 +6,10 @@ package space.opensensor.devices
  *
  * - A nearby sensor is matched to a known one by id. Nearby rows sort by signal, strongest first.
  * - A known sensor that does not advertise is listed under known, most recently seen first.
- * - A known sensor whose station is on the Wi-Fi carries a Wi-Fi tag, with or without access.
- * - A Wi-Fi sensor whose station matches no known sensor is listed on its own. It cannot be opened
+ * - A known sensor whose thing is on the Wi-Fi carries a Wi-Fi tag, with or without access.
+ * - A Wi-Fi sensor whose thing matches no known sensor is listed on its own. It cannot be opened
  *   until it is connected over Bluetooth once, because the token comes over Bluetooth only.
- * - The archive glance is keyed by station.
+ * - The archive glance is keyed by thing.
  */
 object DeviceListMerge {
     fun merge(
@@ -20,10 +20,10 @@ object DeviceListMerge {
         archive: Map<String, ArchiveGlance>,
     ): DeviceList {
         val knownById = known.associateBy { it.id }
-        val wifiStations = wifi.mapNotNull { it.station }.toSet()
+        val wifiThings = wifi.mapNotNull { it.thing }.toSet()
 
         fun wifiTag(k: KnownSensor?): WifiTag? = when {
-            k?.station == null || k.station !in wifiStations -> null
+            k?.thing == null || k.thing !in wifiThings -> null
             k.hasWifiAccess -> WifiTag.WITH_ACCESS
             else -> WifiTag.NO_ACCESS
         }
@@ -33,13 +33,13 @@ object DeviceListMerge {
             DeviceRow(
                 id = n.id,
                 name = n.name ?: k?.name,
-                station = k?.station,
+                thing = k?.thing,
                 rssi = n.rssi,
                 bonded = n.bonded,
                 known = k != null,
                 wifi = wifiTag(k),
                 lastSeenMs = k?.lastSeenMs,
-                archive = k?.station?.let(archive::get),
+                archive = k?.thing?.let(archive::get),
             )
         }
         val nearbyIds = nearbyRows.map { it.id }.toSet()
@@ -49,17 +49,17 @@ object DeviceListMerge {
                 DeviceRow(
                     id = k.id,
                     name = k.name,
-                    station = k.station,
+                    thing = k.thing,
                     rssi = null,
                     bonded = false,
                     known = true,
                     wifi = wifiTag(k),
                     lastSeenMs = k.lastSeenMs,
-                    archive = k.station?.let(archive::get),
+                    archive = k.thing?.let(archive::get),
                 )
             }
-        val knownStations = known.mapNotNull { it.station }.toSet()
-        val wifiOnly = wifi.filter { it.station == null || it.station !in knownStations }.distinctBy { it.name }.sortedBy { it.name }
+        val knownThings = known.mapNotNull { it.thing }.toSet()
+        val wifiOnly = wifi.filter { it.thing == null || it.thing !in knownThings }.distinctBy { it.name }.sortedBy { it.name }
         return DeviceList(
             active = active.distinctBy { it.id },
             nearby = nearbyRows,

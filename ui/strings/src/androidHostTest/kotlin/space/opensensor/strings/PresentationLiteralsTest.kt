@@ -83,6 +83,6 @@ class PresentationLiteralsTest {
         assertTrue(!hasWords("${'$'}{property.label}  ${'$'}unit"))
         assertTrue(hasWords("${'$'}count sensors"))
         assertTrue(sentence.containsMatchIn("""message = "Looking for nearby sensors…""""))
-        assertTrue(!sentence.containsMatchIn("""error("missing station")"""))
+        assertTrue(!sentence.containsMatchIn("""error("missing thing")"""))
     }
 }

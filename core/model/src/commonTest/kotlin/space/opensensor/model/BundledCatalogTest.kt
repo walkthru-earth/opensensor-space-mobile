@@ -72,33 +72,33 @@ class BundledCatalogTest {
 
     @Test
     fun theBundledJoinUsesTheBundledProfile() {
-        val station = assertNotNull(BundledCatalog.station("s1", waveshareDict))
-        assertFalse(station.profile.isDerived)
-        val pm25 = station.datastream("pm25_atmospheric_ug_m3")!!
+        val thing = assertNotNull(BundledCatalog.thing("s1", waveshareDict))
+        assertFalse(thing.profile.isDerived)
+        val pm25 = thing.datastream("pm25_atmospheric_ug_m3")!!
         assertEquals("PM2.5 raw", pm25.label("en"))
         assertEquals("PM2.5 خام", pm25.label("ar"))
         assertEquals("µg/m³", pm25.displayUnit)
         assertEquals("pm25", pm25.scaleId)
         assertEquals(PlausibleRange(0.0, 1000.0), pm25.datastream.plausibleRange)
-        assertNull(BundledCatalog.station("s1", unknownDict))
+        assertNull(BundledCatalog.thing("s1", unknownDict))
     }
 
     @Test
     fun anUnknownDigestShowsRawColumnNamesAndRawUnits() {
         val json = BundledFiles.files.getValue(waveshareFile).replace(waveshareDict, unknownDict)
         val served = BoardTemplate.parse(json, desc = DESC_B)
-        val station = assertNotNull(BundledCatalog.station("s1", unknownDict, desc = DESC_B, served = listOf(served)))
-        assertTrue(station.profile.isDerived)
-        station.datastreams.forEach { ds ->
+        val thing = assertNotNull(BundledCatalog.thing("s1", unknownDict, desc = DESC_B, served = listOf(served)))
+        assertTrue(thing.profile.isDerived)
+        thing.datastreams.forEach { ds ->
             assertEquals(ds.name, ds.label("en"), ds.name)
             assertEquals(ds.name, ds.label("ar"), ds.name)
             assertEquals(ds.datastream.unit, ds.displayUnit, ds.name)
             assertNull(ds.scaleId, ds.name)
         }
-        assertEquals("ug/m3", station.datastream("pm25_atmospheric_ug_m3")!!.displayUnit)
-        assertEquals("Cel", station.datastream("ambient_temperature_c")!!.displayUnit)
+        assertEquals("ug/m3", thing.datastream("pm25_atmospheric_ug_m3")!!.displayUnit)
+        assertEquals("Cel", thing.datastream("ambient_temperature_c")!!.displayUnit)
         // Nothing is hidden, so LIVE shows every key the template maps.
-        assertEquals(served.liveKeys.values.toSet(), station.live.keys)
+        assertEquals(served.liveKeys.values.toSet(), thing.live.keys)
     }
 
     @Test
@@ -124,8 +124,8 @@ class BundledCatalogTest {
     fun propertyIsOptionalOnEveryColumn() {
         // Every published column names a property today. A template that drops one still joins.
         val json = BundledFiles.files.getValue(cores3File).replace("\"opensensor:property\":\"urn:walkthru-earth:property:battery_state_of_charge\",", "")
-        val station = Station.join("s1", BoardTemplate.parse(json), BundledCatalog.profile(cores3Dict))
-        val battery = station.datastream("battery_percent")!!
+        val thing = Thing.join("s1", BoardTemplate.parse(json), BundledCatalog.profile(cores3Dict))
+        val battery = thing.datastream("battery_percent")!!
         assertNull(battery.datastream.property)
         assertEquals("Battery", battery.label("en"))
         assertEquals("%", battery.displayUnit)
@@ -145,8 +145,8 @@ class BundledCatalogTest {
         val profile = AppProfile.parse(
             """{"dict": "$cores3Dict", "family": "air", "primary": ["pm25_atmospheric_ug_m3", "ambient_temperature_c"], "hidden": ["ambient_temperature_c"]}""",
         )
-        val station = Station.join("s1", template, profile)
-        assertEquals(listOf("pm25_atmospheric_ug_m3"), station.primary.map { it.name })
+        val thing = Thing.join("s1", template, profile)
+        assertEquals(listOf("pm25_atmospheric_ug_m3"), thing.primary.map { it.name })
     }
 
     @Test

@@ -27,7 +27,7 @@ import kotlin.time.Clock
  * failed) in small batches, idempotently, safe to interrupt anywhere. [estimateTimes] gives files
  * without UTC an estimated span once their boot has a clock (§4.6). A file the reader refuses gets
  * `indexError` and stays out of History. It remains in the archive untouched, the raw copy is the
- * source of truth and the index only describes it. Each row update runs under the station gate of the
+ * source of truth and the index only describes it. Each row update runs under the thing gate of the
  * [coordinator], so a row the old file cleanup removed is never written back.
  */
 class ArchiveIndexRepair(
@@ -37,7 +37,7 @@ class ArchiveIndexRepair(
     private val nowEpochMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val log: (String) -> Unit = {},
     private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
-    /** The archive's one coordinator. Each row update runs under its station gate. */
+    /** The archive's one coordinator. Each row update runs under its thing gate. */
     private val coordinator: DeviceCoordinator = DeviceCoordinator(),
     /** Resolves each file's board template for its valid row count. */
     private val templates: FileTemplates = FileTemplates.BUNDLED,
@@ -69,16 +69,16 @@ class ArchiveIndexRepair(
     }
 
     private fun indexRecord(record: ArchiveRecord, reader: () -> ByteReader, nowEpochMs: Long, digest: (String) -> Unit): ArchiveRecord = try {
-        val producer = producerStation(record.name)
-        if (producer != null && producer != record.station) {
+        val producer = producerThing(record.name)
+        if (producer != null && producer != record.thing) {
             record.copy(
                 indexedAtEpochMs = nowEpochMs,
-                indexError = "file belongs to station $producer, raw bytes kept, excluded from the history of station ${record.station}",
+                indexError = "file belongs to thing $producer, raw bytes kept, excluded from the history of thing ${record.thing}",
             )
         } else {
             val index = ParquetFile.open(reader(), record.name).use { file ->
                 val footer = file.metadata.footer
-                require(footer?.stationId == null || footer.stationId == record.station) { "file metadata belongs to another station" }
+                require(footer?.thingId == null || footer.thingId == record.thing) { "file metadata belongs to another thing" }
                 ParquetIndexer.index(file, templates).also { footer?.templateSha256?.let(digest) }
             }
             record.copy(
@@ -121,7 +121,7 @@ class ArchiveIndexRepair(
                 // A failed retry of an already failed record changes nothing. Skip the write so the loop ends.
                 if (record.indexError != null && updated.indexError != null) continue
                 // Only the index columns are repair's. The engine may have changed the rest meanwhile.
-                coordinator.withStation(record.station) { index.update(record.key) { latest -> withIndexColumns(latest, updated) } }
+                coordinator.withThing(record.thing) { index.update(record.key) { latest -> withIndexColumns(latest, updated) } }
                 done++
             }
             if (done > 0) log("indexed $done files (${pending.size} candidates)")
@@ -171,13 +171,13 @@ class ArchiveIndexRepair(
     suspend fun estimateTimes(): Int = mutex.withLock {
         withContext(io) {
             var changed = 0
-            for (station in index.stations()) {
-                val files = index.indexedForStation(station)
-                val anchors = TimeEstimate.anchors(files.map { it.info() }, clockAnchors.anchors(station))
+            for (thing in index.things()) {
+                val files = index.indexedForThing(thing)
+                val anchors = TimeEstimate.anchors(files.map { it.info() }, clockAnchors.anchors(thing))
                 for (f in files) {
                     val updated = estimated(f, anchors)
                     if (updated != f) {
-                        coordinator.withStation(f.station) {
+                        coordinator.withThing(f.thing) {
                             index.update(f.key) { latest -> latest.copy(estFirstUtcNs = updated.estFirstUtcNs, estLastUtcNs = updated.estLastUtcNs, estAnchorFile = updated.estAnchorFile) }
                         }
                         changed++
@@ -190,10 +190,10 @@ class ArchiveIndexRepair(
     }
 
     companion object {
-        /** The station inside the Hive path, which can differ from the archive namespace the file was saved under. */
-        fun producerStation(name: String): String? = when (val partition = HivePartition.of(name)) {
-            is HivePartition.Dated -> partition.station
-            is HivePartition.Unsynced -> partition.station
+        /** The thing inside the Hive path, which can differ from the archive namespace the file was saved under. */
+        fun producerThing(name: String): String? = when (val partition = HivePartition.of(name)) {
+            is HivePartition.Dated -> partition.thing
+            is HivePartition.Unsynced -> partition.thing
             else -> null
         }
 

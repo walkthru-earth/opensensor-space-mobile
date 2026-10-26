@@ -52,18 +52,18 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
     }
 }
 
-/// The app's adapters, made once per process. Only ids, names and stations cross into Kotlin.
+/// The app's adapters, made once per process. Only ids, names and things cross into Kotlin.
 @MainActor
 final class AppServices {
     private var openAttempt = UUID()
     private var selectedOpenId: String?
     private var livePage = LivePage()
-    /// One shared engine, so LAN and Bluetooth save into the same archive and never sync a station twice at once.
+    /// One shared engine, so LAN and Bluetooth save into the same archive and never sync a thing twice at once.
     let engine = IosArchiveKt.sharedSensorSync()
     private(set) lazy var bluetooth = BluetoothCompanion(engine: engine)
     private(set) lazy var lan = LanDiscovery(state: bluetooth.state, engine: engine)
     let credentials = LanCredentials()
-    /// My devices over the adapters. Only ids, names and stations cross, never a token.
+    /// My devices over the adapters. Only ids, names and things cross, never a token.
     private(set) lazy var devices: DevicesBridge = DevicesBridgeIosKt.devicesBridge(
         state: bluetooth.state, sync: engine,
         startScan: { [weak self] in self?.scanDevices() },
@@ -109,9 +109,9 @@ final class AppServices {
             MainActor.assumeIsolated { self?.pausedWords = (title, body) }
         }
         bluetooth.peripheralFor = { [weak self] device in self?.devices.peripheralFor(device: device) }
-        bluetooth.onSensorOpened = { [weak self] peripheral, name, station, device in
+        bluetooth.onSensorOpened = { [weak self] peripheral, name, thing, device in
             guard let self else { return SensorOpenResult(accepted: false, notice: .infoInvalid, credentialToRemove: nil) }
-            let result = self.devices.sensorOpened(peripheral: peripheral, name: name, station: station, device: device)
+            let result = self.devices.sensorOpened(peripheral: peripheral, name: name, thing: thing, device: device)
             if let staleDevice = result.credentialToRemove {
                 self.lan.disconnect(device: staleDevice)
                 self.credentials.remove(device: staleDevice)
@@ -145,7 +145,7 @@ final class AppServices {
     func credentialsChanged() {
         let entries = credentials.list()
         devices.credentialsChanged(
-            peripherals: entries.map(\.peripheral), stations: entries.map(\.station), devices: entries.map(\.device))
+            peripherals: entries.map(\.peripheral), things: entries.map(\.thing), devices: entries.map(\.device))
     }
 
     /// My devices uses one scan action for both nearby Bluetooth and local Bonjour sensors.
@@ -205,8 +205,8 @@ final class AppServices {
         selectedOpenId = id
         livePage.opened(id, allowBluetooth: allowBluetooth)
         let attempt = openAttempt
-        if let station = devices.stationFor(peripheral: id), let device = devices.deviceFor(peripheral: id) {
-            let started = lan.connectKnown(station: station, device: device, onFailure: allowBluetooth ? { [weak self] in
+        if let thing = devices.thingFor(peripheral: id), let device = devices.deviceFor(peripheral: id) {
+            let started = lan.connectKnown(thing: thing, device: device, onFailure: allowBluetooth ? { [weak self] in
                 guard let self, self.openAttempt == attempt,
                     self.selectedOpenId?.caseInsensitiveCompare(id) == .orderedSame else { return }
                 self.bluetooth.open(id: id)

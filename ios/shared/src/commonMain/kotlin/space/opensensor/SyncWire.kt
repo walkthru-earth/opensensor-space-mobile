@@ -32,26 +32,26 @@ class SyncWire {
 
     fun identity(json: String): SyncIdentity? = runCatching {
         val info = DeviceInfo.parse(json)
-        val station = info.station ?: error("missing station")
+        val thing = info.thing ?: error("missing thing")
         val device = info.dev ?: error("missing hardware identity")
         require(requireProto3(info) is ProtoGate.Accepted && Regex("[0-9a-fA-F]{12}").matches(device))
-        require(isStationId(station))
+        require(isThingId(thing))
         // Android ReadWindow.kt:21 uses 4096 when max_read is absent. Never above the advertised value.
         val maxRead = info.maxRead ?: DEFAULT_MAX_READ
         require(maxRead > 0)
-        SyncIdentity(station, device.lowercase(), maxRead.coerceIn(1, MAX_READ_CAP), info.boot, info.dict, info.desc)
+        SyncIdentity(thing, device.lowercase(), maxRead.coerceIn(1, MAX_READ_CAP), info.boot, info.dict, info.desc)
     }.getOrNull()
 
     companion object {
         const val DEFAULT_MAX_READ = 4096
         private const val MAX_READ_CAP = 16384
-        private val STATION_ID = Regex("[0-9A-Za-z._-]+")
+        private val THING_ID = Regex("[0-9A-Za-z._-]+")
 
         /**
-         * Same rule as Android (DeviceContinuityPolicy.kt:60, FileArchive.kt:131). The station is one
+         * Same rule as Android (DeviceContinuityPolicy.kt:60, FileArchive.kt:131). The thing is one
          * archive directory, so a slash never passes and `.` or `..` alone is refused.
          */
-        fun isStationId(station: String): Boolean = STATION_ID.matches(station) && station != "." && station != ".."
+        fun isThingId(thing: String): Boolean = THING_ID.matches(thing) && thing != "." && thing != ".."
     }
 
     /** Malformed frames return null; no secret bytes are included in errors or descriptions. */
@@ -155,7 +155,7 @@ enum class HandshakeRefusal {
  * board's column dictionary and the template it serves (#191), both unvalidated here.
  */
 class SyncIdentity(
-    val station: String,
+    val thing: String,
     val device: String,
     val maxRead: Int,
     val boot: String? = null,

@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
-import space.opensensor.airquality.StationSummary
+import space.opensensor.airquality.ThingSummary
 import space.opensensor.publicfeed.CellFreshness
 import space.opensensor.publicfeed.CellGeoJson
 import space.opensensor.publicfeed.CellRow
@@ -117,7 +117,7 @@ data class DiscoverUiState(
 }
 
 /** The selected cell's summary for [property], three windows, headline the 24 hour mean. Null with no selection. */
-fun DiscoverUiState.selectedSummary(property: FeedProperty): StationSummary? {
+fun DiscoverUiState.selectedSummary(property: FeedProperty): ThingSummary? {
     selected ?: return null
     return PublicSummary.of(property, selectedWindows, offered = windows)
 }

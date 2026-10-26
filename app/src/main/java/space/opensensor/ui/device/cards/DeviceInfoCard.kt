@@ -27,7 +27,7 @@ import space.opensensor.ui.components.agoFormatter
 
 /**
  * The device header card. Simple names the device and how it is connected, in words. Detailed adds
- * firmware and protocol. Developer adds every identifier the firmware reports (schema, station,
+ * firmware and protocol. Developer adds every identifier the firmware reports (schema, thing,
  * device and boot IDs, dictionary hash, read window, payload size and endpoint).
  */
 @Composable
@@ -57,7 +57,7 @@ fun DeviceInfoCard(
         }
         if (level.developer) {
             StatLine(stringResource(R.string.device_schema), stringResource(R.string.device_schema_cols, info?.schema ?: NO_VALUE, info?.cols?.toString() ?: NO_VALUE))
-            StatLine(stringResource(R.string.device_station), info?.station ?: NO_VALUE)
+            StatLine(stringResource(R.string.device_thing), info?.thing ?: NO_VALUE)
             StatLine(stringResource(R.string.device_id), info?.dev ?: NO_VALUE)
             StatLine(stringResource(R.string.device_boot), info?.boot?.take(16)?.plus("…") ?: NO_VALUE)
             StatLine(stringResource(R.string.device_dictionary), info?.dict?.take(12)?.plus("…") ?: NO_VALUE)

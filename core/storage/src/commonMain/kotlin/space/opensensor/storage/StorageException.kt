@@ -2,7 +2,7 @@ package space.opensensor.storage
 
 /**
  * A storage write that did not reach the disk as asked. Messages name the step, never the path:
- * archive paths carry station ids (AGENTS.md).
+ * archive paths carry thing ids (AGENTS.md).
  */
 open class StorageException(message: String, cause: Throwable? = null) : Exception(message, cause)
 

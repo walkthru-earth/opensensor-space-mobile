@@ -5,7 +5,7 @@ import space.opensensor.data.history.parquet.ParquetFileMetadata
 
 /**
  * The `opensensor` footer of a raw file, or null when it has none the app can trust. Every footer
- * value the app reads (station, purpose, digests and cadence) comes from here. No unprefixed footer
+ * value the app reads (thing, purpose, digests and cadence) comes from here. No unprefixed footer
  * key is read.
  */
 val ParquetFileMetadata.footer: OpenSensorFooter? get() = OpenSensorFooter.of(keyValueMetadata)

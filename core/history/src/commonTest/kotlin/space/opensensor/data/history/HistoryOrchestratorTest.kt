@@ -36,17 +36,17 @@ import kotlin.time.Duration.Companion.seconds
 /** The History pass order both phones share, over an in-memory archive and fake platform passes. */
 class HistoryOrchestratorTest {
     private val bytes = fixtureBytes("parquet/device/v3-board-2rg-180rows.parquet")
-    private val station = ParquetFile.wrap(bytes).metadata.footer?.stationId ?: "orchestrator-station"
+    private val thing = ParquetFile.wrap(bytes).metadata.footer?.thingId ?: "orchestrator-thing"
 
     private class Store : ArchiveStore {
         val files = HashMap<ArchiveKey, ByteArray>()
-        override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
+        override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = key in files
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader = ByteArrayReader(files.getValue(key))
         override suspend fun commit(key: ArchiveKey) = Unit
-        override suspend fun listFinal(station: String?): List<ArchiveKey> = files.keys.filter { station == null || it.station == station }
+        override suspend fun listFinal(thing: String?): List<ArchiveKey> = files.keys.filter { thing == null || it.thing == thing }
     }
 
     /** An index whose row updates can be held, as a slow backfill would be. */
@@ -58,7 +58,7 @@ class HistoryOrchestratorTest {
         /** How many next row updates throw, as a busy database would. */
         var failUpdates = 0
         override fun observeAll(): Flow<List<ArchiveRecord>> = rows
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station } }
+        override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.thing == thing } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) {
             rows.value = rows.value.filterNot { it.key == record.key } + record
@@ -77,24 +77,24 @@ class HistoryOrchestratorTest {
             rows.value = rows.value.filterNot { it.key == key }
         }
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { !it.isIndexed }.take(limit)
-        override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
-            rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
+        override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
+            rows.value.filter { it.thing == thing && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
+        override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = rows.value.filter { it.thing == thing && it.isIndexed }
 
         /** A failure for the never indexed flow to throw before its first value, as a closed database would. */
         var neverIndexedFails: Exception? = null
         override fun observeNeverIndexed(): Flow<Boolean> = neverIndexedFails?.let { e -> flow { throw e } } ?: super.observeNeverIndexed()
 
-        /** How many times a time estimate or other caller listed the stations. */
-        var stationReads = 0
-        override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct().also { stationReads++ }
+        /** How many times a time estimate or other caller listed the things. */
+        var thingReads = 0
+        override suspend fun things(): List<String> = rows.value.map { it.thing }.distinct().also { thingReads++ }
     }
 
     private val store = Store()
     private val index = Index()
 
     private suspend fun waiting(part: String): ArchiveRecord {
-        val r = ArchiveRecord(station, "station=$station/day/$part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        val r = ArchiveRecord(thing, "station=$thing/day/$part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
         return r
@@ -149,7 +149,7 @@ class HistoryOrchestratorTest {
 
         val backfill = launch { history.backfill() }
         index.updating!!.await()
-        val deriving = launch { derive("emptied station") }
+        val deriving = launch { derive("emptied thing") }
         runCurrent()
         assertEquals(null, sawIndexed, "the entry point waits for the backfill in flight")
 
@@ -339,9 +339,9 @@ class HistoryOrchestratorTest {
         inDerive.await()
 
         val events = ArrayList<String>()
-        val followUp = launch { history.afterClockReceipt { history.derivePass { events += "derive after ${index.stationReads} estimate" } } }
+        val followUp = launch { history.afterClockReceipt { history.derivePass { events += "derive after ${index.thingReads} estimate" } } }
         runCurrent()
-        assertEquals(0, index.stationReads, "the estimates wait for the derive that reads them")
+        assertEquals(0, index.thingReads, "the estimates wait for the derive that reads them")
         endDerive.complete(Unit)
         derive.join()
         followUp.join()
@@ -351,7 +351,7 @@ class HistoryOrchestratorTest {
     @Test
     fun startSweepsThenAppliesTheFeedQuotaThenIndexesWhatTheJanitorAdopted() = runTest {
         // A final on disk with no record, as a crash between commit and insert leaves it.
-        val orphan = ArchiveRecord(station, "station=$station/day/orphan.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        val orphan = ArchiveRecord(thing, "station=$thing/day/orphan.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[orphan.key] = bytes
         val events = ArrayList<String>()
         val (cache, blockStore) = blocks { events += "feed quota" }

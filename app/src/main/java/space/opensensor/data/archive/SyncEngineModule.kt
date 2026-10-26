@@ -39,12 +39,12 @@ object SyncEngineModule {
         index,
         engine,
         budget,
-        archivedIdentities = { station -> files.identitiesForStation(station).map { it.toIdentity() } },
+        archivedIdentities = { thing -> files.identitiesForThing(thing).map { it.toIdentity() } },
     )
 
     /**
      * The archive's one coordinator, shared by sync, the index repair, the storage janitor and the old
-     * file cleanup, so they all see the same admission, writer leases, station gates and tombstones.
+     * file cleanup, so they all see the same admission, writer leases, thing gates and tombstones.
      */
     @Provides
     @Singleton
@@ -64,5 +64,5 @@ object SyncEngineModule {
 
 /** Indexes the committed copy in `filesDir`, the file [HistoryIndexer] reads. */
 fun HistoryIndexer.asRecordIndexer(archive: FileArchive): ArchiveRecordIndexer = ArchiveRecordIndexer { record ->
-    indexed(record.toEntity(), archive.fileFor(record.station, record.name)).toRecord()
+    indexed(record.toEntity(), archive.fileFor(record.thing, record.name)).toRecord()
 }

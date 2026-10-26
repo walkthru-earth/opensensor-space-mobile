@@ -8,7 +8,7 @@ package space.opensensor.data.history
  * app ignores them.
  */
 object LegacyFooterKeys {
-    const val STATION_ID = "station_id"
+    const val THING_ID = "station_id"
     const val BOOT_ID = "boot_id"
     const val SCHEMA_VERSION = "schema_version"
     const val PURPOSE = "purpose"
@@ -19,14 +19,14 @@ object LegacyFooterKeys {
 
     /** True for any old key, the dropped `reconciliation_anchor_*` clock anchors included. */
     fun isLegacy(key: String): Boolean =
-        key in setOf(STATION_ID, BOOT_ID, SCHEMA_VERSION, PURPOSE, DICTIONARY_SHA256, TEMPLATE_SHA256, SAMPLE_INTERVAL_MS) || key.startsWith(ANCHOR)
+        key in setOf(THING_ID, BOOT_ID, SCHEMA_VERSION, PURPOSE, DICTIONARY_SHA256, TEMPLATE_SHA256, SAMPLE_INTERVAL_MS) || key.startsWith(ANCHOR)
 
     /** An old footer with one entry per value given. */
     fun footer(
         dict: String? = null,
         desc: String? = null,
         intervalMs: Long? = null,
-        station: String? = null,
+        thing: String? = null,
         boot: String? = null,
         schema: String? = null,
         purpose: String? = null,
@@ -34,7 +34,7 @@ object LegacyFooterKeys {
         dict?.let { DICTIONARY_SHA256 to it },
         desc?.let { TEMPLATE_SHA256 to it },
         intervalMs?.let { SAMPLE_INTERVAL_MS to it.toString() },
-        station?.let { STATION_ID to it },
+        thing?.let { THING_ID to it },
         boot?.let { BOOT_ID to it },
         schema?.let { SCHEMA_VERSION to it },
         purpose?.let { PURPOSE to it },

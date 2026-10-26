@@ -39,7 +39,7 @@ import space.opensensor.data.background.AutoSyncScheduler
 import space.opensensor.data.background.CompanionPresence
 import space.opensensor.data.ble.ConfigSnapshot
 import space.opensensor.data.ble.ConnectionState
-import space.opensensor.data.ble.StationStatus
+import space.opensensor.data.ble.ThingStatus
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.history.DeviceCapabilities
@@ -71,7 +71,7 @@ data class DeviceUiState(
     val config: ConfigSnapshot? = null,
     val wifiScan: WifiScanState = WifiScanState.Idle,
     val known: KnownDevice? = null,
-    /** This device as currently seen on the LAN (by station), if at all. */
+    /** This device as currently seen on the LAN (by thing), if at all. */
     val onLan: LanDevice? = null,
     val lanDiscoveryError: String? = null,
     /** Phone holds a Bluetooth bond for this address (checked when the screen opens / config refreshes). */
@@ -79,7 +79,7 @@ data class DeviceUiState(
     val busy: Boolean = false,
     /** A file transfer is running on this session (interactive or worker-fed). */
     val syncRunning: Boolean = false,
-    /** A background worker or Collect all holds this device, see [StationStatus]. */
+    /** A background worker or Collect all holds this device, see [ThingStatus]. */
     val heldInBackground: Boolean = false,
     val isFake: Boolean = false,
     val detailLevel: DetailLevel = DetailLevel.SIMPLE,
@@ -104,14 +104,14 @@ data class DeviceUiState(
     val ready: Boolean get() = connection.isReady
     val canEdit: Boolean get() = ready && isV2 && !busy && !heldInBackground
 
-    /** The status every station page reads, the same rule Today and Files use. */
-    val station: StationStatus get() = StationStatus(connection, syncRunning = syncRunning, heldInBackground = heldInBackground)
+    /** The status every thing page reads, the same rule Today and Files use. */
+    val thing: ThingStatus get() = ThingStatus(connection, syncRunning = syncRunning, heldInBackground = heldInBackground)
 
     /**
      * Actions that drop the link (reboot, rotate token, forget bonds) are also refused while a
      * transfer runs: a `REBOOT` mid-sync would kill the download and finalize the RAM batch under it.
      */
-    val canDisrupt: Boolean get() = canEdit && !station.busy
+    val canDisrupt: Boolean get() = canEdit && !thing.busy
     val overBle: Boolean get() = transport == TransportKind.BLE || transport == TransportKind.FAKE
 
     /** What the shared Device section reads. The LAN token itself never leaves the repository. */
@@ -224,7 +224,7 @@ class DeviceViewModel @AssistedInject constructor(
             transport = activity.transport,
             wifiScan = scan,
             known = known,
-            onLan = base.info?.station?.let { lanDevices[it] },
+            onLan = base.info?.thing?.let { lanDevices[it] },
             lanDiscoveryError = lanErr,
             busy = activity.busy,
             syncRunning = activity.syncRunning,
@@ -281,14 +281,14 @@ class DeviceViewModel @AssistedInject constructor(
         override fun clearBonds() = repository.clearBonds()
         override suspend fun applySensorConfig(patch: ConfigPatch): ConfigSnapshot = repository.applySensorConfig(patch)
 
-        /** Room keeps the installation with the station and device id from `INFO`. */
+        /** Room keeps the installation with the thing and device id from `INFO`. */
         override suspend fun recordSensor(serial: String, vendor: String, model: String, batch: String, source: String) {
             val info = uiState.value.info
-            val station = checkNotNull(info?.station) { "no station in INFO" }
+            val thing = checkNotNull(info?.thing) { "no thing in INFO" }
             sensorInstallationDao.record(
                 SensorInstallation(
                     address = deviceAddress,
-                    station = station,
+                    thing = thing,
                     deviceId = info.dev,
                     vendor = vendor,
                     model = model,

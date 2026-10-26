@@ -78,7 +78,7 @@ class SensorCollectionsTest {
         recordClockAnchor = record,
         budget = FakeStorageBudget(),
     )
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val device = "a1b2c3d4e5f6"
 
     @AfterTest
@@ -93,8 +93,8 @@ class SensorCollectionsTest {
     }
 
     private val files = linkedMapOf(
-        "station=$station/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet" to parquet(1, 5_000),
-        "station=$station/year=2026/month=09/day=15/data_1015_b41d_15090-15179-90.parquet" to parquet(2, 3_000),
+        "station=$thing/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet" to parquet(1, 5_000),
+        "station=$thing/year=2026/month=09/day=15/data_1015_b41d_15090-15179-90.parquet" to parquet(2, 3_000),
     )
     private val second = files.keys.last()
 
@@ -120,7 +120,7 @@ class SensorCollectionsTest {
         fun connect(wifi: Boolean = true): IosLink {
             lateinit var link: IosLink
             link = IosLink(Port { answer(link, it) }, overWifi = wifi, address = device, callbacks = Dispatchers.Default, context = Dispatchers.Default)
-            link.identify(station, "boot", 1024)
+            link.identify(thing, "boot", 1024)
             current = link
             return link
         }
@@ -310,7 +310,7 @@ class SensorCollectionsTest {
         val provider = IosLinkProvider({ board.current }, 5.seconds, Dispatchers.Default, board::dial, poll = 10.milliseconds)
         val lent = provider.connect(device, LinkPreference.ANY)
         assertEquals(1, board.dials.load())
-        assertEquals(station, lent.station)
+        assertEquals(thing, lent.thing)
         assertTrue(board.current!!.syncRunning)
         lent.release()
         assertFalse(board.current!!.leased)
@@ -432,7 +432,7 @@ class SensorCollectionsTest {
         done(DialResult.OPENED)
         val lent = withTimeout(30_000) { retry.await() }
         assertEquals(1, dials.load(), "the retry waits for the dial Swift is still making")
-        assertEquals(station, lent.station)
+        assertEquals(thing, lent.thing)
         lent.release()
         assertFalse(board.current!!.leased)
     }
@@ -822,7 +822,7 @@ class SensorCollectionsTest {
         }
         val link = board.connect()
         val done = CompletableDeferred<SyncResult>()
-        sync.start(link, station, device, 1024, {}) { done.complete(it) }
+        sync.start(link, thing, device, 1024, {}) { done.complete(it) }
         val result = withTimeout(10_000) { done.await() }
         assertEquals(SyncEnd.LINK_LOST, result.end)
         assertEquals(2, result.files)

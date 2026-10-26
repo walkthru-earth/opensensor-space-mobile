@@ -9,9 +9,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SyncPlannerTest {
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
-    private val dated = "station=$station/year=2026/month=09/day=16/data_1800_b41d37a48c04031e9397e28ce48c2f43_27-28-1.parquet"
-    private val unsynced = "station=$station/unsynced/boot=b41d37a48c04031e9397e28ce48c2f43/data_unsynced_b41d37a48c04031e9397e28ce48c2f43_0-26-0.parquet"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val dated = "station=$thing/year=2026/month=09/day=16/data_1800_b41d37a48c04031e9397e28ce48c2f43_27-28-1.parquet"
+    private val unsynced = "station=$thing/unsynced/boot=b41d37a48c04031e9397e28ce48c2f43/data_unsynced_b41d37a48c04031e9397e28ce48c2f43_0-26-0.parquet"
     private val bench = "benchmarks/boot=e452563e96c72ca057a48924550779b6/lz4_raw_e452563e96c72ca057a48924550779b6_0-59-1.parquet"
     private val legacy = "legacy-parquet/f1179d54856fa20c31038836e5ec177e-0-6-0.parquet"
 
@@ -19,7 +19,7 @@ class SyncPlannerTest {
     fun hivePartitionsAreRecognisedFromRealDeviceNames() {
         val d = HivePartition.of(dated) as HivePartition.Dated
         assertEquals("2026-09-16", d.isoDate)
-        assertEquals(station, d.station)
+        assertEquals(thing, d.thing)
         val u = HivePartition.of(unsynced) as HivePartition.Unsynced
         assertEquals("b41d37a48c04031e9397e28ce48c2f43", u.boot)
         assertEquals("e452563e96c72ca057a48924550779b6", (HivePartition.of(bench) as HivePartition.Benchmarks).boot)
@@ -28,7 +28,7 @@ class SyncPlannerTest {
 
     @Test
     fun singleDigitMonthAndDayArePaddedInTheIsoDate() {
-        val d = HivePartition.of("station=$station/year=2026/month=3/day=7/data.parquet") as HivePartition.Dated
+        val d = HivePartition.of("station=$thing/year=2026/month=3/day=7/data.parquet") as HivePartition.Dated
         assertEquals("2026-03-07", d.isoDate)
     }
 
@@ -58,33 +58,33 @@ class SyncPlannerTest {
     @Test
     fun aFileRemovedFromThePhoneIsSkippedWhileTheDeviceListsItAtTheSameSize() {
         val manifest = listOf(Frame.File(100, dated), Frame.File(200, unsynced))
-        val pruned = listOf(PrunedFile(station, dated, 100, 7, 1))
-        val plan = SyncPlanner.plan(station, manifest, emptyList(), pruned = pruned)
+        val pruned = listOf(PrunedFile(thing, dated, 100, 7, 1))
+        val plan = SyncPlanner.plan(thing, manifest, emptyList(), pruned = pruned)
         assertEquals(FileSyncState.REMOVED, plan.entries.first { it.name == dated }.state)
         assertEquals(listOf(unsynced), plan.toDownload.map { it.name })
 
         // A file that grew on the device is a new file, so it downloads again.
-        val grown = SyncPlanner.plan(station, listOf(Frame.File(150, dated)), emptyList(), pruned = pruned)
+        val grown = SyncPlanner.plan(thing, listOf(Frame.File(150, dated)), emptyList(), pruned = pruned)
         assertEquals(listOf(dated), grown.toDownload.map { it.name })
 
         // A copy on the phone wins over the removed mark.
-        val held = SyncPlanner.plan(station, listOf(Frame.File(100, dated)), listOf(ArchivedIdentity(station, dated, 100, 7)), pruned = pruned)
+        val held = SyncPlanner.plan(thing, listOf(Frame.File(100, dated)), listOf(ArchivedIdentity(thing, dated, 100, 7)), pruned = pruned)
         assertEquals(FileSyncState.SYNCED, held.entries.single().state)
 
-        // Another station's mark does not apply, and clearing the marks downloads the file again.
-        val other = listOf(PrunedFile("other-station", dated, 100, 7, 1))
-        assertEquals(listOf(dated), SyncPlanner.plan(station, listOf(Frame.File(100, dated)), emptyList(), pruned = other).toDownload.map { it.name })
-        assertEquals(listOf(dated), SyncPlanner.plan(station, listOf(Frame.File(100, dated)), emptyList()).toDownload.map { it.name })
+        // Another thing's mark does not apply, and clearing the marks downloads the file again.
+        val other = listOf(PrunedFile("other-thing", dated, 100, 7, 1))
+        assertEquals(listOf(dated), SyncPlanner.plan(thing, listOf(Frame.File(100, dated)), emptyList(), pruned = other).toDownload.map { it.name })
+        assertEquals(listOf(dated), SyncPlanner.plan(thing, listOf(Frame.File(100, dated)), emptyList()).toDownload.map { it.name })
     }
 
     @Test
     fun aRemovedMarkWhoseNameTheDeviceNoLongerListsIsReportedForForgetting() {
-        val pruned = listOf(PrunedFile(station, dated, 100, 7, 1), PrunedFile(station, bench, 50, 7, 1), PrunedFile("other-station", unsynced, 1, 1, 1))
-        val plan = SyncPlanner.plan(station, listOf(Frame.File(100, dated)), emptyList(), pruned = pruned)
+        val pruned = listOf(PrunedFile(thing, dated, 100, 7, 1), PrunedFile(thing, bench, 50, 7, 1), PrunedFile("other-thing", unsynced, 1, 1, 1))
+        val plan = SyncPlanner.plan(thing, listOf(Frame.File(100, dated)), emptyList(), pruned = pruned)
         assertEquals(listOf(bench), plan.unlistedRemoved.map { it.name })
 
         // After a board reset the name comes back at the same size. With the mark forgotten it is a new file.
-        val reused = SyncPlanner.plan(station, listOf(Frame.File(50, bench)), emptyList(), pruned = pruned - plan.unlistedRemoved.toSet())
+        val reused = SyncPlanner.plan(thing, listOf(Frame.File(50, bench)), emptyList(), pruned = pruned - plan.unlistedRemoved.toSet())
         assertEquals(listOf(bench), reused.toDownload.map { it.name })
     }
 
@@ -96,8 +96,8 @@ class SyncPlannerTest {
             Frame.File(9_427, dated),
             Frame.File(7_741, legacy),
         )
-        val archived = listOf(ArchivedIdentity(station, legacy, 7_741, null))
-        val plan = SyncPlanner.plan(station, manifest, archived)
+        val archived = listOf(ArchivedIdentity(thing, legacy, 7_741, null))
+        val plan = SyncPlanner.plan(thing, manifest, archived)
 
         assertEquals(4, plan.entries.size)
         assertEquals(1, plan.syncedCount)
@@ -110,9 +110,9 @@ class SyncPlannerTest {
     @Test
     fun sizeDriftOnAnImmutableFileIsAMismatchNotAReDownload() {
         val plan = SyncPlanner.plan(
-            station,
+            thing,
             listOf(Frame.File(9_427, dated)),
-            listOf(ArchivedIdentity(station, dated, 9_000, null)),
+            listOf(ArchivedIdentity(thing, dated, 9_000, null)),
         )
         val entry = plan.entries.single()
         assertEquals(FileSyncState.MISMATCH, entry.state)
@@ -122,7 +122,7 @@ class SyncPlannerTest {
     @Test
     fun partialDownloadResumesAndCountsOnlyTheRemainingBytes() {
         val plan = SyncPlanner.plan(
-            station,
+            thing,
             listOf(Frame.File(41_986, unsynced)),
             emptyList(),
             partials = mapOf(unsynced to 16_384L),
@@ -135,17 +135,17 @@ class SyncPlannerTest {
 
     @Test
     fun unsafeNamesAreNeverStored() {
-        val plan = SyncPlanner.plan(station, listOf(Frame.File(10, "../x.parquet")), emptyList())
+        val plan = SyncPlanner.plan(thing, listOf(Frame.File(10, "../x.parquet")), emptyList())
         assertEquals(FileSyncState.INVALID_NAME, plan.entries.single().state)
         assertTrue(plan.toDownload.isEmpty())
     }
 
     @Test
-    fun archiveIdentityIsScopedToTheStation() {
+    fun archiveIdentityIsScopedToTheThing() {
         val plan = SyncPlanner.plan(
-            station,
+            thing,
             listOf(Frame.File(9_427, dated)),
-            listOf(ArchivedIdentity("other-station", dated, 9_427, null)),
+            listOf(ArchivedIdentity("other-thing", dated, 9_427, null)),
         )
         assertEquals(FileSyncState.NOT_SYNCED, plan.entries.single().state)
     }

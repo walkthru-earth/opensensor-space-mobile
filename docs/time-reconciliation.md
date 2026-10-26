@@ -16,7 +16,7 @@ that anchor; unavailable status obtains an initial acknowledged phone anchor. A 
 check does not prevent downloading verified original files. There is no user-facing device-time setting or confirmation.
 The optional microsecond remainder in `SET_TIME` retains the phone's millisecond precision;
 legacy firmware falls back to integer seconds. Only the acknowledged UTC/monotonic pair is
-persisted as evidence, bound to the connection's original station and full boot ID.
+persisted as evidence, bound to the connection's original thing and full boot ID.
 
 A phone does not need internet to supply its system clock or reconcile files. On supported
 Wi-Fi firmware, SNTP supplies a network anchor independently. A Wi-Fi-only recovery dates
@@ -41,7 +41,7 @@ while explicit Finalize can still cut a short chunk. The card never merges final
 
 1. Persist the clock acknowledgement in an immutable app-private receipt.
 2. Use the fully timed rows of verified downloaded files of the same boot as more evidence.
-3. Estimate the UTC span of earlier unknown-UTC files of that same station and boot.
+3. Estimate the UTC span of earlier unknown-UTC files of that same thing and boot.
 4. Rebuild affected UTC day partitions and history buckets, splitting rows at UTC midnight.
 5. Retain original paths and bytes; corrected time goes in `event_time_utc_estimated_us`,
    while the original `event_time_utc_us` remains null.
@@ -53,7 +53,7 @@ Source signatures include the anchor so new evidence invalidates the derived cac
 Boot plus sequence remains row identity; moving a row to another UTC partition does not
 create another sample. Partitioning uses UTC, regardless of the phone's display timezone.
 App restart reloads receipts and rebuilds missing or stale derived output. Both platforms use
-`DailyParquetBuilder` to write `derived/v1/<station>/day=YYYY-MM-DD.parquet` and a source manifest.
+`DailyParquetBuilder` to write `derived/v1/<thing>/day=YYYY-MM-DD.parquet` and a source manifest.
 New files identify the shared writer as `derived_version=4`. Row UTC columns are microseconds in
 current device files (`event_time_utc_us`, `clock_anchor_utc_us`) and nanoseconds in older ones
 (`*_utc_ns`). The app reads the unit from the Parquet logical type and keeps its own timeline in

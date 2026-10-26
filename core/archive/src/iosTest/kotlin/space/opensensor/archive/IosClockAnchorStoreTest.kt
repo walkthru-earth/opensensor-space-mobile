@@ -12,9 +12,9 @@ class IosClockAnchorStoreTest : ClockAnchorStoreContract() {
     override fun newStore(): ClockAnchorStore = IosClockAnchorStore(root)
 
     override fun writeMalformedReceipt() {
-        IosFiles.writeAtomically("$root/${clockTestAnchor.station}/${clockTestAnchor.boot}/broken.anchor", "interrupted".encodeToByteArray())
-        val moved = clockTestAnchor.copy(station = "station-b")
-        IosFiles.writeAtomically("$root/${clockTestAnchor.station}/${clockTestAnchor.boot}/misplaced.anchor", ClockAnchorReceipt.encode(moved))
+        IosFiles.writeAtomically("$root/${clockTestAnchor.thing}/${clockTestAnchor.boot}/broken.anchor", "interrupted".encodeToByteArray())
+        val moved = clockTestAnchor.copy(thing = "thing-b")
+        IosFiles.writeAtomically("$root/${clockTestAnchor.thing}/${clockTestAnchor.boot}/misplaced.anchor", ClockAnchorReceipt.encode(moved))
     }
 
     @AfterTest

@@ -25,13 +25,13 @@ import space.opensensor.data.history.parquet.ScanRequest
 import kotlin.time.Clock
 
 /**
- * The derived daily file of a station's UTC day (#63), for the Day view. The platform hands it out
+ * The derived daily file of a thing's UTC day (#63), for the Day view. The platform hands it out
  * only when it was built from exactly [sources] (its source signature matches), so its rows are the
  * rows of those files. Null makes the reader decode the raw files of the day.
  */
 fun interface DerivedDayFiles {
     /** The day file, which the caller closes, or null when there is none or it is stale. */
-    suspend fun open(station: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): RangeSource?
+    suspend fun open(thing: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): RangeSource?
 
     companion object {
         /** No derived layer, every day reads its raw files. */
@@ -74,37 +74,37 @@ class HistorySeriesReader(
         if (sampleIntervalMs <= 0) 0L else (minOf(toS, nowEpochS()) - fromS).coerceAtLeast(0) * MS_PER_S / sampleIntervalMs
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> {
+    fun observe(thing: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> {
         val tier = range.tier
         return if (tier != null) {
-            observeTier(station, metric, range, window, tier)
+            observeTier(thing, metric, range, window, tier)
         } else {
-            // Re-read the rows only when the station's timeline changed (a synced or indexed file, a
+            // Re-read the rows only when the thing's timeline changed (a synced or indexed file, a
             // new time estimate). A day re-read opens every file of the day.
-            index.observeStation(station)
+            index.observeThing(thing)
                 .map { files -> files.filter { it.isIndexed }.map { Triple(it.name, it.crc32, it.timelineFirstNs) } }
                 .distinctUntilChanged()
-                .flatMapLatest { flow { emit(fromRows(station, metric, range, window.fromS, window.toS)) }.flowOn(io) }
+                .flatMapLatest { flow { emit(fromRows(thing, metric, range, window.fromS, window.toS)) }.flowOn(io) }
         }
     }
 
     /** Today card, the same exact local-day bounds from hourly tiers plus raw boundary rows. */
-    fun observeHourlyDay(station: String, metric: MetricSpec, window: HistoryWindow): Flow<HistorySeries> =
-        observeTier(station, metric, HistoryRange.DAY, window, Resolution.HOUR)
+    fun observeHourlyDay(thing: String, metric: MetricSpec, window: HistoryWindow): Flow<HistorySeries> =
+        observeTier(thing, metric, HistoryRange.DAY, window, Resolution.HOUR)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun observeTier(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow, tier: Resolution): Flow<HistorySeries> =
-        tiers.observe(station, metric.id, tier, tier.bucketStart(window.fromS), window.toS).mapLatest { buckets ->
-            fromBuckets(station, metric, range, window.fromS, window.toS, tier, buckets)
+    private fun observeTier(thing: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow, tier: Resolution): Flow<HistorySeries> =
+        tiers.observe(thing, metric.id, tier, tier.bucketStart(window.fromS), window.toS).mapLatest { buckets ->
+            fromBuckets(thing, metric, range, window.fromS, window.toS, tier, buckets)
         }.flowOn(io)
 
-    private suspend fun fromBuckets(station: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, buckets: List<TierBucket>): HistorySeries {
+    private suspend fun fromBuckets(thing: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, buckets: List<TierBucket>): HistorySeries {
         // A local midnight can cut through a UTC tier bucket (India at :30). Read only those two
         // partial edges from verified rows, whole interior buckets stay cheap.
         val firstWhole = if (tier.bucketStart(fromS) == fromS) fromS else tier.bucketStart(fromS) + tier.seconds
         val lastWholeEnd = tier.bucketStart(toS)
-        val leading = if (fromS < firstWhole) fromRows(station, metric, range, fromS, minOf(firstWhole, toS)) else null
-        val trailing = if (lastWholeEnd < toS && lastWholeEnd >= firstWhole) fromRows(station, metric, range, lastWholeEnd, toS) else null
+        val leading = if (fromS < firstWhole) fromRows(thing, metric, range, fromS, minOf(firstWhole, toS)) else null
+        val trailing = if (lastWholeEnd < toS && lastWholeEnd >= firstWhole) fromRows(thing, metric, range, lastWholeEnd, toS) else null
         val whole = buckets.filter { it.startEpochS >= firstWhole && it.startEpochS + tier.seconds <= toS }
         val points = leading?.points.orEmpty() + whole.map { b ->
             HistoryPoint(
@@ -142,33 +142,33 @@ class HistorySeriesReader(
     }
 
     /** The verified rows of `[fromS, toS)`. Internal so tests see a thrown cancellation without the flow around it. */
-    internal suspend fun fromRows(station: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long): HistorySeries {
+    internal suspend fun fromRows(thing: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long): HistorySeries {
         val rows = Rows()
         val unreadable = HashSet<String>()
-        val indexed = if (toS > fromS) index.indexedForStation(station) else emptyList()
+        val indexed = if (toS > fromS) index.indexedForThing(thing) else emptyList()
         val window = readWindow(fromS, toS, indexed)
         if (window != null) {
             val fromNs = window.first * NS
             val toNs = window.second * NS
-            val firstDay = StationDays.dayOf(fromNs)
-            val lastDay = StationDays.dayOf(toNs - 1)
+            val firstDay = ThingDays.dayOf(fromNs)
+            val lastDay = ThingDays.dayOf(toNs - 1)
             // Whole UTC days, so each day's source set is the one its derived file was built from.
-            val files = index.timeline(station, firstDay * StationDays.DAY_NS, (lastDay + 1) * StationDays.DAY_NS)
-            val anchors = if (files.any { it.hasEstimatedUtc }) TimeEstimate.anchors(indexed.map { it.info() }, clockAnchors.anchors(station)) else emptyMap()
+            val files = index.timeline(thing, firstDay * ThingDays.DAY_NS, (lastDay + 1) * ThingDays.DAY_NS)
+            val anchors = if (files.any { it.hasEstimatedUtc }) TimeEstimate.anchors(indexed.map { it.info() }, clockAnchors.anchors(thing)) else emptyMap()
             val seen = RowKeys()
-            val byDay = StationDays.sourcesByDay(files) { it }
+            val byDay = ThingDays.sourcesByDay(files) { it }
             for (day in firstDay..lastDay) {
                 val sources = byDay[day] ?: continue
-                val dayFrom = maxOf(fromNs, day * StationDays.DAY_NS)
-                val dayTo = minOf(toNs, (day + 1) * StationDays.DAY_NS)
-                if (readDerived(station, day, sources, anchors, metric, dayFrom, dayTo, seen, rows)) continue
+                val dayFrom = maxOf(fromNs, day * ThingDays.DAY_NS)
+                val dayTo = minOf(toNs, (day + 1) * ThingDays.DAY_NS)
+                if (readDerived(thing, day, sources, anchors, metric, dayFrom, dayTo, seen, rows)) continue
                 val daySeen = RowKeys()
                 // Choose duplicates over the whole day before applying the chart window, exactly as
                 // the daily builder does. A duplicate with another timestamp must not win just because
                 // the builder's preferred row falls outside a fractional edge window.
                 for (f in sources.sortedWith(DailyParquetBuilder.SOURCE_ORDER)) {
                     // One damaged file costs only its own rows, the others of the window still chart (#157).
-                    val staged = readRaw(f, anchors, metric, day * StationDays.DAY_NS, (day + 1) * StationDays.DAY_NS, dayFrom, dayTo)
+                    val staged = readRaw(f, anchors, metric, day * ThingDays.DAY_NS, (day + 1) * ThingDays.DAY_NS, dayFrom, dayTo)
                     if (staged == null) unreadable += f.name else staged.commitTo(daySeen, seen, rows)
                 }
             }
@@ -313,7 +313,7 @@ class HistorySeriesReader(
      * derived file or it fails to read, and the caller reads the raw files instead.
      */
     private suspend fun readDerived(
-        station: String,
+        thing: String,
         day: Long,
         sources: List<ArchiveRecord>,
         anchors: Map<String, TimeEstimate.Anchor>,
@@ -324,7 +324,7 @@ class HistorySeriesReader(
         rows: Rows,
     ): Boolean {
         return try {
-            val source = derived.open(station, day, sources, anchors) ?: return false
+            val source = derived.open(thing, day, sources, anchors) ?: return false
             val staged = ParquetReader.open(source, footerCache = footers).use { reader ->
                 val keyValues = reader.metadata.keyValueMetadata
                 // A day file mixing dictionaries carries no digest, and its rows go back to the raw files.

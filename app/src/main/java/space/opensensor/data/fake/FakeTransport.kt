@@ -50,7 +50,7 @@ class FakeTransport(
     private val chunkDelayMs: Long = 4,
     seed: Int = 7,
     private val simulateLan: Boolean = false,
-    val station: String = "53315f5f-cb85-4d8d-b623-d56266084189",
+    val thing: String = "53315f5f-cb85-4d8d-b623-d56266084189",
     val deviceId: String = "441bf6e26b40",
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : DeviceTransport {
@@ -121,9 +121,9 @@ class FakeTransport(
     }
 
     val files: MutableList<FakeFile> = mutableListOf(
-        FakeFile("station=$station/year=2026/month=09/day=15/data_1000_${bootId}_15000-15089-90.parquet", fakeParquet(rnd, 24_000)),
-        FakeFile("station=$station/year=2026/month=09/day=15/data_1015_${bootId}_15090-15179-90.parquet", fakeParquet(rnd, 23_400)),
-        FakeFile("station=$station/unsynced/boot=$bootId/data_0000_${bootId}_1-60-60.parquet", fakeParquet(rnd, 9_800)),
+        FakeFile("station=$thing/year=2026/month=09/day=15/data_1000_${bootId}_15000-15089-90.parquet", fakeParquet(rnd, 24_000)),
+        FakeFile("station=$thing/year=2026/month=09/day=15/data_1015_${bootId}_15090-15179-90.parquet", fakeParquet(rnd, 23_400)),
+        FakeFile("station=$thing/unsynced/boot=$bootId/data_0000_${bootId}_1-60-60.parquet", fakeParquet(rnd, 9_800)),
         // One file big enough (≈ 8 s at the fake's chunk pace) to watch the progress notification,
         // the Stop action and a resume from `.partial` without hardware.
         FakeFile("benchmarks/boot=$bootId/bench_lz4_raw_${bootId}_1-6000-6000.parquet", fakeParquet(rnd, 1_048_576)),
@@ -131,7 +131,7 @@ class FakeTransport(
 
     init {
         finalized = files.size.toLong()
-        logLine("BOOT station=$station dev=$deviceId boot=$bootId fw=idf-cores3-parquet-v6.12 (fake)")
+        logLine("BOOT station=$thing dev=$deviceId boot=$bootId fw=idf-cores3-parquet-v6.12 (fake)")
         logLine("PARQUET STATUS files=$finalized codec=LZ4_RAW sd=1")
         logLine("BLE START name=$displayName pair=$pairMode")
         logLine("WIFI OFF (wifi.on=0)")
@@ -321,7 +321,7 @@ class FakeTransport(
                 delay(400)
                 val rows = buffered
                 val first = seq - rows + 1
-                val dir = if (utcAnchorNs != null) "station=$station/year=2026/month=09/day=16" else "station=$station/unsynced/boot=$bootId"
+                val dir = if (utcAnchorNs != null) "station=$thing/year=2026/month=09/day=16" else "station=$thing/unsynced/boot=$bootId"
                 files += FakeFile("$dir/data_flush_${bootId}_$first-$seq-$rows.parquet", fakeParquet(rnd, 2_000 + rows * 120))
                 finalized++
                 buffered = 0
@@ -363,7 +363,7 @@ class FakeTransport(
                     // "finalizes any RAM batch first"
                     val rows = buffered
                     val first = seq - rows + 1
-                    val dir = if (utcAnchorNs != null) "station=$station/year=2026/month=09/day=16" else "station=$station/unsynced/boot=$bootId"
+                    val dir = if (utcAnchorNs != null) "station=$thing/year=2026/month=09/day=16" else "station=$thing/unsynced/boot=$bootId"
                     files += FakeFile("$dir/data_reboot_${bootId}_$first-$seq-$rows.parquet", fakeParquet(rnd, 2_000 + rows * 120))
                     finalized++
                     buffered = 0
@@ -522,7 +522,7 @@ class FakeTransport(
 
     private fun infoJson(): String =
         """{"proto":3,"fw":"idf-cores3-parquet-v6.15 (fake)","schema":"cores3-telemetry-v5","cols":81,""" +
-            """"dict":"$CORES3_DICT","station":"$station","dev":"$deviceId","boot":"$bootId","max_read":$maxRead}"""
+            """"dict":"$CORES3_DICT","station":"$thing","dev":"$deviceId","boot":"$bootId","max_read":$maxRead}"""
 
     private fun statusJson(): String =
         """{"up_s":$upSeconds,"int_s":900,"buf":$buffered,"fin":$finalized,"drop":0,"err":0,"miss":0,""" +

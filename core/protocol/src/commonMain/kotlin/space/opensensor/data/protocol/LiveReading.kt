@@ -1,18 +1,18 @@
 package space.opensensor.data.protocol
 
-import space.opensensor.model.Station
+import space.opensensor.model.Thing
 
 /**
- * One [LiveSample] read through its [station]. A column's value comes from the LIVE key the template's
- * `live_keys` give it, and only for a column LIVE shows ([Station.live]). A key the template does not
+ * One [LiveSample] read through its [thing]. A column's value comes from the LIVE key the template's
+ * `live_keys` give it, and only for a column LIVE shows ([Thing.live]). A key the template does not
  * declare is ignored, so a newer board adding a key breaks nothing. The unit comes from the column and
  * the label from the app profile, never from a key name.
  */
-class LiveReading(val sample: LiveSample, val station: Station) {
+class LiveReading(val sample: LiveSample, val thing: Thing) {
     private fun keyOf(column: String): String? =
-        station.datastream(column)?.datastream?.liveKey?.takeIf { it in station.live.keys }
+        thing.datastream(column)?.datastream?.liveKey?.takeIf { it in thing.live.keys }
 
-    /** True when LIVE shows [column] for this station, whatever this sample carries. */
+    /** True when LIVE shows [column] for this thing, whatever this sample carries. */
     fun declares(column: String): Boolean = keyOf(column) != null
 
     /** True when this sample carries [column]'s key, even as `null`. An absent key means the board has no such field. */
@@ -33,8 +33,8 @@ class LiveReading(val sample: LiveSample, val station: Station) {
         /** The PM sensor state column, `0` absent to `4` valid. */
         const val PMS_STATUS = "pms_status"
 
-        /** [sample] read through [station], or null when either is missing, as for an unknown dictionary. */
-        fun of(sample: LiveSample?, station: Station?): LiveReading? =
-            if (sample == null || station == null) null else LiveReading(sample, station)
+        /** [sample] read through [thing], or null when either is missing, as for an unknown dictionary. */
+        fun of(sample: LiveSample?, thing: Thing?): LiveReading? =
+            if (sample == null || thing == null) null else LiveReading(sample, thing)
     }
 }

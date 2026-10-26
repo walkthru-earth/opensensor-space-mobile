@@ -77,7 +77,7 @@
     <string name="files_group_benchmarks">Benchmarks</string>
     <string name="files_group_legacy">Legacy Parquet</string>
     <string name="files_group_root">Archive root</string>
-    <string name="files_group_station">station %1$s</string>
+    <string name="files_group_thing">sensor %1$s</string>
     <string name="files_group_boot">boot %1$s</string>
     <plurals name="files_group_utc_folders">
         <item quantity="one">UTC folder %1$s</item>

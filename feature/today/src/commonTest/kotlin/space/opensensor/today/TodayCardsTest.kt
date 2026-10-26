@@ -169,7 +169,7 @@ class TodayCardsTest {
     fun unknownDictionaryShowsNoLiveReadings() {
         val unknown = waveshare.copy(dict = "0".repeat(64))
         val state = state(unknown, LiveSample.parse("""{"pms":4,"pm25":14.9,"t":22.5,"imu_t":40.0,"rh":50.0}"""), DetailLevel.SIMPLE)
-        assertNull(state.capabilities.station)
+        assertNull(state.capabilities.thing)
         assertNull(state.reading)
         assertEquals(LiveSupport.UNSUPPORTED, state.liveSupport)
         assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), state.cards)

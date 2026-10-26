@@ -9,13 +9,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.datetime.TimeZone
 
 /** Includes the range as well as both derived bounds, so paging and midnight cannot reuse a result. */
-data class ArchiveSeriesQuery(val station: String?, val metric: MetricSpec, val range: HistoryRange, val window: HistoryWindow) {
+data class ArchiveSeriesQuery(val thing: String?, val metric: MetricSpec, val range: HistoryRange, val window: HistoryWindow) {
     val fromS: Long get() = window.fromS
     val toS: Long get() = window.toS
 }
 
-/** One local day of one station. On the JVM a `java.time.ZoneId` overload builds it too (jvmMain). */
-data class ArchiveDayQuery(val station: String?, val dayStartS: Long, val zone: TimeZone = TimeZone.currentSystemDefault()) {
+/** One local day of one thing. On the JVM a `java.time.ZoneId` overload builds it too (jvmMain). */
+data class ArchiveDayQuery(val thing: String?, val dayStartS: Long, val zone: TimeZone = TimeZone.currentSystemDefault()) {
     val window: HistoryWindow get() = HistoryWindow.dayContaining(dayStartS, zone)
 }
 

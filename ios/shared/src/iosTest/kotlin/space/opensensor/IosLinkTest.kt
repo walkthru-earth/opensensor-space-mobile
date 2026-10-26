@@ -40,27 +40,27 @@ class IosLinkTest {
     }
 
     @Test
-    fun identifyBindsStationBootAndReadWindow() = withLink { link ->
-        assertNull(link.station)
+    fun identifyBindsThingBootAndReadWindow() = withLink { link ->
+        assertNull(link.thing)
         assertNull(link.boot)
         assertEquals(0, link.maxRead)
 
-        link.identify("first-station", "full-boot-identity", 4096)
+        link.identify("first-thing", "full-boot-identity", 4096)
 
-        assertEquals("first-station", link.station)
+        assertEquals("first-thing", link.thing)
         assertEquals("full-boot-identity", link.boot)
         assertEquals(4096, link.maxRead)
     }
 
     @Test
     fun repeatedIdentifyRejectsReplacementAndPreservesOriginalIdentity() = withLink { link ->
-        link.identify("original-station", null, 1024)
+        link.identify("original-thing", null, 1024)
 
         assertFailsWith<IllegalStateException> {
-            link.identify("replacement-station", "replacement-boot", 8192)
+            link.identify("replacement-thing", "replacement-boot", 8192)
         }
 
-        assertEquals("original-station", link.station)
+        assertEquals("original-thing", link.thing)
         assertNull(link.boot)
         assertEquals(1024, link.maxRead)
     }

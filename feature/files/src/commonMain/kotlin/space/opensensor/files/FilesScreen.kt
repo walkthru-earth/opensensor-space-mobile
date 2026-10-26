@@ -100,7 +100,7 @@ import space.opensensor.files.resources.files_group_boot
 import space.opensensor.files.resources.files_group_count
 import space.opensensor.files.resources.files_group_legacy
 import space.opensensor.files.resources.files_group_root
-import space.opensensor.files.resources.files_group_station
+import space.opensensor.files.resources.files_group_thing
 import space.opensensor.files.resources.files_group_unrecognised
 import space.opensensor.files.resources.files_group_unsynced
 import space.opensensor.files.resources.files_group_utc_day
@@ -164,7 +164,7 @@ typealias MenuItems = @Composable ColumnScope.(close: () -> Unit) -> Unit
 fun FilesScreen(
     controller: FilesController,
     level: DetailLevel,
-    onOpenFileMetrics: (station: String, name: String) -> Unit,
+    onOpenFileMetrics: (thing: String, name: String) -> Unit,
     device: DeviceFiles? = null,
     onDeviceAction: (DeviceFilesAction) -> Unit = {},
     onBack: (() -> Unit)? = null,
@@ -409,7 +409,7 @@ fun FilesScreen(
                 item(key = "g:" + group.key) { GroupHeader(group, level) }
                 items(group.entries, key = { it.key }) { item ->
                     val entry = item.entry
-                    val record = if (listing != null) controller.archived(entry.name) else state.records.firstOrNull { it.station == item.station && it.name == entry.name }
+                    val record = if (listing != null) controller.archived(entry.name) else state.records.firstOrNull { it.thing == item.thing && it.name == entry.name }
                     FileRow(
                         entry = entry,
                         localTime = item.localTime,
@@ -419,7 +419,7 @@ fun FilesScreen(
                         onSync = { guard { onDeviceAction(DeviceFilesAction.SyncOne(entry.name)) } },
                         onShare = { record?.let { controller.shareFile(it, presenter) } },
                         onInspect = if (level.detailed && record != null) {
-                            { onOpenFileMetrics(record.station, record.name) }
+                            { onOpenFileMetrics(record.thing, record.name) }
                         } else {
                             null
                         },
@@ -622,7 +622,7 @@ private fun groupTitle(title: GroupTitle): String = when (title) {
 /** Developer line under a group header, null when there is nothing to show. */
 @Composable
 private fun groupDetail(detail: GroupDetail): String? = listOfNotNull(
-    detail.station?.let { stringResource(Res.string.files_group_station, it) },
+    detail.thing?.let { stringResource(Res.string.files_group_thing, it) },
     detail.utcFolders.takeIf { it.isNotEmpty() }?.let { pluralStringResource(Res.plurals.files_group_utc_folders, it.size, spokenList(it, listSeparator())) },
     detail.boot?.let { stringResource(Res.string.files_group_boot, it) },
     stringResource(Res.string.files_group_unrecognised).takeIf { detail.unrecognised },

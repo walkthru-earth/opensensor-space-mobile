@@ -25,7 +25,7 @@ class TransportSelectorTest {
     }
 
     @Test
-    fun anotherBoardUnderTheSameStationIsNotTriedOverLan() {
+    fun anotherBoardUnderTheSameThingIsNotTriedOverLan() {
         assertNull(TransportSelector.lanPort(true, dev, "ffffffffffff", 47390, 47390))
         assertNull(TransportSelector.lanPort(true, dev, null, 47390, 47390))
     }

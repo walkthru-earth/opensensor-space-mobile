@@ -26,13 +26,13 @@ data class LanDevice(
     val txt: Map<String, String>,
     val lastSeenEpochMs: Long,
 ) : BackgroundLanTarget {
-    val station: String? get() = txt[LanFraming.TXT_STATION]
+    val thing: String? get() = txt[LanFraming.TXT_THING]
     val dev: String? get() = txt[LanFraming.TXT_DEV]
     val fw: String? get() = txt[LanFraming.TXT_FW]
     val proto: Int? get() = txt[LanFraming.TXT_PROTO]?.toIntOrNull()
 
-    /** Usable as a connect target: resolved address, sane port, and a station to match a known device. */
-    override val isConnectable: Boolean get() = host != null && port in 1..65535 && station != null
+    /** Usable as a connect target: resolved address, sane port, and a thing to match a known device. */
+    override val isConnectable: Boolean get() = host != null && port in 1..65535 && thing != null
 }
 
 /**

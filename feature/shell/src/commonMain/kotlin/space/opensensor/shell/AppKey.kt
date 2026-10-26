@@ -49,7 +49,7 @@ data class DebugKey(val address: String) : AppKey
 
 /** Detailed level and up. One archived file decoded by the app's Parquet reader. */
 @Serializable
-data class FileMetricsKey(val station: String, val name: String) : AppKey
+data class FileMetricsKey(val thing: String, val name: String) : AppKey
 
 /** Saves every [AppKey] in a back stack, the same way on Android and iOS. */
 @OptIn(ExperimentalSerializationApi::class)

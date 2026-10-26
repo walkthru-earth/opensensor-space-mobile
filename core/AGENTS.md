@@ -13,25 +13,25 @@ records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `Storag
 `StorageBudget`, `StorageTree`, `RetentionPolicy` with the derived `QuotaEnforcer`, and
 `MemoryPressure` with `ByteBudgetLru` for memory caches that trim on the OS signal (#61). Every file
 writer goes through `AtomicFiles`, and the `StorageJanitor` (in `sync/`, it needs the archive ports)
-sweeps Scratch at start, enforces the derived quota and never deletes Durable data. Only the user's old format cleanup in Settings (`LegacyFileCleanup`, `:core:history`) removes archive files, phone only, and leaves a `PrunedFiles` record. Sync skips such a file while the device lists it at the same size and the phone has no copy. A whole LIST that no longer names it drops the record, and Settings › Storage › Removed files › Download again clears them all ([sync guide](../docs/sync-engine.md)). One `DeviceCoordinator` (`:core:sync`) per archive owns station admission, writer leases, station gates and tombstones. Every archive index write takes its station gate, lease first then gate, readers never. `HistoryOrchestrator` (`:core:history`) owns the janitor, back-fill and derive order on both phones. `ParquetFile` and
+sweeps Scratch at start, enforces the derived quota and never deletes Durable data. Only the user's old format cleanup in Settings (`LegacyFileCleanup`, `:core:history`) removes archive files, phone only, and leaves a `PrunedFiles` record. Sync skips such a file while the device lists it at the same size and the phone has no copy. A whole LIST that no longer names it drops the record, and Settings › Storage › Removed files › Download again clears them all ([sync guide](../docs/sync-engine.md)). One `DeviceCoordinator` (`:core:sync`) per archive owns thing admission, writer leases, thing gates and tombstones. Every archive index write takes its thing gate, lease first then gate, readers never. `HistoryOrchestrator` (`:core:history`) owns the janitor, back-fill and derive order on both phones. `ParquetFile` and
 `ByteReader` are `AutoCloseable`, open them with `use`. `sync/` holds the link session, the sync
 engine and, in `collection/`, the per-device `CollectionController` ([sync guide](../docs/sync-engine.md)). Android adopts the controller
 through `DeviceFacade`; iOS uses `IosLink` and `SensorSync` for link and engine adoption,
 and `SensorCollections` for one controller per device, which every native sync entry point
 runs through ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
-`model/` owns what a station measures as data. `BoardTemplate` (parsed from the stac-opensensor
+`model/` owns what a thing measures as data. `BoardTemplate` (parsed from the stac-opensensor
 v0.1.0 board template, keyed by `TemplateKey` of `dict` and an optional `desc`), `TemplateIndex`
 (resolves by `desc` first, then the bundled template keyed by `dict`), `Datastream` (one column or
 one phone-derived stream with its own id and `sourceColumns`, referencing a board-neutral
 `ObservedProperty` and a `Sensor` of procedure and board), `AppProfile` (app owned, keyed by `dict`,
-derived from the template when none is bundled), `StationCollection`, `Scale`, `ValidityGate`, and
-`Station.join`, which joins them. A station keeps every datastream whatever its role, the profile
+derived from the template when none is bundled), `ThingCollection`, `Scale`, `ValidityGate`, and
+`Thing.join`, which joins them. A thing keeps every datastream whatever its role, the profile
 picks what shows first. `Aggregate`, `Role` and `Family` are open value classes, so an unknown value
 parses (an unknown aggregate rolls up as `point`). The template sample interval is a default, the
-runtime interval and a file footer `acquisition.sample_interval_ms` win (`Station.sampleIntervalFor`). `LiveColumns`
+runtime interval and a file footer `acquisition.sample_interval_ms` win (`Thing.sampleIntervalFor`). `LiveColumns`
 maps a template's columns to LIVE keys and picks the temperature and humidity keys, and
 `BundledCatalog.live` reads it for a bundled `dict`. `LiveReading` in `protocol/` reads a LIVE
-sample through a `Station`, `DeviceCapabilities` in `history/` builds that station from `info.desc`
+sample through a `Thing`, `DeviceCapabilities` in `history/` builds that thing from `info.desc`
 and `info.dict`, and the Today screen reads it from there. `BoardDescriptors` in `history/` fetches
 the template a board serves over `GET_DESCRIPTOR` (`DeviceSession.downloadDescriptor`,
 `DescriptorDownload` in `sync/`), verifies it against `desc` and `dict`, caches it by SHA-256 in
@@ -87,7 +87,7 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   241-byte segment cap, so every sibling of a segment fits a 255-byte file name. Platform code
   measures and calls them, it does not re-implement them.
 - History derives each grouped day once with `DayPass`, producing tiers and daily Parquet
-  together. Android uses derive version 5 and plans from projected station archive identities.
+  together. Android uses derive version 5 and plans from projected thing archive identities.
   iOS persists rebuildable tiers and enforces the derived quota after building.
   Preserve these paths and immutable raw archives. See [history pipeline](../docs/history-pipeline.md)
   and the [host benchmark](../docs/perf/history-2026-10-11.md), which does not qualify phone latency.

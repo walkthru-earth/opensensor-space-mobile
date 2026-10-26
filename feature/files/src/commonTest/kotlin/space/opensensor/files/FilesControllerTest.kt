@@ -46,7 +46,7 @@ class FilesControllerTest {
 
         /** Finals removed after the listing, such as by the old format cleanup. */
         val gone = mutableSetOf<ArchiveKey>()
-        override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
+        override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("exports never write the archive")
         override suspend fun discardPartial(key: ArchiveKey) = error("exports never write the archive")
         override suspend fun exists(key: ArchiveKey): Boolean = key in finals
@@ -57,23 +57,23 @@ class FilesControllerTest {
             return ByteArrayReader(finals.getValue(key))
         }
         override suspend fun commit(key: ArchiveKey) = error("exports never write the archive")
-        override suspend fun listFinal(station: String?): List<ArchiveKey> = finals.keys.filter { station == null || it.station == station }
+        override suspend fun listFinal(thing: String?): List<ArchiveKey> = finals.keys.filter { thing == null || it.thing == thing }
     }
 
     private class Index(records: List<ArchiveRecord>) : ArchiveIndex {
         val rows = MutableStateFlow(records)
 
-        /** The scope of each subscription, a station or null for every record. */
+        /** The scope of each subscription, a thing or null for every record. */
         val observed = mutableListOf<String?>()
         override fun observeAll(): Flow<List<ArchiveRecord>> = rows.map { r -> r.sortedBy { it.name } }.also { observed += null }
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { r -> r.filter { it.station == station } }.also { observed += station }
+        override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = rows.map { r -> r.filter { it.thing == thing } }.also { observed += thing }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) = error("read only")
         override suspend fun remove(key: ArchiveKey) = error("read only")
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = emptyList()
-        override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = emptyList()
-        override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
+        override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
+        override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = emptyList()
+        override suspend fun things(): List<String> = rows.value.map { it.thing }.distinct()
     }
 
     /** Runs in memory, each one a map of name to bytes, with flags once released or deleted. */
@@ -164,8 +164,8 @@ class FilesControllerTest {
         }
     }
 
-    private fun record(station: String, name: String, bytes: ByteArray) =
-        ArchiveRecord(station = station, name = name, bytes = bytes.size.toLong(), crc32 = 1, sha256 = "x", syncedAtEpochMs = 1_000, sourceDevice = station)
+    private fun record(thing: String, name: String, bytes: ByteArray) =
+        ArchiveRecord(thing = thing, name = name, bytes = bytes.size.toLong(), crc32 = 1, sha256 = "x", syncedAtEpochMs = 1_000, sourceDevice = thing)
 
     private class Fixture(
         scope: TestScope,
@@ -524,9 +524,9 @@ class FilesControllerTest {
     fun theOwnerDecidesWhichCopyAListedNameMeans() = runTest {
         val f = fixture(owner = "t")
         advanceUntilIdle()
-        assertEquals("t", f.controller.archived(nameA)?.station)
+        assertEquals("t", f.controller.archived(nameA)?.thing)
         assertNull(f.controller.archived(nameB))
-        assertEquals(listOf("t"), f.controller.state.value.shown.map { it.station })
+        assertEquals(listOf("t"), f.controller.state.value.shown.map { it.thing })
         f.owner.value = null
         advanceUntilIdle()
         // Without an owner a listed name never falls back to another sensor's copy.
@@ -536,12 +536,12 @@ class FilesControllerTest {
     }
 
     @Test
-    fun aKnownOwnerObservesOnlyItsStation() = runTest {
+    fun aKnownOwnerObservesOnlyItsThing() = runTest {
         val f = fixture(owner = "t")
         advanceUntilIdle()
         assertEquals(listOf<String?>("t"), f.index.observed)
-        assertEquals(listOf("t"), f.controller.state.value.records.map { it.station })
-        // Another station's new file does not reach this owner's list.
+        assertEquals(listOf("t"), f.controller.state.value.records.map { it.thing })
+        // Another thing's new file does not reach this owner's list.
         val before = f.controller.state.value
         f.index.rows.value = f.index.rows.value + record("s", "station=s/year=2026/month=09/day=21/data_0900_b_1-2-1.parquet", bytesA)
         advanceUntilIdle()
@@ -553,7 +553,7 @@ class FilesControllerTest {
     }
 
     @Test
-    fun sensorExportsAndCountsStayWithinItsStationButPhoneArchiveIncludesAll() = runTest {
+    fun sensorExportsAndCountsStayWithinItsThingButPhoneArchiveIncludesAll() = runTest {
         val f = fixture(owner = "t")
         advanceUntilIdle()
         assertEquals(1, f.controller.state.value.shown.size)
@@ -567,7 +567,7 @@ class FilesControllerTest {
         f.controller.shareZip(zipPresenter)
         advanceUntilIdle()
         assertEquals(1, zipPresenter.shared.single().first.size)
-        // A separate phone-archive entry has no owner and still exports every station.
+        // A separate phone-archive entry has no owner and still exports every thing.
         f.owner.value = null
         advanceUntilIdle()
         assertEquals(3, f.controller.state.value.shown.size)
@@ -578,14 +578,14 @@ class FilesControllerTest {
     }
 
     @Test
-    fun aStationZipHoldsOnlyThatStationsVerifiedFiles() = runTest {
+    fun aThingZipHoldsOnlyThatThingsVerifiedFiles() = runTest {
         val f = fixture(owner = "s")
         advanceUntilIdle()
         val p = Presenter()
         f.controller.shareZip(p)
         advanceUntilIdle()
         val zip = f.space.runs.single().files.values.single()
-        // Not station t's copy of nameA, and not the unindexed orphan of station s.
+        // Not thing t's copy of nameA, and not the unindexed orphan of thing s.
         assertEquals(listOf("s/$nameA", "s/$nameB"), zipNames(zip))
         val streaming = Presenter(streams = true)
         f.controller.saveZip(streaming)
@@ -603,7 +603,7 @@ class FilesControllerTest {
     }
 
     @Test
-    fun aStationDailyZipHoldsOnlyThatStationsDayFiles() = runTest {
+    fun aThingDailyZipHoldsOnlyThatThingsDayFiles() = runTest {
         fun day(path: String) = ExportEntry(path, 0) { ByteArrayReader(bytesA) }
         val f = fixture(
             owner = "s",

@@ -70,7 +70,7 @@ class TodayViewModel @AssistedInject constructor(
 
     private val enrolled = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } }
 
-    /** Only a saved token for this enrolled station and a current mDNS result permit LAN-only reconnect. */
+    /** Only a saved token for this enrolled thing and a current mDNS result permit LAN-only reconnect. */
     val lanReconnectAvailable: StateFlow<Boolean> = combine(enrolled, repository.lanDevices) { known, discovered ->
         hasLanReconnectTarget(known, discovered)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -80,7 +80,7 @@ class TodayViewModel @AssistedInject constructor(
         repository = repository,
         address = deviceAddress,
         enrolled = enrolled,
-        todaySoFar = todaySoFar(repository.info.map { it?.station }, history::observeHourlyDay),
+        todaySoFar = todaySoFar(repository.info.map { it?.thing }, history::observeHourlyDay),
     )
 
     val controller = TodayController(

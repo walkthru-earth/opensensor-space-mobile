@@ -14,7 +14,7 @@ flowchart LR
   I --> AF[("archived_file<br/>index cols")]
   AF --> TE["TimeEstimate<br/>anchor per boot"]
   TE --> AF
-  AF --> DV["HistoryDeriver.deriveStale()<br/>per UTC station-day, signature-gated"]
+  AF --> DV["HistoryDeriver.deriveStale()<br/>per UTC thing-day, signature-gated"]
   DV --> AG["Aggregator → metric_bucket<br/>15 min · 1 h · 1 day, one row per metric"]
   DV --> DD["DailyDerivedBuilder → derived/v1/…/day=….parquet + manifest"]
   AG --> HR["HistoryRepository.observe"]
@@ -57,18 +57,18 @@ flowchart LR
 - **Time estimates.** `estimateTimes` rewrites the estimated spans a derive reads for its source sets
   and signatures, so it runs only inside a pass. A derive pass re-dates first. iOS's clock receipt
   follow-up calls `HistoryOrchestrator.afterClockReceipt`, which estimates as one pass and then
-  derives. Android's SET_TIME saves the receipt on the link, then starts `deriveStation` off it, so a
+  derives. Android's SET_TIME saves the receipt on the link, then starts `deriveThing` off it, so a
   pass in flight never holds the link.
 - **Every derive is a pass.** Android's `HistoryDeriver.deriveStale` and `ensureDailyFiles` and iOS's
   `IosArchive.rebuildDerived` each run inside one `derivePass`, which is not reentrant. iOS builds
   `rebuildDerived` with `derivePassOf`, so its derive body has no entry point outside a pass. The iOS
-  History reader's own refresh of one station takes only the derived lock, so History stays visible
+  History reader's own refresh of one thing takes only the derived lock, so History stays visible
   during a back-fill.
 - **Held days.** A day a waiting record holds stays in History, see below.
 - **Prune.** The old file cleanup writes its tombstone under the `DeviceCoordinator` writer lease,
-  then its rebuild of the emptied stations is a derive pass like any other.
+  then its rebuild of the emptied things is a derive pass like any other.
 
-## Index (`ParquetIndexer` → `archived_file`, Room v4)
+## Index (`ParquetIndexer` → `archived_file`)
 
 Derived from the **file**, never its name: rows, row groups, `file.purpose` from the `opensensor`
 footer JSON, the boot from the first row's `boot_id_hi` and `boot_id_lo`, then the UTC row count + span, monotonic span, sequence span, the valid rows of the headline metric (the template's primary column through its gate and settle time, null when no bundled template knows the file or the column cannot be read),
@@ -83,7 +83,7 @@ error) is the one test of whether a row's index columns can be read, and `withUt
 same test in SQL. `ArchiveRecord.awaitsIndex` (never indexed, or reopened) marks a row the back-fill
 still has to read.
 
-Room v11 and the one time iOS receipt import (`ArchiveRecord.INDEX_LAYOUT`) reopen every indexed row without UTC
+The one time iOS receipt import (`ArchiveRecord.INDEX_LAYOUT`) reopen every indexed row without UTC
 rows or an error, so a file whose `event_time_utc_us` an older build could not read is indexed again
 once. Until the back-fill reaches it, such a row awaits its index.
 
@@ -107,12 +107,12 @@ specs and never name a column. A spec whose column a file lacks yields **no valu
 `0.1.0`, in the style of GeoParquet `geo`). `OpenSensorFooter` reads only `template.sha256`,
 `dictionary.sha256`, `acquisition.sample_interval_ms`, `station.id` and `file.purpose` from it and
 ignores every other member. A missing key, JSON that is not an object, an unknown major version, a
-digest that is not 64 lowercase hex, an interval that is not an integer or a station or purpose that
+digest that is not 64 lowercase hex, an interval that is not an integer or a thing or purpose that
 is not a non-empty string means the file has no footer. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
 unprefixed keys has no footer, so it keeps its rows and has no
 metrics. A rebuilt partial file carries no `opensensor` key either
 (stac-opensensor question 30), so it reads the same way. Such files are wiped after the matched reflash (decision 14). The repair checks a file's
-`station.id` against its archive station, and the daily builder checks each source the same way.
+`station.id` against its archive thing, and the daily builder checks each source the same way.
 The boot is not read from `firmware.boot_id`. Every row carries `boot_id_hi` and `boot_id_lo`, and
 `rowBootId` formats the first pair as 32 lowercase hex digits, the same text firmware writes and sends
 in its clock receipts. The schema name is not read at all.
@@ -137,8 +137,8 @@ app reads back. `interval_ms` is the shortest positive interval of its sources, 
 the same template and expected rows as its sources. A day of mixed dictionaries carries no digest,
 and History reads its rows from the raw files. A day whose sources have no footer writes no
 `app_day` and also reads from the raw files. The daily file's own bookkeeping keys (`day`,
-`derived_by`, `source_count` and the rest) are app-local too. A day file writes no station or
-purpose key, since the station is in its path.
+`derived_by`, `source_count` and the rest) are app-local too. A day file writes no thing or
+purpose key, since the thing is in its path.
 `FileTemplates.bind` gives a file only the specs its template stores in the same unit and rollup,
 with that template's gate and settle time. A file whose dict no bundled template knows keeps its rows
 and has no metrics.
@@ -152,7 +152,7 @@ PMS concentrations are **INT32** µg/m³ in the files; only IMU/temperature/humi
 a `humidityColumn` passes every row through `MetricSpec.valueOf(raw, rh)`, which calls
 `EpaPm25Correction.correct(cf1, rh)` from `:core:airquality`. The `Aggregator` (Android and iOS
 tiers), `FileSummary` and both `HistorySeriesReader` paths (raw rows and daily files) correct each
-row before any mean, min or max. A row without a valid RH yields no corrected value, so a station
+row before any mean, min or max. A row without a valid RH yields no corrected value, so a thing
 without humidity has no `pm25_epa` buckets and every screen falls back to `pm25`, labelled raw.
 Both PM2.5 specs carry `property = "pm25"` for the WHO scale and a `basis` (`CORRECTED` or `RAW`)
 for the label. Daily files keep the raw `pm25_cf1_ug_m3` and RH columns, so they need no change.
@@ -171,14 +171,14 @@ minute 3 by 1.7, minute 7 by 0.6 — inside one band. Decision: **discard nothin
 metrics carry `settleSeconds = 180` (`PMS_SETTLE_S`) and `MetricAgg.settling` counts those rows per
 bucket for a future "n settling" hint. No humidity correction, no "AQI".
 
-## Tiers (`Aggregator` → `metric_bucket`, Room v7)
+## Tiers (`Aggregator` → `metric_bucket`)
 
 `Resolution`: `MIN15` 900 s · `HOUR` 3600 s · `DAY` 86 400 s. `expectedRows` is the span over the
-footer's sample interval, and 0 when no interval is known. Identity `(station, metricId, resolution,
+footer's sample interval, and 0 when no interval is known. Identity `(thing, metricId, resolution,
 startEpochS)`; per row: `rows`, `validRows` (passed the gate), `estimatedRows`, `mean`, `min`, `max`
 and `sampleIntervalMs`. The value follows the metric's aggregate (`Rollup.kt`), so a sum adds, a
 mode keeps the most common value and a point keeps the last. `coverage = validRows / expected`. Rows without UTC are off the timeline unless dated by `TimeEstimate`. Built per UTC
-station-day, replaced atomically per day. **Duplicate rows** across files are skipped on one
+thing-day, replaced atomically per day. **Duplicate rows** across files are skipped on one
 shared key, `RowKey` in `:core:history`: `(boot_id_hi, boot_id_lo, sequence)`, or
 `(boot_id_hi, boot_id_lo, timeline ns)` when the sequence is absent or null, a missing boot half
 counting as 0. The tiers, the day chart and the daily file all use it, so their row counts agree.
@@ -186,7 +186,7 @@ Means over a span are weighted by valid rows — never averages of averages.
 
 ## Derived daily Parquet (`DailyParquetBuilder`)
 
-`derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` on both platforms, in the OS cache
+`derived/v1/<thing>/day=YYYY-MM-DD.parquet` + `.manifest.json` on both platforms, in the OS cache
 directory under the derived quota (`docs/data-model.md`, Quotas and memory pressure), written by the shared
 `ParquetWriter`. One shared `DayPass` opens each source once to time its rows and feed the tiers, and
 closes it before the next. The daily file is then written one hourly row group at a time. A source is
@@ -204,9 +204,9 @@ source stored, so a day that mixes older NANOS files and current MICROS files st
 `event_time_utc_us` column in microseconds (`UtcColumns`). Device columns keep their `field_id`. An
 older source without ids takes the id of the same name from a newer source. An id two sources
 disagree on, or one that two names share, is dropped. `source_file_index` and
-the estimate column have no id. **No station
+the estimate column have no id. **No thing
 string column** (deviation from the evaluation). It stays flat numeric so our reader reads it back,
-and the station is in the path. Metadata: the `app_day` key above, `derived_by`
+and the thing is in the path. Metadata: the `app_day` key above, `derived_by`
 (`opensensor.space shared derived-v4`), `derived_version` (4), `source_count`, `coverage_rows`, `complete`
 (every known file in and the day ended > 30 min ago), `day`, and the
 `time_estimate` note. Measured 188 B/row vs 512 B/row for device files (5–9× smaller). Validated by
@@ -234,7 +234,7 @@ A file that fails to open, decode or close is skipped, and `HistorySeries.unread
 it, so the other files of the window still chart. Cancellation still propagates. The Archive card
 shows the count as "could not read" when it is above zero.
 
-Read window. `HistorySeriesReader.readWindow` clamps every requested window to the station's archive
+Read window. `HistorySeriesReader.readWindow` clamps every requested window to the thing's archive
 span plus one day on each side, and to the seconds whose nanoseconds still fit a Long. A window far
 past the archive costs no lookups and never multiplies into a wrapped nanosecond. The Settings date
 picker of the old format cleanup offers the same span plus one day (`StorageControls.archiveDays`).
@@ -244,20 +244,20 @@ picker of the old format cleanup offers the same span plus one day (`StorageCont
 `derived_day.sourceSignature` = SHA-256 over `derive-v<DERIVE_VERSION>` + the day's sorted
 `name:crc32` sources + anchors. `deriveStale()` rebuilds exactly the days whose set changed (late
 file, re-synced mismatch, deleted file, new anchor) and drops days with no sources. A day with no
-source is kept while a row of that station awaits its index and may place itself there
-(`StationDays.held`). A waiting row that kept a span holds the days of that span, one without a span
-holds every day of its station, and a row with an index error holds nothing. Android's
+source is kept while a row of that thing awaits its index and may place itself there
+(`ThingDays.held`). A waiting row that kept a span holds the days of that span, one without a span
+holds every day of its thing, and a row with an index error holds nothing. Android's
 `HistoryDeriver`, iOS's `IosDailyDerivedStore` and the tier store retain in `ArchiveHistoryTiers` all
 use this rule, so a derive pass that runs before the back-fill never deletes a day the back-fill is
-about to fill again. `StationDays.kept` is the one rule for what History shows on those days, so both
+about to fill again. `ThingDays.kept` is the one rule for what History shows on those days, so both
 phones agree. A day that lost every source while a record holds it keeps what was derived for it,
 in Room on Android and from its saved tier file on iOS, until the record indexes again. Healthy log
-line after a sync: `HistoryDeriver: derived 0 of N station-days (nothing changed)` (debug level).
+line after a sync: `HistoryDeriver: derived 0 of N thing-days (nothing changed)` (debug level).
 
-## Time for rows logged before the clock (`TimeEstimate`, Room v6)
+## Time for rows logged before the clock (`TimeEstimate`)
 
 A successful automatic clock handshake persists the acknowledged UTC/monotonic pair in
-app-private clock receipts, scoped to the original station and full 128-bit boot ID.
+app-private clock receipts, scoped to the original thing and full 128-bit boot ID.
 History uses the earliest receipt or fully-timed file of that boot. A footer carries no clock
 anchor (decision 25 dropped `reconciliation_anchor_*`), the rows and the receipts do. It no longer
 needs to wait for a fully-timed file to finalize. For that boot's unsynced files,
@@ -345,8 +345,8 @@ use one `expect` seam (`formatEpoch`, `DateTimeFormatter` on Android, `NSDateFor
 
 `HistoryController` is a plain class (the SettingsController pattern) over four ports. The
 `HistorySeriesReader`, the `HistoryTiers` and the `ArchiveIndex` from `:core:history` and
-`:core:archive`, plus two flows, the station History opens on and the station generations its
-chips offer. It owns station, metric, range and paging, follows "now" across local midnight until
+`:core:archive`, plus two flows, the thing History opens on and the thing generations its
+chips offer. It owns thing, metric, range and paging, follows "now" across local midnight until
 the user pages back, and opens on the last local day with readings.
 
 | | Android | iOS |
@@ -354,8 +354,8 @@ the user pages back, and opens on the last local day with readings.
 | Host | `HistoryViewModel` (Hilt, assisted by address) | `HistoryHolder` ViewModel in `AppRoot` |
 | Index | Room `archived_file` (`RoomArchiveIndex`) | Room `archived_file` (`RoomArchiveIndex` through `IosArchiveDatabase`), one instance shared with the sync runner (`IosArchive`) |
 | Tiers | Room `metric_bucket` (`RoomHistoryTiers`) | persisted signature-gated sidecars from the shared day pass (`ArchiveHistoryTiers`) |
-| Current station | the known device's station | the archived station with the latest reading |
-| Chips | the device's authenticated station epochs | every archived station, oldest latest reading first |
+| Current thing | the known device's thing | the archived thing with the latest reading |
+| Chips | the device's authenticated thing epochs | every archived thing, oldest latest reading first |
 | Index repair | `HistoryStartup.start` from `OpenSensorApplication`. The engine indexes each file in the same upsert, so a record waits only after a migration reopens it | `HistoryStartup.start` from `IosArchive.startIndexRepair`. The engine adds records without index columns, so a back-fill follows each new file. On both phones changes during a pass are conflated, and passes repeat until no record is waiting |
 | Header | device section tabs and the link chip | a back arrow, opened from the History button on My devices |
 
@@ -383,19 +383,19 @@ controller over a fake archive. It runs as the Android host test and on the iOS 
 
 ## Incremental history and flow inputs
 
-Android plans observe only name, size and CRC for the connected station. History index updates
-and another station cannot rebuild a plan. Byte progress updates only the sampled overlay,
-and the Files progress card collects its own flow. Charts collect station rows while visible.
+Android plans observe only name, size and CRC for the connected thing. History index updates
+and another thing cannot rebuild a plan. Byte progress updates only the sampled overlay,
+and the Files progress card collects its own flow. Charts collect thing rows while visible.
 Scan summaries and index repair use aggregate queries instead of materializing every receipt.
 
-Android groups one archive listing into UTC station-days and moves decoding to
+Android groups one archive listing into UTC thing-days and moves decoding to
 `Dispatchers.Default.limitedParallelism(2)`. Daily cache write failures keep valid tiers and
 leave the day eligible for retry. Sources are chosen by real first UTC and name consistently
 in tiers, daily output and raw chart fallback, including fractional chart windows. This fixes
 previous disagreement when duplicate identities carried conflicting payloads.
 
 iOS persists versioned tier sidecars beside daily files. Its three tier observers share a
-station snapshot containing summaries, while full buckets stay in the bounded LRU or disk
+thing snapshot containing summaries, while full buckets stay in the bounded LRU or disk
 store. Idle replay expires after five seconds. Critical memory pressure drops cached buckets.
 Sidecars participate in quota eviction and Clear History. A failed source pass is retried
 rather than persisted under a complete source signature. Receipt lookups and mutations use a

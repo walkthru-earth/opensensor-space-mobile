@@ -15,7 +15,7 @@ enum class StorageClass { Durable, Rebuildable, Scratch, Settings }
 
 /** One directory the app writes, and its [StorageClass]. A role maps to exactly one directory per platform. */
 enum class StorageRole(val storageClass: StorageClass) {
-    /** Verified archive copies, one directory per station. */
+    /** Verified archive copies, one directory per thing. */
     Archive(StorageClass.Durable),
 
     /** The archive index (iOS receipts sit beside the finals, Android keeps it in Room). */

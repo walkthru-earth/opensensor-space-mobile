@@ -124,12 +124,12 @@ class UtcColumnsTest {
         val oldBytes = fixtureBytes(fixture)
         val newBytes = current(seqOffset = 1_000_000)
         val old = ParquetFile.wrap(oldBytes)
-        val station = old.metadata.footer?.stationId ?: "station-a"
-        val day = StationDays.dayOf(ParquetIndexer.index(old, templates = CoreS3Files).firstUtcNs!!)
+        val thing = old.metadata.footer?.thingId ?: "thing-a"
+        val day = ThingDays.dayOf(ParquetIndexer.index(old, templates = CoreS3Files).firstUtcNs!!)
         fun source(name: String, bytes: ByteArray, n: Long): DailyParquetSource {
             val index = ParquetIndexer.index(ParquetFile.wrap(bytes), templates = CoreS3Files)
             val record = ArchiveRecord(
-                station, name, bytes.size.toLong(), n, "sha-$n", 1, "fixture",
+                thing, name, bytes.size.toLong(), n, "sha-$n", 1, "fixture",
                 indexedAtEpochMs = 1, rows = index.rows, bootId = index.bootId, utcRows = index.utcRows,
                 firstUtcNs = index.firstUtcNs, lastUtcNs = index.lastUtcNs, firstMonoUs = index.firstMonoUs, lastMonoUs = index.lastMonoUs,
                 firstSeq = index.firstSeq, lastSeq = index.lastSeq,
@@ -137,14 +137,14 @@ class UtcColumnsTest {
             return DailyParquetSource(record) { ParquetFile.wrap(bytes, name) }
         }
         val sink = MemorySink()
-        val result = assertNotNull(DailyParquetBuilder.build(station, day, listOf(source("old.parquet", oldBytes, 1), source("new.parquet", newBytes, 2)), sink, nowEpochS = 0))
+        val result = assertNotNull(DailyParquetBuilder.build(thing, day, listOf(source("old.parquet", oldBytes, 1), source("new.parquet", newBytes, 2)), sink, nowEpochS = 0))
         val daily = ParquetFile.wrap(sink.toByteArray())
         assertEquals(2, result.sources.count { it.rowsUsed > 0 })
 
         assertNull(daily.metadata.leaf(UtcColumns.EVENT_NS), "a derived file never holds the old name")
         val utc = daily.leaf(UtcColumns.EVENT_US)
         assertEquals(TimeUnit.MICROS, utc.timestampUtcUnit)
-        val dayStartUs = day * StationDays.DAY_NS / 1_000
+        val dayStartUs = day * ThingDays.DAY_NS / 1_000
         val micros = daily.readColumn(utc)
         for (i in 0 until micros.size) {
             val v = micros.asLong(i) ?: continue
@@ -163,7 +163,7 @@ class UtcColumnsTest {
         // Two newer sources that disagree on an id: the id is dropped, the column kept.
         val other = current(seqOffset = 2_000_000, idShift = 100)
         val mixed = MemorySink()
-        DailyParquetBuilder.build(station, day, listOf(source("new.parquet", newBytes, 2), source("other.parquet", other, 3)), mixed, nowEpochS = 0)
+        DailyParquetBuilder.build(thing, day, listOf(source("new.parquet", newBytes, 2), source("other.parquet", other, 3)), mixed, nowEpochS = 0)
         val conflicted = ParquetFile.wrap(mixed.toByteArray())
         assertTrue(conflicted.leaves.all { it.fieldId == null })
         assertEquals(TimeUnit.MICROS, conflicted.leaf(UtcColumns.EVENT_US).timestampUtcUnit)
@@ -176,7 +176,7 @@ class UtcColumnsTest {
             write(columns, raw.leaves.map { raw.readColumn(it) }, raw.metadata.keyValueMetadata)
         }
         val shared = MemorySink()
-        DailyParquetBuilder.build(station, day, listOf(source("new.parquet", newBytes, 2), source("renamed.parquet", renamed, 4)), shared, nowEpochS = 0)
+        DailyParquetBuilder.build(thing, day, listOf(source("new.parquet", newBytes, 2), source("renamed.parquet", renamed, 4)), shared, nowEpochS = 0)
         val sharedFile = ParquetFile.wrap(shared.toByteArray())
         val last = ParquetFile.wrap(newBytes).leaves.last().name
         assertNull(sharedFile.leaf(last).fieldId)

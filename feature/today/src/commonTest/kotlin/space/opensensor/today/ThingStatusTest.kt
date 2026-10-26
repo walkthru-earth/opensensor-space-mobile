@@ -1,16 +1,16 @@
 package space.opensensor.today
 
 import space.opensensor.data.ble.ConnectionState
-import space.opensensor.data.ble.StationStatus
+import space.opensensor.data.ble.ThingStatus
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** The one busy and owner rule every station page reads, on both platforms. */
-class StationStatusTest {
+/** The one busy and owner rule every thing page reads, on both platforms. */
+class ThingStatusTest {
     @Test
     fun aReadyIdleLinkTakesCommandsAndShowsNoBanner() {
-        val status = StationStatus(ConnectionState.Ready(247))
+        val status = ThingStatus(ConnectionState.Ready(247))
         assertTrue(status.canCommand)
         assertFalse(status.busy)
         assertFalse(status.showsBanner)
@@ -19,34 +19,34 @@ class StationStatusTest {
 
     @Test
     fun aRunningSyncIsBusy() {
-        val status = StationStatus(ConnectionState.Ready(247), syncRunning = true)
+        val status = ThingStatus(ConnectionState.Ready(247), syncRunning = true)
         assertTrue(status.busy)
         assertFalse(status.canCommand)
     }
 
     @Test
     fun backgroundWorkShowsAWaitingBannerWithoutReconnect() {
-        val closed = StationStatus(ConnectionState.Disconnected, heldInBackground = true)
+        val closed = ThingStatus(ConnectionState.Disconnected, heldInBackground = true)
         assertTrue(closed.busy)
         assertTrue(closed.showsBanner)
         assertFalse(closed.offersReconnect)
-        val ready = StationStatus(ConnectionState.Ready(247), heldInBackground = true)
+        val ready = ThingStatus(ConnectionState.Ready(247), heldInBackground = true)
         assertTrue(ready.showsBanner)
         assertFalse(ready.canCommand)
     }
 
     @Test
     fun reconnectIsOfferedOnlyForAClosedOrFailedLinkNothingIsBringingBack() {
-        assertTrue(StationStatus(ConnectionState.Disconnected).offersReconnect)
-        assertTrue(StationStatus(ConnectionState.Failed("x")).offersReconnect)
-        assertFalse(StationStatus(ConnectionState.Disconnected, reconnecting = true).offersReconnect)
-        assertFalse(StationStatus(ConnectionState.Connecting).offersReconnect)
+        assertTrue(ThingStatus(ConnectionState.Disconnected).offersReconnect)
+        assertTrue(ThingStatus(ConnectionState.Failed("x")).offersReconnect)
+        assertFalse(ThingStatus(ConnectionState.Disconnected, reconnecting = true).offersReconnect)
+        assertFalse(ThingStatus(ConnectionState.Connecting).offersReconnect)
     }
 
     @Test
     fun todaySnapshotReadsTheSameStatus() {
         val snapshot = TodaySnapshot(connection = ConnectionState.Ready(247), heldInBackground = true)
-        assertTrue(snapshot.station.busy)
-        assertFalse(snapshot.station.canCommand)
+        assertTrue(snapshot.thing.busy)
+        assertFalse(snapshot.thing.canCommand)
     }
 }

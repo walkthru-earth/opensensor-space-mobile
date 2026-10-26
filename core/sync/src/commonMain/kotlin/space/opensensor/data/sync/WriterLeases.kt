@@ -6,7 +6,7 @@ import space.opensensor.archive.ArchiveKey
 import space.opensensor.sync.SyncLock
 
 /**
- * One writer per archive identity (station, name), waiters included. Different files transfer
+ * One writer per archive identity (thing, name), waiters included. Different files transfer
  * together. A slot lives only while someone holds or waits for it, so a cancelled waiter never leaves
  * a lease behind. Only [DeviceCoordinator] makes one, so every writer of an archive shares it.
  */

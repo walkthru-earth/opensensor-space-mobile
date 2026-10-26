@@ -118,18 +118,18 @@ class IosLink internal constructor(
     /** [IosLinkPort.mtu], for the Debug link line. */
     val mtu: Int get() = port.mtu
 
-    private data class Identity(val station: String, val boot: String?, val maxRead: Int)
+    private data class Identity(val thing: String, val boot: String?, val maxRead: Int)
 
     private val identity = AtomicReference<Identity?>(null)
-    internal val station: String? get() = identity.load()?.station
+    internal val thing: String? get() = identity.load()?.thing
     internal val boot: String? get() = identity.load()?.boot
 
     /** The sensor's advertised read window, for [IosLinkProvider]. */
     internal val maxRead: Int get() = identity.load()?.maxRead ?: 0
 
     /** Bind the full boot identity once before sharing the link. A second binding fails. */
-    fun identify(station: String, boot: String?, maxRead: Int) {
-        check(identity.compareAndSet(null, Identity(station, boot, maxRead))) { "link identity is already bound" }
+    fun identify(thing: String, boot: String?, maxRead: Int) {
+        check(identity.compareAndSet(null, Identity(thing, boot, maxRead))) { "link identity is already bound" }
     }
 
     /**
@@ -139,7 +139,7 @@ class IosLink internal constructor(
      */
     fun fetchBoardTemplate(dict: String?, desc: String?) {
         if (dict == null || desc == null) return
-        val info = DeviceInfo(proto = DeviceGatt.PROTOCOL_VERSION, dict = dict, desc = desc, station = station)
+        val info = DeviceInfo(proto = DeviceGatt.PROTOCOL_VERSION, dict = dict, desc = desc, thing = thing)
         scope.launch {
             try {
                 val outcome = leased(LeaseKind.COMMAND) { IosArchive.boardDescriptors.ensure(info, it) }
@@ -429,7 +429,7 @@ class IosLink internal constructor(
         override suspend fun open(sink: FrameSink): LinkInfo {
             this.sink.store(OnceSink(sink))
             // Swift refused a sensor below proto 3 before making the link (`SyncWire.identity`).
-            return LinkInfo(kind, payloadMax = port.mtu - 3, info = DeviceInfo(proto = DeviceGatt.PROTOCOL_VERSION, station = station, boot = boot))
+            return LinkInfo(kind, payloadMax = port.mtu - 3, info = DeviceInfo(proto = DeviceGatt.PROTOCOL_VERSION, thing = thing, boot = boot))
         }
 
         override suspend fun send(body: ByteArray, deadline: Duration) {

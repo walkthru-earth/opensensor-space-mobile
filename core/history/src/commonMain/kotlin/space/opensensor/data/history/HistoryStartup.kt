@@ -20,7 +20,7 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * 3. [HistoryOrchestrator.run], the backfill and the platform derive, so a file the janitor adopted is
  *    indexed in the same start.
  *
- * [log] gets step names, counts and class names only, never paths or station ids.
+ * [log] gets step names, counts and class names only, never paths or thing ids.
  */
 @OptIn(ExperimentalAtomicApi::class)
 class HistoryStartup(

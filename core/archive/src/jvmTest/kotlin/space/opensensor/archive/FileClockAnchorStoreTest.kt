@@ -13,9 +13,9 @@ class FileClockAnchorStoreTest : ClockAnchorStoreContract() {
     override fun newStore(): ClockAnchorStore = FileClockAnchorStore(root)
 
     override fun writeMalformedReceipt() {
-        File(root, "${clockTestAnchor.station}/${clockTestAnchor.boot}/broken.anchor").writeText("interrupted")
-        val moved = clockTestAnchor.copy(station = "station-b")
-        File(root, "${clockTestAnchor.station}/${clockTestAnchor.boot}/misplaced.anchor").writeBytes(ClockAnchorReceipt.encode(moved))
+        File(root, "${clockTestAnchor.thing}/${clockTestAnchor.boot}/broken.anchor").writeText("interrupted")
+        val moved = clockTestAnchor.copy(thing = "thing-b")
+        File(root, "${clockTestAnchor.thing}/${clockTestAnchor.boot}/misplaced.anchor").writeBytes(ClockAnchorReceipt.encode(moved))
     }
 
     @AfterTest
@@ -24,14 +24,14 @@ class FileClockAnchorStoreTest : ClockAnchorStoreContract() {
     }
 
     @Test
-    fun duplicateReceiptsAreImmutableAndSymlinkStationsAreRefused() = runTest {
+    fun duplicateReceiptsAreImmutableAndSymlinkThingsAreRefused() = runTest {
         newStore().put(clockTestAnchor)
-        val receipt = File(root, "${clockTestAnchor.station}/${ClockAnchorReceipt.relativePath(clockTestAnchor)}")
+        val receipt = File(root, "${clockTestAnchor.thing}/${ClockAnchorReceipt.relativePath(clockTestAnchor)}")
         receipt.setLastModified(1_000L)
         newStore().put(clockTestAnchor)
         assertEquals(1_000L, receipt.lastModified())
-        Files.createSymbolicLink(File(root, "linked-station").toPath(), File(root, clockTestAnchor.station).toPath())
-        assertFailsWith<IllegalStateException> { newStore().anchors("linked-station") }
-        assertFailsWith<IllegalStateException> { newStore().put(clockTestAnchor.copy(station = "linked-station")) }
+        Files.createSymbolicLink(File(root, "linked-thing").toPath(), File(root, clockTestAnchor.thing).toPath())
+        assertFailsWith<IllegalStateException> { newStore().anchors("linked-thing") }
+        assertFailsWith<IllegalStateException> { newStore().put(clockTestAnchor.copy(thing = "linked-thing")) }
     }
 }

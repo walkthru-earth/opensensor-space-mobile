@@ -7,12 +7,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class DeviceContinuityPolicyTest {
-    private val known = Identity("AA:BB:CC:DD:EE:01", "441bf6e26b40", "station-old")
+    private val known = Identity("AA:BB:CC:DD:EE:01", "441bf6e26b40", "thing-old")
 
     @Test
-    fun stationRolloverCannotEscapeItsArchiveNamespace() {
-        for (station in listOf(".", "..", "../outside", "station/child")) {
-            assertEquals(Decision.Reject(Reason.STATION_MALFORMED), decide(known.copy(station = station), ble = true))
+    fun thingRolloverCannotEscapeItsArchiveNamespace() {
+        for (thing in listOf(".", "..", "../outside", "thing/child")) {
+            assertEquals(Decision.Reject(Reason.THING_MALFORMED), decide(known.copy(thing = thing), ble = true))
         }
     }
 
@@ -23,17 +23,17 @@ class DeviceContinuityPolicyTest {
     }
 
     @Test
-    fun newStationOnTheAuthenticatedSameHardwareBecomesAnEpochAndInvalidatesCredentials() {
-        assertEquals(Decision.Accept(stationChanged = true, invalidateLanToken = true), decide(known.copy(station = "station-new"), ble = true))
+    fun newThingOnTheAuthenticatedSameHardwareBecomesAnEpochAndInvalidatesCredentials() {
+        assertEquals(Decision.Accept(thingChanged = true, invalidateLanToken = true), decide(known.copy(thing = "thing-new"), ble = true))
     }
 
     @Test
-    fun lanCannotAuthorizeAStationGenerationChange() {
-        assertEquals(Decision.Reject(Reason.STATION_CHANGE_REQUIRES_BLE), decide(known.copy(station = "station-new"), ble = false))
+    fun lanCannotAuthorizeAThingGenerationChange() {
+        assertEquals(Decision.Reject(Reason.THING_CHANGE_REQUIRES_BLE), decide(known.copy(thing = "thing-new"), ble = false))
     }
 
     @Test
-    fun sameStationCannotDisguiseChangedHardwareOnBleOrLan() {
+    fun sameThingCannotDisguiseChangedHardwareOnBleOrLan() {
         for (ble in listOf(true, false)) {
             assertEquals(Decision.Reject(Reason.HARDWARE_CHANGED), decide(known.copy(deviceId = "a4cb8fd77500"), ble))
         }
@@ -57,9 +57,9 @@ class DeviceContinuityPolicyTest {
     }
 
     @Test
-    fun missingStationCannotBeUsedToCollectFiles() {
-        for (station in listOf(null, "", " ")) {
-            assertEquals(Decision.Reject(Reason.STATION_MISSING), decide(known.copy(station = station), ble = true))
+    fun missingThingCannotBeUsedToCollectFiles() {
+        for (thing in listOf(null, "", " ")) {
+            assertEquals(Decision.Reject(Reason.THING_MISSING), decide(known.copy(thing = thing), ble = true))
         }
     }
 
@@ -79,17 +79,17 @@ class DeviceContinuityPolicyTest {
 
     @Test
     fun anEmptySavedScanRowIsStillAFirstEnrollment() {
-        val scanned = known.copy(deviceId = null, station = null)
+        val scanned = known.copy(deviceId = null, thing = null)
         assertEquals(Decision.Accept(), DeviceContinuityPolicy.evaluate(scanned, known, authenticatedBle = true))
         assertEquals(Decision.Reject(Reason.ENROLLMENT_REQUIRES_BLE), DeviceContinuityPolicy.evaluate(scanned, known, authenticatedBle = false))
     }
 
     @Test
-    fun legacyDevicesWithoutDevMayCollectSameStationButCannotAutomaticallyLinkANewOne() {
+    fun legacyDevicesWithoutDevMayCollectSameThingButCannotAutomaticallyLinkANewOne() {
         val legacy = known.copy(deviceId = null)
         assertEquals(Decision.Accept(), DeviceContinuityPolicy.evaluate(legacy, legacy, authenticatedBle = false))
-        assertEquals(Decision.Reject(Reason.STATION_CHANGE_REQUIRES_HARDWARE), DeviceContinuityPolicy.evaluate(legacy, legacy.copy(station = "station-new"), authenticatedBle = true))
-        assertEquals(Decision.Reject(Reason.STATION_CHANGE_REQUIRES_HARDWARE), DeviceContinuityPolicy.evaluate(legacy, known.copy(station = "station-new"), authenticatedBle = true))
+        assertEquals(Decision.Reject(Reason.THING_CHANGE_REQUIRES_HARDWARE), DeviceContinuityPolicy.evaluate(legacy, legacy.copy(thing = "thing-new"), authenticatedBle = true))
+        assertEquals(Decision.Reject(Reason.THING_CHANGE_REQUIRES_HARDWARE), DeviceContinuityPolicy.evaluate(legacy, known.copy(thing = "thing-new"), authenticatedBle = true))
     }
 
     private fun decide(observed: Identity, ble: Boolean): Decision = DeviceContinuityPolicy.evaluate(known, observed, authenticatedBle = ble)

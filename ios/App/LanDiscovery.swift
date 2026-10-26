@@ -46,7 +46,7 @@ final class LanDiscovery {
     private var progressCounts = RunCounts<String>()
     private struct Device {
         let endpoint: NWEndpoint
-        let station: String
+        let thing: String
         let device: String
     }
     private let engine: SensorSync
@@ -128,10 +128,10 @@ final class LanDiscovery {
     /// A known sensor may use Wi-Fi immediately after the combined scan. Match both the saved
     /// identity and the Bonjour hints; connect() performs the Keychain and HELLO checks again.
     @discardableResult
-    func connectKnown(station: String, device: String, onFailure: (() -> Void)? = nil) -> Bool {
-        guard credentials.find(device: device.lowercased())?.station == station else { return false }
+    func connectKnown(thing: String, device: String, onFailure: (() -> Void)? = nil) -> Bool {
+        guard credentials.find(device: device.lowercased())?.thing == thing else { return false }
         guard let name = devices.first(where: { _, found in
-            found.station == station && found.device == device.lowercased()
+            found.thing == thing && found.device == device.lowercased()
         })?.key else { return false }
         return connect(name: name, onFailure: onFailure)
     }
@@ -167,7 +167,7 @@ final class LanDiscovery {
                 let devices = self.sensors(in: results)
                 self.devices = devices
                 let names = Array(devices.keys)
-                self.state.lanSensorsFound(names: names, stations: names.map { devices[$0]?.station ?? "" })
+                self.state.lanSensorsFound(names: names, things: names.map { devices[$0]?.thing ?? "" })
                 // A run iOS interrupted may have waited for Bonjour to find its sensor.
                 self.runs?.retryInterrupted()
             }
@@ -178,18 +178,18 @@ final class LanDiscovery {
         }
     }
 
-    /// Protocol 2 sensors in a browse result, by service name. Station and hardware id come from TXT.
+    /// Protocol 2 sensors in a browse result, by service name. Thing and hardware id come from TXT.
     private func sensors(in results: Set<NWBrowser.Result>) -> [String: Device] {
         var devices: [String: Device] = [:]
         for result in results {
             guard case .service(let name, let type, let domain, _) = result.endpoint,
                 type.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == state.lanServiceType,
                 domain == "local.", case .bonjour(let txt) = result.metadata,
-                case .string(let station)? = txt.getEntry(for: "station"),
+                case .string(let thing)? = txt.getEntry(for: "station"),
                 case .string(let device)? = txt.getEntry(for: "dev"),
                 case .string(let proto)? = txt.getEntry(for: "proto"), (Int(proto) ?? 0) >= 3
             else { continue }
-            devices[name] = Device(endpoint: result.endpoint, station: station, device: device.lowercased())
+            devices[name] = Device(endpoint: result.endpoint, thing: thing, device: device.lowercased())
         }
         return devices
     }
@@ -210,7 +210,7 @@ final class LanDiscovery {
             report(name, notice: .lanSensorGone)
             return false
         }
-        guard let credential = credentials.find(device: device.device), credential.station == device.station else {
+        guard let credential = credentials.find(device: device.device), credential.thing == device.thing else {
             report(name, notice: LanFailure.enrollmentRequired.notice)
             return false
         }
@@ -574,7 +574,7 @@ final class LanDiscovery {
         let device = device.lowercased()
         if let name = sessionDevices.first(where: { $0.value == device })?.key { return name }
         return devices.first { _, found in
-            found.device == device && credentials.find(device: device)?.station == found.station
+            found.device == device && credentials.find(device: device)?.thing == found.thing
         }?.key
     }
 
@@ -647,10 +647,10 @@ final class LanDiscovery {
 }
 
 /// Auto-sync over Wi-Fi (#23). Only sensors with saved Wi-Fi access, found by `_ossync._tcp` and
-/// matching the saved station, are opened. Requests are the sync engine's LIST, OPEN, READ and CLOSE.
+/// matching the saved thing, are opened. Requests are the sync engine's LIST, OPEN, READ and CLOSE.
 extension LanDiscovery {
     /// Looks for sensors for up to [timeout] seconds, then answers with service names and their TXT
-    /// stations. Found sensors are kept so a step can open them.
+    /// things. Found sensors are kept so a step can open them.
     func backgroundBrowse(timeout: TimeInterval, done: @escaping ([String], [String]) -> Void) {
         endBackgroundBrowse()
         let browser = NWBrowser(for: .bonjourWithTXTRecord(type: state.lanServiceType, domain: "local."), using: .tcp)
@@ -688,7 +688,7 @@ extension LanDiscovery {
         guard let done = backgroundBrowseDone else { return }
         backgroundBrowseDone = nil
         let names = Array(found.keys)
-        done(names, names.map { found[$0]?.station ?? "" })
+        done(names, names.map { found[$0]?.thing ?? "" })
     }
 
     /// One step of the shared background run. Opens its own session to this service, syncs, closes
@@ -704,7 +704,7 @@ extension LanDiscovery {
             done(.skipped("not found"))
             return
         }
-        guard let credential = credentials.find(device: device.device), credential.station == device.station else {
+        guard let credential = credentials.find(device: device.device), credential.thing == device.thing else {
             done(.skipped("no wifi access"))
             return
         }
@@ -732,7 +732,7 @@ extension LanDiscovery {
     /// whether the link is open and identified, and whether the sensor refused the saved access.
     private func openQuiet(_ name: String, done: @escaping (Bool, Bool) -> Void) {
         guard tasks[name] == nil, sessions[name] == nil, let device = devices[name],
-            let credential = credentials.find(device: device.device), credential.station == device.station,
+            let credential = credentials.find(device: device.device), credential.thing == device.thing,
             claims.connect(name: name, device: device.device)
         else { return done(false, false) }
         let session = LanSession(endpoint: device.endpoint)
