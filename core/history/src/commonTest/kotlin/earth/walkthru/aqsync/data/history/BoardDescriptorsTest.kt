@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import space.opensensor.model.BoardTemplate
+import space.opensensor.model.BundledCatalog
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -61,6 +62,17 @@ class BoardDescriptorsTest {
         var downloads = 0
         assertEquals(DescriptorOutcome.Known, descriptors.ensure(info) { downloads++; bytes })
         assertEquals(0, downloads)
+    }
+
+    @Test
+    fun everyBundledIndexDescSkipsTheDownload() = runTest {
+        val descriptors = BoardDescriptors(MemoryBlockStore(), ServedTemplates(), io = StandardTestDispatcher(testScheduler))
+        assertTrue(BundledCatalog.templates.isNotEmpty())
+        for (bundled in BundledCatalog.templates) {
+            val desc = assertNotNull(bundled.key.desc, "index.json gives ${bundled.dict} its desc")
+            val device = info.copy(dict = bundled.dict, desc = desc.take(16))
+            assertEquals(DescriptorOutcome.Known, descriptors.ensure(device) { error("bundled ${bundled.dict} must not download") })
+        }
     }
 
     @Test
