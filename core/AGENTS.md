@@ -39,6 +39,12 @@ the template a board serves over `GET_DESCRIPTOR` (`DeviceSession.downloadDescri
 keep at most 16 templates, oldest out first. `ArchiveIndexRepair` hands each indexed file's footer
 `template.sha256` to `BoardDescriptors.confirm`, which evicts a served template with the same 16 hex
 prefix and another full digest. Bundled templates are never evicted. All Kotlin code lives under `space.opensensor`.
+`stac/` builds one STAC File Item per synced device file (`FileItems.build`, #190), the sidecar
+JSON at `thing=<uuid>/year=YYYY/month=MM/day=DD/<file>.json`. It is a pure function of the verified
+file bytes, its `opensensor` footer and its `BoardTemplate`, with no upload, network or Room. The
+geometry is H3 cells only, `ColumnStatistics` gives each measurement column `statistics` under its
+`valid_when` gate, and `FileItemResult.NoItem` names why a file gets none (no UTC anchor, no located
+row under `FileItems.ITEM_NEEDS_LOCATION`, a fixed Thing in two cells). Nothing calls it yet.
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log` in any

@@ -21,6 +21,14 @@ interface H3Grid {
 
     /** Cells whose centres fall inside the polygon [ring] (no holes). */
     fun polygonToCells(ring: List<LatLng>, res: Int): List<Long>
+
+    /**
+     * The union of [cells], all at one resolution, as polygons. Each polygon is its outer loop first,
+     * then its holes, and no loop repeats its first vertex. Cells that share an edge merge into one
+     * polygon, so a polygon only touches another at a vertex. Empty for no cells.
+     */
+    fun cellsToMultiPolygon(cells: Collection<Long>): List<List<List<LatLng>>> =
+        throw UnsupportedOperationException("this H3 binding has no cell union")
 }
 
 /** The platform H3 binding. */

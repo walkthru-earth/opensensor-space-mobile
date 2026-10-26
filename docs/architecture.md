@@ -21,6 +21,7 @@ flowchart TB
     SE[":core:settings<br/>app preferences on DataStore, detail level, cache quotas"]
     ST[":core:storage<br/>atomic files, storage budget, quotas, memory caches"]
     SY1[":core:sync<br/>LinkSession, SyncEngine, ArchiveCollector, CollectionController"]
+    SC[":core:stac<br/>one STAC File Item per synced device file"]
   end
   subgraph ui["Compose Multiplatform, Android and iOS"]
     DS[":ui:designsystem<br/>tokens, theme, fonts, floating controls"]
@@ -37,6 +38,7 @@ flowchart TB
   HI --> PQ & PR & AQ
   PF --> PQ & AQ & NT
   NT --> PQ
+  SC --> HI & PF & PR
   DI --> PF & UN & DS & PM & SE
   DS --> AQ
   SE --> UN & ST
