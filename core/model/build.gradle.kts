@@ -12,7 +12,7 @@ plugins {
  * Embeds every `*.json` file under [source] as a Kotlin string, so common code on Android and iOS reads
  * the bundled templates and profiles without a resource API. The output is the internal object
  * `BundledFiles` with one entry per file, keyed by its path under [source] such as
- * `templates/cores3-telemetry-v5.json`.
+ * `templates/m5stack-cores3/<dict>.json`.
  */
 @CacheableTask
 abstract class BundleFiles : DefaultTask() {

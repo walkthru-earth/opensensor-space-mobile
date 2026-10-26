@@ -62,9 +62,16 @@ Rules.
 
 1. The firmware repository documents the family's wire and measurement contract in
    `../aq-parquet/docs/shared/` (or its own contract repo).
-2. Bundle its board template (keyed by `dict`) under `core/model/bundled/templates/` and, if the
-   derived default is not enough, an `AppProfile` for that `dict` under
-   `core/model/bundled/profiles/`. `BundledCatalogTest` checks them.
+2. Mirror the firmware's published board templates (aq-parquet `docs/shared/templates`, one
+   `<board>/<dict>.json` per board plus `index.json` and `README.md`) into
+   `core/model/bundled/templates/`, byte for byte, with
+   `rsync -a --delete ../aq-parquet/docs/shared/templates/ core/model/bundled/templates/` from the
+   repo root, and, if the derived default is not enough, add an
+   `AppProfile` for that `dict` under `core/model/bundled/profiles/`. `BundledCatalog` reads the
+   templates through `index.json`, which gives each its `desc`. `BundledTemplateBytesTest` checks each
+   file's SHA-256 against its `index.json` desc and pins the full SHA-256 of every copied json file,
+   so update its `pinned` map with the copy. `BundledCatalogTest` checks the profiles. The template
+   links point at fixed aq commits, the app never fetches or trusts them, only the digests.
 3. If it uses a new transport, follow "Adding a transport" in the cross-platform guide.
 4. Optional. A family may provide a hero component (the air-quality mood face is one). Without
    one, the generic `MetricCard` is used.

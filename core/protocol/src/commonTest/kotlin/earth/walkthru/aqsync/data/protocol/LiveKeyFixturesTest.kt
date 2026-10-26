@@ -7,18 +7,19 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
- * The digests and LIVE key sets frozen in aq-parquet `tools/fixtures/live_keys/cores3.json` and
- * `waveshare.json`, copied as test data. The app bundles one template per board, for its current
- * digest. When firmware ships a new digest, swap the bundled template file, move the old digest to
+ * The digests and LIVE keys frozen in aq-parquet `tools/fixtures/live_keys/cores3.json` and
+ * `waveshare.json`, copied as test data in board key order. The app bundles one template per board,
+ * for its current digest, and its `live_keys` list the keys in the same order (aq-parquet #86). When
+ * firmware ships a new digest, copy aq-parquet `docs/shared/templates` again, move the old digest to
  * [retired] and copy the new build here. The weekly `live-key-drift` workflow fails while aq-parquet
  * main has a digest missing from this file.
  */
 class LiveKeyFixturesTest {
-    private data class FixtureBuild(val board: String, val digest: String, val firmware: String, val keys: Set<String>)
+    private data class FixtureBuild(val board: String, val digest: String, val keys: List<String>)
 
     private val current = listOf(
-        FixtureBuild("cores3", "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94", "idf-cores3-parquet-v6.15", setOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "n5", "n10", "imu_t", "als", "vbus", "bat", "pct", "chg", "t", "rh")),
-        FixtureBuild("waveshare", "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb", "idf-waveshare-parquet-v2.9", setOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
+        FixtureBuild("cores3", "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "n5", "n10", "imu_t", "als", "vbus", "bat", "pct", "chg", "t", "rh")),
+        FixtureBuild("waveshare", "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
     )
 
     /** Released digests the app no longer bundles. Boards on them get no LIVE view until reflashed. */
@@ -39,10 +40,10 @@ class LiveKeyFixturesTest {
     private val cores3AlwaysNull = setOf("t", "rh")
 
     @Test
-    fun `every current digest has a bundled template with the fixture LIVE keys`() {
+    fun `every current digest has a bundled template with the fixture LIVE keys in board order`() {
         current.forEach { build ->
-            val template = assertNotNull(BundledCatalog.template(build.digest), build.firmware)
-            assertEquals(build.keys, template.liveKeys.values.toSet(), build.firmware)
+            val template = assertNotNull(BundledCatalog.template(build.digest), build.board)
+            assertEquals(build.keys, template.liveKeys.values.toList(), build.board)
         }
         assertEquals(current.map { it.digest }.toSet(), BundledCatalog.templates.map { it.dict }.toSet())
     }
@@ -50,9 +51,9 @@ class LiveKeyFixturesTest {
     @Test
     fun `every current digest shows the fixture LIVE keys of its board`() {
         current.forEach { build ->
-            val station = assertNotNull(BundledCatalog.station("station", build.digest), "${build.firmware} has no LIVE station")
-            val expected = if (build.board == "cores3") build.keys - cores3AlwaysNull else build.keys
-            assertEquals(expected, station.live.keys, build.firmware)
+            val station = assertNotNull(BundledCatalog.station("station", build.digest), "${build.board} has no LIVE station")
+            val expected = if (build.board == "cores3") build.keys.toSet() - cores3AlwaysNull else build.keys.toSet()
+            assertEquals(expected, station.live.keys, build.board)
         }
     }
 
