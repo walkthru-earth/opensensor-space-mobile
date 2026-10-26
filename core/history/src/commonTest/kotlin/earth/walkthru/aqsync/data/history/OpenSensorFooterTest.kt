@@ -12,6 +12,11 @@ class OpenSensorFooterTest {
     private fun parse(json: String) = OpenSensorFooter.parse(json)
 
     @Test
+    fun theFooterKeyIsOpensensor() {
+        assertEquals("opensensor", OpenSensorFooter.KEY)
+    }
+
+    @Test
     fun aFullFooterGivesOnlyTheFieldsTheAppReads() {
         assertEquals(
             OpenSensorFooter(10_000, dict, desc, stationId = "station-a", purpose = "telemetry"),

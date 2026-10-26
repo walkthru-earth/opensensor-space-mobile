@@ -169,6 +169,69 @@ class BoardDescriptorsTest {
         assertEquals(0, h.downloads)
     }
 
+    /** A digest with [sha]'s 16 hex prefix and a different rest, what a footer of a different template says. */
+    private val samePrefixOtherDigest = sha.take(16) + sha.drop(16).map { if (it == '0') '1' else '0' }.joinToString("")
+
+    @Test
+    fun servedTemplateContradictedByAFooterIsEvictedAndNotFetchedAgain() = runTest {
+        val h = harness()
+        assertIs<DescriptorOutcome.Fetched>(h.descriptors.ensure(info) { h.downloads++; bytes })
+        assertEquals(1, h.descriptors.confirm(samePrefixOtherDigest))
+        assertTrue(h.store.list().isEmpty())
+        assertTrue(h.served.all.value.isEmpty())
+        // The next ensure downloads again, and the same bytes now differ from the footer.
+        assertIs<DescriptorOutcome.Rejected>(h.descriptors.ensure(info) { h.downloads++; bytes })
+        assertEquals(2, h.downloads)
+        assertTrue(h.store.list().isEmpty())
+        assertTrue(h.served.all.value.isEmpty())
+    }
+
+    @Test
+    fun cachedTemplateContradictedBeforeItLoadsIsDeleted() = runTest {
+        val h = harness()
+        h.store.write("$sha.json", bytes)
+        assertEquals(1, h.descriptors.confirm(samePrefixOtherDigest))
+        assertEquals(0, h.descriptors.load())
+        assertTrue(h.store.list().isEmpty())
+    }
+
+    @Test
+    fun footerWithTheSameDigestKeepsTheTemplate() = runTest {
+        val h = harness()
+        val fetched = assertIs<DescriptorOutcome.Fetched>(h.descriptors.ensure(info) { h.downloads++; bytes })
+        assertEquals(0, h.descriptors.confirm(sha))
+        assertEquals(0, h.descriptors.confirm(sha.uppercase()))
+        assertEquals(listOf("$sha.json"), h.store.list().map { it.name })
+        assertEquals(listOf(fetched.template), h.served.all.value)
+        assertEquals(DescriptorOutcome.Known, h.descriptors.ensure(info) { h.downloads++; bytes })
+        assertEquals(1, h.downloads)
+    }
+
+    @Test
+    fun footerOfAnotherPrefixChangesNothing() = runTest {
+        val h = harness()
+        h.descriptors.ensure(info) { bytes }
+        assertEquals(0, h.descriptors.confirm("f".repeat(64)))
+        assertEquals(0, h.descriptors.confirm("not a digest"))
+        assertEquals(1, h.store.list().size)
+        assertEquals(1, h.served.all.value.size)
+    }
+
+    @Test
+    fun bundledTemplatesAreNeverEvicted() = runTest {
+        val bundled = BoardTemplate.parse(template(dict), desc = sha)
+        val store = MemoryBlockStore()
+        val served = ServedTemplates()
+        // A cached copy of the bundled bytes, as a device that served them before the app bundled them leaves.
+        store.write("$sha.json", bytes)
+        val descriptors = BoardDescriptors(store, served, listOf(bundled), StandardTestDispatcher(testScheduler))
+        assertEquals(1, descriptors.load())
+        assertEquals(0, descriptors.confirm(samePrefixOtherDigest))
+        assertEquals(listOf("$sha.json"), store.list().map { it.name })
+        assertEquals(1, served.all.value.size)
+        assertEquals(DescriptorOutcome.Known, descriptors.ensure(info) { error("bundled must not download") })
+    }
+
     private fun template(dict: String) = """
 {
   "type": "OpenSensorTemplate",
