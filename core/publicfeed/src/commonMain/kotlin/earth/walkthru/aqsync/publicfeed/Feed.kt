@@ -145,6 +145,12 @@ interface PublicFeed {
     suspend fun latest(): FeedPartition?
 
     suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable
+
+    /**
+     * The resolution to read for a zoom that asks for [res]. [res] itself unless the feed lists only
+     * some resolutions, then the nearest listed one. Read after [latest].
+     */
+    suspend fun resolutionFor(res: Int): Int = res
 }
 
 /** Paths in the live layout, relative to the feed root (`opensensor/discover/v1`). */

@@ -164,6 +164,16 @@ class OpenAqAggregatesFeedTest {
         assertEquals(emptyList(), r7.rows)
         assertEquals(emptyList(), r7.info.properties)
         assertEquals(emptyList<Pair<String, String?>>(), store.requests)
+        // So a zoom asks for the nearest resolution the Collection lists instead.
+        assertEquals(5, feed.resolutionFor(7))
+        assertEquals(5, feed.resolutionFor(2))
+    }
+
+    @Test
+    fun `a manifest feed reads every resolution as asked`() = runTest {
+        feed.latest()
+        assertEquals(7, feed.resolutionFor(7))
+        assertEquals(2, feed.resolutionFor(2))
     }
 
     @Test

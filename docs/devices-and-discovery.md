@@ -155,7 +155,7 @@ an info button.
   scale's `color_hint` colours, with its edges under the borders and the guideline border marked
   with an ink tick. Steps without colours take an even viridis ramp. The PM2.5 and PM10 scales
   are the WHO 2021 Air Quality Guidelines (PM2.5 15, 25, 37.5, 50, 75, PM10 45, 50, 75, 100, 150,
-  µg/m³, never converted). A WHO scale, one citing the WHO guidelines with six steps, keeps the
+  µg/m³, never converted). A WHO scale, one citing the WHO guidelines with six steps and an open last step, keeps the
   "WHO" mark and a caption naming the averaging, "WHO 24-hour guideline" in the 24 hour window
   and "Compared with the WHO 24-hour guideline" in the 1 hour and 7 day windows (owner decision,
   WHO colours in every window). Its info button explains the steps and cites "WHO global air
@@ -567,13 +567,16 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
 - **Discover Collection (#189).** `collection.json` at the root is a STAC Collection read with
   `StationCollection` from `:core:model` (`DiscoverCollection`). H3 only. One asset per
   resolution, keyed `h3_res=<n>`, with a relative href (no `..`, no absolute path) or an http or
-  https URL. The map opens at resolution 5. `item_assets.data.table:columns` name `<id>__n`,
+  https URL. The map opens at resolution 5 when it is listed. A zoom whose resolution has no
+  asset reads the nearest listed one, and between two equally near the one nearer 5, so a
+  Collection that lists only some resolutions never shows an empty map. `item_assets.data.table:columns` name `<id>__n`,
   `__mean`, `__min` and `__max` per property. The `__mean` column's `title` names the property
   for an id the app does not know, and its `opensensor:scale` is a key of the Collection's
-  `opensensor:scales`, the legend's step scale. A column without one gets the neutral ramp. The
+  `opensensor:scales`, the legend's step scale. A column without one gets the neutral ramp, and so does one whose
+  scale does not parse, which is dropped alone while the rest of the Collection stands. The
   end of `extent.temporal.interval` is `as_of`, `updated` is the generation. `latest()` answers
   `FeedPartition(as_of, 0, updated)`. A resolution without an asset answers an empty table with
-  no request.
+  no request, so the controller asks the feed for the nearest listed resolution first.
 - `manifest.json` is the fallback when the Collection answers 404 or 403. Any other failure
   throws. It carries `as_of` (`YYYY-MM-DD`, the newest complete PM2.5 day) and `generation`,
   plus fields the phone ignores. `latest()` answers `FeedPartition(as_of, 0, generation)`. A

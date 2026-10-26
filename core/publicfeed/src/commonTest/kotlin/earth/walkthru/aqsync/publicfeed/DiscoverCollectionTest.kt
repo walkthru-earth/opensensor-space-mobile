@@ -81,6 +81,46 @@ class DiscoverCollectionTest {
         assertFailsWith<IllegalArgumentException> { DiscoverCollection.parse("not json", root) }
     }
 
+    private fun assets(vararg res: Int) = res.joinToString(",") { """"h3_res=$it":{"href":"cells/h3_res=$it/data.parquet"}""" }
+
+    @Test
+    fun theMapOpensAtFiveWhenListedAndOtherwiseAtTheNearestListedResolution() {
+        val all = DiscoverCollection.parse(collection(assets(3, 5, 7)), root)
+        assertEquals(5, all.defaultRes)
+        assertEquals(5, all.resolutionNear(5))
+        assertEquals(7, all.resolutionNear(7))
+        assertEquals(3, all.resolutionNear(2))
+
+        val gap = DiscoverCollection.parse(collection(assets(3, 7)), root)
+        // 5 is as near 3 as 7, so the coarser wins the tie and the map is never empty.
+        assertEquals(3, gap.defaultRes)
+        assertEquals(3, gap.resolutionNear(5))
+        assertEquals(7, gap.resolutionNear(6))
+        assertEquals(3, gap.resolutionNear(4))
+
+        // A resolution the map cannot draw is never chosen.
+        val far = DiscoverCollection.parse(collection(assets(1, 6, 9)), root)
+        assertEquals(6, far.defaultRes)
+        assertEquals(6, far.resolutionNear(2))
+        assertNull(DiscoverCollection.parse(collection(assets(9)), root).defaultRes)
+        assertNull(DiscoverCollection.parse(collection(""), root).defaultRes)
+    }
+
+    @Test
+    fun aScaleThatDoesNotParseIsDroppedAloneAndItsPropertyGoesNeutral() {
+        val fixture = fixtureBytes(OpenAqFixture.STAC_COLLECTION).decodeToString()
+        val broken = fixture.replace(
+            "\"opensensor:scales\": {",
+            "\"opensensor:scales\":{\"soil-broken\":{\"source\":\"https://example.test/soil\",\"steps\":[{\"upper\":\"high\"}]},",
+        ).replace("\"name\": \"soil_moisture__mean\"", "\"name\":\"soil_moisture__mean\",\"opensensor:scale\":\"soil-broken\"")
+        check(broken.contains("soil-broken\":{") && broken.contains("\"opensensor:scale\":\"soil-broken\"")) { "the fixture changed shape" }
+        val c = DiscoverCollection.parse(broken, root)
+        assertNull(c.scale("soil_moisture"))
+        assertEquals("Soil moisture", c.title("soil_moisture"))
+        assertEquals(WhoGuidelines.URL, c.scale("pm25")?.source)
+        assertEquals(mapOf(5 to "$root/cells/h3_res=5/data.parquet"), c.cells)
+    }
+
     @Test
     fun theBundledScalesMatchTheWhoGuidelinesStepForStep() {
         for ((id, who) in listOf("pm25" to WhoGuidelines.PM25, "pm10" to WhoGuidelines.PM10)) {

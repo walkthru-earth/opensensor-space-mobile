@@ -35,8 +35,8 @@ import kotlin.time.Clock
  *   `FeedPartition(date = as_of, hour = 0, generation)`. The answer is kept for [MANIFEST_TTL_MS] by
  *   [clock]. A feed without `as_of` answers null.
  * - [cells] describes the properties with the Collection's titles and scales, or with
- *   [DiscoverCollection.BUNDLED] for a manifest feed. A resolution the Collection has no asset for
- *   answers an empty table without a request.
+ *   [DiscoverCollection.BUNDLED] for a manifest feed. [resolutionFor] snaps a zoom to the nearest
+ *   resolution the Collection lists. One it has no asset for answers an empty table without a request.
  * - [cells] reads the cells file of `res` through an [HttpRangeSource], with one
  *   [FooterCache] for the feed, keeps the daily rows of the 7 days ending at the partition date and
  *   folds them with [DailyCellFold]. With [blocks] the source is a [CachedRangeSource] keyed by URL,
@@ -187,6 +187,9 @@ class OpenAqAggregatesFeed(
         val http = HttpRangeSource(url, engine)
         return blocks?.let { CachedRangeSource(http, it, url, generation = "${key.asOf}\n${files.orEmpty()}") } ?: http
     }
+
+    /** The nearest resolution the Collection lists ([DiscoverCollection.resolutionNear]), [res] for a manifest feed. */
+    override suspend fun resolutionFor(res: Int): Int = rowsLock.withLock { layout }?.resolutionNear(res) ?: res
 
     /**
      * The URL of the cells file at [res]. The Collection's asset for it, or null when it has none.

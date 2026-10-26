@@ -60,6 +60,11 @@ class StepScaleTest {
         assertNull(StepScale.of("pm25", pm.copy(source = "https://example.test/other"))!!.who)
         assertNull(StepScale.of("pm25", pm.copy(steps = pm.steps.dropLast(1)))!!.who)
         assertNull(StepScale.of("pm25", pm.copy(steps = pm.steps.dropLast(1) + step(500.0)))!!.who)
+        // Five steps cited to WHO with an open last step is not the WHO scale either.
+        val five = pm.copy(steps = pm.steps.dropLast(2) + pm.steps.last())
+        assertEquals(5, five.steps.size)
+        assertNull(five.steps.last().upper)
+        assertNull(StepScale.of("pm25", five)!!.who)
         assertFalse(StepScale.of("pm25", pm)!!.darkFill(0))
     }
 }

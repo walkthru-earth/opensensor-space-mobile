@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.publicfeed.H3Grid
 import earth.walkthru.aqsync.publicfeed.H3Index
 import earth.walkthru.aqsync.publicfeed.LatLng
 import earth.walkthru.aqsync.publicfeed.PublicFeed
+import earth.walkthru.aqsync.publicfeed.ViewportCover
 import earth.walkthru.aqsync.settings.DiscoverSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -86,8 +87,17 @@ class DiscoverControllerTest {
             return partition
         }
 
+        /** When set, the only resolution this feed lists, so every zoom snaps to it. */
+        var listedRes: Int? = null
+
+        /** The resolution of every [cells] read. */
+        val resolutions = mutableListOf<Int>()
+
+        override suspend fun resolutionFor(res: Int): Int = listedRes ?: res
+
         override suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable {
             calls += window to ranges
+            resolutions += res
             // Another feed's partition names files this feed does not have.
             val offset = published[partition] ?: throw IllegalStateException("no file for $partition")
             val single = ranges?.singleOrNull()?.takeIf { it.first == it.last }?.first
@@ -182,6 +192,20 @@ class DiscoverControllerTest {
         val summary = c.state.value.selectedSummary(pm25)!!
         assertEquals(listOf(WhoStep.GUIDELINE, WhoStep.IT3, WhoStep.ABOVE_IT1), summary.blocks.map { it.step })
         assertEquals(30.0, summary.value)
+    }
+
+    @Test
+    fun aZoomTheFeedHasNoFileForReadsTheNearestListedResolution() = runTest {
+        val feed = FakeFeed().apply { listedRes = 5 }
+        val c = controller(feed)
+        feed.resolutions.clear()
+        // Zoom 9 asks for resolution 7, which this feed does not list.
+        c.onCamera(CameraRest(GeoBounds(-122.01, 36.99, -121.99, 37.01), zoom = 9.0, lat = 37.0, lng = -122.0))
+        settle()
+        assertEquals(7, ViewportCover.resolutionForZoom(9.0))
+        assertEquals(5, c.state.value.res)
+        assertEquals(listOf(5), feed.resolutions.distinct())
+        assertEquals(setOf(cellA, cellB), c.state.value.rows.map { it.h3 }.toSet())
     }
 
     @Test
