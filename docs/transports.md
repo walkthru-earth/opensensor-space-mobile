@@ -36,7 +36,7 @@ A LAN connect refused with EPERM, the Local Network permission refusal, is the s
 connection failure falls back to BLE with a snackbar. After connection, INFO must pass
 `DeviceContinuityPolicy` before identity is persisted or files collected; a mismatch closes the
 attempt and surfaces an error. Enrollment stays keyed by the Bluetooth address on both pipes.
-The [canonical firmware contract](../../aq-parquet/docs/shared/ble-sync-protocol.md) owns the UUIDs,
+The [canonical firmware contract](../../opensensor-space-firmware/docs/shared/ble-sync-protocol.md) owns the UUIDs,
 advertising and mDNS names. Boards advertise `OS-xxxx` and publish the mDNS host `os-xxxx.local`,
 where `xxxx` is the last four hex digits of `device_id`. Both phones find boards by the GATT
 service UUID alone (Android `ScanFilter.setServiceUuid`, iOS `scanForPeripherals(withServices:)`)
@@ -102,7 +102,7 @@ Android after saving iPhone access. Both mobile engines start at the advertised
 `max_read` (normally 16 KiB) and only drop below it after a lost or timed-out window; Android also enables `TCP_NODELAY`. Do not shrink
 LAN windows, remove integrity checks or assume an iOS UI change fixes both apps.
 
-The [CoreS3 v6.6 concurrency bench](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#board-1-concurrent-lan-collectors-firmware-v66)
+The [CoreS3 v6.6 concurrency bench](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#board-1-concurrent-lan-collectors-firmware-v66)
 measured two host collectors downloading 87,654 bytes each in 49.801 seconds
 (about 1.8 KB/s each), with a third connection present. That host benchmark used
 4 KiB READ windows; it establishes a slow concurrent run, not the throughput of
@@ -121,14 +121,14 @@ each 16 KiB READ through READ_END, CLOSE, and local verification separately;
 report actual newly received bytes per second, excluding resumed bytes. Record
 firmware/app versions, file size, active collectors and radio conditions. Keep
 tokens and private credentials out of traces. Any firmware scheduling or radio
-change belongs in `../aq-parquet` and needs sampling/coexistence checks and a
+change belongs in `../opensensor-space-firmware` and needs sampling/coexistence checks and a
 dated board run before claiming a throughput improvement.
 
 The subsequent implementation replaces the fixed LAN poll sleep with a bounded
 socket-readiness wait, and wakes the storage worker after successful queue
 enqueues. Sampling and commands retain one turn each per worker pass; queue
 contents survive coalesced wakeups. See the firmware owner's
-[LAN performance guide](../../aq-parquet/docs/shared/lan-performance.md) for
+[LAN performance guide](../../opensensor-space-firmware/docs/shared/lan-performance.md) for
 regressions and qualification. CRC calculation, Wi-Fi sleep/coexistence, frame
 sizes and the wire contract remain unchanged.
 
@@ -148,7 +148,7 @@ two simultaneous host collectors each reached about 57 KB/s. The old image's
 USB-drained/undrained comparison identified console backpressure as a material
 contributor: radio/archive diagnostics now stay in LOG_TAIL without console IO.
 Physical serial DATA/list/status/provisioning paths retain their behavior.
-See the [dated board result](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--cores3-v67-lan-latency-and-usb-backpressure)
+See the [dated board result](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--cores3-v67-lan-latency-and-usb-backpressure)
 for image/backup hashes, client-count differences and limits. These short host
 measurements do not establish Android/iPhone throughput after the upgrade.
 
@@ -213,7 +213,7 @@ because Android may encrypt a bonded link right after connect but flaky stacks a
 133 and a bare disconnect never count. No stale bond on a phone has produced them, while healthy
 bonds do at the edge of range.
 
-The reflash for firmware #93 (aq-parquet #102) is a partial erase. The settings namespace `oscfg`
+The reflash for firmware #93 (opensensor-space-firmware#102) is a partial erase. The settings namespace `oscfg`
 starts empty, and nothing is copied from the old one. `parquet` keeps the thing UUID and the
 codec, so the app sees the same thing and keeps its archive. Lost on the board, back to first
 boot defaults.
@@ -249,7 +249,7 @@ Thing generations preserve the original archive and Hive paths; they do not repa
 ([data model](data-model.md#thing-generations-and-device-continuity)). The policies and migration
 are covered by host checks; multi-device radio behavior, erased-NVS Android recovery and fingerprint
 replacement have **not been verified on a phone**. Measured runs remain in the
-[CoreS3 bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#phone-over-lan-and-ble-oneplus-7-pro-android-16);
+[CoreS3 bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#phone-over-lan-and-ble-oneplus-7-pro-android-16);
 other boards need their own records.
 
 ## LAN token lifecycle

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Fail when aq-parquet has a LIVE dictionary digest the app fixtures do not know.
+"""Fail when opensensor-space-firmware has a LIVE dictionary digest the app fixtures do not know.
 
-The firmware freezes every released LIVE key set in aq-parquet
+The firmware freezes every released LIVE key set in opensensor-space-firmware
 tools/fixtures/live_keys/*.json. The app copies them into LiveKeyFixturesTest.
 A digest that is only on the firmware side means a firmware release the app has
 no bundled board template for, so it shows no live readings until the template
 and profile files are swapped in (issues #153 and #184).
 
-Usage: check_live_key_drift.py <aq-parquet fixtures dir> <LiveKeyFixturesTest.kt>
+Usage: check_live_key_drift.py <opensensor-space-firmware fixtures dir> <LiveKeyFixturesTest.kt>
 """
 
 import json

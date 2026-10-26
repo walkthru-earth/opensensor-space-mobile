@@ -296,5 +296,5 @@ state change, de-duplicated). Never derive it per screen from the session object
 | `ui/theme/BrandTokens.kt` | Every screen, `BrandTokensTest` (website values and contrast) |
 | `DeviceCapabilities` (`:core:history`) | Today hero and batch card, Device sensor card, `setSensorIdentity` guard |
 | `BandColumnChart.kt`, `DayRing.kt`, `CalendarHeatmap.kt` | History and Files › Chart by file (share `Columns` + `HistoryColumn`) |
-| `feature/files/.../FileGrouping.kt` | Files list headers on both apps and per-row local time (pure: `zone`/`locale` parameters, `FileGroupingTest`); the firmware's `day=`/`data_HHMM_` naming in `../aq-parquet/docs/shared/telemetry-pipeline.md` is what it parses |
+| `feature/files/.../FileGrouping.kt` | Files list headers on both apps and per-row local time (pure: `zone`/`locale` parameters, `FileGroupingTest`); the firmware's `day=`/`data_HHMM_` naming in `../opensensor-space-firmware/docs/shared/telemetry-pipeline.md` is what it parses |
 | `DeviceRoute` confirmation dialogs | the **only** call path to `rebootAndReconnect()`. Keep it that way ([sync-engine.md](sync-engine.md#smart-sync-and-state-changing-requests)) |

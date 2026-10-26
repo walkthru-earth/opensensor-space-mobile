@@ -89,7 +89,7 @@ class JsonModelsTest {
 
     @Test
     fun `live floats with trailing zeros parse as numbers`() {
-        // aq-parquet #100 prints each float with its field decimals.
+        // opensensor-space-firmware#100 prints each float with its field decimals.
         val parsed = LiveSample.parse("""{"seq":1,"mono":1,"utc":1760000000000000000,"pms":4,"pm25":5.00,"t":22.50,"rh":41.0,"imu_t":40.1,"pct":87}""")
         assertEquals(5.0, parsed["pm25"]!!, 0.0)
         assertEquals(22.5, parsed["t"]!!, 0.0)

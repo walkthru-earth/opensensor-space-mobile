@@ -4,7 +4,7 @@
 sees public sensor data near them on first open through a privacy-preserving H3 map.
 **Code:** `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/`, `core/model/`. **Related:**
 [cross-platform-guide.md](cross-platform-guide.md),
-`../aq-parquet/docs/shared/table-and-observation-model.md`.
+`../opensensor-space-firmware/docs/shared/table-and-observation-model.md`.
 
 ## Product direction
 
@@ -61,11 +61,11 @@ Rules.
 ### Adding a device family
 
 1. The firmware repository documents the family's wire and measurement contract in
-   `../aq-parquet/docs/shared/` (or its own contract repo).
-2. Mirror the firmware's published board templates (aq-parquet `docs/shared/templates`, one
+   `../opensensor-space-firmware/docs/shared/` (or its own contract repo).
+2. Mirror the firmware's published board templates (opensensor-space-firmware `docs/shared/templates`, one
    `<board>/<dict>.json` per board plus `index.json` and `README.md`) into
    `core/model/bundled/templates/`, byte for byte, with
-   `rsync -a --delete ../aq-parquet/docs/shared/templates/ core/model/bundled/templates/` from the
+   `rsync -a --delete ../opensensor-space-firmware/docs/shared/templates/ core/model/bundled/templates/` from the
    repo root, and, if the derived default is not enough, add an
    `AppProfile` for that `dict` under `core/model/bundled/profiles/`. `BundledCatalog` reads the
    templates through `index.json`, which gives each its `desc`. `BundledTemplateBytesTest` checks each
@@ -469,7 +469,7 @@ treat each public series as personal data until it is aggregated.
    makes a new key, ID and name. Nothing is derived from the thing UUID, MAC address, serial
    or the owner. The thing UUID, MAC, BLE name, Wi-Fi and LAN token never leave the phone.
    If the firmware later uploads by itself, the key moves to the board through an
-   `aq-parquet` contract change.
+   `opensensor-space-firmware` contract change.
 8. **Opt in per device, with an open licence.** Reading the feed is anonymous and read-only.
    Uploading is off for every device by default and is turned on only in that device's settings
    ("Share this sensor publicly"), never globally, in onboarding or in pairing. One

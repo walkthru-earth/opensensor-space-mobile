@@ -3,7 +3,7 @@
 **Date** 2026-10-12. **Status** draft for owner review.
 **Owner decisions (2026-10-12).** Approach A, five slices in order. No app side backward
 compatibility and no migrations. Remove legacy and unused code. The firmware wire contract
-(`../aq-parquet/docs/shared/`) is unchanged.
+(`../opensensor-space-firmware/docs/shared/`) is unchanged.
 
 ## Goal
 

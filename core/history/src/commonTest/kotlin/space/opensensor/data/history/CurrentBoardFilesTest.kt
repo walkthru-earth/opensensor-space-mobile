@@ -246,7 +246,7 @@ class CurrentBoardFilesTest {
 
     @Test
     fun aBoardWithNoLocationReadsIndexesAndCompacts() {
-        // aq main 689bb61 with location unset writes h3_cell_id, location_source and geometry null in every row.
+        // Firmware main 689bb61 with location unset writes h3_cell_id, location_source and geometry null in every row.
         val raw = boardFile(coreS3Template, locationUnset = true)
         val file = ParquetFile.wrap(raw)
         assertTrue(file.leaf("geometry").isGeospatial)

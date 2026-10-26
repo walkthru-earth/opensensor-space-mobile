@@ -49,7 +49,7 @@ internal object ModelJson {
     }
 
     /**
-     * The `templates` map of an aq-parquet `docs/shared/templates/index.json`, one entry per `dict`
+     * The `templates` map of an opensensor-space-firmware `docs/shared/templates/index.json`, one entry per `dict`
      * with its `href` relative to that folder, `desc` and firmware `schema`.
      */
     fun parseTemplateIndex(text: String): List<TemplateIndexEntry> = decode<TemplateIndexDto>(text).templates.map { (dict, e) ->

@@ -37,7 +37,7 @@ shared Kotlin, and screens share one design system based on the opensensor.space
 
 | Platform | Current scope | Verification |
 | --- | --- | --- |
-| Android | Multi-device BLE/LAN collection, verified local archive, offline history, and background sync | Host gate passes; phone qualification is tracked separately in [`docs/status.md`](docs/status.md) and the [CoreS3](../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md) and [Waveshare](../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md) records. |
+| Android | Multi-device BLE/LAN collection, verified local archive, offline history, and background sync | Host gate passes; phone qualification is tracked separately in [`docs/status.md`](docs/status.md) and the [CoreS3](../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md) and [Waveshare](../opensensor-space-firmware/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md) records. |
 | iOS | The same shared screens, BLE and LAN collection into a verified local archive, offline history and per-device Auto-sync | Host, simulator and native checks pass. iPhone runs are tracked in [`docs/status.md`](docs/status.md), see [`docs/ios.md`](docs/ios.md) |
 
 Host tests, simulator builds, and phone observations are different evidence. The app ID
@@ -126,7 +126,7 @@ core/history/    KMP sensor-domain rules + JVM file adapters · Metrics registry
 app/             Android app · data/{ble,lan,sync,background,history,local,settings,export,fake} · ui/{scan,device,history,files,debug,settings}
 ios/shared/      Kotlin Multiplatform presentation state and Compose Multiplatform live screen
 ios/App/         Xcode app · Swift/Core Bluetooth/Bonjour platform adapters
-tools/           fixture generators + PyArrow/DuckDB oracle (run in ../aq-parquet's pixi env), hooks, signing
+tools/           fixture generators + PyArrow/DuckDB oracle (run in ../opensensor-space-firmware's pixi env), hooks, signing
 docs/            one file per concern (see the map above)
 
 Planned (see the production plan)
@@ -138,7 +138,7 @@ core/publicfeed/    public discover feed port, sample fixture, later Parquet ove
 feature/discover/   shared map, cell sheet and public device page
 ```
 
-The Bluetooth protocol is owned by the firmware repo (`../aq-parquet/docs/shared/ble-sync-protocol.md`);
+The Bluetooth protocol is owned by the firmware repo (`../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`);
 this app mirrors it and never changes a frame, opcode, UUID or JSON key first.
 
 ## License & Attribution (CC-BY-4.0)

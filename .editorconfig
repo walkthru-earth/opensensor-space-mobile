@@ -39,7 +39,7 @@ trim_trailing_whitespace = false
 [*.py]
 indent_size = 4
 
-# Bundled board templates are aq-parquet bytes, the SHA-256 of each template is its desc. Never touch them.
+# Bundled board templates are firmware repo bytes, the SHA-256 of each template is its desc. Never touch them.
 [core/model/bundled/templates/**]
 insert_final_newline = unset
 trim_trailing_whitespace = unset

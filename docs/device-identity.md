@@ -12,7 +12,7 @@ that stay fixed under the opensensor.space brand.
 | Concern | Rule |
 | --- | --- |
 | App identity | Application ID and iOS bundle ID `space.opensensor.app` and the release certificate. Changing either installs a new app with an empty archive |
-| Wire | Service UUIDs, `_ossync._tcp`, `OSS1`, framing and opcodes. The firmware owns them and they change only in lockstep with aq-parquet `docs/shared` |
+| Wire | Service UUIDs, `_ossync._tcp`, `OSS1`, framing and opcodes. The firmware owns them and they change only in lockstep with opensensor-space-firmware `docs/shared` |
 | Supported device | Any device that implements the shared sync contract. An ESP32-S3 radio alone does not imply it |
 | Unknown schema | Verified files are collected and exported. Live cards stay unavailable instead of guessing |
 | One owner per device | Firmware has one open file across BLE and LAN, so each physical device has one controller |

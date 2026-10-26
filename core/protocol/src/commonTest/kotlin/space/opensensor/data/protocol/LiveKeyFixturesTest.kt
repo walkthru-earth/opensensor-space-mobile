@@ -7,11 +7,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
- * The digests and LIVE keys frozen in aq-parquet `tools/fixtures/live_keys/cores3.json` and
+ * The digests and LIVE keys frozen in opensensor-space-firmware `tools/fixtures/live_keys/cores3.json` and
  * `waveshare.json`, copied as test data in board key order. The app bundles one template per board,
- * for its current digest, and its `live_keys` list the keys in the same order (aq-parquet #86). When
- * firmware ships a new digest, copy aq-parquet `docs/shared/templates` again, move the old digest to
- * [retired] and copy the new build here. The weekly `live-key-drift` workflow fails while aq-parquet
+ * for its current digest, and its `live_keys` list the keys in the same order (opensensor-space-firmware#86). When
+ * firmware ships a new digest, copy opensensor-space-firmware `docs/shared/templates` again, move the old digest to
+ * [retired] and copy the new build here. The weekly `live-key-drift` workflow fails while opensensor-space-firmware
  * main has a digest missing from this file.
  */
 class LiveKeyFixturesTest {

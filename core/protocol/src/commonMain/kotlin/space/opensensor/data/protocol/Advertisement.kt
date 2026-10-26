@@ -4,7 +4,7 @@ package space.opensensor.data.protocol
  * Advertising service data, protocol revision 2.1 (firmware `-v6.3`): ten little-endian bytes the
  * device broadcasts under [DeviceGatt.SERVICE] so a phone learns "something changed" without
  * connecting — and so an offloaded scan filter can wake the app on a flag bit. Layout and rules:
- * `../aq-parquet/docs/shared/ble-sync-protocol.md`, "Advertising payload (v2.1)".
+ * `../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`, "Advertising payload (v2.1)".
  *
  * Everything in it is public to anyone in range; it carries presence, counters and health bits only.
  */

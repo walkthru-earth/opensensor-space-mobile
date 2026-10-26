@@ -1,6 +1,6 @@
 # Firmware MICROS columns, field ids and LIVE keys
 
-Date 2026-10-16. Source of truth is aq-parquet `integration/waveshare-bench` (PRs 20, 21 and 22,
+Date 2026-10-16. Source of truth is opensensor-space-firmware `integration/waveshare-bench` (PRs 20, 21 and 22,
 draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md` there.
 
 ## Firmware
@@ -8,9 +8,9 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
 | Board | Firmware | Schema | Dictionary | Digest |
 | --- | --- | --- | --- | --- |
 | CoreS3 | `idf-cores3-parquet-v6.12` | `cores3-telemetry-v5` | `cores3-telemetry-v4` | `22291d3aab63365404394f30c1549fb18bde0699df9b2de863de70bb3f4edf65` |
-| CoreS3 | `idf-cores3-parquet-v6.13` (aq-parquet #31) | `cores3-telemetry-v5` | same | `e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b` |
+| CoreS3 | `idf-cores3-parquet-v6.13` (opensensor-space-firmware#31) | `cores3-telemetry-v5` | same | `e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b` |
 | Waveshare SIM7670G | `idf-waveshare-parquet-v2.6` | `waveshare-sim7670g-telemetry-v4` | same | `0a024b85c632f621c0e1223f1ecafe3a9c4524a1ec3c0d03d910d191aaee2f82` |
-| Waveshare SIM7670G | `idf-waveshare-parquet-v2.7` (aq-parquet #24) | `waveshare-sim7670g-telemetry-v5` | same | `67688d0fd2e86053c1c66b961a1446ad3c225ee71823e0fadb771b645c7183ff` |
+| Waveshare SIM7670G | `idf-waveshare-parquet-v2.7` (opensensor-space-firmware#24) | `waveshare-sim7670g-telemetry-v5` | same | `67688d0fd2e86053c1c66b961a1446ad3c225ee71823e0fadb771b645c7183ff` |
 
 ## Plan
 
@@ -43,7 +43,7 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
    user may remove old format files in Settings (#88), phone only, and sync then skips them until
    Download again. A file the device no longer lists is not data loss, and the app never uploads
    to the device.
-9. Iceberg v3. Owner update, aq-parquet commit c1f07ed. Tables are created as format v3, device
+9. Iceberg v3. Owner update, opensensor-space-firmware commit c1f07ed. Tables are created as format v3, device
    MICROS columns are `timestamptz` and `field_id` is the Iceberg field id. No `timestamptz_ns`.
    Row lineage is left to the committing library (iceberg-go 0.7.0+ `AddFiles` or iceberg-rust
    0.9.0+ with `DataFile` entries from footer metrics, not PyIceberg 0.12). Pre v6.12 and v2.6

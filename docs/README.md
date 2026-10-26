@@ -19,7 +19,7 @@ before planning new work. Use [architecture.md](architecture.md), [sync-engine.m
 
 | I need to… | Read | Then open the code in |
 | --- | --- | --- |
-| Know what is verified on Android, iOS simulator, and real devices | [status.md](status.md) | `../aq-parquet/docs/boards/*/bench-verified.md` |
+| Know what is verified on Android, iOS simulator, and real devices | [status.md](status.md) | `../opensensor-space-firmware/docs/boards/*/bench-verified.md` |
 | Keep design and sync behaviour the same on iOS and Android, see what still differs and why, add a sensor family or transport | [cross-platform-guide.md](cross-platform-guide.md) | `core/*/src/commonMain/`, `ios/App/`, `app/` |
 | Understand the product direction, device families, the public H3 discover map and sharing rules | [devices-and-discovery.md](devices-and-discovery.md) | `core/publicfeed/`, `feature/discover/` |
 | Know which values identify a sensor and how the app recovers after a reset or reflash | [device-identity.md](device-identity.md) | `data/DeviceLinkOwner.kt`, `data/ble/`, `data/local/database/` |
@@ -41,7 +41,7 @@ before planning new work. Use [architecture.md](architecture.md), [sync-engine.m
 
 Rules (non-negotiables and AI delegation guidance) live in [`../AGENTS.md`](../AGENTS.md).
 The iOS app boundary is documented in [`../ios/AGENTS.md`](../ios/AGENTS.md). The protocol
-contract lives in the firmware repo, `../aq-parquet/docs/shared/ble-sync-protocol.md`, never here.
+contract lives in the firmware repo, `../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`, never here.
 
 ## How the concerns connect
 

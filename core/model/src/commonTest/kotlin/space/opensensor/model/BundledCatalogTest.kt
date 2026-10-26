@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 class BundledCatalogTest {
     private val indexFile = "templates/index.json"
 
-    // The current digests, aq-parquet docs/shared/templates (#86). A desc move keeps them.
+    // The current digests, opensensor-space-firmware docs/shared/templates (#86). A desc move keeps them.
     private val cores3Dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
     private val waveshareDict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7"
     private val unknownDict = "a".repeat(64)
@@ -156,7 +156,7 @@ class BundledCatalogTest {
 
     @Test
     fun theFirmwareTemplateCarriesCodeClassesATitleAndKeywords() {
-        // aq-parquet #85 generates classification:classes on code columns, a title and keywords.
+        // opensensor-space-firmware#85 generates classification:classes on code columns, a title and keywords.
         val template = assertNotNull(BundledCatalog.template(waveshareDict))
         assertTrue(template.title!!.startsWith("Waveshare"))
         assertTrue("PM2.5" in template.keywords)
@@ -210,7 +210,7 @@ class BundledCatalogTest {
 
     @Test
     fun aRealFirmwareDescResolvesWithoutADict() {
-        // The desc aq-parquet firmware writes in template.sha256 for the CoreS3 v5 template.
+        // The desc firmware writes in template.sha256 for the CoreS3 v5 template.
         val desc = "1c9511bd6836876bf90bbdbe3224b00bd5d176e0fdd5293d5ee6dd73ef6ea45a"
         val template = assertNotNull(BundledCatalog.templateByDesc(desc))
         assertEquals(cores3Dict, template.dict)
