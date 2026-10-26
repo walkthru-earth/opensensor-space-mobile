@@ -73,7 +73,7 @@ class OpenAqAggregatesFeedTest {
     private fun manifestReads() = store.requests.count { it.first.endsWith("manifest.json") }
 
     @Test
-    fun `the feed is live data for 24 hours and 7 days`() {
+    fun `the feed is live data for 24 hours and 7 days`() = runTest {
         assertFalse(feed.isSample)
         assertTrue(feed.isDaily)
         assertEquals(listOf(FeedWindow.DAY, FeedWindow.WEEK), feed.windows)
@@ -143,6 +143,82 @@ class OpenAqAggregatesFeedTest {
         val view = feed.cells(partition, FeedWindow.DAY, 5, ranges = listOf(ACCRA..NAIROBI))
         assertEquals(listOf(NAIROBI), view.rows.map { it.h3 })
         assertFailsWith<HttpRangeException> { feed.cells(partition, FeedWindow.DAY, 6, ranges = null) }
+    }
+
+    private fun stacFeed(): OpenAqAggregatesFeed {
+        store.objects["$root/collection.json"] = fixtureBytes(OpenAqFixture.STAC_COLLECTION) to "\"k1\""
+        store.objects["$root/cells/h3_res=5/data.parquet"] = fixtureBytes(OpenAqFixture.STAC_CELLS) to "\"s1\""
+        return OpenAqAggregatesFeed(store, root = root, clock = clock)
+    }
+
+    @Test
+    fun `the Collection comes first and names the day generation and files`() = runTest {
+        val feed = stacFeed()
+        assertEquals(FeedPartition("2026-10-08", 0, OpenAqFixture.STAC_UPDATED), feed.latest())
+        assertEquals(listOf("$root/collection.json"), store.requests.map { it.first })
+        assertEquals("$root/cells/h3_res=5/data.parquet", feed.cellsUrl(5))
+        // A resolution the Collection does not list has no file, so it is empty without a request.
+        assertNull(feed.cellsUrl(7))
+        store.requests.clear()
+        val r7 = feed.cells(feed.latest()!!, FeedWindow.DAY, 7, ranges = null)
+        assertEquals(emptyList(), r7.rows)
+        assertEquals(emptyList(), r7.info.properties)
+        assertEquals(emptyList<Pair<String, String?>>(), store.requests)
+        // So a zoom asks for the nearest resolution the Collection lists instead.
+        assertEquals(5, feed.resolutionFor(7))
+        assertEquals(5, feed.resolutionFor(2))
+    }
+
+    @Test
+    fun `a manifest feed reads every resolution as asked`() = runTest {
+        feed.latest()
+        assertEquals(7, feed.resolutionFor(7))
+        assertEquals(2, feed.resolutionFor(2))
+    }
+
+    @Test
+    fun `a soil property gets its Collection title and a neutral scale while PM keeps WHO`() = runTest {
+        val feed = stacFeed()
+        val table = feed.cells(feed.latest()!!, FeedWindow.DAY, 5, ranges = null)
+        val soil = table.info.properties.single { it.id == "soil_moisture" }
+        val pm25 = table.info.properties.single { it.id == "pm25" }
+        assertEquals("Soil moisture", soil.label)
+        assertNull(soil.scale)
+        assertEquals("PM2.5", pm25.label)
+        assertEquals(listOf(CAIRO, LAGOS, NAIROBI), table.rows.map { it.h3 })
+        assertEquals(CellStat(2, 0.31, 0.27, 0.35), table.rows.first().stats["soil_moisture"])
+        val soilScale = CellScale.of(soil, table.rows.mapNotNull { it.mean("soil_moisture") })
+        assertTrue(soilScale is CellScale.Relative)
+        val pmScale = CellScale.of(pm25, table.rows.mapNotNull { it.mean("pm25") })
+        assertTrue(pmScale is CellScale.Steps && pmScale.scale.who == earth.walkthru.aqsync.airquality.WhoGuidelines.PM25)
+    }
+
+    @Test
+    fun `a Collection PM column without a scale is neutral`() = runTest {
+        val original = fixtureBytes(OpenAqFixture.STAC_COLLECTION).decodeToString()
+        val json = original.replace(Regex(""",\s*"opensensor:scale":\s*"who-2021-pm25""""), "")
+        check(json.length < original.length) { "the fixture changed shape" }
+        val feed = stacFeed()
+        store.objects["$root/collection.json"] = json.encodeToByteArray() to "\"k2\""
+        val pm25 = feed.cells(feed.latest()!!, FeedWindow.DAY, 5, ranges = null).info.properties.single { it.id == "pm25" }
+        assertNull(pm25.scale)
+    }
+
+    @Test
+    fun `the manifest is read only when the Collection is missing or forbidden`() = runTest {
+        for (status in listOf(403, 404)) {
+            val engine = object : HttpRangeEngine {
+                override suspend fun get(url: String, range: String?, ifRange: String?, ifNoneMatch: String?, limit: BodyLimit): HttpRangeResponse =
+                    if (url.endsWith("collection.json")) HttpRangeResponse(status, null, null, null, ByteArray(0)) else store.get(url, range, ifRange, ifNoneMatch, limit)
+            }
+            assertEquals(FeedPartition("2026-10-08", 0, "fixture-0001"), OpenAqAggregatesFeed(engine, root = root, clock = clock).latest(), "$status")
+        }
+        // Any other failure is an error, never a silent fallback.
+        val failing = object : HttpRangeEngine {
+            override suspend fun get(url: String, range: String?, ifRange: String?, ifNoneMatch: String?, limit: BodyLimit): HttpRangeResponse =
+                HttpRangeResponse(if (url.endsWith("collection.json")) 500 else 200, null, null, null, ByteArray(0))
+        }
+        assertEquals(500, assertFailsWith<HttpRangeException> { OpenAqAggregatesFeed(failing, root = root, clock = clock).latest() }.status)
     }
 
     private fun cellsReads() = store.requests.count { it.first.endsWith(".parquet") }
@@ -288,7 +364,7 @@ class OpenAqAggregatesFeedTest {
         store.requests.clear()
         val second = OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks)
         assertEquals(expected.rows, second.cells(second.latest()!!, FeedWindow.DAY, 5, ranges = null).rows)
-        assertEquals(listOf("$root/manifest.json"), store.requests.map { it.first })
+        assertEquals(listOf("$root/collection.json", "$root/manifest.json"), store.requests.map { it.first })
     }
 
     @Test
@@ -324,7 +400,7 @@ class OpenAqAggregatesFeedTest {
         store.requests.clear()
         val second = OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks)
         assertEquals(25.0, cairo(second.cells(second.latest()!!, FeedWindow.DAY, 5, ranges = null)))
-        assertEquals(listOf("$root/manifest.json"), store.requests.map { it.first })
+        assertEquals(listOf("$root/collection.json", "$root/manifest.json"), store.requests.map { it.first })
     }
 
     private companion object {

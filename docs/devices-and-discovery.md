@@ -139,8 +139,8 @@ an info button.
   property grouped by the category the feed dictionary gives it (Air, Weather, Water, Soil, Noise,
   Energy). Choosing one from "More" moves it into the row. The last choice is remembered. Every
   property and category id the app knows is named in the app's language (`DiscoverLabels.kt`),
-  on chips, legends, the sheet and what screen readers say. Only an unknown id shows the
-  feed's own English label.
+  on chips, legends, the sheet and what screen readers say. An id the app does not know shows
+  the column title of the discover Collection, else the feed's own label.
 - **Time slider.** A 44dp pill on the left edge of the map, not in the chip row. At rest it
   shows only the chosen window. A touch grows it into one snap stop per window the feed on
   screen offers, 1h at the top, then 24h and 7d (Real has no 1h stop, and a 1h choice moves to
@@ -148,19 +148,25 @@ an info button.
   Tap a stop to pick it. It folds back about two seconds after the last touch. Screen readers get
   one control named Time window, its state is the full window name, and its actions pick the
   others. The chip row holds metrics only.
-- **Legend (WHO, Detailed and Developer, 2026-10-09).** Bottom left, just above the sheet, a floating card with the
-  label and unit. PM2.5 and PM10 show six discrete, equal swatches (not a gradient) with the
-  WHO edges under the borders (PM2.5 15, 25, 37.5, 50, 75, PM10 45, 50, 75, 100, 150, µg/m³,
-  never converted), the guideline border marked "WHO" with an ink tick, and a caption naming
-  the averaging, "WHO 24-hour guideline" in the 24 hour window and "Compared with the WHO
-  24-hour guideline" in the 1 hour and 7 day windows (owner decision, WHO colours in every
-  window). Its info button explains the steps and cites "WHO global air quality guidelines,
-  2021". A property without a published scale keeps the neutral viridis ramp stretched from the
+- **Legend (Detailed and Developer, #189).** Bottom left, just above the sheet, a floating card with the
+  label and unit. The legend follows the scale the feed publishes for the property
+  (`opensensor:scale` on its `__mean` column, see the discover Collection below), never the
+  property id. A step scale shows one discrete, equal swatch per step (not a gradient), in the
+  scale's `color_hint` colours, with its edges under the borders and the guideline border marked
+  with an ink tick. Steps without colours take an even viridis ramp. The PM2.5 and PM10 scales
+  are the WHO 2021 Air Quality Guidelines (PM2.5 15, 25, 37.5, 50, 75, PM10 45, 50, 75, 100, 150,
+  µg/m³, never converted). A WHO scale, one citing the WHO guidelines with six steps and an open last step, keeps the
+  "WHO" mark and a caption naming the averaging, "WHO 24-hour guideline" in the 24 hour window
+  and "Compared with the WHO 24-hour guideline" in the 1 hour and 7 day windows (owner decision,
+  WHO colours in every window). Its info button explains the steps and cites "WHO global air
+  quality guidelines, 2021". Any other step scale is titled "Published scale", marks its
+  guideline "Guideline" and names its steps from the scale's own labels in the app's language.
+  A property without a scale, PM2.5 included, keeps the neutral viridis ramp stretched from the
   5th to the 95th percentile of the cells in view, as the website does, shows those two values
   and says "No health scale published". Practice followed, Mazama Science "Qualitative display
   of air quality data", the South Coast AQMD accessible AQI scale, and the EPA Fire and Smoke
-  map (`CellScale` in `:core:publicfeed`).
-- **Legend (Simple, 2026-10-12).** For PM2.5 and PM10 the floating card shows the six mood
+  map (`CellScale` and `StepScale` in `:core:publicfeed`).
+- **Legend (Simple, 2026-10-12).** For a WHO scale the floating card shows the six mood
   words with their colours, titled with the property, and no numbers. Its info sheet explains
   the moods without naming the guideline body and points to Detailed in Settings. A property
   without a health scale keeps the gradient legend. The card is one accessibility node that
@@ -182,8 +188,8 @@ an info button.
   freshness and the other measurements as plain value rows, all from the 24 hour row. A property
   without a health scale shows only its number. Detailed and Developer are unchanged. The mood
   words live only in `:ui:designsystem`.
-- **Cell styles.** Filled with the scale colour, the fixed WHO step colour of the cell mean
-  (`HealthScale.colorOf`) for PM, the percentile ramp for the rest. A stale cell (no hourly value for 3 hours) is
+- **Cell styles.** Filled with the scale colour, the fixed step colour of the cell mean
+  (`StepScale.colorOf`) for a property with a step scale, the percentile ramp for the rest. A stale cell (no hourly value for 3 hours) is
   drawn at 40 percent opacity with a dashed outline. A cell that does not measure the chosen
   metric is outline only, no fill. Selected cell has a thick ink outline. Staleness is judged on
   the chosen metric's own date, so a newer reading of another metric never hides it.
@@ -285,37 +291,39 @@ max), no hourly history, so the sheet draws no time series. Charts are Canvas in
 identical on Android and iOS, and every one carries a spoken summary of its values.
 
 - **Chart and map cross filter.** Touch and slide across the spread chart to read each bar (its
-  range, how many areas it holds and the WHO step). While a bar is touched, areas outside it fade
+  range, how many areas it holds and the step). While a bar is touched, areas outside it fade
   on the map and the list keeps only its areas. A tap pins the bar, a second tap or a tap on the
   map outside any area lets go. The other way, tapping an area marks it on the chart, and panning
   redraws the chart for the areas in view. The map filters with a style expression on each
   cell's mean (`v` in the GeoJSON), so nothing is rebuilt while a finger moves.
-- **Spread chart.** A histogram of the chosen metric's cell means in view. For PM2.5 and PM10
-  (WHO, 2026-10-09) the value axis starts at zero and ends on the smallest WHO edge at or above
-  the 95th percentile in view, at least the guideline (`HealthAxis.high`), so the guideline is
-  always in view and charts compare across cells. Bin borders fall on every WHO edge in view
-  (`HealthAxis.bins`), so each bar holds one step and takes its step colour with a faint ink
-  edge. The guideline is a dashed ink line labelled "WHO 15" (or 45). Past the last edge the
+- **Spread chart.** A histogram of the chosen metric's cell means in view. For a step scale whose
+  first edge is above zero the value axis starts at zero and ends on the smallest edge at or above
+  the 95th percentile in view, at least the guideline (`StepAxis.high`), so the guideline is
+  always in view and charts compare across cells. Bin borders fall on every edge in view
+  (`StepAxis.bins`), so each bar holds one step and takes its step colour with a faint ink
+  edge. The guideline, when the scale has one, is a dashed ink line labelled "WHO 15" (or 45)
+  for a WHO scale and "Guideline" with its value otherwise. Past the last edge the
   95th percentile is the top. Values past the top count in the end bar, an ink arrow marks the
   axis end and "Some areas go past the chart, up to N" says how far. The axis track stays
   neutral, no colour bands sit behind the data. Other metrics keep thin grey bars on an axis
   drawn as the map's viridis scale, clamped at the 5th and 95th percentile like the cells. End
-  values sit under the axis. With a cell selected its bin turns ink (outlined in ink for WHO
+  values sit under the axis. With a cell selected its bin turns ink (outlined in ink for step
   bars), an ink rule and a ringed dot in the cell colour mark its mean, and a band below the
   axis spans its min to max. "Higher than N% of areas in view" follows when three or more areas
   report the metric. With nothing selected the same chart, unmarked, sits above the list of
   cells.
-- **Step names.** Colour never carries a WHO step alone. The cell headline, each row of the
-  cell list and each PM range row name the step in text (Meets WHO guideline, Interim target 4
-  to 1, Above all targets).
+- **Step names.** Colour never carries a step alone. The cell headline, each row of the
+  cell list and each range row with a step scale name the step in text, the scale's own label in
+  the app's language (for WHO, Within the WHO guideline, Within WHO interim target 4 to 1, Above
+  every WHO target).
 - **Range rows.** One row per other metric the cell reports, in dictionary order, grouped by
-  category past five rows. Label and unit, a track for that metric's axis (zero to a WHO edge
-  with a dashed guideline tick for PM, the extent in view for the rest), the cell's min to max
+  category past five rows. Label and unit, a track for that metric's axis (zero to an edge
+  with a dashed guideline tick for a step scale, the extent in view for the rest), the cell's min to max
   band, the mean as a ringed dot in the colour the map would give it, and the mean as text.
   Tapping a row makes it the chosen metric (chips, map and hero follow) without closing the
   sheet. A missing min or max leaves the band out, never draws zero.
 - Marks are ink and grey from the theme (onSurface), text is never in a data colour, and the only
-  hues are the scale (WHO steps or viridis), so light and dark both read. Marker moves animate
+  hues are the scale (published steps or viridis), so light and dark both read. Marker moves animate
   for 350 ms.
 
 **Cell tapped, fewer than 3 devices**
@@ -556,9 +564,29 @@ live feed share one code path. The toggle shows Sample while `sample` is true.
 is the OpenAQ aggregates collection on source.coop, read with the same reader. Root
 `https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/`.
 
-- `manifest.json` carries `as_of` (`YYYY-MM-DD`, the newest complete PM2.5 day) and
-  `generation`, plus fields the phone ignores. `latest()` answers `FeedPartition(as_of, 0, generation)` and
-  keeps it for 5 minutes. A failed read throws and is not cached.
+- **Discover Collection (#189).** `collection.json` at the root is a STAC Collection read with
+  `StationCollection` from `:core:model` (`DiscoverCollection`). H3 only. One asset per
+  resolution, keyed `h3_res=<n>`, with a relative href (no `..`, no absolute path, no scheme) or an https
+  URL on the same host as the feed root. Any other asset, such as cleartext, another host or a
+  local address, is dropped alone and the rest of the Collection stands. The zoom picks the resolution. A zoom whose resolution has no asset reads the
+  nearest listed one, and between two equally near the one nearer 5, so a Collection that lists
+  only some resolutions never shows an empty map. `item_assets.data.table:columns` name `<id>__n`,
+  `__mean`, `__min` and `__max` per property. The `__mean` column's `title` names the property
+  for an id the app does not know, and its `opensensor:scale` is a key of the Collection's
+  `opensensor:scales`, the legend's step scale. A column without one gets the neutral ramp, and so does one whose
+  scale does not parse or breaks a bound (more than 12 steps, or an edge or guideline that is not
+  finite or is beyond 1e9), which is dropped alone while the rest of the Collection stands. Only the
+  first 64 entries of `opensensor:scales` are read, later ones are dropped the same way. The
+  end of `extent.temporal.interval` is `as_of`, `updated` is the generation. `latest()` answers
+  `FeedPartition(as_of, 0, updated)`. A resolution without an asset answers an empty table with
+  no request, so the controller asks the feed for the nearest listed resolution first.
+- `manifest.json` is the fallback when the Collection answers 404 or 403. Any other failure
+  throws. It carries `as_of` (`YYYY-MM-DD`, the newest complete PM2.5 day) and `generation`,
+  plus fields the phone ignores. `latest()` answers `FeedPartition(as_of, 0, generation)`. A
+  manifest feed, like the bundled sample, gets the PM2.5 and PM10 WHO scales the app ships
+  (`DiscoverCollection.BUNDLED`, the same edges, colours and step names as `WhoGuidelines` and
+  the Android step strings, held by tests). Either answer is kept for 5 minutes. A failed read
+  throws and is not cached.
 - `cells/h3_res=<1..9>/data.parquet`, one file per resolution holding every day since 2023,
   written by DuckDB. Verified on 2026-10-12 against `h3_res=3` (250 KB, 3,131 rows, generation
   `007d89a5...`): one row group, SNAPPY, dictionary encoded, min and max statistics, no page
@@ -589,8 +617,9 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
   other windows are read 24 hours first, so a failing window never delays the headline. A pan
   rereads a failed window without flipping the sheet back to loading. A pan that picks up a new
   partition reads every window of the selected cell again, and a window read of an older partition
-  never lands. A new manifest `generation` under the same `as_of` is a new partition. Tests use a 13 row fixture from
-  `tools/discover-fixture/make_openaq_fixture.py` served by a fake HTTP engine. The live URL is
+  never lands. A new `generation` under the same `as_of` is a new partition. Tests use a 13 row fixture from
+  `tools/discover-fixture/make_openaq_fixture.py` served by a fake HTTP engine, and a STAC fixture
+  from the same script with PM2.5 on the WHO scale and a soil property with a title and no scale. The live URL is
   not in the gate.
 
 **What we do not copy from the website.** The EOX Sentinel-2 cloudless basemap, whose licence
@@ -687,7 +716,7 @@ starts with the target layout from the producer guidance.
 | Module | Owns |
 | --- | --- |
 | `:core:model` | `BoardTemplate`, `TemplateKey`, `TemplateIndex`, `Datastream`, `ObservedProperty`, `Sensor`, `AppProfile`, `Family`, `StationCollection`, `Scale`, `ValidityGate`, `Aggregate`, `Role` and the `Station` join, parsed from stac-opensensor v0.1.0 JSON (#183). `BundledCatalog` and `LiveColumns` read the bundled templates and profiles in `core/model/bundled/` (#184). `LiveReading`, `DeviceCapabilities` and the batch estimate use them, `Metrics` still drives the screens |
-| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. `OpenAqAggregatesFeed` over `:core:net`, the daily schema in `ParquetFeedReader` and `DailyCellFold`, built 2026-10-12 (host and simulator tests only). Its reads go through the `:core:net` block cache (#94). Planned here: S3 listing for the opensensor feed |
+| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `DiscoverCollection` (the discover STAC Collection and the bundled WHO PM scales), `CellScale` (`StepScale` from the property's published scale, else `PercentileScale`), `StepAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. `OpenAqAggregatesFeed` over `:core:net`, the daily schema in `ParquetFeedReader` and `DailyCellFold`, built 2026-10-12 (host and simulator tests only). Its reads go through the `:core:net` block cache (#94). Planned here: S3 listing for the opensensor feed |
 | `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, used by `OpenAqAggregatesFeed` in both apps |
 | `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
@@ -702,7 +731,7 @@ phone run).** Discover opens on the last camera or the time zone region, reads t
 through the common Parquet reader with row group and page pruning, covers the viewport with at most 1,024
 cells at `round(zoom * 0.8)` clamped to 2..7, and redraws one GeoJSON source after 400 ms of camera
 rest. Chips rank properties by visible cells (three, then More), a vertical time slider on the left
-snaps between Last hour, 24 hours and 7 days, the legend shows fixed WHO 2021 steps for PM2.5 and PM10 (added 2026-10-09, host tests and builds only) and the 5th to 95th percentile of the cells in view on a viridis
+snaps between Last hour, 24 hours and 7 days, the legend shows the steps of the scale the feed publishes, WHO 2021 for PM2.5 and PM10 (host tests and builds only) and the 5th to 95th percentile of the cells in view on a viridis
 ramp, and the sheet peeks with the first-run card or the area count and opens on a cell tap with
 a spread chart of the chosen property and a range row per other property. Search moves the map over a small built-in city list. The basemap is
 the Protomaps OpenStreetMap PMTiles build on source.coop (`pmtiles://` rendered on the Android

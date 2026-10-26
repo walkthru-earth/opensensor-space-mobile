@@ -119,7 +119,7 @@ data class DiscoverUiState(
 /** The selected cell's summary for [property], three windows, headline the 24 hour mean. Null with no selection. */
 fun DiscoverUiState.selectedSummary(property: FeedProperty): StationSummary? {
     selected ?: return null
-    return PublicSummary.of(property.id, property.unit, selectedWindows, offered = windows)
+    return PublicSummary.of(property, selectedWindows, offered = windows)
 }
 
 /**
@@ -378,11 +378,11 @@ class DiscoverController(
     private suspend fun load(r: CameraRest) {
         saved = saved.copy(camera = SavedCamera(r.lat, r.lng, r.zoom))
         persist()
-        val res = ViewportCover.resolutionForZoom(r.zoom)
+        val zoomRes = ViewportCover.resolutionForZoom(r.zoom)
         val source = active
         val real = !source.isSample
         if (!_state.value.available) {
-            _state.update { it.copy(loading = false, res = res) }
+            _state.update { it.copy(loading = false, res = zoomRes) }
             return
         }
         // The sample's partition never changes. The real one is asked again on every load, its
@@ -397,9 +397,11 @@ class DiscoverController(
         if (source !== active) return
         val p = partition
         if (p == null) {
-            _state.update { it.copy(loading = false, res = res, loadFailed = real) }
+            _state.update { it.copy(loading = false, res = zoomRes, loadFailed = real) }
             return
         }
+        // A feed that lists only some resolutions answers the nearest one, never a silently empty map.
+        val res = source.resolutionFor(zoomRes)
         val current = _state.value
         val window = current.window
         val read = withContext(io) {
@@ -543,7 +545,7 @@ class DiscoverController(
                 { CellFreshness.isStale(it, nowMs, property?.id) }
             }
             val (scale, json) = withContext(io) {
-                val scale = property?.let { p -> CellScale.of(p.id, rows.mapNotNull { it.mean(p.id) }) }
+                val scale = property?.let { p -> CellScale.of(p, rows.mapNotNull { it.mean(p.id) }) }
                 val json = if (current.available) {
                     CellGeoJson.build(h3, rows, property?.id, scale, stale)
                 } else {

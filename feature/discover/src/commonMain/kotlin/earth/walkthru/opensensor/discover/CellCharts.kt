@@ -52,12 +52,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import earth.walkthru.aqsync.airquality.HealthScale
-import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.FeedWindow
 import earth.walkthru.aqsync.publicfeed.SequentialRamp
+import earth.walkthru.aqsync.publicfeed.StepScale
+import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.opensensor.designsystem.FitText
 import earth.walkthru.opensensor.designsystem.listSeparator
 import earth.walkthru.opensensor.designsystem.spokenList
@@ -106,17 +106,20 @@ internal fun SpreadChart(
     clearSignal: Int = 0,
     onHighlight: (ValueBand?) -> Unit = {},
 ) {
-    val domain = remember(values, property.id) { ChartDomain.forProperty(property.id, values) } ?: return
-    val health = (scale as? CellScale.Health)?.scale
-    val bins = remember(domain, property.id, values.size) { chartBins(property.id, domain, values.size) }
-    val counts = remember(values, domain, bins, health) { histogram(values, domain, bins, upperInclusive = health != null) }
-    val hereBin = here?.let { binOf(it, domain, bins, upperInclusive = health != null) }
+    val domain = remember(values, scale) { ChartDomain.forScale(scale, values) } ?: return
+    // [steps] names and colours the bars. [axis] is set when the chart runs from zero to an edge.
+    val steps = (scale as? CellScale.Steps)?.scale
+    val axis = stepAxisOf(scale)
+    val guideline = axis?.guideline
+    val bins = remember(domain, scale, values.size) { chartBins(scale, domain, values.size) }
+    val counts = remember(values, domain, bins, steps) { histogram(values, domain, bins, upperInclusive = steps != null) }
+    val hereBin = here?.let { binOf(it, domain, bins, upperInclusive = steps != null) }
     // The bar under the finger while it touches the chart, and the bar a tap pinned. Either one filters
     // the map and the list to that bar's areas. A new axis or [clearSignal] drops the pin.
     var scrub by remember(domain, bins) { mutableStateOf<Int?>(null) }
     var pinned by remember(domain, bins, clearSignal) { mutableStateOf<Int?>(null) }
     val active = scrub ?: pinned
-    val upperInclusive = health != null
+    val upperInclusive = steps != null
     val highlight by rememberUpdatedState(onHighlight)
     LaunchedEffect(active, domain, bins) { highlight(active?.let { bandOf(it, domain, bins, upperInclusive) }) }
     DisposableEffect(Unit) { onDispose { highlight(null) } }
@@ -127,8 +130,8 @@ internal fun SpreadChart(
     val track = ink.copy(alpha = 0.12f)
     val stops = remember(domain, scale) { rampStops(domain, scale) }
     val hereColor = here?.let { Color(scale?.color(it) ?: SequentialRamp.at(0.5)) }
-    // Only a WHO axis marks values past its end. A percentile axis clamps them, as the map does.
-    val offScaleMax = if (health != null) values.filter { it.isFinite() && it > domain.high }.maxOrNull() else null
+    // Only a step axis marks values past its end. A percentile axis clamps them, as the map does.
+    val offScaleMax = if (axis != null) values.filter { it.isFinite() && it > domain.high }.maxOrNull() else null
     val anim = tween<Float>(ANIM_MS)
     val hereX by animateFloatAsState(here?.let { domain.fraction(it) } ?: 0f, anim)
     val minX by animateFloatAsState(hereMin?.let { domain.fraction(it) } ?: 0f, anim)
@@ -137,8 +140,8 @@ internal fun SpreadChart(
     // Geometry stays on the feed's SI values. Only the labels and the spoken summary convert.
     val units = LocalDiscoverUnits.current
     val unit = unitLabel(property, units)
-    val low = if (health != null) formatEdge(domain.low) else formatValue(domain.low, property, units)
-    val high = if (health != null) formatEdge(domain.high) else formatValue(domain.high, property, units)
+    val low = if (axis != null) edgeLabel(axis, domain.low, property, units) else formatValue(domain.low, property, units)
+    val high = if (axis != null) edgeLabel(axis, domain.high, property, units) else formatValue(domain.high, property, units)
     val offScale = offScaleMax?.let { strings.offScale("${formatValue(it, property, units)} $unit") }
     fun binFrom(i: Int) = domain.low + (domain.high - domain.low) * i / bins
     fun binTo(i: Int) = domain.low + (domain.high - domain.low) * (i + 1) / bins
@@ -151,14 +154,14 @@ internal fun SpreadChart(
         if (here != null) {
             append(". ")
             append(strings.rangeSummary(property.shownLabel(), formatValue(here, property, units), hereMin?.let { formatValue(it, property, units) }, hereMax?.let { formatValue(it, property, units) }, unit))
-            health?.stepOf(here)?.let { append(". ").append(strings.stepName(it)) }
+            steps?.stepOf(here)?.let { append(". ").append(strings.stepName(steps, it)) }
         }
         if (offScale != null) append(". ").append(offScale)
     }
     val separator = listSeparator()
     val readout = active?.let { i ->
         val range = "${formatValue(binFrom(i), property, units)} ${strings.to} ${formatValue(binTo(i), property, units)} $unit"
-        val step = health?.stepOf(binMid(i, domain, bins))?.let { strings.stepName(it) }
+        val step = steps?.stepOf(binMid(i, domain, bins))?.let { strings.stepName(steps, it) }
         spokenList(listOfNotNull(range, strings.areaCount(counts[i]), step), separator)
     }
     // The summary is the chart's name. A touched or pinned bar, which also filters the map and the
@@ -174,7 +177,7 @@ internal fun SpreadChart(
         val labelStyle = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
         when {
             readout != null -> PositionedLabels(listOf((active + 0.5f) / bins to readout), labelStyle, ink)
-            health != null -> PositionedLabels(listOf(domain.fraction(health.guideline) to "${strings.whoMark} ${formatEdge(health.guideline)}"), labelStyle, ink)
+            axis != null && guideline != null -> PositionedLabels(listOf(domain.fraction(guideline) to "${guidelineMark(axis, strings)} ${edgeLabel(axis, guideline, property, units)}"), labelStyle, ink)
             else -> PositionedLabels(listOf(0f to " "), labelStyle, ink)
         }
         Spacer(Modifier.height(2.dp))
@@ -220,7 +223,7 @@ internal fun SpreadChart(
             val gap = 2.dp.toPx()
             val slot = size.width / bins
             val peak = (counts.maxOrNull() ?: 0).coerceAtLeast(1)
-            // Bars. WHO bars take their step colour with a faint ink edge, so the light steps still
+            // Bars. Step bars take their step colour with a faint ink edge, so the light steps still
             // read. Others are thin and grey. The area's own bin is ink (or outlined in ink), so it
             // reads without colour.
             counts.forEachIndexed { i, c ->
@@ -229,8 +232,8 @@ internal fun SpreadChart(
                 val topLeft = Offset(i * slot + gap / 2, barArea - h)
                 val barSize = Size((slot - gap).coerceAtLeast(1f), h)
                 val radius = CornerRadius(2.dp.toPx())
-                if (health != null) {
-                    val fill = Color(health.colorOf(binMid(i, domain, bins)) ?: SequentialRamp.at(0.5))
+                if (steps != null) {
+                    val fill = Color(steps.colorOf(binMid(i, domain, bins)) ?: SequentialRamp.at(0.5))
                     drawRoundRect(color = fill, topLeft = topLeft, size = barSize, cornerRadius = radius)
                     val picked = i == (active ?: hereBin)
                     val edge = if (picked) ink else ink.copy(alpha = 0.35f)
@@ -240,11 +243,13 @@ internal fun SpreadChart(
                     drawRoundRect(color = if (i == (active ?: hereBin)) ink else bar, topLeft = topLeft, size = barSize, cornerRadius = radius)
                 }
             }
-            if (health != null) {
+            if (steps != null) {
                 // A neutral axis. The guideline crosses bars and axis as a dashed ink line.
                 drawRoundRect(color = track, topLeft = Offset(0f, axisTop), size = Size(size.width, axisH), cornerRadius = CornerRadius(axisH / 2))
-                val gx = (domain.fraction(health.guideline) * size.width).coerceIn(1f, size.width - 1f)
-                drawLine(ink, Offset(gx, 0f), Offset(gx, axisTop + axisH), strokeWidth = 1.5.dp.toPx(), pathEffect = GUIDE_DASH)
+                if (guideline != null) {
+                    val gx = (domain.fraction(guideline) * size.width).coerceIn(1f, size.width - 1f)
+                    drawLine(ink, Offset(gx, 0f), Offset(gx, axisTop + axisH), strokeWidth = 1.5.dp.toPx(), pathEffect = GUIDE_DASH)
+                }
                 if (offScaleMax != null) offScaleCap(Offset(size.width, axisTop + axisH / 2), ink, 5.dp.toPx())
             } else {
                 // The map's scale as the axis.
@@ -295,8 +300,8 @@ internal fun SpreadChart(
 /**
  * One measurement of the selected area. Label and unit, a range bar on that measurement's own
  * axis (band is this area's min to max, dot is the mean in the map colour) and the mean as text.
- * For PM the track runs from zero to a WHO edge with the guideline as a dashed tick, the step name
- * sits under the unit and a value past the track end is marked. Tapping it makes it the hero.
+ * With a step scale the track runs from zero to an edge with the guideline as a dashed tick, the
+ * step name sits under the unit and a value past the track end is marked. Tapping it makes it the hero.
  */
 @Composable
 internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () -> Unit) {
@@ -310,10 +315,10 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
     val maxX by animateFloatAsState(range.max?.let { range.domain.fraction(it) } ?: 0f, anim)
     val hasBand = range.min != null && range.max != null
     val guideX = range.guideline?.let { range.domain.fraction(it) }
-    val offScale = range.guideline != null && maxOf(range.mean, range.max ?: range.mean) > range.domain.high
+    val offScale = range.stepAxis && maxOf(range.mean, range.max ?: range.mean) > range.domain.high
     val units = LocalDiscoverUnits.current
     val unit = unitLabel(p, units)
-    val stepName = range.step?.let { strings.stepName(it) }
+    val stepName = range.steps?.let { steps -> range.step?.let { strings.stepName(steps, it) } }
     val summary = strings.rangeSummary(p.shownLabel(), formatValue(range.mean, p, units), range.min?.let { formatValue(it, p, units) }, range.max?.let { formatValue(it, p, units) }, unit)
     val spoken = if (stepName != null) "$summary. $stepName" else summary
     Row(
@@ -356,38 +361,50 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
 }
 
 /**
- * Six WHO step swatches, equal width, cleanest first, the edge values under the borders and the
- * guideline marked above its border with an ink tick through the bar. The legend's scale.
+ * The step swatches of [scale], equal width, lowest first, the edge values under the borders and
+ * the guideline marked above its border with an ink tick through the bar. The legend's scale.
  */
 @Composable
-internal fun WhoStepBar(health: HealthScale, strings: DiscoverStrings, modifier: Modifier = Modifier) {
+internal fun StepBar(scale: StepScale, property: FeedProperty, strings: DiscoverStrings, modifier: Modifier = Modifier) {
     val ink = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val steps = WhoStep.entries
-    val n = steps.size
+    val units = LocalDiscoverUnits.current
+    val n = scale.size
+    // The border after the step whose upper bound is the guideline, when the scale has one.
+    val guideBorder = scale.guideline?.let { g -> scale.edges.indexOfFirst { it == g }.takeIf { it >= 0 } }?.plus(1)
     Column(modifier) {
-        PositionedLabels(listOf(1f / n to strings.whoMark), MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), ink)
+        val mark = if (guideBorder != null) listOf(guideBorder.toFloat() / n to guidelineMark(scale, strings)) else listOf(0f to " ")
+        PositionedLabels(mark, MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), ink)
         Canvas(Modifier.fillMaxWidth().height(16.dp)) {
             val gap = 2.dp.toPx()
             val barH = 10.dp.toPx()
             val top = (size.height - barH) / 2
             val slot = size.width / n
-            steps.forEachIndexed { i, step ->
+            scale.colors.forEachIndexed { i, color ->
                 val left = i * slot + if (i == 0) 0f else gap / 2
                 val right = (i + 1) * slot - if (i == n - 1) 0f else gap / 2
                 drawRoundRect(
-                    color = Color(step.color),
+                    color = Color(color),
                     topLeft = Offset(left, top),
                     size = Size(right - left, barH),
                     cornerRadius = CornerRadius(3.dp.toPx()),
                 )
             }
-            // The guideline border.
-            drawLine(ink, Offset(slot, 0f), Offset(slot, size.height), strokeWidth = 2.dp.toPx())
+            if (guideBorder != null) drawLine(ink, Offset(guideBorder * slot, 0f), Offset(guideBorder * slot, size.height), strokeWidth = 2.dp.toPx())
         }
-        PositionedLabels(health.edges.mapIndexed { i, e -> (i + 1f) / n to formatEdge(e) }, MaterialTheme.typography.labelSmall, muted)
+        PositionedLabels(scale.edges.mapIndexed { i, e -> (i + 1f) / n to edgeLabel(scale, e, property, units) }, MaterialTheme.typography.labelSmall, muted)
     }
 }
+
+/** The mark at a scale's guideline. WHO for the WHO scale, a neutral word for any other. */
+internal fun guidelineMark(scale: StepScale, strings: DiscoverStrings): String = if (scale.who != null) strings.whoMark else strings.scaleMark
+
+/**
+ * An edge of [scale] as the legend and charts print it. WHO edges are µg/m³ as published and never
+ * converted ([formatEdge]). Other edges follow the property's units like its values.
+ */
+internal fun edgeLabel(scale: StepScale, value: Double, property: FeedProperty, units: UnitFormatter): String =
+    if (scale.who != null) formatEdge(value) else formatValue(value, property, units)
 
 /**
  * Texts placed along a width, each centred on its fraction (0 at the left, 1 at the right, as the

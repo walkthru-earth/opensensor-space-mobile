@@ -23,8 +23,7 @@ class PublicSummaryTest {
     @Test
     fun threeWindowsOldestFirstWithTheDayMeanAsHeadline() {
         val s = PublicSummary.of(
-            "pm25",
-            "µg/m³",
+            TestProperties.PM25,
             mapOf(FeedWindow.WEEK to row(10.0, 100L), FeedWindow.DAY to row(30.0, 300L), FeedWindow.LAST_HOUR to row(80.0, 200L)),
         )
         assertEquals(listOf(FeedWindow.WEEK, FeedWindow.DAY, FeedWindow.LAST_HOUR), PublicSummary.ORDER)
@@ -37,14 +36,14 @@ class PublicSummaryTest {
     @Test
     fun aFeedWithoutTheLastHourHasTwoBlocks() {
         val windows = mapOf(FeedWindow.WEEK to row(10.0, 100L), FeedWindow.DAY to row(30.0, 300L))
-        val s = PublicSummary.of("pm25", "µg/m³", windows, offered = listOf(FeedWindow.DAY, FeedWindow.WEEK))
+        val s = PublicSummary.of(TestProperties.PM25, windows, offered = listOf(FeedWindow.DAY, FeedWindow.WEEK))
         assertEquals(listOf(WhoStep.GUIDELINE, WhoStep.IT3), s.blocks.map { it.step })
         assertEquals(30.0, s.value)
     }
 
     @Test
     fun missingWindowsGiveNullBlocks() {
-        val s = PublicSummary.of("pm25", "µg/m³", mapOf(FeedWindow.LAST_HOUR to row(12.0, 50L), FeedWindow.DAY to null))
+        val s = PublicSummary.of(TestProperties.PM25, mapOf(FeedWindow.LAST_HOUR to row(12.0, 50L), FeedWindow.DAY to null))
         assertEquals(listOf(null, null, WhoStep.GUIDELINE), s.blocks.map { it.step })
         assertNull(s.value)
         assertNull(s.step)
@@ -55,8 +54,7 @@ class PublicSummaryTest {
     @Test
     fun theUpdateTimeIsTheDayWindowsEvenWhenAnotherIsNewer() {
         val s = PublicSummary.of(
-            "pm25",
-            "µg/m³",
+            TestProperties.PM25,
             mapOf(FeedWindow.DAY to row(30.0, 300L), FeedWindow.LAST_HOUR to row(80.0, 900L)),
         )
         assertEquals(300L, s.updatedEpochMs)
@@ -64,14 +62,14 @@ class PublicSummaryTest {
 
     @Test
     fun aWindowWithoutTheStatIsNotAvailable() {
-        val s = PublicSummary.of("pm25", "µg/m³", mapOf(FeedWindow.DAY to row(null, 10L)))
+        val s = PublicSummary.of(TestProperties.PM25, mapOf(FeedWindow.DAY to row(null, 10L)))
         assertNull(s.value)
         assertEquals(listOf(null, null, null), s.blocks.map { it.step })
     }
 
     @Test
     fun anUnscaledPropertyKeepsItsNumberOnly() {
-        val s = PublicSummary.of("co2", "ppm", mapOf(FeedWindow.DAY to row(5.0, 10L, co2 = 900.0)))
+        val s = PublicSummary.of(TestProperties.CO2, mapOf(FeedWindow.DAY to row(5.0, 10L, co2 = 900.0)))
         assertFalse(s.scaled)
         assertEquals(900.0, s.value)
         assertNull(s.step)
@@ -79,7 +77,20 @@ class PublicSummaryTest {
     }
 
     @Test
+    fun aPropertyWithoutAWhoScaleHasNoMoodEvenWithSteps() {
+        // A Collection scale that is not WHO colours the map but gives no mood blocks.
+        val steps = TestProperties.PM25.scale!!.copy(source = "https://example.test/other-scale")
+        val s = PublicSummary.of(TestProperties.PM25.copy(scale = steps), mapOf(FeedWindow.DAY to row(30.0, 10L)))
+        assertFalse(s.scaled)
+        assertEquals(30.0, s.value)
+        assertNull(s.step)
+        assertTrue(s.blocks.isEmpty())
+        // PM2.5 without any scale is neutral too. The id alone never picks WHO.
+        assertFalse(PublicSummary.of(TestProperties.PM25.copy(scale = null), mapOf(FeedWindow.DAY to row(30.0, 10L))).scaled)
+    }
+
+    @Test
     fun noWindowsMeansNoUpdateTime() {
-        assertNull(PublicSummary.of("pm25", "µg/m³", emptyMap()).updatedEpochMs)
+        assertNull(PublicSummary.of(TestProperties.PM25, emptyMap()).updatedEpochMs)
     }
 }

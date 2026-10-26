@@ -66,6 +66,12 @@ internal object ModelJson {
         )
     }
 
+    fun parseScale(id: String, element: JsonElement): Scale = try {
+        json.decodeFromJsonElement(ScaleDto.serializer(), element).toScale(id)
+    } catch (e: SerializationException) {
+        throw IllegalArgumentException(e.message, e)
+    }
+
     fun parseProfile(text: String): AppProfile {
         val dto = decode<ProfileDto>(text)
         require(SHA256_HEX.matches(dto.dict)) { "app profile has a malformed dict digest" }

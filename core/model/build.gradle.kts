@@ -79,7 +79,7 @@ kotlin {
         commonMain {
             kotlin.srcDir(bundleFiles.map { it.output })
             dependencies {
-                implementation(libs.kotlinx.serialization.json)
+                api(libs.kotlinx.serialization.json)
             }
         }
     }

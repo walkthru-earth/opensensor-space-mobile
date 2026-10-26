@@ -11,6 +11,11 @@ object OpenAqFixture {
     const val MANIFEST = "openaq-aggregates/manifest.json"
     val asOf = LocalDate(2026, 10, 8)
 
+    /** The same feed read from a discover Collection, with PM2.5 and a soil property. */
+    const val STAC_COLLECTION = "openaq-aggregates-stac/collection.json"
+    const val STAC_CELLS = "openaq-aggregates-stac/cells/h3_res=5/data.parquet"
+    const val STAC_UPDATED = "2026-10-09T03:00:00Z"
+
     // Resolution 5 cells, in h3_index order.
     const val CAIRO = 600076239138455551L
     const val LAGOS = 600537624926486527L

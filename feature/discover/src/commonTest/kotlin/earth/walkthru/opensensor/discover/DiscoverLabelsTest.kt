@@ -5,10 +5,9 @@ import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.opensensor.designsystem.pm25LabelRes
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * #92 and #145. The public feed has no humidity, so its PM2.5 is always labelled raw. Every other
@@ -24,7 +23,6 @@ class DiscoverLabelsTest {
 
     @Test
     fun theFeedPm25IsLabelledRaw() {
-        assertTrue(isRawPm25(pm25))
         assertEquals(pm25LabelRes(Pm25Basis.RAW), shownLabelRes(pm25))
     }
 
@@ -32,7 +30,16 @@ class DiscoverLabelsTest {
     fun everyKnownIdHasItsOwnDistinctString() {
         val resources = knownIds.map { id -> assertNotNull(shownLabelRes(FeedProperty(id, "Feed $id", "u", "Air")), id) }
         assertEquals(knownIds.size, resources.map { it.key }.toSet().size)
-        assertFalse(isRawPm25(pm10))
+        assertNotEquals(pm25LabelRes(Pm25Basis.RAW), shownLabelRes(pm10))
+    }
+
+    @Test
+    fun aCollectionTitleShowsForAnIdTheAppDoesNotKnow() {
+        // The Collection's column title arrives as the property label. A known id keeps the app's string.
+        val soil = FeedProperty("soil_moisture", "Soil moisture", "m³/m³", "Soil")
+        assertNull(shownLabelRes(soil))
+        assertEquals("Soil moisture", shownLabel(soil) { error("an unknown id resolves no string") })
+        assertNotNull(shownLabelRes(pm10.copy(label = "Particulate matter 10")))
     }
 
     @Test

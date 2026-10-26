@@ -10,7 +10,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.Json
+import space.opensensor.model.Scale
 
 /** The averaging window of a cells file. Public values are hourly means, never "now". */
 enum class FeedWindow(val key: String) {
@@ -30,7 +32,11 @@ enum class FeedWindow(val key: String) {
 @Serializable
 data class FeedPartition(val date: String, val hour: Int, val generation: String? = null)
 
-/** One property from the dictionary named in the file's key value metadata. */
+/**
+ * One property from the dictionary named in the file's key value metadata. [label] is the discover
+ * Collection's column title when it has one ([DiscoverCollection.describe]). [scale] is the scale
+ * the Collection gives the property, null for the neutral ramp. It is never read from the file.
+ */
 @Serializable
 data class FeedProperty(
     val id: String,
@@ -38,6 +44,7 @@ data class FeedProperty(
     val unit: String,
     val category: String,
     val precision: Double? = null,
+    @Transient val scale: Scale? = null,
 )
 
 @Serializable
@@ -138,6 +145,12 @@ interface PublicFeed {
     suspend fun latest(): FeedPartition?
 
     suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable
+
+    /**
+     * The resolution to read for a zoom that asks for [res]. [res] itself unless the feed lists only
+     * some resolutions, then the nearest listed one. Read after [latest].
+     */
+    suspend fun resolutionFor(res: Int): Int = res
 }
 
 /** Paths in the live layout, relative to the feed root (`opensensor/discover/v1`). */
@@ -190,7 +203,9 @@ class BundledSampleFeed(
         if (!reader.available) return CellsTable.EMPTY
         val path = "$root/${FeedPaths.cells(partition, window, res)}"
         val data = mutex.withLock { bytes[path] } ?: load(path).also { loaded -> mutex.withLock { bytes.put(path, loaded) } }
-        return reader.readCells(MemoryRangeSource(data, path, "bundled"), ranges)
+        val table = reader.readCells(MemoryRangeSource(data, path, "bundled"), ranges)
+        // The sample has no Collection. The scales the app ships describe it.
+        return table.copy(info = table.info.copy(properties = DiscoverCollection.BUNDLED.describe(table.info.properties)))
     }
 
     companion object {
