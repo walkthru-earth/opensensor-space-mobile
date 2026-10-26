@@ -24,6 +24,8 @@ import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.coroutines.WallClock
 import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.data.fake.FakeTransport
+import earth.walkthru.aqsync.data.history.BoardDescriptors
+import earth.walkthru.aqsync.data.history.DescriptorOutcome
 import earth.walkthru.aqsync.data.history.HistoryRefresher
 import earth.walkthru.aqsync.data.lan.LanConnectException
 import earth.walkthru.aqsync.data.lan.LanDevice
@@ -186,6 +188,8 @@ class DeviceLinkOwner @Inject constructor(
     private val clock: WallClock,
     /** Files removed in Settings, which the plan shows as removed instead of to sync. */
     private val pruned: PrunedFiles,
+    /** Board templates the device serves over `GET_DESCRIPTOR` (#191). */
+    private val boardDescriptors: BoardDescriptors,
 ) {
     /**
      * Child of the process scope: one failed child never cancels its siblings, and cancelling the
@@ -194,6 +198,11 @@ class DeviceLinkOwner @Inject constructor(
     private val scope = CoroutineScope(applicationScope.coroutineContext + SupervisorJob(applicationScope.coroutineContext[Job]) + io)
     private val stateLock = ReentrantLock()
     private val tokenPolicy = LanTokenPolicy()
+
+    init {
+        // Cached served templates register before the first connect asks for one.
+        scope.launch { suspendRunCatching { boardDescriptors.load() }.onFailure { Log.w(TAG, "board template cache unreadable (${it::class.simpleName})") } }
+    }
 
     /** The ciphertext each LAN link authenticated with, so a dead token is cleared only if still stored. */
     private val lanCiphertexts: MutableMap<AndroidLink, String> = Collections.synchronizedMap(WeakHashMap())
@@ -741,6 +750,10 @@ class DeviceLinkOwner @Inject constructor(
                     .onSuccess { _config.value = it }
                     .onFailure { Log.w(TAG, "GET_CONFIG failed: ${it.message}") }
             }
+            // The link is open and, on BLE, bonded. Only a desc no known template matches is fetched.
+            suspendRunCatching { boardDescriptors.ensure(info, session) }
+                .onSuccess { if (it !is DescriptorOutcome.Known && it !is DescriptorOutcome.Unsupported) Log.i(TAG, "board template ${it.label()}") }
+                .onFailure { Log.w(TAG, "GET_DESCRIPTOR failed (${it::class.simpleName})") }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.w(TAG, "device verification failed (${e.message})")
@@ -1710,6 +1723,15 @@ class DeviceLinkOwner @Inject constructor(
 
     companion object {
         private const val TAG = "DeviceConnection"
+
+        /** A log label without template content. */
+        private fun DescriptorOutcome.label(): String = when (this) {
+            is DescriptorOutcome.Fetched -> "fetched"
+            is DescriptorOutcome.Rejected -> "rejected ($reason)"
+            DescriptorOutcome.NoDescriptor -> "not served"
+            DescriptorOutcome.Known -> "known"
+            DescriptorOutcome.Unsupported -> "unsupported"
+        }
 
         /**
          * Bound on one [lendLink]. The link open (with a passkey typed on the phone) has

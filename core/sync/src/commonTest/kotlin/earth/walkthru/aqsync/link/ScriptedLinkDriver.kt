@@ -42,7 +42,8 @@ class ScriptedLinkDriver(
 
     override fun abort(cause: DisconnectCause) {
         aborts.incrementAndFetch()
-        sink.onClosed(cause)
+        // A link that was never opened has no sink to tell.
+        if (::sink.isInitialized) sink.onClosed(cause)
     }
 
     fun emit(vararg frames: Frame) = frames.forEach { sink.onFrame(FrameCodec.encode(it)) }

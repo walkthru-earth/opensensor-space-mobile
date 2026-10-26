@@ -31,8 +31,11 @@ parses (an unknown aggregate rolls up as `point`). The template sample interval 
 runtime interval and a file footer `sample_interval_ms` win (`Station.sampleIntervalFor`). `LiveColumns`
 maps a template's columns to LIVE keys and picks the temperature and humidity keys, and
 `BundledCatalog.live` reads it for a bundled `dict`. `LiveReading` in `protocol/` reads a LIVE
-sample through a `Station`, `DeviceCapabilities` in `history/` builds that station from `info.dict`,
-and the Today screen reads it from there. It is the first module in the `space.opensensor`
+sample through a `Station`, `DeviceCapabilities` in `history/` builds that station from `info.desc`
+and `info.dict`, and the Today screen reads it from there. `BoardDescriptors` in `history/` fetches
+the template a board serves over `GET_DESCRIPTOR` (`DeviceSession.downloadDescriptor`,
+`DescriptorDownload` in `sync/`), verifies it against `desc` and `dict`, caches it by SHA-256 in
+`StorageRole.Templates` and adds it to `ServedTemplates`, which resolves ahead of the bundled ones. It is the first module in the `space.opensensor`
 package (`space.opensensor.model`), the rest move in #192.
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo

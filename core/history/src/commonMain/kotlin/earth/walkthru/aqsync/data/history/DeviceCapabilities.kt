@@ -4,6 +4,7 @@ import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.LiveReading
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PmsStatus
+import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
 import space.opensensor.model.Family
 import space.opensensor.model.Role
@@ -13,11 +14,12 @@ import space.opensensor.model.StationDatastream
 /**
  * What the connected device can do, derived from `INFO`. Screens ask these questions instead of
  * comparing schema strings or key names. Every answer comes from the bundled template and app
- * profile of `info.dict`, so a new board is a template and a profile, not a code change. Pure and
- * shared by Android and iOS.
+ * profile of `info.dict`, or from the template the board served (#191), so a new board is a template
+ * and a profile, not a code change. Pure and shared by Android and iOS.
  *
- * - [station] is the bundled template joined with its app profile. It reads LIVE ([reading]). Null
- *   without `INFO`, without a dictionary or for one the app does not bundle, which has no LIVE view.
+ * - [station] is the served or bundled template joined with its app profile. It reads LIVE
+ *   ([reading]). Null without `INFO`, without a dictionary or for a board whose template is neither
+ *   served nor bundled, which has no LIVE view.
  * - [configurable] is protocol v2 or later: pairing, Wi-Fi, LAN and bonds can be edited.
  * - [sensorIdentity] is a template with the `sensor_serial_code` column, a board that stores the
  *   fitted PM module's sticker (`sensor` config) and can opt in to a batch estimate.
@@ -66,9 +68,10 @@ data class DeviceCapabilities(
         /** Nothing known yet (no `INFO`): no live interpretation, no configuration. */
         val NONE = DeviceCapabilities(station = null, configurable = false, sensorIdentity = false, batchEstimate = false)
 
-        fun from(info: DeviceInfo?): DeviceCapabilities {
+        /** Resolves `info.dict` and `info.desc` against [served] templates first, then the bundled ones. */
+        fun from(info: DeviceInfo?, served: List<BoardTemplate> = ServedTemplates.shared.all.value): DeviceCapabilities {
             if (info == null) return NONE
-            val station = info.dict?.let { BundledCatalog.station(info.station.orEmpty(), it) }
+            val station = info.dict?.let { BundledCatalog.station(info.station.orEmpty(), it, desc = info.desc, served = served) }
             return DeviceCapabilities(
                 station = station,
                 configurable = (info.proto ?: 1) >= 2,

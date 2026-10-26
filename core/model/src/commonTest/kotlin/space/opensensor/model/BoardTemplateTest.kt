@@ -128,6 +128,18 @@ class BoardTemplateTest {
     }
 
     @Test
+    fun templateIndexResolvesTheDevicePrefix() {
+        val served = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
+        val index = TemplateIndex(bundled = emptyList(), served = listOf(served))
+        assertSame(served, index.resolve(CORES3_DICT, DESC_A.take(16)))
+        assertSame(served, index.resolve(CORES3_DICT, DESC_A.take(16).uppercase()))
+        assertNull(index.resolve(CORES3_DICT, DESC_B.take(16)))
+        // A prefix shorter than 16 hex never matches.
+        assertNull(index.byDesc(DESC_A.take(15)))
+        assertNull(index.byDesc(""))
+    }
+
+    @Test
     fun bundledTemplateWithADescIsStillTheDictFallback() {
         val bundled = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
         val index = TemplateIndex(bundled = listOf(bundled))

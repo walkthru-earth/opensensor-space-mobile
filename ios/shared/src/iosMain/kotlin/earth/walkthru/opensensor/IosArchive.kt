@@ -12,6 +12,7 @@ import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.archive.IosArchiveDatabase
 import earth.walkthru.aqsync.data.history.ArchiveHistoryTiers
 import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
+import earth.walkthru.aqsync.data.history.BoardDescriptors
 import earth.walkthru.aqsync.data.history.HistoryOrchestrator
 import earth.walkthru.aqsync.data.history.HistorySeriesReader
 import earth.walkthru.aqsync.data.history.HistoryStartup
@@ -150,6 +151,7 @@ internal object IosArchive {
                 StorageRole.Temp to "$base/${AtomicFiles.TEMP_DIR}",
                 StorageRole.Exports to IosExportSpace.temporaryRoot(),
                 StorageRole.FeedBlocks to "${cachesDirectory()}/feed-blocks",
+                StorageRole.Templates to "${cachesDirectory()}/board-templates",
             ),
         )
     }
@@ -163,6 +165,11 @@ internal object IosArchive {
      */
     val derivedQuota: DerivedQuota by lazy {
         DerivedQuota(QuotaEnforcer(roots, IosStorageTree(), log = ::println)) { settingsRepository.current().retention.derivedQuotaBytes }
+    }
+
+    /** Board templates sensors served over `GET_DESCRIPTOR` (#191), in `Library/Caches`, keyed by SHA-256. */
+    val boardDescriptors: BoardDescriptors by lazy {
+        BoardDescriptors(DiskBlockStore(roots.rootOf(StorageRole.Templates), derivedAtomic, IosStorageTree()))
     }
 
     /**
@@ -305,6 +312,16 @@ internal object IosArchive {
         scope.trimOnMemoryPressure(tiers)
         // The startup sweep of #60, the feed block quota, the backfill and the derive, in the shared order.
         historyStartup.start(scope) { rebuildDerived(emptyList()) }
+        // Cached served templates register before a sensor's own copy is asked for.
+        scope.launch {
+            try {
+                boardDescriptors.load()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("board template cache unreadable: ${e::class.simpleName}")
+            }
+        }
         // Every archive change, a sync's new file or a removal, derives again after any backfill in flight.
         scope.launch {
             index.observeAll().conflate().collect {

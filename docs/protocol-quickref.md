@@ -43,13 +43,13 @@ sequenceDiagram
 | `0x04` CLOSE | → `CLOSED` | `0x0B` REBOOT | → `REBOOTING(delay_ms)` |
 | `0x05` SET_TIME | → `TIME_SET` | `0x0C` LOG_TAIL | → `LOG`× … `LOG_END(returned)` |
 | `0x06` FLUSH | → `FLUSHED` | `0x0D` GET_TOKEN | → `TOKEN` (BLE only; `ERROR` 13 on LAN) |
-| `0x07` STATUS | no response frame; the `status` push is the ack | | |
+| `0x07` STATUS | no response frame; the `status` push is the ack | `0x11` GET_DESCRIPTOR | → `DESCRIPTOR_CHUNK(total,offset,bytes)` (`ERROR` 17 when none) |
 
 ## Frame types (`FrameType`)
 
 | v1 | v2 | LAN-only |
 | --- | --- | --- |
-| `0x10` FILE · `0x11` LIST_END · `0x20` OPENED · `0x21` CHUNK · `0x22` READ_END · `0x23` CLOSED · `0x30` TIME_SET · `0x31` FLUSHED | `0x40` CONFIG · `0x41` WIFI_AP · `0x42` WIFI_SCAN_END · `0x43` REBOOTING · `0x44` LOG · `0x45` LOG_END · `0x46` TOKEN · `0x4A` CONFIG_CHUNK (BLE when CONFIG exceeds one notification) | `0x47` HELLO · `0x48` STATUS push · `0x49` LIVE push |
+| `0x10` FILE · `0x11` LIST_END · `0x20` OPENED · `0x21` CHUNK · `0x22` READ_END · `0x23` CLOSED · `0x30` TIME_SET · `0x31` FLUSHED | `0x40` CONFIG · `0x41` WIFI_AP · `0x42` WIFI_SCAN_END · `0x43` REBOOTING · `0x44` LOG · `0x45` LOG_END · `0x46` TOKEN · `0x4A` CONFIG_CHUNK (BLE when CONFIG exceeds one notification) · `0x4F` DESCRIPTOR_CHUNK | `0x47` HELLO · `0x48` STATUS push · `0x49` LIVE push |
 
 ## Error codes (`ProtocolError`)
 
@@ -61,6 +61,7 @@ sequenceDiagram
 | 13 | not allowed on this link | `GET_TOKEN` over LAN — force BLE |
 | 14 | authentication failed | LAN handshake: stored token is dead → clear + refetch over BLE (`LanTokenPolicy`) |
 | 15 | Wi-Fi unavailable | `WIFI_SCAN_END.status` → typed "Wi-Fi unavailable" |
+| 17 | no descriptor | `GET_DESCRIPTOR`: the board serves no template, keep the bundled one (`NoDescriptorException`) |
 
 `ERROR.op` is "mine" only when it equals the request opcode (firmware echoes the first byte);
 anything else is a `ProtocolViolationException`.
@@ -77,6 +78,26 @@ anything else is a `ProtocolViolationException`.
 
 `HELLO.payload_max` is trusted if ≥ 64 (`TcpLinkDriver.MIN_PAYLOAD_MAX`); `mtu` reports
 `payload_max + 3` so the same `MTU − 3` arithmetic yields it.
+
+## Board template (`DescriptorDownload`, `BoardDescriptors`)
+
+`info` and `HELLO` carry `desc`, the first 16 hex of the SHA-256 of the board template the firmware
+serves. No `desc` means the board serves none, and the phone never asks.
+
+- Request `GET_DESCRIPTOR` is 7 bytes: op, offset u32 LE, length u16 LE (at least 1). Golden
+  `11000200000004` asks for 1024 bytes at offset 512.
+- Reply `DESCRIPTOR_CHUNK` is total u32 LE, offset u32 LE (the echo), then the bytes. It carries
+  min(length, total − offset, payload_max − 9) bytes, so the phone asks for payload_max − 9.
+- The phone asks for the next missing offset each time. It drops a chunk for another offset and
+  asks again. A lost reply costs one more request for the same offset. A changed total restarts once
+  from offset 0, and a second change fails the download.
+- The bytes are kept only when their SHA-256 starts with `desc`, they parse as an
+  `OpenSensorTemplate` and their `firmware.dict` is `info.dict`.
+- A bundled or cached template whose full SHA-256 starts with `desc` skips the download.
+- Verified templates are cached as `<sha256>.json` in the `board-templates` cache directory
+  (`StorageRole.Templates`) and resolve ahead of the bundled ones (`ServedTemplates`).
+- The request goes out only on an open link, which on BLE includes the bond. Android asks after
+  connect setup, iOS on a command lease of the new link.
 
 ## CONFIG keys (`DeviceConfig`)
 
@@ -114,8 +135,9 @@ declared key missing from a sample also shows a dash, and the particle cards nee
 null never means unsupported. On
 overflow every key is null, and that sample replaces the last one, so every live value clears. A key
 the template does not declare is ignored, so a newer board adding a key breaks nothing.
-`LiveReading` reads a sample through the `Station` of the `info.dict` digest only, so a newer schema
-string over the same dictionary keeps its view. A column's value comes from its LIVE key, its unit
+`LiveReading` reads a sample through the `Station` of the template the board served for `info.desc`,
+else the bundled one for the `info.dict` digest, so a newer schema string over the same dictionary
+keeps its view. A column's value comes from its LIVE key, its unit
 from the column and its label from the app profile. The station joins the bundled board template
 under `core/model/bundled/templates/` with the app profile under `core/model/bundled/profiles/`
 (`BundledCatalog.station`). The templates are aq-parquet `docs/shared/templates` copied byte for

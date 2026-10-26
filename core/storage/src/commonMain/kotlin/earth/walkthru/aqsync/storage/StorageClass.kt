@@ -30,6 +30,9 @@ enum class StorageRole(val storageClass: StorageClass) {
     /** Blocks of the public feed files the Discover map read (`BlockCache` in `:core:net`, #94), in the OS cache directory. */
     FeedBlocks(StorageClass.Rebuildable),
 
+    /** Board templates devices served over `GET_DESCRIPTOR` (#191), in the OS cache directory. A purge refetches them. */
+    Templates(StorageClass.Rebuildable),
+
     /** Where builds before #61 kept `derived/v1`, in app files. The startup janitor removes it whole. */
     LegacyDerived(StorageClass.Rebuildable),
 

@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.data.archive.asRecordIndexer
 import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.coroutines.WallClock
+import earth.walkthru.aqsync.data.history.BoardDescriptors
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.history.HistoryOrchestrator
 import earth.walkthru.aqsync.data.history.HistoryStartup
@@ -60,6 +61,7 @@ object StorageModule {
                 StorageRole.Temp to File(files, AtomicFiles.TEMP_DIR).path,
                 StorageRole.Exports to File(cache, "export").path,
                 StorageRole.FeedBlocks to File(cache, "feed-blocks").path,
+                StorageRole.Templates to File(cache, "board-templates").path,
                 StorageRole.Settings to File(files, "datastore").path,
             ),
         )
@@ -137,6 +139,16 @@ object StorageModule {
             }
         })
     }
+
+    /** Board templates devices served over `GET_DESCRIPTOR` (#191), cached by their SHA-256. */
+    @Provides
+    @Singleton
+    fun provideBoardDescriptors(
+        roots: StorageRoots,
+        atomic: AtomicFiles,
+        tree: StorageTree,
+        @IoDispatcher io: CoroutineDispatcher,
+    ): BoardDescriptors = BoardDescriptors(DiskBlockStore(roots.rootOf(StorageRole.Templates), atomic, tree), io = io)
 
     @Provides
     fun provideStorageJanitor(
