@@ -2,7 +2,8 @@ package earth.walkthru.opensensor.discover
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import earth.walkthru.aqsync.airquality.WhoStep
+import earth.walkthru.aqsync.publicfeed.StepScale
+import earth.walkthru.opensensor.designsystem.preferredLanguage
 import earth.walkthru.opensensor.discover.resources.Res
 import earth.walkthru.opensensor.discover.resources.discover_access_cancel
 import earth.walkthru.opensensor.discover.resources.discover_access_continue
@@ -57,6 +58,7 @@ import earth.walkthru.opensensor.discover.resources.discover_sample_info
 import earth.walkthru.opensensor.discover.resources.discover_scale_info1
 import earth.walkthru.opensensor.discover.resources.discover_scale_info2
 import earth.walkthru.opensensor.discover.resources.discover_scale_info2_real
+import earth.walkthru.opensensor.discover.resources.discover_scale_mark
 import earth.walkthru.opensensor.discover.resources.discover_scale_title
 import earth.walkthru.opensensor.discover.resources.discover_search_places
 import earth.walkthru.opensensor.discover.resources.discover_sensors
@@ -67,6 +69,8 @@ import earth.walkthru.opensensor.discover.resources.discover_source_sample
 import earth.walkthru.opensensor.discover.resources.discover_spread_peak
 import earth.walkthru.opensensor.discover.resources.discover_spread_summary
 import earth.walkthru.opensensor.discover.resources.discover_stale
+import earth.walkthru.opensensor.discover.resources.discover_steps_info1
+import earth.walkthru.opensensor.discover.resources.discover_steps_title
 import earth.walkthru.opensensor.discover.resources.discover_time_window
 import earth.walkthru.opensensor.discover.resources.discover_unavailable
 import earth.walkthru.opensensor.discover.resources.discover_updated_hours_ago
@@ -87,12 +91,6 @@ import earth.walkthru.opensensor.discover.resources.discover_window_short_day
 import earth.walkthru.opensensor.discover.resources.discover_window_short_hour
 import earth.walkthru.opensensor.discover.resources.discover_window_short_latest_day
 import earth.walkthru.opensensor.discover.resources.discover_window_short_week
-import earth.walkthru.opensensor.discover.resources.who_step_above_it1
-import earth.walkthru.opensensor.discover.resources.who_step_guideline
-import earth.walkthru.opensensor.discover.resources.who_step_it1
-import earth.walkthru.opensensor.discover.resources.who_step_it2
-import earth.walkthru.opensensor.discover.resources.who_step_it3
-import earth.walkthru.opensensor.discover.resources.who_step_it4
 import earth.walkthru.opensensor.permissions.AccessDialogTexts
 import kotlinx.datetime.LocalDate
 import org.jetbrains.compose.resources.pluralStringResource
@@ -154,10 +152,18 @@ class DiscoverStrings internal constructor(
     val windowShortLatestDay: String,
     /** The time pill, spoken only. Its state is the full window name. */
     val timeWindow: String,
-    /** Names of the six WHO steps, cleanest first, in [WhoStep] order. Shown beside values, so colour is never the only cue. */
-    val whoSteps: List<String>,
+    /** The phone's language, for step names a scale publishes ([stepName]). */
+    val language: String,
     /** The short mark at the guideline on the legend and the charts. */
     val whoMark: String,
+    /** [whoMark] for a published scale that is not WHO's. */
+    val scaleMark: String,
+    /** Legend caption and info title for a published scale that is not WHO's. */
+    val stepsTitle: String,
+    /** The legend info sheet for a published scale that is not WHO's. */
+    val stepsInfo: InfoText,
+    /** [stepsInfo] for the daily public feed. */
+    val stepsInfoReal: InfoText,
     /** Legend caption in the 24 hour window, where the means match the guideline's averaging. */
     val whoCaptionDay: String,
     /** Legend caption in the last hour and 7 day windows. */
@@ -202,8 +208,8 @@ class DiscoverStrings internal constructor(
     fun dayMonth(date: LocalDate): String =
         stringResource(Res.string.discover_day_month, date.day, monthsShort.getOrElse(date.month.ordinal) { date.month.name })
 
-    /** The name of [step], from [whoSteps]. */
-    fun stepName(step: WhoStep): String = whoSteps.getOrElse(step.ordinal) { step.name }
+    /** The name of step [i] of [scale] in [language], so colour is never the only cue. */
+    fun stepName(scale: StepScale, i: Int): String = scale.label(i, language)
 
     @Composable
     fun areasInView(n: Int): String = pluralStringResource(Res.plurals.discover_areas_in_view, n, n)
@@ -316,15 +322,18 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     windowShortWeek = stringResource(Res.string.discover_window_short_week),
     windowShortLatestDay = stringResource(Res.string.discover_window_short_latest_day),
     timeWindow = stringResource(Res.string.discover_time_window),
-    whoSteps = listOf(
-        stringResource(Res.string.who_step_guideline),
-        stringResource(Res.string.who_step_it4),
-        stringResource(Res.string.who_step_it3),
-        stringResource(Res.string.who_step_it2),
-        stringResource(Res.string.who_step_it1),
-        stringResource(Res.string.who_step_above_it1),
-    ),
+    language = preferredLanguage(),
     whoMark = stringResource(Res.string.discover_who_mark),
+    scaleMark = stringResource(Res.string.discover_scale_mark),
+    stepsTitle = stringResource(Res.string.discover_steps_title),
+    stepsInfo = InfoText(
+        stringResource(Res.string.discover_steps_title),
+        listOf(stringResource(Res.string.discover_steps_info1), stringResource(Res.string.discover_scale_info2)),
+    ),
+    stepsInfoReal = InfoText(
+        stringResource(Res.string.discover_steps_title),
+        listOf(stringResource(Res.string.discover_steps_info1), stringResource(Res.string.discover_scale_info2_real)),
+    ),
     whoCaptionDay = stringResource(Res.string.discover_who_caption_day),
     whoCaptionCompared = stringResource(Res.string.discover_who_caption_compared),
     noHealthScale = stringResource(Res.string.discover_no_health_scale),

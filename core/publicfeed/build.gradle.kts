@@ -14,8 +14,10 @@ kotlin {
             api(project(":core:parquet"))
             // ByteBudgetLru and MemoryPressure bound the bundled sample cache (#61).
             api(project(":core:storage"))
-            // WHO 2021 steps for PM2.5 and PM10 (CellScale, HealthAxis).
+            // The WHO 2021 HealthScale of a WHO cited step scale (StepScale.who) for the mood surfaces.
             api(project(":core:airquality"))
+            // The discover Collection is read with the shared STAC model (Scale, StationCollection).
+            api(project(":core:model"))
             // OpenAqAggregatesFeed takes an HttpRangeEngine and reads through HttpRangeSource.
             api(project(":core:net"))
             // Daily rows carry a station local date (CellRow.date, DailyCellFold).

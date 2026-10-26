@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.publicfeed.CellRow
 import earth.walkthru.aqsync.publicfeed.CellStat
 import earth.walkthru.aqsync.publicfeed.CellsFileInfo
 import earth.walkthru.aqsync.publicfeed.CellsTable
+import earth.walkthru.aqsync.publicfeed.DiscoverCollection
 import earth.walkthru.aqsync.publicfeed.FeedPartition
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.FeedWindow
@@ -33,7 +34,9 @@ import kotlin.test.assertTrue
 class DiscoverControllerTest {
     private val cellA = 0x85283473fffffffL
     private val cellB = 0x8528347bfffffffL
-    private val pm25 = FeedProperty("pm25", "PM2.5", "µg/m³", "Air")
+
+    // A real feed describes its PM2.5 with a scale, here the WHO one the app ships.
+    private val pm25 = DiscoverCollection.BUNDLED.describe(listOf(FeedProperty("pm25", "PM2.5", "µg/m³", "Air"))).single()
 
     /** pm25 per window. A is 10, 30 and 80 (7 days, 24 hours, last hour). B is 5 in every window. */
     private fun value(cell: Long, window: FeedWindow): Double = when {

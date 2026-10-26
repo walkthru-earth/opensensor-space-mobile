@@ -3,18 +3,27 @@ package earth.walkthru.opensensor.discover
 import earth.walkthru.aqsync.airquality.WhoGuidelines
 import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.publicfeed.CellRow
+import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.CellStat
+import earth.walkthru.aqsync.publicfeed.DiscoverCollection
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.PercentileScale
 import earth.walkthru.aqsync.publicfeed.SequentialRamp
+import space.opensensor.model.LocalizedText
+import space.opensensor.model.Scale
+import space.opensensor.model.ScaleStep
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CellChartMathTest {
-    private val pm = FeedProperty("pm25", "PM2.5", "µg/m³", "Air", 1.0)
+    // A feed describes PM with the scales the app ships ([DiscoverCollection.BUNDLED]).
+    private val pm = DiscoverCollection.BUNDLED.describe(listOf(FeedProperty("pm25", "PM2.5", "µg/m³", "Air", 1.0))).single()
+    private val pm10 = DiscoverCollection.BUNDLED.describe(listOf(FeedProperty("pm10", "PM10", "µg/m³", "Air", 1.0))).single()
+    private fun scaleOf(p: FeedProperty, values: List<Double> = listOf(1.0)) = CellScale.of(p, values)
     private val temp = FeedProperty("temp", "Temp", "°C", "Weather", 0.5)
     private val noise = FeedProperty("noise", "Noise", "dB", "Noise", 1.0)
 
@@ -67,29 +76,35 @@ class CellChartMathTest {
         val p = ranges[1]
         assertEquals(ChartDomain(0.0, 25.0), p.domain)
         assertEquals(WhoStep.GUIDELINE.color, p.color)
-        assertEquals(WhoStep.GUIDELINE, p.step)
+        assertEquals(WhoStep.GUIDELINE.ordinal, p.step)
         assertEquals(15.0, p.guideline)
+        assertTrue(p.stepAxis)
         assertEquals(6.0, p.min)
         // Temperature keeps the percentile ramp and has no step.
         val t = ranges[0]
         assertNull(t.min)
         assertNull(t.max)
         assertNull(t.step)
+        assertNull(t.steps)
+        assertFalse(t.stepAxis)
         assertEquals(ChartDomain(21.5, 21.5), t.domain)
         assertEquals(SequentialRamp.at(0.5), t.color)
     }
 
     @Test
     fun whoAxisStartsAtZeroAndBinsFollowTheEdges() {
-        assertEquals(ChartDomain(0.0, 15.0), ChartDomain.forProperty("pm25", listOf(3.0, 9.0)))
-        assertEquals(ChartDomain(0.0, 37.5), ChartDomain.forProperty("pm25", listOf(10.0, 30.0)))
-        assertEquals(ChartDomain(0.0, 45.0), ChartDomain.forProperty("pm10", listOf(30.0)))
-        assertNull(ChartDomain.forProperty("pm25", emptyList()))
-        // Without a WHO scale the percentile span stays.
-        assertEquals(ChartDomain(10.0, 20.0), ChartDomain.forProperty("co2", listOf(10.0, 20.0)))
+        assertEquals(ChartDomain(0.0, 15.0), ChartDomain.forScale(scaleOf(pm), listOf(3.0, 9.0)))
+        assertEquals(ChartDomain(0.0, 37.5), ChartDomain.forScale(scaleOf(pm), listOf(10.0, 30.0)))
+        assertEquals(ChartDomain(0.0, 45.0), ChartDomain.forScale(scaleOf(pm10), listOf(30.0)))
+        assertNull(ChartDomain.forScale(scaleOf(pm), emptyList()))
+        // Without a step scale the percentile span stays.
+        val co2 = FeedProperty("co2", "CO2", "ppm", "Air")
+        assertEquals(ChartDomain(10.0, 20.0), ChartDomain.forScale(scaleOf(co2, listOf(10.0, 20.0)), listOf(10.0, 20.0)))
+        // PM2.5 with no scale in its Collection is neutral too. The id alone never picks WHO.
+        assertEquals(ChartDomain(10.0, 20.0), ChartDomain.forScale(scaleOf(pm.copy(scale = null), listOf(10.0, 20.0)), listOf(10.0, 20.0)))
 
         val d = ChartDomain(0.0, 25.0)
-        val bins = chartBins("pm25", d, 3)
+        val bins = chartBins(scaleOf(pm), d, 3)
         assertEquals(10, bins)
         // 15 is at or below the guideline, so it counts in the last guideline bar.
         assertEquals(5, binOf(15.0, d, bins, upperInclusive = true))
@@ -97,9 +112,33 @@ class CellChartMathTest {
         assertEquals(0, binOf(0.0, d, bins, upperInclusive = true))
         assertEquals(WhoStep.GUIDELINE, WhoGuidelines.PM25.stepOf(binMid(5, d, bins)))
         assertEquals(WhoStep.IT4, WhoGuidelines.PM25.stepOf(binMid(6, d, bins)))
-        assertEquals(binCount(40), chartBins("co2", ChartDomain(0.0, 25.0), 40))
+        assertEquals(binCount(40), chartBins(scaleOf(co2), ChartDomain(0.0, 25.0), 40))
         assertEquals("37.5", formatEdge(37.5))
         assertEquals("15", formatEdge(15.0))
+    }
+
+    @Test
+    fun aPublishedScaleThatIsNotWhoStillStepsTheChart() {
+        // A soil scale from a Collection, no colour hints, no guideline. Its edges set the axis.
+        val soilScale = Scale(
+            "soil",
+            "https://example.test/soil",
+            listOf(0.2, 0.4, null).map { ScaleStep(it, LocalizedText(mapOf("en" to "s$it"))) },
+        )
+        val soil = FeedProperty("soil_moisture", "Soil moisture", "m³/m³", "Soil", scale = soilScale)
+        val scale = scaleOf(soil)
+        assertTrue(scale is CellScale.Steps && scale.scale.who == null)
+        assertNull(scale.who)
+        assertEquals(ChartDomain(0.0, 0.4), ChartDomain.forScale(scale, listOf(0.1, 0.3)))
+        // A scale with an edge at or below zero cannot start the axis at zero, so the percentile span stays.
+        val below = soil.copy(scale = soilScale.copy(steps = listOf(-1.0, 0.4, null).map { ScaleStep(it, LocalizedText(mapOf("en" to "s"))) }))
+        assertNull(stepAxisOf(scaleOf(below)))
+        assertEquals(ChartDomain(0.1, 0.3), ChartDomain.forScale(scaleOf(below), listOf(0.1, 0.3)))
+        val here = cell(1, "soil_moisture" to CellStat(1, 0.3, 0.25, 0.35))
+        val r = metricRanges(here, listOf(here), listOf(soil)).single()
+        assertEquals(1, r.step)
+        assertNull(r.guideline)
+        assertTrue(r.stepAxis)
     }
 
     @Test

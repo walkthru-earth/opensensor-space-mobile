@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -110,7 +111,10 @@ class SampleFeedTest {
     fun `geojson carries colour only for measured cells`() = runTest {
         val partition = feed.latest()!!
         val rows = feed.cells(partition, FeedWindow.DAY, 5, ranges = null).rows
-        val scale = CellScale.of("pm25", rows.mapNotNull { it.mean("pm25") })
+        val pm25 = feed.cells(partition, FeedWindow.DAY, 5, ranges = null).info.properties.single { it.id == "pm25" }
+        val scale = CellScale.of(pm25, rows.mapNotNull { it.mean("pm25") })
+        // The sample has no Collection, so the scales the app ships colour it.
+        assertIs<CellScale.Steps>(scale)
         val json = CellGeoJson.build(h3, rows, "pm25", scale) { false }
         assertTrue(json.startsWith("{\"type\":\"FeatureCollection\""))
         assertEquals(rows.size, Regex("\"type\":\"Feature\"").findAll(json).count())

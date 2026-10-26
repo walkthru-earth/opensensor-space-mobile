@@ -29,10 +29,15 @@ import kotlin.time.Clock
  * The live public feed, read from the OpenAQ aggregates collection on source.coop
  * (docs/devices-and-discovery.md). Anonymous, read-only GETs, no identifiers.
  *
- * - [latest] GETs `manifest.json` and answers `FeedPartition(date = as_of, hour = 0, generation)`, `as_of` being
- *   the newest complete PM2.5 day. The answer is kept for [MANIFEST_TTL_MS] by [clock]. A manifest
- *   without `as_of` answers null.
- * - [cells] reads `cells/h3_res=<res>/data.parquet` through an [HttpRangeSource], with one
+ * - [latest] GETs the discover Collection `collection.json` ([DiscoverCollection]) and answers
+ *   `FeedPartition(date = as_of, hour = 0, generation = updated)`, `as_of` being the newest complete
+ *   day. When the Collection is missing (404 or 403) it GETs `manifest.json` instead and answers
+ *   `FeedPartition(date = as_of, hour = 0, generation)`. The answer is kept for [MANIFEST_TTL_MS] by
+ *   [clock]. A feed without `as_of` answers null.
+ * - [cells] describes the properties with the Collection's titles and scales, or with
+ *   [DiscoverCollection.BUNDLED] for a manifest feed. A resolution the Collection has no asset for
+ *   answers an empty table without a request.
+ * - [cells] reads the cells file of `res` through an [HttpRangeSource], with one
  *   [FooterCache] for the feed, keeps the daily rows of the 7 days ending at the partition date and
  *   folds them with [DailyCellFold]. With [blocks] the source is a [CachedRangeSource] keyed by URL,
  *   `as_of` and the manifest `generation`, so a later read of the same partition, also after a restart, takes the blocks from disk
@@ -62,7 +67,7 @@ class OpenAqAggregatesFeed(
     private val mutex = Mutex()
     private var cached: Pair<Long, FeedPartition?>? = null
 
-    /** Guards [daily], [inflight], [generation], [lastManifest] and [files]. Never held across a network read. */
+    /** Guards [daily], [inflight], [generation], [lastManifest], [files] and [layout]. Never held across a network read. */
     private val rowsLock = Mutex()
     private val daily = ByteBudgetLru<DailyKey, CellsTable>(budgetBytes) { _, table -> estimateBytes(table) }
     private val inflight = HashMap<DailyKey, CompletableDeferred<CellsTable>>()
@@ -73,8 +78,11 @@ class OpenAqAggregatesFeed(
     /** The partition last read, which carries the manifest `generation`. */
     private var lastManifest: FeedPartition? = null
 
-    /** The manifest `generation` of the files, part of the block cache key with `as_of`. */
+    /** The manifest `generation` or Collection `updated` of the files, part of the block cache key with `as_of`. */
     private var files: String? = null
+
+    /** The discover Collection last read, null for a manifest feed. */
+    private var layout: DiscoverCollection? = null
 
     /** The resolutions whose daily rows are kept now. */
     suspend fun cachedResolutions(): Int = rowsLock.withLock { daily.size }
@@ -89,17 +97,17 @@ class OpenAqAggregatesFeed(
     override suspend fun latest(): FeedPartition? = mutex.withLock {
         val now = clock.now().toEpochMilliseconds()
         cached?.let { (at, partition) -> if (now - at in 0 until MANIFEST_TTL_MS) return@withLock partition }
-        val manifest = readManifest()
-        val partition = manifest.asOf?.let { FeedPartition(LocalDate.parse(it).toString(), 0, manifest.generation) }
+        val (partition, collection) = readIndex()
         cached = now to partition
         if (partition != null) {
             // A new as_of or generation replaces the files whole. Rows of the old one are never served again.
             rowsLock.withLock {
-                if (partition != lastManifest) {
+                if (partition != lastManifest || collection?.cells != layout?.cells) {
                     if (lastManifest != null) clearRows()
                     lastManifest = partition
-                    files = manifest.generation
+                    files = partition.generation
                 }
+                layout = collection
             }
         }
         partition
@@ -116,14 +124,20 @@ class OpenAqAggregatesFeed(
         )
     }
 
-    /** The kept daily rows of [key], or one download shared with every concurrent caller of [key]. */
+    /**
+     * The kept daily rows of [key], or one download shared with every concurrent caller of [key].
+     * [CellsTable.EMPTY] without a request when the Collection has no file for the resolution.
+     */
     private suspend fun dailyRows(key: DailyKey): CellsTable {
         while (true) {
             var owner = false
             var startedFiles: String? = null
+            var startedLayout: DiscoverCollection? = null
             val (deferred, startedAt) = rowsLock.withLock {
                 daily[key]?.let { return it }
                 startedFiles = files
+                startedLayout = layout
+                if (cellsUrl(key.res, layout) == null) return CellsTable.EMPTY
                 val running = inflight[key]
                 if (running != null) {
                     running to generation
@@ -142,7 +156,9 @@ class OpenAqAggregatesFeed(
             }
             try {
                 val days = key.asOf.minus(DatePeriod(days = DAYS - 1))..key.asOf
-                val table = reader.readCells(source(key, startedFiles), ranges = null, days = days)
+                val read = reader.readCells(source(key, startedFiles, startedLayout), ranges = null, days = days)
+                val described = (startedLayout ?: DiscoverCollection.BUNDLED).describe(read.info.properties)
+                val table = read.copy(info = read.info.copy(properties = described))
                 rowsLock.withLock {
                     if (inflight[key] === deferred) inflight.remove(key)
                     if (generation == startedAt) {
@@ -165,22 +181,44 @@ class OpenAqAggregatesFeed(
         generation++
     }
 
-    /** The cells file of [key], through the block cache keyed on `as_of` and the manifest generation [files]. */
-    private fun source(key: DailyKey, files: String?): RangeSource {
-        val url = cellsUrl(key.res)
+    /** The cells file of [key], through the block cache keyed on `as_of` and the generation [files]. */
+    private fun source(key: DailyKey, files: String?, collection: DiscoverCollection?): RangeSource {
+        val url = checkNotNull(cellsUrl(key.res, collection)) { "no cells file at resolution ${key.res}" }
         val http = HttpRangeSource(url, engine)
         return blocks?.let { CachedRangeSource(http, it, url, generation = "${key.asOf}\n${files.orEmpty()}") } ?: http
     }
 
-    /** The URL of the cells file at [res]. */
-    fun cellsUrl(res: Int): String = "$root/cells/h3_res=$res/data.parquet"
+    /**
+     * The URL of the cells file at [res]. The Collection's asset for it, or null when it has none.
+     * The manifest layout `cells/h3_res=<res>/data.parquet` when there is no Collection.
+     */
+    suspend fun cellsUrl(res: Int): String? = cellsUrl(res, rowsLock.withLock { layout })
+
+    private fun cellsUrl(res: Int, collection: DiscoverCollection?): String? =
+        if (collection != null) collection.cells[res] else "$root/cells/h3_res=$res/data.parquet"
+
+    /** The Collection's partition and the Collection, else the manifest's partition when the Collection is missing. */
+    private suspend fun readIndex(): Pair<FeedPartition?, DiscoverCollection?> {
+        val url = "$root/${DiscoverCollection.FILE}"
+        val response = getIndex(url)
+        if (response.status == 200) {
+            val collection = DiscoverCollection.parse(response.body.decodeToString(), root)
+            return collection.asOf?.let { FeedPartition(it.toString(), 0, collection.generation) } to collection
+        }
+        if (response.status !in MISSING) throw HttpRangeException(response.status, url)
+        val manifest = readManifest()
+        return manifest.asOf?.let { FeedPartition(LocalDate.parse(it).toString(), 0, manifest.generation) } to null
+    }
 
     private suspend fun readManifest(): Manifest {
         val url = "$root/$MANIFEST"
-        val response = engine.get(url, range = null, ifRange = null, ifNoneMatch = null, limit = BodyLimit(MANIFEST_MAX_BYTES, MANIFEST_MAX_BYTES))
+        val response = getIndex(url)
         if (response.status != 200) throw HttpRangeException(response.status, url)
         return FeedPaths.json.decodeFromString<Manifest>(response.body.decodeToString())
     }
+
+    private suspend fun getIndex(url: String) =
+        engine.get(url, range = null, ifRange = null, ifNoneMatch = null, limit = BodyLimit(MANIFEST_MAX_BYTES, MANIFEST_MAX_BYTES))
 
     private data class DailyKey(val res: Int, val asOf: LocalDate)
 
@@ -197,10 +235,10 @@ class OpenAqAggregatesFeed(
         const val DEFAULT_ROOT: String = "https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates"
         const val MANIFEST: String = "manifest.json"
 
-        /** How long an answer of [latest] stands before the manifest is read again. */
+        /** How long an answer of [latest] stands before the Collection or manifest is read again. */
         const val MANIFEST_TTL_MS: Long = 5 * 60 * 1000L
 
-        /** The manifest is a few KB. Anything far larger is not the manifest. */
+        /** The Collection and the manifest are a few KB. Anything far larger is neither. */
         const val MANIFEST_MAX_BYTES: Long = 1024L * 1024
 
         /** The most resolutions whose daily rows are kept. A zoom spans about two. */
@@ -217,5 +255,8 @@ class OpenAqAggregatesFeed(
         private const val STAT_BYTES = 96
         private const val DAYS = 7
         private val WINDOWS = listOf(FeedWindow.DAY, FeedWindow.WEEK)
+
+        /** Answers that mean "no Collection here". S3 answers 403 for a missing key without list rights. */
+        private val MISSING = setOf(403, 404)
     }
 }

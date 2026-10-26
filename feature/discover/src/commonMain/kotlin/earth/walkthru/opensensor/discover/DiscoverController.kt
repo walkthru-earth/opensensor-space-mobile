@@ -119,7 +119,7 @@ data class DiscoverUiState(
 /** The selected cell's summary for [property], three windows, headline the 24 hour mean. Null with no selection. */
 fun DiscoverUiState.selectedSummary(property: FeedProperty): StationSummary? {
     selected ?: return null
-    return PublicSummary.of(property.id, property.unit, selectedWindows, offered = windows)
+    return PublicSummary.of(property, selectedWindows, offered = windows)
 }
 
 /**
@@ -543,7 +543,7 @@ class DiscoverController(
                 { CellFreshness.isStale(it, nowMs, property?.id) }
             }
             val (scale, json) = withContext(io) {
-                val scale = property?.let { p -> CellScale.of(p.id, rows.mapNotNull { it.mean(p.id) }) }
+                val scale = property?.let { p -> CellScale.of(p, rows.mapNotNull { it.mean(p.id) }) }
                 val json = if (current.available) {
                     CellGeoJson.build(h3, rows, property?.id, scale, stale)
                 } else {

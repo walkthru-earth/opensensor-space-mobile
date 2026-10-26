@@ -19,10 +19,11 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The label Discover shows for a feed property, in the app's language (#145). The public feed's
- * manifest carries English labels only, so every property id the app knows has its own string, and
- * only an unknown id shows the feed label. The feed carries pre-aggregated PM2.5 means without
- * humidity, so the EPA correction cannot run and PM2.5 is always labelled raw (#92).
+ * The label Discover shows for a feed property, in the app's language (#145). Every property id the
+ * app knows has its own string in English and Arabic. Any other id shows the feed's label, the
+ * Collection column title when the feed has one, else the dictionary label. The feed carries
+ * pre-aggregated PM2.5 means without humidity, so the EPA correction cannot run and PM2.5 is always
+ * labelled raw (#92).
  */
 @Composable
 internal fun FeedProperty.shownLabel(): String = shownLabel(this) { stringResource(it) }
@@ -33,13 +34,11 @@ internal inline fun shownLabel(property: FeedProperty, resolve: (StringResource)
 
 /** The app's own label for [property], else null for an id the app does not know. */
 internal fun shownLabelRes(property: FeedProperty): StringResource? =
-    if (isRawPm25(property)) pm25LabelRes(Pm25Basis.RAW) else propertyLabels[property.id]
+    propertyLabels[property.id]
 
-/** True for the feed's PM2.5, the one property whose label says raw. */
-internal fun isRawPm25(property: FeedProperty): Boolean = property.id == "pm25"
-
-/** The feed property ids the app names itself (tools/discover-fixture), PM2.5 aside. */
+/** The feed property ids the app names itself (tools/discover-fixture). */
 private val propertyLabels: Map<String, StringResource> = mapOf(
+    "pm25" to pm25LabelRes(Pm25Basis.RAW),
     "pm10" to Res.string.discover_property_pm10,
     "pm1" to Res.string.discover_property_pm1,
     "um003" to Res.string.discover_property_um003,

@@ -83,7 +83,6 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import earth.walkthru.aqsync.airquality.HealthScale
-import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.publicfeed.CellRow
 import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.FeedProperty
@@ -91,6 +90,7 @@ import earth.walkthru.aqsync.publicfeed.FeedWindow
 import earth.walkthru.aqsync.publicfeed.H3Index
 import earth.walkthru.aqsync.publicfeed.PublicSummary
 import earth.walkthru.aqsync.publicfeed.SequentialRamp
+import earth.walkthru.aqsync.publicfeed.StepScale
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.settings.DiscoverSource
 import earth.walkthru.aqsync.units.UnitFormatter
@@ -288,8 +288,8 @@ private fun DiscoverContent(
                     val property = state.property
                     val scale = state.scale
                     if (property != null && scale != null) {
-                        // Simple shows mood words for a health scale. A property without one keeps its gradient.
-                        if (simple && scale is CellScale.Health) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton, state.daily)
+                        // Simple shows mood words for the WHO scale. Any other property keeps its steps or gradient.
+                        if (simple && scale.who != null) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton, state.daily)
                     }
                     Spacer(Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -463,9 +463,9 @@ private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, di
 }
 
 /**
- * The map legend. For PM2.5 and PM10, six fixed WHO step swatches with their edges, the guideline
- * marked and a caption naming the averaging. For the rest, the viridis gradient with the 5th and
- * 95th percentile in view and a note that no health scale is published.
+ * The map legend. For a property with a published scale, its fixed step swatches with their edges,
+ * the guideline marked and a caption. The WHO scale names the averaging. For the rest, the viridis
+ * gradient with the 5th and 95th percentile in view and a note that no health scale is published.
  */
 @Composable
 private fun Legend(
@@ -482,25 +482,35 @@ private fun Legend(
     FloatingSurface {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
             when (scale) {
-                is CellScale.Health -> {
-                    val health = scale.scale
-                    val caption = if (window == FeedWindow.DAY) strings.whoCaptionDay else strings.whoCaptionCompared
-                    // WHO edges are µg/m³ and never converted, so the edges print as published.
+                is CellScale.Steps -> {
+                    val steps = scale.scale
+                    val who = steps.who != null
+                    val caption = when {
+                        !who -> strings.stepsTitle
+                        window == FeedWindow.DAY -> strings.whoCaptionDay
+                        else -> strings.whoCaptionCompared
+                    }
                     val spoken = buildString {
                         append("${property.shownLabel()} $unit. $caption. ")
-                        WhoStep.entries.forEach { step ->
-                            val upTo = health.rangeOf(step).second?.let { formatEdge(it) }
-                            append(strings.whoStepSpoken(strings.stepName(step), upTo, unit)).append(". ")
+                        for (i in 0 until steps.size) {
+                            val upTo = steps.rangeOf(i).second?.let { edgeLabel(steps, it, property, units) }
+                            append(strings.whoStepSpoken(strings.stepName(steps, i), upTo, unit)).append(". ")
                         }
                     }
                     Column(Modifier.width(212.dp).padding(vertical = 8.dp).clearAndSetSemantics { contentDescription = spoken }) {
                         FitText("${property.shownLabel()}  $unit", style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.height(2.dp))
-                        WhoStepBar(health, strings)
+                        StepBar(steps, property, strings)
                         Spacer(Modifier.height(2.dp))
                         Text(caption, style = MaterialTheme.typography.labelSmall, color = muted)
                     }
-                    infoButton(if (daily) strings.whoInfoReal else strings.whoInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
+                    val info = when {
+                        who && daily -> strings.whoInfoReal
+                        who -> strings.whoInfo
+                        daily -> strings.stepsInfoReal
+                        else -> strings.stepsInfo
+                    }
+                    infoButton(info, Modifier.minimumInteractiveComponentSize().size(40.dp))
                 }
                 is CellScale.Relative -> {
                     val low = scale.percentile.low
@@ -539,16 +549,16 @@ private fun SimpleLegend(property: FeedProperty, strings: DiscoverStrings, infoB
     }
 }
 
-/** A small swatch in [step]'s colour and its name, so the step never rests on colour alone. */
+/** A small swatch in step [i]'s colour and its name, so the step never rests on colour alone. */
 @Composable
-private fun StepLabel(step: WhoStep, strings: DiscoverStrings, modifier: Modifier = Modifier) {
+private fun StepLabel(scale: StepScale, i: Int, strings: DiscoverStrings, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(Color(step.color))
+            Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(Color(scale.colors[i]))
                 .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), RoundedCornerShape(3.dp)),
         )
         Spacer(Modifier.width(6.dp))
-        Text(strings.stepName(step), style = MaterialTheme.typography.bodyMedium)
+        Text(strings.stepName(scale, i), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -691,7 +701,7 @@ private fun InView(
     val property = state.property
     val units = LocalDiscoverUnits.current
     val values = property?.let { p -> state.rows.mapNotNull { it.mean(p.id) } }.orEmpty()
-    val health = (state.scale as? CellScale.Health)?.scale
+    val health = state.scale.who
     if (property != null && values.size >= 2) {
         if (!simple) {
             ChartTitle(property, strings, state)
@@ -699,7 +709,7 @@ private fun InView(
             SpreadChart(values, property, state.scale, strings, clearSignal = clearSignal, onHighlight = onHighlight)
             Spacer(Modifier.height(12.dp))
         } else if (health != null) {
-            // Simple. Areas per mood, no axis. A property without a health scale shows no chart, no mood is invented.
+            // Simple. Areas per mood, no axis. A property without the WHO scale shows no chart, no mood is invented.
             ChartTitle(property, strings, state)
             Spacer(Modifier.height(8.dp))
             SimpleSpread(values, health, strings, highlight, onHighlight)
@@ -724,12 +734,15 @@ private fun InView(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val value = row.mean(property.id)!!
-                val step = (state.scale as? CellScale.Health)?.stepOf(value)
+                val steps = (state.scale as? CellScale.Steps)?.scale
+                val step = steps?.stepOf(value)
+                val mood = if (simple) steps?.who?.stepOf(value) else null
                 Box(Modifier.size(14.dp).clip(CircleShape).background(Color(state.scale?.color(value) ?: SequentialRamp.stops.first())))
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("${formatValue(value, property, units)} ${unitLabel(property, units)}", style = MaterialTheme.typography.bodyLarge)
-                    if (step != null) Text(if (simple) moodWord(step) else strings.stepName(step), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val stepText = if (mood != null) moodWord(mood) else step?.let { strings.stepName(steps, it) }
+                    if (stepText != null) Text(stepText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(strings.sensors(row.devices), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -809,7 +822,8 @@ private fun CellDetail(
         val units = LocalDiscoverUnits.current
         val stat = property?.let { row.stats[it.id] }
         val headline = stat?.mean
-        val headlineStep = headline?.let { (state.scale as? CellScale.Health)?.stepOf(it) }
+        val headlineSteps = (state.scale as? CellScale.Steps)?.scale
+        val headlineStep = headline?.let { headlineSteps?.stepOf(it) }
         if (property != null && headline != null) {
             val min = stat.min
             val max = stat.max
@@ -844,8 +858,8 @@ private fun CellDetail(
                 Spacer(Modifier.width(10.dp))
                 Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
             }
-            // The WHO step in words, beside its colour.
-            if (headlineStep != null) StepLabel(headlineStep, strings, Modifier.padding(vertical = 2.dp))
+            // The step in words, beside its colour.
+            if (headlineSteps != null && headlineStep != null) StepLabel(headlineSteps, headlineStep, strings, Modifier.padding(vertical = 2.dp))
         } else {
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }

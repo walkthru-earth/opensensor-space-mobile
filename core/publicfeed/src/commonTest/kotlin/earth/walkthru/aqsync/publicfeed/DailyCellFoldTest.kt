@@ -48,10 +48,10 @@ class DailyCellFoldTest {
             val out = DailyCellFold.fold(rows, window, asOf).single()
             assertEquals(endOf(day(8)), out.updatedEpochMs, "$window")
             val windows = mapOf(FeedWindow.DAY to out)
-            assertEquals(endOf(day(3)), PublicSummary.of("pm25", "µg/m³", windows).updatedEpochMs, "$window")
-            assertEquals(endOf(day(8)), PublicSummary.of("temperature", "°C", windows).updatedEpochMs, "$window")
+            assertEquals(endOf(day(3)), PublicSummary.of(TestProperties.PM25, windows).updatedEpochMs, "$window")
+            assertEquals(endOf(day(8)), PublicSummary.of(TestProperties.TEMPERATURE, windows).updatedEpochMs, "$window")
             // A property the cell does not report stays missing.
-            assertNull(PublicSummary.of("humidity", "%", windows).value, "$window")
+            assertNull(PublicSummary.of(TestProperties.HUMIDITY, windows).value, "$window")
         }
     }
 

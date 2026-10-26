@@ -1,0 +1,156 @@
+{
+  "type": "Collection",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/table/v1.3.0/schema.json"
+  ],
+  "id": "discover-cells",
+  "title": "Discover cells",
+  "description": "Daily H3 aggregates of public stations. Fixture, every number is made up.",
+  "license": "CC-BY-4.0",
+  "updated": "2026-10-09T03:00:00Z",
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          -180,
+          -90,
+          180,
+          90
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2026-10-02T00:00:00Z",
+          "2026-10-08T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "opensensor:scales": {
+    "who-2021-pm25": {
+      "source": "https://www.who.int/publications/i/item/9789240034228",
+      "unit": "µg/m³",
+      "guideline": 15,
+      "steps": [
+        {
+          "upper": 15,
+          "label": {
+            "en": "Within the WHO guideline"
+          },
+          "color_hint": "C6EBA8"
+        },
+        {
+          "upper": 25,
+          "label": {
+            "en": "Within WHO interim target 4"
+          },
+          "color_hint": "F5D75E"
+        },
+        {
+          "upper": 37.5,
+          "label": {
+            "en": "Within WHO interim target 3"
+          },
+          "color_hint": "F2A14A"
+        },
+        {
+          "upper": 50,
+          "label": {
+            "en": "Within WHO interim target 2"
+          },
+          "color_hint": "DC5A4A"
+        },
+        {
+          "upper": 75,
+          "label": {
+            "en": "Within WHO interim target 1"
+          },
+          "color_hint": "9A3F8E"
+        },
+        {
+          "upper": null,
+          "label": {
+            "en": "Above every WHO target"
+          },
+          "color_hint": "5C1A33"
+        }
+      ]
+    }
+  },
+  "item_assets": {
+    "data": {
+      "type": "application/vnd.apache.parquet",
+      "roles": [
+        "data"
+      ],
+      "table:columns": [
+        {
+          "name": "h3_index",
+          "type": "int64",
+          "title": "H3 cell"
+        },
+        {
+          "name": "date",
+          "type": "date32",
+          "title": "Station local day"
+        },
+        {
+          "name": "pm25__n",
+          "type": "int32",
+          "title": "PM2.5 readings"
+        },
+        {
+          "name": "pm25__mean",
+          "type": "double",
+          "title": "PM2.5",
+          "unit": "µg/m³",
+          "opensensor:scale": "who-2021-pm25"
+        },
+        {
+          "name": "pm25__min",
+          "type": "double",
+          "unit": "µg/m³"
+        },
+        {
+          "name": "pm25__max",
+          "type": "double",
+          "unit": "µg/m³"
+        },
+        {
+          "name": "soil_moisture__n",
+          "type": "int32",
+          "title": "Soil moisture readings"
+        },
+        {
+          "name": "soil_moisture__mean",
+          "type": "double",
+          "title": "Soil moisture",
+          "unit": "m³/m³"
+        },
+        {
+          "name": "soil_moisture__min",
+          "type": "double",
+          "unit": "m³/m³"
+        },
+        {
+          "name": "soil_moisture__max",
+          "type": "double",
+          "unit": "m³/m³"
+        }
+      ]
+    }
+  },
+  "assets": {
+    "h3_res=5": {
+      "href": "cells/h3_res=5/data.parquet",
+      "type": "application/vnd.apache.parquet",
+      "roles": [
+        "data"
+      ]
+    }
+  },
+  "links": []
+}

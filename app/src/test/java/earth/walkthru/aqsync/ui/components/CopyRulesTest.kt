@@ -5,8 +5,8 @@ import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PmsStatus
+import earth.walkthru.aqsync.publicfeed.DiscoverCollection
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
 import space.opensensor.model.BundledCatalog
@@ -14,8 +14,8 @@ import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * Android and shared catalogues say the same words where they share a key (docs/screens.md, Copy
- * and the info affordance). The copy rules themselves (no dashes, semicolons or sentence colons)
+ * Android and shared copy say the same words where both name one thing (docs/screens.md, Copy and
+ * the info affordance). The copy rules themselves (no dashes, semicolons or sentence colons)
  * are checked for every catalogue in the repository by `:ui:strings` CopyLintTest, which runs
  * without this module.
  */
@@ -59,23 +59,23 @@ class CopyRulesTest {
     }
 
     /**
-     * A few strings live in both catalogues while Android screens outside the shared modules still
-     * read them. They must say the same, word for word.
+     * Discover names WHO steps from the PM scales the app ships (`DiscoverCollection.BUNDLED`), the
+     * stations from the Android step strings. Both say the same in English and Arabic.
      */
     @Test
-    fun `shared copies match the Android resources`() {
-        val both = mapOf(
-            "discover" to listOf("who_step_guideline", "who_step_it4", "who_step_it3", "who_step_it2", "who_step_it1", "who_step_above_it1"),
-        )
-        // The English default and every translation (values-ar) keep the shared copies identical.
-        for (folder in listOf("values", "values-ar")) {
+    fun `bundled WHO step names match the Android step strings`() {
+        val keys = listOf("who_step_guideline", "who_step_it4", "who_step_it3", "who_step_it2", "who_step_it1", "who_step_above_it1")
+        for ((folder, lang) in listOf("values" to "en", "values-ar" to "ar")) {
             val s = strings(folder)
-            val shared = sharedStrings(folder)
-            assertTrue("Shared catalogues missing in $folder: ${shared.keys}", shared.keys.containsAll(listOf("discover", "settings", "designsystem", "strings")))
-            both.forEach { (module, keys) ->
-                keys.forEach { key -> assertEquals("$folder $module/$key", shown(s.getValue(key)), shared.getValue(module).getValue(key)) }
+            for (id in listOf("pm25", "pm10")) {
+                val scale = checkNotNull(DiscoverCollection.BUNDLED.scale(id)) { "$id has no bundled scale" }
+                assertEquals("$folder $id", keys.map { shown(s.getValue(it)) }, scale.steps.map { it.label.get(lang) })
             }
         }
+    }
+
+    @Test
+    fun `Today owns the warming hint`() {
         // Today (`:feature:today`) owns the warming hint on both apps.
         val waveshare = DeviceInfo(dict = BundledCatalog.templates.first { it.schema.startsWith("waveshare-") }.dict)
         val sample = LiveSample.parse("""{"pms":${PmsStatus.WARMING.code}}""")
