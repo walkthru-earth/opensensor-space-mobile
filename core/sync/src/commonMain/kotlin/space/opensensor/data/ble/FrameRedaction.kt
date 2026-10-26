@@ -8,7 +8,7 @@ import space.opensensor.data.protocol.Opcode
  * The one place that decides what the Debug screen may show of a frame. The LAN token, the Wi-Fi
  * passphrase and the BLE PIN never leave this boundary in readable form (root `AGENTS.md`).
  *
- * Secret frames, per `aq-parquet/docs/shared/ble-sync-protocol.md`:
+ * Secret frames, per `opensensor-space-firmware/docs/shared/ble-sync-protocol.md`:
  * - RX `TOKEN` (0x46) carries the 32-byte LAN bearer token.
  * - TX `SET_CONFIG` (0x09) can carry `wifi.psk` and `ble.pin`.
  * - TX bytes that start with the LAN handshake magic `OSS1` carry the token. The handshake is

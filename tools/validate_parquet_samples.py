@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate files written by the app's Kotlin ParquetWriter with independent readers.
 
-    cd ../aq-parquet && pixi run python ../opensensor-space-android/tools/validate_parquet_samples.py [paths…]
+    cd ../opensensor-space-firmware && pixi run python ../opensensor-space-mobile/tools/validate_parquet_samples.py [paths…]
 
 Without arguments it checks `app/build/parquet-samples/*.parquet` (written by `ParquetWriterTest`; run
 `./gradlew testDebugUnitTest` first), `core/parquet/build/geoparquet-samples/*.parquet` (written by

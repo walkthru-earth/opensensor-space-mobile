@@ -19,7 +19,7 @@ class PortableProtocolTest {
         assertFailsWith<IllegalArgumentException> { LanProtocol.handshake(ByteArray(31)) }
     }
 
-    /** aq-parquet docs/shared/mobile-migration.md, #93 entry. Base `255f595e-XXXX-47ed-8e0d-59994199b680`. */
+    /** opensensor-space-firmware docs/shared/mobile-migration.md, #93 entry. Base `255f595e-XXXX-47ed-8e0d-59994199b680`. */
     @Test fun gattUuidsMatchFirmwareTable() {
         assertEquals("255f595e-0001-47ed-8e0d-59994199b680", DeviceGatt.SERVICE)
         assertEquals("255f595e-0002-47ed-8e0d-59994199b680", DeviceGatt.INFO)

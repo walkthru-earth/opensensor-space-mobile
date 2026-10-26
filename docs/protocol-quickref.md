@@ -1,7 +1,7 @@
 # Protocol quick reference, the mirror, not the contract
 
 **Scope:** constants as implemented in `:core:protocol`, for lookup. The **owner** is
-`../aq-parquet/docs/shared/ble-sync-protocol.md`; do not change a layout, opcode, UUID, JSON key
+`../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`; do not change a layout, opcode, UUID, JSON key
 or error code here before changing it there (and the firmware).
 **Code:** `core/protocol/…/data/protocol/Frames.kt`, `DeviceUuids.kt`, `LanFraming.kt`, `DeviceConfig.kt`, `JsonModels.kt`, `ParquetVerify.kt`.
 **Related:** [transports.md](transports.md) (pipes), [sync-engine.md](sync-engine.md) (how the file opcodes are driven).
@@ -148,7 +148,7 @@ else the bundled one for the `info.dict` digest, so a newer schema string over t
 keeps its view. A column's value comes from its LIVE key, its unit
 from the column and its label from the app profile. The thing joins the bundled board template
 under `core/model/bundled/templates/` with the app profile under `core/model/bundled/profiles/`
-(`BundledCatalog.thing`). The templates are aq-parquet `docs/shared/templates` copied byte for
+(`BundledCatalog.thing`). The templates are opensensor-space-firmware `docs/shared/templates` copied byte for
 byte, `<board>/<dict>.json` and `index.json`, and their `live_keys` list the keys in board LIVE order.
 Only the current digest of each board is bundled, at the firmware version the bundled templates name. CoreS3 (`3b4d8500…`)
 sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
@@ -157,9 +157,9 @@ temperature, `rh` and `bstate`, the battery health code. A new firmware digest i
 published templates, a profile file swap and a fixture refresh, with no code change. Any other digest, older ones included,
 has no LIVE view, and Today says so only after `INFO` arrived. The thing join (`BundledCatalog.thing`) still shows such a board from a
 served template, with raw column names and raw units and no guessed label. `LiveKeyFixturesTest`
-holds every digest from aq-parquet `tools/fixtures/live_keys/`, checks the bundled template live keys
+holds every digest from opensensor-space-firmware `tools/fixtures/live_keys/`, checks the bundled template live keys
 against the current ones and lists the retired ones, and the weekly `live-key-drift` workflow fails
-when aq-parquet main has a digest missing there. LIVE is a snapshot, not archive data.
+when opensensor-space-firmware main has a digest missing there. LIVE is a snapshot, not archive data.
 
 `LOG_TAIL` may contain storage watchdog lines. They are informational. A storage stall resets the
 device after about 60 s, which ends the link. The existing `RetryPolicy` and the re-planned LIST of a
@@ -184,4 +184,4 @@ board keeps in RAM and writes with `location_source` 3. No released firmware acc
 app names the key and never sends it.
 Pages 2–4 are firmware time policy/status and server configuration; this app
 currently exposes location provisioning. See [device-location.md](device-location.md)
-and the firmware-owned [wire contract](../../aq-parquet/docs/shared/ble-sync-protocol.md).
+and the firmware-owned [wire contract](../../opensensor-space-firmware/docs/shared/ble-sync-protocol.md).

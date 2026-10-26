@@ -11,7 +11,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * The bundled templates are aq-parquet `docs/shared/templates` copied byte for byte. A template's desc
+ * The bundled templates are opensensor-space-firmware `docs/shared/templates` copied byte for byte. A template's desc
  * is the SHA-256 of its exact bytes and `index.json` names it, so a reformat, a final newline or a line
  * ending change fails here. The expected hashes come from the copied `index.json`, so a re-copy of the
  * folder needs no edit there. [pinned] holds the full SHA-256 of each copied file, `index.json`
@@ -27,7 +27,7 @@ class BundledTemplateBytesTest {
             "templates/" + e.getValue("href").jsonPrimitive.content to e.getValue("desc").jsonPrimitive.content
         }
 
-    /** aq-parquet 9915aec `docs/shared/templates`. The template pins equal their index desc. */
+    /** opensensor-space-firmware 9915aec `docs/shared/templates`. The template pins equal their index desc. */
     private val pinned = mapOf(
         "templates/index.json" to "d51cf30858947e53ff1f583c55d3fcc843dc6dcb787ada7042c01b9acafe8adb",
         "templates/m5stack-cores3/3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9.json" to

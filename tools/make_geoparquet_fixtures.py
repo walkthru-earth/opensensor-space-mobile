@@ -4,7 +4,7 @@
 Run from the firmware repo so its pixi environment (PyArrow >= 21 with the Parquet GEOMETRY type,
 DuckDB with the installed `spatial` extension) is used:
 
-    cd ../aq-parquet && pixi run python ../opensensor-space-android/tools/make_geoparquet_fixtures.py
+    cd ../opensensor-space-firmware && pixi run python ../opensensor-space-mobile/tools/make_geoparquet_fixtures.py
 
 What it writes to `core/parquet/src/test/resources/geoparquet/` (see docs/history-ux-and-data-layer.md §7):
 

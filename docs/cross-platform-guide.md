@@ -28,7 +28,7 @@ option to drop into SwiftUI or UIKit at a boundary (document picker, system shee
 build the same screen twice.
 
 Common to all three patterns, and non-negotiable here, are a written wire contract (owned by
-`../aq-parquet/docs/shared/`), one source of design tokens, and platform adapters behind narrow
+`../opensensor-space-firmware/docs/shared/`), one source of design tokens, and platform adapters behind narrow
 interfaces.
 
 ## Sync parity
@@ -84,7 +84,7 @@ flowchart LR
 ### Rules
 
 1. **The contract first.** A frame layout, opcode, error code, name rule or retry rule comes from
-   `../aq-parquet/docs/shared/ble-sync-protocol.md`. Read it before changing either platform. If
+   `../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`. Read it before changing either platform. If
    the code disagrees with it, the code is wrong.
 2. **One engine.** The download loop (list, open, read windows, retry a failed window from the
    phone's own offset, close, verify, commit) runs in shared Kotlin on both phones. Platform code
@@ -112,7 +112,7 @@ flowchart LR
 
 ### Adding a transport (example, L2CAP or USB)
 
-1. Confirm the firmware contract supports it (`../aq-parquet/docs/shared/`).
+1. Confirm the firmware contract supports it (`../opensensor-space-firmware/docs/shared/`).
 2. Implement `LinkDriver` on each platform that needs it and feed the connection's `LinkSession` through `FrameSink`. Declare
    `payloadMax` and capabilities.
 3. Add the transport choice to the shared transport selection policy and its tests.
@@ -477,7 +477,7 @@ Both apps keep the raw command denylist (`REBOOT`, `SET_CONFIG`) and frame redac
 
 ## Checklist for a cross-platform change
 
-- [ ] Contract checked in `../aq-parquet/docs/shared/` when the change touches the wire.
+- [ ] Contract checked in `../opensensor-space-firmware/docs/shared/` when the change touches the wire.
 - [ ] Shared rule in `commonMain`, tested in `commonTest`.
 - [ ] Platform adapters only map OS behaviour to a port.
 - [ ] Design uses tokens, no raw colours or sizes in screens.

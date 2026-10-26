@@ -2,7 +2,7 @@ package space.opensensor.model
 
 /**
  * The board templates and app profiles the app ships, read from the raw JSON files under
- * `core/model/bundled`. `templates/` is a verbatim copy of aq-parquet `docs/shared/templates`, one
+ * `core/model/bundled`. `templates/` is a verbatim copy of opensensor-space-firmware `docs/shared/templates`, one
  * `<board>/<dict>.json` per board and the `index.json` that maps each `dict` to its file and `desc`, so
  * a new digest is a folder copy and a fixture refresh with no code change. Only the current digest of
  * each board is bundled. An unknown digest resolves only through a served template, and then renders

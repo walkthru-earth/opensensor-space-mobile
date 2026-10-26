@@ -1,6 +1,6 @@
 # Agent map — opensensor.space mobile (Android + iOS)
 
-Mobile companion for `../aq-parquet`. Android and iOS apps live in this repository with
+Mobile companion for `../opensensor-space-firmware`. Android and iOS apps live in this repository with
 shared Kotlin modules. The Gradle project is `opensensor-space-mobile`. The Android
 application ID and the iOS bundle ID are `space.opensensor.app`. All Kotlin code lives under
 the `space.opensensor` package.
@@ -10,7 +10,7 @@ concern you are changing in `docs/README.md`.
 
 | Task | Open next | Code |
 | --- | --- | --- |
-| Current status and real-phone evidence | `docs/status.md`, then `../aq-parquet/docs/boards/*/bench-verified.md` | — |
+| Current status and real-phone evidence | `docs/status.md`, then `../opensensor-space-firmware/docs/boards/*/bench-verified.md` | — |
 | Cross-platform design and sync rules | `docs/cross-platform-guide.md` | `core/`, `app/`, `ios/` |
 | Device families, sensor-agnostic model, public H3 discover map | `docs/devices-and-discovery.md` | `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/` |
 | iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios.md`, `ios/AGENTS.md` | `core/`, `ios/` |
@@ -23,7 +23,7 @@ concern you are changing in `docs/README.md`.
 
 ## Boundaries
 
-- The wire and telemetry contracts belong to `../aq-parquet/docs/shared/`. Resolve
+- The wire and telemetry contracts belong to `../opensensor-space-firmware/docs/shared/`. Resolve
   ambiguity there before changing this app's mirror. `ble-sync-protocol.md` owns
   the wire contract. Mobile requires `proto >= 3`. Preserve frame layouts,
   opcodes, UUIDs, JSON keys and Hive archive paths across both repositories.

@@ -10,7 +10,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 
 /**
- * JSON characteristic payloads from ../aq-parquet/docs/shared/ble-sync-protocol.md.
+ * JSON characteristic payloads from ../opensensor-space-firmware/docs/shared/ble-sync-protocol.md.
  *
  * Every field is nullable on purpose: "absent keys mean null (invalid/unavailable), never zero".
  * Unknown keys are ignored so a newer firmware does not break an older phone.
@@ -101,7 +101,7 @@ data class DeviceStatus(
     val dc: Int? = null,
     /** Protocol 3. The latest [DisconnectReason] code, absent while [dc] is 0. */
     val dr: Int? = null,
-    /** Card state from walkthru-earth/aq-parquet#5, 0 ready, 1 degraded, 2 full, 3 retrying after an error. */
+    /** Card state from walkthru-earth/opensensor-space-firmware#5, 0 ready, 1 degraded, 2 full, 3 retrying after an error. */
     @SerialName("sd_state") val sdState: Int? = null,
 ) {
     val utcSynced: Boolean get() = utc == 1

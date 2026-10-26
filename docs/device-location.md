@@ -28,7 +28,7 @@ the original fix; the app requires a new fix. Firmware applies the maximum again
 before saving and derives the published center from the retained cell. Country
 is declared by the owner, not inferred from the cell or used as NTP residency
 proof. Exact GPS, cell-center coordinates and administrative country are different
-things. See the firmware-owned [time/location contract](../../aq-parquet/docs/shared/time-and-location.md).
+things. See the firmware-owned [time/location contract](../../opensensor-space-firmware/docs/shared/time-and-location.md).
 
 ## Code boundaries
 

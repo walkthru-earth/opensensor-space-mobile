@@ -167,7 +167,7 @@ whole output tree. The protocol's archive namespace remains the thing from the c
 session's INFO, while the original Hive path and Parquet thing metadata describe the file's
 own generation. These can differ. Do not silently reparent old files or relabel their rows as
 the current generation. Collection routing and history interpretation must preserve that distinction
-([canonical firmware contract](../../aq-parquet/docs/shared/ble-sync-protocol.md#phone-sync-algorithm)).
+([canonical firmware contract](../../opensensor-space-firmware/docs/shared/ble-sync-protocol.md#phone-sync-algorithm)).
 
 No destructive fallback. Every version's JSON is exported to `core/database/schemas/`. Token encryption does
 not change the SQL schema: `SecureKnownDeviceDao` encrypts new values with AES-256-GCM under a

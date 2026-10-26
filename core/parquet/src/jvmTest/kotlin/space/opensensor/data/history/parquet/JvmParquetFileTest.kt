@@ -19,7 +19,7 @@ class JvmParquetFileTest {
     @Test
     fun `file open reads the same values as wrap`() {
         val bytes = fixtureBytes(device)
-        val tmp = File.createTempFile("aq-parquet", ".parquet").apply { deleteOnExit(); writeBytes(bytes) }
+        val tmp = File.createTempFile("opensensor", ".parquet").apply { deleteOnExit(); writeBytes(bytes) }
         val opened = ParquetFile.open(tmp)
         assertEquals(tmp.name, opened.source)
         val wrapped = ParquetFile.wrap(bytes)
@@ -33,7 +33,7 @@ class JvmParquetFileTest {
     @Test
     fun `file reader serves absolute ranges from many threads`() {
         val bytes = fixtureBytes(device)
-        val tmp = File.createTempFile("aq-parquet", ".parquet").apply { deleteOnExit(); writeBytes(bytes) }
+        val tmp = File.createTempFile("opensensor", ".parquet").apply { deleteOnExit(); writeBytes(bytes) }
         val reader = LocalFileReader(tmp)
         assertEquals(bytes.size.toLong(), reader.size)
         val threads = (0 until 8).map { t ->
@@ -50,7 +50,7 @@ class JvmParquetFileTest {
 
     @Test
     fun `a closed file reader refuses reads`() {
-        val tmp = File.createTempFile("aq-parquet", ".parquet").apply { deleteOnExit(); writeBytes(fixtureBytes(device)) }
+        val tmp = File.createTempFile("opensensor", ".parquet").apply { deleteOnExit(); writeBytes(fixtureBytes(device)) }
         val reader = LocalFileReader(tmp)
         ParquetFile.open(reader, tmp.name).use { assertEquals(90L, it.metadata.numRows) }
 
@@ -61,7 +61,7 @@ class JvmParquetFileTest {
 
     @Test
     fun `a directory is refused at open, as the mapping refused it`() {
-        val dir = kotlin.io.path.createTempDirectory("aq-parquet").toFile().apply { deleteOnExit() }
+        val dir = kotlin.io.path.createTempDirectory("opensensor").toFile().apply { deleteOnExit() }
         assertThrows(java.io.FileNotFoundException::class.java) { LocalFileReader(dir) }
     }
 
@@ -72,7 +72,7 @@ class JvmParquetFileTest {
      */
     @Test
     fun `opened files hold no mapping and give their descriptor back on close`() {
-        val tmp = File.createTempFile("aq-parquet", ".parquet").apply { deleteOnExit(); writeBytes(fixtureBytes(device)) }
+        val tmp = File.createTempFile("opensensor", ".parquet").apply { deleteOnExit(); writeBytes(fixtureBytes(device)) }
         val os = ManagementFactory.getOperatingSystemMXBean() as UnixOperatingSystemMXBean
         val mapped = ManagementFactory.getPlatformMXBeans(BufferPoolMXBean::class.java).single { it.name == "mapped" }
         val mappedBefore = mapped.count

@@ -57,11 +57,11 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   families arrive as data (a measurement dictionary and a family entry), never as
   a code branch or a schema string check in a screen. `:core:model` holds
   the data model (#183) and the bundled board templates and app profiles under
-  `core/model/bundled/` (#184). `bundled/templates/` is aq-parquet `docs/shared/templates` copied
+  `core/model/bundled/` (#184). `bundled/templates/` is opensensor-space-firmware `docs/shared/templates` copied
   byte for byte (marked `-text`, excluded from the whitespace hooks), and `BundledTemplateBytesTest`
   checks each file's SHA-256 against its `index.json` desc and its pinned hash, `index.json`
   included, so never reformat it and update the pins with each copy. A re-copy is
-  `rsync -a --delete ../aq-parquet/docs/shared/templates/ core/model/bundled/templates/`. LIVE (`LiveReading`, #185), the batch estimate and
+  `rsync -a --delete ../opensensor-space-firmware/docs/shared/templates/ core/model/bundled/templates/`. LIVE (`LiveReading`, #185), the batch estimate and
   History read them. History builds each `MetricSpec` from a template datastream
   and the profile (`Metrics.of`), and reads each file by the template of its
   `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by

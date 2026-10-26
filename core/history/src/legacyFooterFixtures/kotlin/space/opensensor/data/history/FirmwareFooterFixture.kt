@@ -5,7 +5,7 @@ package space.opensensor.data.history
 
 /**
  * A full stac-opensensor v0.1.0 `opensensor` footer value, shaped member for member like the footer
- * firmware writes (aq-parquet #105), naming [dict], [desc], [intervalMs], [thing], [mobility], [purpose] and [boot]. A null
+ * firmware writes (opensensor-space-firmware#105), naming [dict], [desc], [intervalMs], [thing], [mobility], [purpose] and [boot]. A null
  * leaves that member out. [thing] and [mobility] are required by the contract, so they are always written. The firmware version is a placeholder, so no test pins a release string.
  * Every member the app does not read is there so the reader is shown to ignore it.
  */

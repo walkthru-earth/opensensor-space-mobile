@@ -3,7 +3,7 @@
 
 Run from the firmware repo so its pixi environment (PyArrow, DuckDB) is used:
 
-    cd ../aq-parquet && pixi run python -I ../opensensor-space-mobile/tools/make_encoding_fixtures.py
+    cd ../opensensor-space-firmware && pixi run python -I ../opensensor-space-mobile/tools/make_encoding_fixtures.py
 
 What it writes to `core/parquet/src/test/resources/parquet/encodings/`:
 

@@ -269,7 +269,7 @@ and progress remain per device. Worker cancellation closes only that run's sessi
 The proto 3 firmware has one logical file handle per BLE connection and per LAN peer.
 Android still prevents endpoint aliases from concurrently claiming one physical device on
 the same phone. This phone policy is separate from firmware's independent peer handles.
-The owner contract is [`../aq-parquet/docs/shared/ble-sync-protocol.md`](../../aq-parquet/docs/shared/ble-sync-protocol.md).
+The owner contract is [`../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`](../../opensensor-space-firmware/docs/shared/ble-sync-protocol.md).
 
 The archive's one `DeviceCoordinator` (`core/sync`), through its writer lease in `SyncEngine`, serializes the entire OPEN/read/verify/commit/index/CLOSE sequence for
 one `(thing, name)`, with cancellable waiters; different identities transfer independently.
@@ -284,7 +284,7 @@ worker browses.
 These changes are covered by host tests (`AutoSyncRunnerTest`, `DeviceOwnershipTest`,
 `ConcurrentArchiveTest`, `LanTransferLeasesTest`). Simultaneous physical-device collection and the
 new Android plumbing have **not been verified on hardware**. Historical phone measurements remain
-in the [CoreS3 bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md).
+in the [CoreS3 bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md).
 
 History derives a grouped day once with `DayPass`, producing tiers and daily Parquet.
 Android uses derive version 5. Its collection plans use projected thing archive identities rather

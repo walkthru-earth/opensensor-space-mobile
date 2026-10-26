@@ -2,16 +2,16 @@
 
 **Scope:** a dated log of what was checked and where. Host tests, the iOS simulator, an Android phone and an iPhone are kept apart, and anything not recorded here or in a board bench file is unverified.
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
-**Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
+**Related:** measured device behaviour is recorded in the board-specific `../opensensor-space-firmware/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
 ## 2026-10-26, Thing contract and dictionary v7 templates (code only)
 
 Host tests and the iOS simulator only. No phone run is recorded.
 
-- The bundled templates are byte copies of aq-parquet 9915aec `docs/shared/templates`, CoreS3
+- The bundled templates are byte copies of opensensor-space-firmware 9915aec `docs/shared/templates`, CoreS3
   (`3b4d8500…`, firmware v6.21) and Waveshare (`50a53393…`, firmware v2.15). The two H3 centre
   columns become `location_source` and `geometry`. The v6 digests are retired.
-- To check on phones. LIVE and History on boards flashed from aq-parquet main.
+- To check on phones. LIVE and History on boards flashed from opensensor-space-firmware main.
 
 ## 2026-10-26, History reads template datastreams (code only)
 
@@ -81,7 +81,7 @@ the owner's approval. Host tests, the iOS simulator build and `verify` only. No 
 ## 2026-10-16, firmware MICROS columns, field ids and LIVE keys (code only)
 
 Branch `yharby/firmware-parquet-micros-live-keys`, for CoreS3 v6.12 and Waveshare v2.6 from
-aq-parquet `integration/waveshare-bench` (PRs 20, 21 and 22, draft). Host tests, the iOS simulator
+opensensor-space-firmware `integration/waveshare-bench` (PRs 20, 21 and 22, draft). Host tests, the iOS simulator
 build and `verify` only. No phone run against the new firmware yet.
 
 - Parquet. `event_time_utc_us` and `clock_anchor_utc_us` are read by their `TIMESTAMP` unit, MICROS
@@ -536,7 +536,7 @@ Google Play services and may download its module at first use; manual entry need
 
 `./gradlew --no-daemon clean verify` (2026-09-30): **247 tests passed, zero skipped or failed** across
 `:app` and the three `:core` modules of that date; zero lint errors. The debug APK builds.
-The optional real-archive test now finds the sibling `aq-parquet` checkout and
+The optional real-archive test now finds the sibling `opensensor-space-firmware` checkout and
 decoded all 767 local Parquet files (67,442 rows) instead of silently skipping
 that corpus. The stdlib SQLite migration validator passes against v8/v9 exports.
 These are host checks. Hardware results are in the dated entries below.
@@ -569,7 +569,7 @@ archive and verified”; the phone archive count rose from 1,399 to 1,400. This
 is a one-file transfer and UI lifecycle check, not a full-archive throughput,
 LAN, screen-off sync or multi-device qualification. The board had no UTC anchor,
 so those new readings were archived without invented calendar times. See the
-[Waveshare bench record](../../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md).
+[Waveshare bench record](../../opensensor-space-firmware/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md).
 
 ## USB installation and stale pairing (2026-09-29)
 
@@ -584,7 +584,7 @@ AQ-7500's automatic BLE reconnect failed: Android recorded GATT status 5 and
 Waveshare had been reflashed/erased after pairing. Its USB console answered `parquet status`
 without a reset; no firmware, time, configuration or bond changes were made. Current image
 SHA-256 was not measured, so no firmware-specific transfer result is claimed. See the
-[Waveshare bench record](../../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md).
+[Waveshare bench record](../../opensensor-space-firmware/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md).
 The owner then entered the physical USB owner PIN. Android reported BOND_BONDED and BLE
 MTU 517; the app verified INFO and displayed current PM2.5, ambient temperature and humidity.
 The station changed from `7abe1b6b-e014-42e7-b259-bf61cee9f288` to
@@ -614,16 +614,16 @@ with Waveshare firmware image SHA-256
 `63951c913b0995ee7d2180a68fb4fc995202b48cfe6741655909e2b420febc0c`.
 The app was in Simple view; switching to Detailed showed **100% / 4,277 mV** in Today's Battery
 card while current sensor readings updated. No app source or APK change was needed. The
-screenshot at `../../aq-parquet/firmware/arduino-waveshare-sim7670g/artifacts/battery-android-live-20260930.png`
+screenshot at `../../opensensor-space-firmware/firmware/arduino-waveshare-sim7670g/artifacts/battery-android-live-20260930.png`
 (SHA-256 `8080782f9cc55761599a8dd92354a05c93c43ec7c972f66bc88734fdb61bc988`)
 is retained in the firmware trial's git-ignored artifacts; the
-[Waveshare bench record](../../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md)
+[Waveshare bench record](../../opensensor-space-firmware/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md)
 has the board-side evidence. This first display observation was USB-attached. After USB was
 unplugged, AQ-7500 remained connected over Bluetooth and the Detailed Battery card showed
 **100% / 4,067 mV**, with changed particle and ambient readings, status age 4 s and uptime
 12m50s. This verifies a fresh battery-only app readout on the same phone and firmware image.
 The second screenshot is retained at
-`../../aq-parquet/firmware/arduino-waveshare-sim7670g/artifacts/battery-android-live-battery-only-20260930.png`
+`../../opensensor-space-firmware/firmware/arduino-waveshare-sim7670g/artifacts/battery-android-live-battery-only-20260930.png`
 (322,123 bytes; SHA-256 `70250dffca9867bc284612c9e0a89a6d47e1569a789bd75810856b84a102d78f`).
 Neither run captured a raw GATT packet or transferred a file. The 100% value is the gauge's
 capped estimate, not a capacity-calibration result. Charging state remains unknown; the board
@@ -678,8 +678,8 @@ The focused History presentation tests and `./gradlew --no-daemon verify` passed
   unrelated failures still surface. Covered by focused JVM tests; not yet exercised on a phone or
   across a real device-to-device transfer.
 - **2026-09-19**, **Post-sync `LIST` no longer dies with the link.** Seen on the phone after a completed sync: "LIST failed: link lost while waiting for a response" replaced the whole file list. Cause: the refresh was launched after `running = false`, i.e. after the foreground service let go of the uid, so the socket was killed under it (transport of that run not recorded, LAN + backgrounded phone fits; confirm with `adb logcat -s SyncEngine SyncFgs ConnectivityService` on the next run). The re-list now runs inside the protected run; `ManifestState` keeps the last listing through `Loading`/`Error` (`ManifestStateTest`), so the Files screen shows "Refresh failed: …, showing the last listing." instead of a blank list, and `plan` stays usable. Not yet on the phone.
-- **2026-09-18** (14:03 local), app `678c1c0` (APK `3c454c74…`) installed on the OnePlus over Wi-Fi adb against firmware `-v6.3`; **first device-flagged wake measured**, see the firmware repo's [bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#board-1-advertising-payload-wakes-the-phone-firmware-v63-protocol-21). `setForeground` still refused (no companion association yet); Wi-Fi callback fires at every process start and is throttled as designed.
-- **2026-09-18** (evening), **Event-driven Auto-sync** ([background-sync.md](background-sync.md#triggers--starting-a-run-before-the-period-is-up)): Companion Device Manager "wake when nearby" (association dialog on the Device screen, `CompanionPresenceService`, `REQUEST_COMPANION_*` exemptions, Room v8 `companionAssociationId`), offloaded advertising-flag scan on the firmware's new protocol-2.1 service data (`Advertisement`, `AdvertFlagScan`), Wi-Fi-arrival LAN-only run (`SyncTriggers`), `SyncTrigger` on every one-time run. 151 tests, lint clean. **Not yet on the phone**; design and measurement list in `../aq-parquet/docs/shared/background-sync-triggers.md`.
+- **2026-09-18** (14:03 local), app `678c1c0` (APK `3c454c74…`) installed on the OnePlus over Wi-Fi adb against firmware `-v6.3`; **first device-flagged wake measured**, see the firmware repo's [bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#board-1-advertising-payload-wakes-the-phone-firmware-v63-protocol-21). `setForeground` still refused (no companion association yet); Wi-Fi callback fires at every process start and is throttled as designed.
+- **2026-09-18** (evening), **Event-driven Auto-sync** ([background-sync.md](background-sync.md#triggers--starting-a-run-before-the-period-is-up)): Companion Device Manager "wake when nearby" (association dialog on the Device screen, `CompanionPresenceService`, `REQUEST_COMPANION_*` exemptions, Room v8 `companionAssociationId`), offloaded advertising-flag scan on the firmware's new protocol-2.1 service data (`Advertisement`, `AdvertFlagScan`), Wi-Fi-arrival LAN-only run (`SyncTriggers`), `SyncTrigger` on every one-time run. 151 tests, lint clean. **Not yet on the phone**; design and measurement list in `../opensensor-space-firmware/docs/shared/background-sync-triggers.md`.
 
 - **2026-09-18** (later), Files list grouped by **local calendar day** (`FileGrouping`, zone-pinned tests): the headers were the SD card's UTC `day=` folder, so at UTC+3 every file after 21:00 local sat under tomorrow. Header subtitle names the UTC folder(s); each row shows its local start time. Installed on the OnePlus (commit `c6c27cd`), not yet recorded in bench-verified.
 - **2026-09-18**, bugs found on the phone, fixed: `derived_day` upsert that never updated (every pass rebuilt every day), Today card on the UTC day, History span frozen at open time, Day re-read on every Room write. Day view → **24 hourly columns**; Files gained **Chart by file**.
@@ -698,7 +698,7 @@ The focused History presentation tests and `./gradlew --no-daemon verify` passed
 2. **Auto-sync overnight on the OnePlus**: count 15-min periods that ran (`adb logcat -s AutoSyncScheduler SyncWorker CompanionPresence AdvertFlagScan SyncTriggers`), whether `setForeground` was refused, whether BLE-by-address connects with the screen off; record OEM battery settings needed. **Triggers first:** the owner taps *Set up wake when nearby*, does the association dialog find the advertising logger; does `EVENT_BLE_APPEARED` arrive after walking back in; does a screen-off LAN sync survive with the device present (no "Destroyed live tcp sockets") and does `setForeground` stop being refused. The flag scan firing within a minute of `PARQUET READY` is measured (19 s, one event); repeat for a distribution and after a Bluetooth toggle.
 3. **API 37 local-network permission** on a real Android 17 device (grant / deny / revoke while connected) and `NsdManager` across API 31–37.
 4. **Further transports** (LoRa relays) behind `DeviceTransport`; engine, archive, verification unchanged.
-5. **Opt-in cloud step after local sync**, off by default, own setting and review; `INTERNET` for LAN does not pre-approve it. Privacy boundaries: `../aq-parquet/product/mobile-architecture.md`.
+5. **Opt-in cloud step after local sync**, off by default, own setting and review; `INTERNET` for LAN does not pre-approve it. Privacy boundaries: `../opensensor-space-firmware/product/mobile-architecture.md`.
 
 ## Test phone
 
@@ -735,7 +735,7 @@ Bonjour discovery of `aq-6b40` on the iPhone. After reporting that the other pho
 was disconnected, the owner confirmed a Bluetooth connection and visible live
 readings in the iOS app. This is owner-reported foreground behavior, not a
 captured wire trace or a comparison of values with the board. The corresponding
-[CoreS3 bench note](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--first-ios-companion-phone-observation)
+[CoreS3 bench note](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--first-ios-companion-phone-observation)
 records the evidence and its limits. A fresh pairing/PIN flow, notification
 cadence, STATUS updates, stale timeout and foreground/background behavior still
 need qualification. At that first-stage commit, the iOS app was a foreground live reader only:
@@ -838,7 +838,7 @@ storage work through queue-first signaling, preserving sample/command fairness
 and radio/security settings. Sanitized scheduling, LAN, archive and control gates,
 format/lint, both board builds and the generic logger build passed. An additional
 Waveshare schema gate fails at an existing firmware-identity assertion in unrelated
-pending schema work. See its [performance guide](../../aq-parquet/docs/shared/lan-performance.md).
+pending schema work. See its [performance guide](../../opensensor-space-firmware/docs/shared/lan-performance.md).
 Firmware has not been installed for this change; a sensor restart requires owner
 confirmation. Hardware throughput and sampling/coexistence results remain pending.
 
@@ -863,7 +863,7 @@ another initial undrained baseline took 33.672 seconds with client count unknown
 Different loads/client counts prevent claiming a controlled phone speed multiplier.
 
 Exact application/ELF and backup hashes, timings and limits are in the
-[CoreS3 bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--cores3-v67-lan-latency-and-usb-backpressure).
+[CoreS3 bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--cores3-v67-lan-latency-and-usb-backpressure).
 The enhanced iPhone app remains installed with average KiB/s feedback. Actual
 Android/iPhone throughput after the firmware upgrade still needs phone observations;
 these are real-board host measurements, not phone or sustained-radio qualification.
