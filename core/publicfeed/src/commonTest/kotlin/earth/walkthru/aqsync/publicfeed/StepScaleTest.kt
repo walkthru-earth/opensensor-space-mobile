@@ -78,6 +78,14 @@ class StepScaleTest {
     }
 
     @Test
+    fun aTopTooSmallForOneUnitHasNoBins() {
+        val s = StepScale.of("pm25", DiscoverCollection.BUNDLED.scale("pm25")!!)!!
+        // Just inside the rounding slack of zero half units, so the top rounds to zero and the bin
+        // search would divide by it.
+        assertNull(StepAxis.bins(s, 4.9e-10))
+    }
+
+    @Test
     fun onlyASixStepOpenScaleCitedToWhoIsTheMoodScale() {
         val pm = DiscoverCollection.BUNDLED.scale("pm25")!!
         assertNotNull(StepScale.of("pm25", pm)!!.who)

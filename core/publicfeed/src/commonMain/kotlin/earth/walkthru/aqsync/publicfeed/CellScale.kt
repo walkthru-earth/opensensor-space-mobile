@@ -178,6 +178,8 @@ object StepAxis {
         val units = inside.map { it / unit }
         if (units.any { abs(it - it.roundToLong()) > EPS }) return null
         val top = units.last().roundToLong()
+        // A top below half a unit rounds to zero and has no bins, and it would divide by zero below.
+        if (top <= 0L) return null
         // Bounded by the bin counts and the steps, never by the size of [high].
         val fits = (MIN_BINS..MAX_BINS).filter { n -> top % n == 0L && units.all { it.roundToLong() % (top / n) == 0L } }
         return fits.filter { it <= 24 }.maxOrNull() ?: fits.minOrNull()
