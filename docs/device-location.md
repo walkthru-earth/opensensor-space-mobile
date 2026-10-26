@@ -1,6 +1,6 @@
 # Private device location
 
-Device settings can provision the monitoring station's H3 area over the existing
+Device settings can provision the monitoring thing's H3 area over the existing
 authenticated BLE or LAN session. This is available in shared Android/iOS UI on
 firmware that supports GET_CONFIG page 1. Legacy firmware shows unsupported.
 
@@ -36,11 +36,11 @@ things. See the firmware-owned [time/location contract](../../aq-parquet/docs/sh
 - `feature/device` owns shared draft/readback behavior and permission-triggered UI.
 - Its Android and iOS source sets own the temporary OS fix, cancellation and H3
   conversion. Android repository and iOS bridge retain their existing command guards.
-- `DeviceCapabilities` reads LIVE through the station of the `info.dict` digest, from the
+- `DeviceCapabilities` reads LIVE through the thing of the `info.dict` digest, from the
   bundled board templates in `core/model/bundled`. Only the current digest of each board is
   bundled. An older or unknown digest still syncs verified files but has no LIVE view.
 
 Cross-platform host and simulator gates verify parsing, old firmware behavior,
 coarsening, late-fix suppression and readback decisions. A phone run beside a
-real station is still required to qualify permission timing, OS fix quality and
+real thing is still required to qualify permission timing, OS fix quality and
 radio behavior. No phone evidence is claimed by these host checks.

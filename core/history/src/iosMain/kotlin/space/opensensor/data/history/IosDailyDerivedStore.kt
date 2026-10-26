@@ -50,7 +50,7 @@ import kotlin.time.Instant
 
 /**
  * Atomic on-disk daily Parquet cache for iOS. [root] is `Library/Caches` (#61), which iOS may purge
- * and never backs up; the shared layout puts files in `derived/v1/<station>/day=YYYY-MM-DD.parquet`.
+ * and never backs up; the shared layout puts files in `derived/v1/<thing>/day=YYYY-MM-DD.parquet`.
  * Rebuild runs after index repair on startup, after downloads and after durable clock receipts
  * arrive. It needs no network. Temps commit with [AtomicFiles.commitReplace] as Rebuildable data
  * (#60). Pass the app's [AtomicFiles], whose temp directory is on the same volume.
@@ -76,18 +76,18 @@ class IosDailyDerivedStore(
 
     /** Rebuild changed UTC days, remove obsolete partitions, and return the daily paths present now. */
     suspend fun rebuild(
-        station: String,
+        thing: String,
         files: List<ArchiveRecord>,
         archive: ArchiveStore,
         anchors: Map<String, TimeEstimate.Anchor>,
         nowEpochS: Long,
     ): List<String> = withContext(Dispatchers.IO) {
         mutex.withLock {
-            val directory = checked("$root/${ArchiveLayout.derivedStationDir(station)}")
+            val directory = checked("$root/${ArchiveLayout.derivedThingDir(thing)}")
             check(fm.createDirectoryAtPath(directory, true, protection, null)) { "cannot create derived directory" }
-            val records = files.filter { it.station == station && it.isIndexed && it.isTelemetry }
-            // One pass over the station's records for every day, not a filter per day (#63).
-            val byDay = StationDays.sourcesByDay(records) { it }
+            val records = files.filter { it.thing == thing && it.isIndexed && it.isTelemetry }
+            // One pass over the thing's records for every day, not a filter per day (#63).
+            val byDay = ThingDays.sourcesByDay(records) { it }
             val paths = mutableListOf<String>()
             // Day files this pass keeps, built or evicted. Everything else in the directory is stale.
             val kept = HashSet<String>()
@@ -95,8 +95,8 @@ class IosDailyDerivedStore(
                 val sources = byDay.getValue(day)
                 val complete = nowEpochS >= (day + 1) * 86_400 + DailyParquetBuilder.COMPLETE_GRACE_S
                 val signature = signature(sources, anchors, complete)
-                val target = checked("$root/${ArchiveLayout.derivedDayPath(station, day)}")
-                val manifest = checked("$root/${ArchiveLayout.derivedManifestPath(station, day)}")
+                val target = checked("$root/${ArchiveLayout.derivedDayPath(thing, day)}")
+                val manifest = checked("$root/${ArchiveLayout.derivedManifestPath(thing, day)}")
                 if (cachedSignature(manifest) == signature) {
                     if (isFile(target)) paths += target
                     kept += target.substringAfterLast('/')
@@ -108,13 +108,13 @@ class IosDailyDerivedStore(
                     val daily = sources.map { source -> DailyParquetSource(source) { ParquetFile.open(archive.reader(source.key)) } }
                     val sink = FileSink(temporary)
                     val pass = try {
-                        DayPass.run(station, day, daily, sink, anchors, nowEpochS, templates = templates)
+                        DayPass.run(thing, day, daily, sink, anchors, nowEpochS, templates = templates)
                     } finally {
                         sink.close()
                     }
                     val result = pass.daily
                     if (pass.failedSources.isEmpty()) {
-                        tierStore.save(station, day, ArchiveHistoryTiers.signature(sources), TierStore.fromBuckets(pass.buckets))
+                        tierStore.save(thing, day, ArchiveHistoryTiers.signature(sources), TierStore.fromBuckets(pass.buckets))
                     }
                     pass.dailyError?.let { throw it }
                     if (result == null) {
@@ -127,7 +127,7 @@ class IosDailyDerivedStore(
                     // A crash between the two commits must leave no receipt claiming older bytes.
                     remove(manifest)
                     atomic.commitReplace(temporary, target, StorageClass.Rebuildable)
-                    writeManifest(manifest, station, day, result, signature, nowEpochS)
+                    writeManifest(manifest, thing, day, result, signature, nowEpochS)
                     paths += target
                     kept += target.substringAfterLast('/')
                 } finally {
@@ -135,8 +135,8 @@ class IosDailyDerivedStore(
                 }
             }
             // A day that a record still waiting for its index may fill again is not stale yet (#87).
-            val held = StationDays.held(files.filter { it.station == station })
-            for (day in held.days) kept += ArchiveLayout.derivedDayPath(station, day).substringAfterLast('/')
+            val held = ThingDays.held(files.filter { it.thing == thing })
+            for (day in held.days) kept += ArchiveLayout.derivedDayPath(thing, day).substringAfterLast('/')
             val names = if (held.all) emptyList() else fm.contentsOfDirectoryAtPath(directory, null).orEmpty().filterIsInstance<String>()
             for (name in names) {
                 if (!name.startsWith("day=")) continue
@@ -151,11 +151,11 @@ class IosDailyDerivedStore(
         }
     }
 
-    override suspend fun open(station: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): LocalRangeSource? =
+    override suspend fun open(thing: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): LocalRangeSource? =
         withContext(Dispatchers.IO) {
             mutex.withLock {
-                val target = checked("$root/${ArchiveLayout.derivedDayPath(station, epochDay)}")
-                val cached = cachedSignature(checked("$root/${ArchiveLayout.derivedManifestPath(station, epochDay)}")) ?: return@withLock null
+                val target = checked("$root/${ArchiveLayout.derivedDayPath(thing, epochDay)}")
+                val cached = cachedSignature(checked("$root/${ArchiveLayout.derivedManifestPath(thing, epochDay)}")) ?: return@withLock null
                 // Completeness changes the receipt, not the rows, either one is current.
                 if (cached != signature(sources, anchors, true) && cached != signature(sources, anchors, false)) return@withLock null
                 // The constructor opens its descriptor here, before a rebuild can replace the path.
@@ -191,9 +191,9 @@ class IosDailyDerivedStore(
         }
     }
 
-    private fun writeManifest(path: String, station: String, day: Long, result: DailyParquetResult, signature: String, nowEpochS: Long) {
+    private fun writeManifest(path: String, thing: String, day: Long, result: DailyParquetResult, signature: String, nowEpochS: Long) {
         val json = buildJsonObject {
-            put("station", station)
+            put("thing", thing)
             put("day", ArchiveLayout.dayLabel(day))
             put("rows", result.rows)
             put("columns", buildJsonArray { result.columns.forEach { add(JsonPrimitive(it)) } })

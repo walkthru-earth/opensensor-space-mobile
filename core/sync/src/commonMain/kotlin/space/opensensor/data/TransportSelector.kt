@@ -2,8 +2,8 @@ package space.opensensor.data
 
 /**
  * The pure part of choosing a pipe for a connect (contract, "LAN transport"). LAN is tried only
- * when the device's station is discovered on this network and a token is stored, else Bluetooth.
- * The caller looks the station up in its discovery map and resolves the host; this decides the
+ * when the device's thing is discovered on this network and a token is stored, else Bluetooth.
+ * The caller looks the thing up in its discovery map and resolves the host; this decides the
  * rest from plain values, so both apps apply the same rule.
  */
 object TransportSelector {
@@ -12,7 +12,7 @@ object TransportSelector {
      *
      * [knownDeviceId] is the pinned hardware id and [advertisedDev] the mDNS `dev` TXT value. A
      * pinned id that differs from the advertisement means another board answers under this
-     * station, so LAN is skipped. A missing or out-of-range [advertisedPort] falls back to the
+     * thing, so LAN is skipped. A missing or out-of-range [advertisedPort] falls back to the
      * port stored with the token.
      */
     fun lanPort(

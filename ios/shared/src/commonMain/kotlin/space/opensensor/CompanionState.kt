@@ -109,8 +109,8 @@ class CompanionState {
     internal var lanDevices by mutableStateOf<List<String>>(emptyList())
         private set
 
-    /** The station of each Wi-Fi service name, from its TXT record. */
-    internal var lanStations by mutableStateOf<Map<String, String>>(emptyMap())
+    /** The thing of each Wi-Fi service name, from its TXT record. */
+    internal var lanThings by mutableStateOf<Map<String, String>>(emptyMap())
         private set
     internal var lanScanning by mutableStateOf(false)
         private set
@@ -149,7 +149,7 @@ class CompanionState {
     fun lanSyncStarted(name: String) {
         lanRuns = lanRuns + (
             name to LanRunState(
-                station = lanInfo[name]?.station,
+                thing = lanInfo[name]?.thing,
                 running = true,
                 startedAtEpochMs = clock(),
             )
@@ -161,10 +161,10 @@ class CompanionState {
         lanRuns = lanRuns + (name to run.copy(running = false, interrupted = true, finishedAtEpochMs = clock()))
     }
 
-    internal fun connectedLanForStation(station: String?): String? =
-        station?.let { wanted ->
+    internal fun connectedLanForThing(thing: String?): String? =
+        thing?.let { wanted ->
             lanInfo.entries.firstOrNull { (name, info) ->
-                info.station == wanted && lanSessions[name]?.connected == true
+                info.thing == wanted && lanSessions[name]?.connected == true
             }?.key
         }
     fun lanCollectionPaused(name: String, paused: Boolean) {
@@ -214,7 +214,7 @@ class CompanionState {
         val previousRun = lanRuns[name]
         lanRuns = lanRuns + (
             name to LanRunState(
-                station = previousRun?.station ?: lanInfo[name]?.station,
+                thing = previousRun?.thing ?: lanInfo[name]?.thing,
                 running = false,
                 startedAtEpochMs = previousRun?.startedAtEpochMs,
                 finishedAtEpochMs = clock(),
@@ -240,7 +240,7 @@ class CompanionState {
         }
     }
 
-    /** Bluetooth file sync for the connected sensor. Available once INFO names its station. */
+    /** Bluetooth file sync for the connected sensor. Available once INFO names its thing. */
     internal var syncAvailable by mutableStateOf(false)
         private set
     internal var syncBusy by mutableStateOf(false)
@@ -331,12 +331,12 @@ class CompanionState {
 
     /**
      * An Auto-sync step holds this sensor, over Bluetooth by its peripheral [address] or over Wi-Fi
-     * by its [station]. Station pages then wait calmly and offer no Reconnect.
+     * by its [thing]. Thing pages then wait calmly and offer no Reconnect.
      */
-    internal fun heldInBackground(address: String, station: String?): Boolean {
+    internal fun heldInBackground(address: String, thing: String?): Boolean {
         val bluetoothId = selectedId ?: reconnectingId ?: failedId
         val overBluetooth = bluetoothBackground && bluetoothId.equals(address, ignoreCase = true)
-        val overWifi = station != null && lanBackground.any { lanStations[it] == station || lanInfo[it]?.station == station }
+        val overWifi = thing != null && lanBackground.any { lanThings[it] == thing || lanInfo[it]?.thing == thing }
         return overBluetooth || overWifi
     }
 
@@ -348,7 +348,7 @@ class CompanionState {
     fun lanInfoReceived(name: String, json: String) {
         if (lanSessions[name]?.connected != true) return
         val parsed = runCatching { DeviceInfo.parse(json) }.getOrNull() ?: return
-        if (requireProto3(parsed) !is ProtoGate.Accepted || parsed.dev.isNullOrBlank() || parsed.station.isNullOrBlank()) return
+        if (requireProto3(parsed) !is ProtoGate.Accepted || parsed.dev.isNullOrBlank() || parsed.thing.isNullOrBlank()) return
         lanInfo = lanInfo + (name to parsed)
     }
 
@@ -388,15 +388,15 @@ class CompanionState {
     fun lanScanStarted() {
         lanAccessDenied = false
         lanDevices = emptyList()
-        lanStations = emptyMap()
+        lanThings = emptyMap()
         lanScanning = true
         lanMessage = UiText.of(Res.string.companion_lan_looking)
     }
 
-    /** Like [lanDevicesFound], with the TXT station of each name, in the same order. */
-    fun lanSensorsFound(names: List<String>, stations: List<String>) {
+    /** Like [lanDevicesFound], with the TXT thing of each name, in the same order. */
+    fun lanSensorsFound(names: List<String>, things: List<String>) {
         if (!lanScanning) return
-        lanStations = names.zip(stations).toMap()
+        lanThings = names.zip(things).toMap()
         lanDevicesFound(names)
     }
 
@@ -433,7 +433,7 @@ class CompanionState {
     fun lanScanUnavailable() {
         lanScanning = false
         lanDevices = emptyList()
-        lanStations = emptyMap()
+        lanThings = emptyMap()
         lanMessage = UiText.of(Res.string.companion_lan_unavailable)
     }
 
@@ -575,7 +575,7 @@ class CompanionState {
 internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: UiText, val filesDone: Int, val filesTotal: Int, val bytesDone: Long, val bytesPerSecond: Double = 0.0, val bytesTotal: Long = 0)
 
 internal data class LanRunState(
-    val station: String?,
+    val thing: String?,
     val running: Boolean,
     val startedAtEpochMs: Long?,
     val finishedAtEpochMs: Long? = null,

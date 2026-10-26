@@ -1,30 +1,30 @@
 package space.opensensor.data.history
 
-/** One UTC station-day of tiers: resolution, then metric id, then the buckets in time order. */
+/** One UTC thing-day of tiers: resolution, then metric id, then the buckets in time order. */
 typealias DayTiers = Map<Resolution, Map<String, List<TierBucket>>>
 
 /**
- * Keeps each station-day's tier buckets under its source signature, so a new process reads the tiers
+ * Keeps each thing-day's tier buckets under its source signature, so a new process reads the tiers
  * without decoding any Parquet (#63). A cache: a missing, stale or unreadable entry is rebuilt from the
  * archive, and nothing here is ever the only copy of anything.
  */
 interface TierStore {
     /** The day's tiers when they were saved under [signature], otherwise null. */
-    suspend fun load(station: String, epochDay: Long, signature: String): DayTiers?
+    suspend fun load(thing: String, epochDay: Long, signature: String): DayTiers?
 
-    suspend fun save(station: String, epochDay: Long, signature: String, tiers: DayTiers)
+    suspend fun save(thing: String, epochDay: Long, signature: String, tiers: DayTiers)
 
-    /** Drops the station's saved days that are not in [days]. */
-    suspend fun retain(station: String, days: Set<Long>)
+    /** Drops the thing's saved days that are not in [days]. */
+    suspend fun retain(thing: String, days: Set<Long>)
 
-    /** The station's saved days, whatever their signature. */
-    suspend fun savedDays(station: String): Set<Long>
+    /** The thing's saved days, whatever their signature. */
+    suspend fun savedDays(thing: String): Set<Long>
 
     /**
      * The day's tiers with the signature they were saved under, whatever it is, otherwise null. History
-     * shows a day a waiting record holds this way, see [StationDays.kept].
+     * shows a day a waiting record holds this way, see [ThingDays.kept].
      */
-    suspend fun loadSaved(station: String, epochDay: Long): SavedDay?
+    suspend fun loadSaved(thing: String, epochDay: Long): SavedDay?
 
     companion object {
         /** The shared pass's buckets in the form used on disk and in the tier reader. */
@@ -36,11 +36,11 @@ interface TierStore {
 
         /** Keeps nothing, every process rebuilds its tiers from the archive. */
         val NONE: TierStore = object : TierStore {
-            override suspend fun load(station: String, epochDay: Long, signature: String): DayTiers? = null
-            override suspend fun save(station: String, epochDay: Long, signature: String, tiers: DayTiers) = Unit
-            override suspend fun retain(station: String, days: Set<Long>) = Unit
-            override suspend fun savedDays(station: String): Set<Long> = emptySet()
-            override suspend fun loadSaved(station: String, epochDay: Long): SavedDay? = null
+            override suspend fun load(thing: String, epochDay: Long, signature: String): DayTiers? = null
+            override suspend fun save(thing: String, epochDay: Long, signature: String, tiers: DayTiers) = Unit
+            override suspend fun retain(thing: String, days: Set<Long>) = Unit
+            override suspend fun savedDays(thing: String): Set<Long> = emptySet()
+            override suspend fun loadSaved(thing: String, epochDay: Long): SavedDay? = null
         }
     }
 }

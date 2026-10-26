@@ -59,10 +59,10 @@ class SecureKnownDeviceDao(
 
     override suspend fun clearLanTokenIfStored(address: String, expected: String): Int = delegate.clearLanTokenIfStored(address, expected)
 
-    override suspend fun recordConnection(address: String, name: String?, station: String?, deviceId: String?, firmware: String?, epochMs: Long) =
-        delegate.recordConnection(address, name, station, deviceId, firmware, epochMs)
+    override suspend fun recordConnection(address: String, name: String?, thing: String?, deviceId: String?, firmware: String?, epochMs: Long) =
+        delegate.recordConnection(address, name, thing, deviceId, firmware, epochMs)
 
-    override suspend fun findByStation(station: String): KnownDevice? = delegate.findByStation(station)
+    override suspend fun findByThing(thing: String): KnownDevice? = delegate.findByThing(thing)
 
     override suspend fun setAutoSync(address: String, enabled: Boolean) = delegate.setAutoSync(address, enabled)
 

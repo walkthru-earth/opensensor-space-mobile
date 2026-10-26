@@ -17,7 +17,7 @@ data class KnownDevice(
     /** Advertised local name such as `OS-6b40`, shown as is and never parsed. */
     override val name: String?,
     /** `info.station` UUID once read; null until the first successful connection. */
-    override val station: String?,
+    override val thing: String?,
     /** `info.dev`, 12 hex. */
     val deviceId: String?,
     val firmware: String?,
@@ -52,7 +52,7 @@ data class KnownDevice(
 
     /** Safe for logs: identity without the secret. */
     override fun toString(): String =
-        "KnownDevice(address=$address, name=$name, station=$station, lanToken=${if (lanToken != null) "<set>" else "null"}, lanPort=$lanPort, autoSync=$autoSync, companion=$companionAssociationId)"
+        "KnownDevice(address=$address, name=$name, station=$thing, lanToken=${if (lanToken != null) "<set>" else "null"}, lanPort=$lanPort, autoSync=$autoSync, companion=$companionAssociationId)"
 
     companion object {
         /** API 31–32 associations have no id visible to the app; this marks "associated, id unknown". */
@@ -93,13 +93,13 @@ interface KnownDeviceDao {
      * A null [name] keeps the stored one.
      */
     @Query(
-        "UPDATE known_device SET name = COALESCE(:name, name), station = :station, deviceId = :deviceId, " +
+        "UPDATE known_device SET name = COALESCE(:name, name), thing = :thing, deviceId = :deviceId, " +
             "firmware = :firmware, lastSeenEpochMs = :epochMs, lastConnectedEpochMs = :epochMs WHERE address = :address",
     )
-    suspend fun recordConnection(address: String, name: String?, station: String?, deviceId: String?, firmware: String?, epochMs: Long)
+    suspend fun recordConnection(address: String, name: String?, thing: String?, deviceId: String?, firmware: String?, epochMs: Long)
 
-    @Query("SELECT * FROM known_device WHERE station = :station LIMIT 1")
-    suspend fun findByStation(station: String): KnownDevice?
+    @Query("SELECT * FROM known_device WHERE thing = :thing LIMIT 1")
+    suspend fun findByThing(thing: String): KnownDevice?
 
     @Query("UPDATE known_device SET autoSync = :enabled WHERE address = :address")
     suspend fun setAutoSync(address: String, enabled: Boolean)

@@ -1,26 +1,26 @@
 # Data model — Room, DataStore, files on disk, backup
 
 **Scope:** what the phone stores, where, and how it moves between phones. Not how it is computed (see history-pipeline) or fetched (see sync-engine).
-**Code:** `core/database` commonMain `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `StationEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`opensensor.db`); `core/database/schemas/space.opensensor.data.local.database.AppDatabase/1…12.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
+**Code:** `core/database` commonMain `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `ThingEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`opensensor.db`); `core/database/schemas/space.opensensor.data.local.database.AppDatabase/1…12.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
 **Related:** [sync-engine.md](sync-engine.md) (who writes `archived_file`), [history-pipeline.md](history-pipeline.md) (who writes the tiers), [transports.md](transports.md#lan-token-lifecycle) (the token).
 
 ## Finding and exporting the mobile archive
 
 Android raw Parquet files live in app-private
-`/data/user/0/space.opensensor/files/archive/<station>/<relative Hive path>`.
+`/data/user/0/space.opensensor/files/archive/<thing>/<relative Hive path>`.
 Ordinary file managers cannot browse this directory. Open the sensor's **Files** screen,
 then **⋮ → Save zip to…**, **Share archive as zip**, or **Share N Parquet files**.
 Derived daily exports are separate from the original sensor files.
 
 iOS raw files live in the app's private
-`Library/Application Support/SensorArchive/<station>/<relative Hive path>`, excluded from
+`Library/Application Support/SensorArchive/<thing>/<relative Hive path>`, excluded from
 cloud backup. **Files** (a button next to History on My devices) shares one file, all files,
 or a zip of the archive, and saves the zip through Apple's Files picker, preserving
-station/Hive paths. Partial downloads are not exported. The original archive stays private and supports resume;
+thing/Hive paths. Partial downloads are not exported. The original archive stays private and supports resume;
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
-## Room schema v12 (`opensensor.db`)
+## Room schema v1 (`opensensor.db`)
 
 One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
 keeps the file in its app database directory. iOS keeps it at
@@ -32,26 +32,26 @@ erDiagram
   known_device {
     string address PK "enrolled Bluetooth endpoint, also used on LAN"
     string name
-    string station "uuid from info"
+    string thing "uuid from info"
     string deviceId
     string firmware
     long lastSeenEpochMs
     long lastConnectedEpochMs
     string lanToken "AES-GCM ciphertext, nullable, REDACTED everywhere"
     int lanPort
-    bool autoSync "v3"
-    int companionAssociationId "v8, nullable; CDM association behind wake-when-nearby"
+    bool autoSync
+    int companionAssociationId "nullable; CDM association behind wake-when-nearby"
   }
-  station_epoch {
-    string address PK "composite key with station"
-    string station PK "original generation UUID"
+  thing_epoch {
+    string address PK "composite key with thing"
+    string thing PK "original generation UUID"
     string deviceId "nullable; no invented historical hardware identity"
     long firstSeenEpochMs
-    bool observedFromAuthenticatedBle "false for migrated associations"
+    bool observedFromAuthenticatedBle
   }
   archived_file {
-    long id PK "auto; business key (station,name) UNIQUE"
-    string station
+    long id PK "auto; business key (thing,name) UNIQUE"
+    string thing
     string name "verbatim Hive path"
     long bytes
     string sha256
@@ -76,8 +76,8 @@ erDiagram
     string estAnchorFile
   }
   metric_bucket {
-    long id PK "UNIQUE (station,metricId,resolution,startEpochS)"
-    string station
+    long id PK "UNIQUE (thing,metricId,resolution,startEpochS)"
+    string thing
     string metricId "template column name or derived id such as pm25_epa"
     long resolution "900 · 3600 · 86400"
     long startEpochS
@@ -90,8 +90,8 @@ erDiagram
     long sampleIntervalMs "footer interval, 0 unknown"
   }
   derived_day {
-    long id PK "UNIQUE (station,epochDay)"
-    string station
+    long id PK "UNIQUE (thing,epochDay)"
+    string thing
     long epochDay
     string sourceSignature "SHA-256 of derive-v2 + sorted name:crc32 + anchors"
     int sourceFiles
@@ -100,17 +100,17 @@ erDiagram
     string dailyFile "null → retry next pass"
   }
   pruned_file {
-    string station PK "composite key with name"
+    string thing PK "composite key with name"
     string name PK "verbatim Hive path"
     long bytes "size when removed, matched against the device list"
     long crc32
     long prunedAtEpochMs
   }
-  known_device ||--o{ archived_file : "station"
-  known_device ||--o{ station_epoch : "address (logical association, no cascade)"
-  archived_file }o--o{ metric_bucket : "derived per station-day"
+  known_device ||--o{ archived_file : "thing"
+  known_device ||--o{ thing_epoch : "address (logical association, no cascade)"
+  archived_file }o--o{ metric_bucket : "derived per thing-day"
   archived_file }o--|| derived_day : "signature over sources"
-  known_device ||--o{ pruned_file : "station"
+  known_device ||--o{ pruned_file : "thing"
 ```
 
 `metric_bucket` and `derived_day` are **caches**: drop them and derive again → identical rows.
@@ -134,69 +134,37 @@ that cannot list the archive writes no marker and imports on the next launch.
 
 ### Migrations
 
-| From → to | Kind | Change |
-| --- | --- | --- |
-| 1 → 2 | explicit | `known_device.lanToken TEXT`, `lanPort INTEGER` |
-| 2 → 3 | explicit | `known_device.autoSync INTEGER NOT NULL DEFAULT 0` |
-| 3 → 4 | explicit | `archived_file` index columns (`ALTER TABLE … ADD COLUMN` each) |
-| 4 → 5 | `AutoMigration` | new tables (`aggregate_bucket` wide, `derived_day`) |
-| 5 → 6 | `AutoMigration` | `archived_file.est*` (time estimate), `estimatedRows` |
-| 6 → 7 | `AutoMigration` + `DropWideTiers` (`@DeleteTable aggregate_bucket`) | `metric_bucket` one row per metric; `DERIVE_VERSION` 2 forces a rebuild |
-| 7 → 8 | `AutoMigration` | nullable `known_device.companionAssociationId` |
-| 8 → 9 | explicit | `station_epoch`; seed current known stations and historical `(sourceDevice, station)` associations from archived files, preserving files, credentials and settings |
-| 9 → 10 | explicit | `sensor_installation`; the replaceable module's phone-local identity and assertion time, with one current row per device address and prior rows retained when the asserted module changes |
-| 10 → 11 | explicit | no schema change; rows indexed with no UTC rows and no error are marked never indexed, so the reader indexes them again |
-| 11 → 12 | `AutoMigration` | new table `pruned_file` |
-| 12 → 13 | explicit | drops `archived_file.pmValidRows`, recreates `metric_bucket` empty with `sampleIntervalMs` and clears `derived_day`. Tiers key metrics by template column now, so the deriver rebuilds every day. The archive and its index stay |
-| 13 → 14 | explicit | drops `archived_file.schemaVersion`, which nothing wrote or read |
+None. The app ID `space.opensensor.app` always starts with an empty database, so the schema is
+version 1. A schema change after release adds an explicit or auto migration and the next
+`core/database/schemas/<n>.json`.
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores
 the full sticker, vendor/model, batch, source (`barcode` or `manual`), phone UTC assertion time,
-and logger/station identifiers. The record is written after the logger echoes `SET_CONFIG`.
+and logger/thing identifiers. The record is written after the logger echoes `SET_CONFIG`.
 It does not backdate an installation or change archived raw rows. The optional batch estimate
 is a separate Parquet field and History metric. It never replaces the shown PM₂.₅, which is EPA corrected where RH is valid and atmospheric raw otherwise, each with its label.
 
-Check the v9→v10 migration against the exported schemas with
-`python3 tools/validate_sensor_installation_migration.py`.
+### Thing generations and device continuity
 
-The v8→v9 SQL can be checked without Android or extra Python dependencies:
-
-```sh
-python3 tools/validate_station_epoch_migration.py
-```
-
-Passed on 2026-09-29. The validator builds SQLite databases from the exported v8/v9 Room schemas
-and executes the literal SQL extracted from `MIGRATION_8_9` in `AppDatabase.kt`. It verifies every
-migrated table's columns, keys, indexes and foreign keys against v9, unchanged known-device and
-archive rows (including an opaque synthetic token), current and archive-only epochs, missing
-legacy hardware IDs, timestamp fallback/earliest observation, immutable first-seen provenance and
-retention after forgetting a device. It prints no credentials. This is a host check of the SQL
-and schema exports, not an Android Room migration or phone reset/reflash measurement.
-
-### Station generations and device continuity
-
-`known_device.station` is the latest accepted station UUID for an enrolled Bluetooth endpoint.
-`station_epoch` retains each observed generation under that endpoint. `recordIfAbsent` preserves
-its first observation; there is no foreign-key cascade when the owner forgets a device. The v9
-migration records existing associations as legacy (`observedFromAuthenticatedBle = false`), uses
-the saved connection/seen time for current stations and the earliest archive sync time for
-archive-only stations, and leaves historical hardware IDs null when they were not recorded.
-History can select these station generations independently. They are associations, not permission
-to replace a device or merge measurements from different stations.
+`known_device.thing` is the latest accepted thing UUID for an enrolled Bluetooth endpoint.
+`thing_epoch` retains each observed generation under that endpoint. `recordIfAbsent` preserves
+its first observation; there is no foreign-key cascade when the owner forgets a device.
+History can select these thing generations independently. They are associations, not permission
+to replace a device or merge measurements from different things.
 
 The current enrollment key remains the public Bluetooth address. A future durable phone-local
 physical-device ID and endpoint reassignment need a separate migration and explicit ownership
 policy. `info.dev` is a full hardware MAC identifier, not a cryptographic fingerprint; the wire
 contract contains no device public key or signed firmware-image identity. Changes to `boot`, `fw`
 or the dictionary hash are normal metadata changes. A changed or missing previously recorded
-full hardware ID is rejected before identity is overwritten. An accepted station change requires
+full hardware ID is rejected before identity is overwritten. An accepted thing change requires
 the same full hardware ID over the enrolled BLE link; it adds an epoch, clears the old LAN token
 and port, and fetches a replacement token over BLE. See [transports](transports.md#reset-reflash-and-identity-continuity).
 
-Station lineage never rewrites existing archive paths, database archive identities or file bytes.
-An SD card can still contain older station trees after NVS erase; firmware LIST traverses the
-whole output tree. The protocol's archive namespace remains the station from the collecting
-session's INFO, while the original Hive path and Parquet station metadata describe the file's
+Thing lineage never rewrites existing archive paths, database archive identities or file bytes.
+An SD card can still contain older thing trees after NVS erase; firmware LIST traverses the
+whole output tree. The protocol's archive namespace remains the thing from the collecting
+session's INFO, while the original Hive path and Parquet thing metadata describe the file's
 own generation. These can differ. Do not silently reparent old files or relabel their rows as
 the current generation. Collection routing and history interpretation must preserve that distinction
 ([canonical firmware contract](../../aq-parquet/docs/shared/ble-sync-protocol.md#phone-sync-algorithm)).
@@ -219,7 +187,7 @@ Unrelated crypto, programming and database failures also propagate.
 ### Write semantics that bit us
 
 - **`@Upsert` on an entity with an auto id and a unique index updates nothing** (it runs `UPDATE … WHERE id = ?` with id 0). `archived_file` and `derived_day` use `@Insert(onConflict = REPLACE)` — the id carries no meaning. `known_device` (address is the PK) may use `@Upsert`.
-- **`openSession` never writes a `KnownDevice` snapshot.** `connect()` already inserts a placeholder row with `insertIfAbsent` before the link opens. After `info`, `openSession` calls `insertIfAbsent` again with default settings, which adds a row only if it is still missing and returns -1 otherwise. An existing row gets `recordConnection`, which writes identity and timestamps only, so Auto-sync, the companion association and the LAN credential keep their latest value. Identity checks run before that write, and a station change clears the old token and port first with `setLanToken`. Clearing an unusable credential, or a token the LAN refused or rotated, uses `clearLanTokenIfStored`, one conditional update on the ciphertext that failed.
+- **`openSession` never writes a `KnownDevice` snapshot.** `connect()` already inserts a placeholder row with `insertIfAbsent` before the link opens. After `info`, `openSession` calls `insertIfAbsent` again with default settings, which adds a row only if it is still missing and returns -1 otherwise. An existing row gets `recordConnection`, which writes identity and timestamps only, so Auto-sync, the companion association and the LAN credential keep their latest value. Identity checks run before that write, and a thing change clears the old token and port first with `setLanToken`. Clearing an unusable credential, or a token the LAN refused or rotated, uses `clearLanTokenIfStored`, one conditional update on the ciphertext that failed.
 - **`ArchiveIndex.update` is one Room transaction** (`ArchivedFileDao.update`, `@Transaction`), so index repair and a sync never lose each other's columns. `RoomArchiveIndexTest` (`:core:database` commonTest, Android host and iOS simulator) runs 64 concurrent updates on one key.
 - `derived_day.dailyFile == null` means the daily Parquet failed → its signature is treated as stale next pass.
 
@@ -243,16 +211,16 @@ An older `clock_sync_mode` key may remain in the file. Nothing reads it.
 ## Files under `filesDir`
 
 ```
-archive/<station>/<hive path>.parquet              verified device files — byte-exact SD mirror   (sync-engine)
-archive-partial/<station>/<name>.partial(.meta)    in-progress downloads                           (sync-engine)
+archive/<thing>/<hive path>.parquet              verified device files — byte-exact SD mirror   (sync-engine)
+archive-partial/<thing>/<name>.partial(.meta)    in-progress downloads                           (sync-engine)
 ```
 
 Derived day files live in the OS cache directory since #61, Android `cacheDir/derived/v1/` and
 iOS `Library/Caches/derived/v1/`, so the OS may drop them and backups skip them.
 
 ```
-derived/v1/<station>/day=YYYY-MM-DD.parquet        one Parquet per UTC station-day               (history-pipeline)
-derived/v1/<station>/day=YYYY-MM-DD.manifest.json  sources (name, crc32, time_anchor), coverage    (history-pipeline)
+derived/v1/<thing>/day=YYYY-MM-DD.parquet        one Parquet per UTC thing-day               (history-pipeline)
+derived/v1/<thing>/day=YYYY-MM-DD.manifest.json  sources (name, crc32, time_anchor), coverage    (history-pipeline)
 ```
 
 Derived files are written atomically (temp + rename) and **never inside `archive/`**, so the raw
@@ -266,7 +234,7 @@ zip stays the byte-exact mirror and the derived zip is the small analysis-ready 
 | --- | --- | --- |
 | Durable | `archive/`, the Room database, `clock-anchors/` (iOS `SensorArchive/`, `SensorArchive-clock-anchors/`) | never deletes |
 | Rebuildable | `cacheDir/derived/v1/` (iOS `Library/Caches/derived/v1/`), the map tile cache `cacheDir/maplibre-cache.db`, the feed block cache `cacheDir/feed-blocks/` (iOS `Library/Caches/feed-blocks/`) | old derived temps, a `derived/` left in `filesDir` or Application Support by an older build (removed whole), then the derived quota |
-| Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 h (derived builds stream into theirs), released export runs after 1 h (a leased run stays, `ExportRuns`), partials of an unknown station after 1 h, any partial after 30 days |
+| Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 h (derived builds stream into theirs), released export runs after 1 h (a leased run stays, `ExportRuns`), partials of an unknown thing after 1 h, any partial after 30 days |
 | Settings | `datastore/` | never deletes |
 
 Every writer goes through `AtomicFiles`. Temps are `storage-tmp/.ostmp-*` beside the roots, on the
@@ -282,7 +250,7 @@ between commit and record), checks size, CRC-32, SHA-256 and `PAR1`, and indexes
 `sourceDevice = "adopted"` through `ArchiveIndex.putIfAbsent` (Room `INSERT OR IGNORE` on both
 phones), so a record the engine writes meanwhile is never replaced. A final that
 fails `PAR1` stays in place, counted as unverifiable. A stale partial is re-listed before it is
-deleted, since opening a partial rewrites its meta. The 30 day sweep re-lists under the station's
+deleted, since opening a partial rewrites its meta. The 30 day sweep re-lists under the thing's
 `DeviceCoordinator` writer lease, the one the sync engine holds while it writes that file, so a resume that
 starts during the sweep keeps its partial. The log line has counts only. `StorageBudget` reports free bytes per class for the free-space gate of #55.
 
@@ -360,5 +328,5 @@ removed — Android 12+ (our minSdk) reads only `dataExtractionRules`.
 | `metric_bucket` meaning | bump `HistoryDeriver.DERIVE_VERSION` (part of every day's signature) |
 | `derived_day.sourceSignature` inputs | which days rebuild after a sync — keep `name:crc32` + anchor |
 | `known_device` columns | `insertIfAbsent` defaults and `recordConnection` in `openSession`; `KnownDevice.toString` redaction |
-| `station_epoch` / continuity policy | History's generation picker, reset provenance, credential renewal; never archive path rewriting |
+| `thing_epoch` / continuity policy | History's generation picker, reset provenance, credential renewal; never archive path rewriting |
 | `FileArchive.root` | `data_extraction_rules.xml` device-transfer include, Export zips, `HistoryIndexer` |

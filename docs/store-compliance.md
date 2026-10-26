@@ -80,7 +80,7 @@ Have counsel read the privacy policy before the first public release.
    privacy manifest.
 3. **Uploads stay opt-in per device, off by default**, with one confirmation that lists what is
    shared (readings, the resolution 7 cell, the public name) and what never is (exact location,
-   station UUID, MAC address, Wi-Fi, PIN, token), and states that published data is released
+   thing UUID, MAC address, Wi-Fi, PIN, token), and states that published data is released
    under CC BY 4.0 and cannot be withdrawn (owner decision). "Stop sharing" lives in that
    device's settings and stops publication from the next UTC day. Already published data stays
    public. The privacy policy keeps a contact for legal removal requests, since a device's series
@@ -126,7 +126,7 @@ Have counsel read the privacy policy before the first public release.
 - [ ] At publish time, the privacy policy URL is live and matches what the release does.
 - [ ] At publish time, the Play foreground service declaration has its video.
 
-## Private station provisioning (2026-10-09)
+## Private thing provisioning (2026-10-09)
 
 This is a local sensor configuration action, not a developer-server upload. The
 owner selects the resolution and taps Save before the cell leaves the phone.

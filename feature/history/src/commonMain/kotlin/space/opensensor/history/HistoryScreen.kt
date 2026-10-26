@@ -79,7 +79,7 @@ import space.opensensor.history.resources.history_dev_binned
 import space.opensensor.history.resources.history_dev_points
 import space.opensensor.history.resources.history_dev_raw
 import space.opensensor.history.resources.history_dev_source
-import space.opensensor.history.resources.history_dev_station
+import space.opensensor.history.resources.history_dev_thing
 import space.opensensor.history.resources.history_dev_tier
 import space.opensensor.history.resources.history_dev_title
 import space.opensensor.history.resources.history_dev_valid_rows
@@ -100,7 +100,7 @@ import space.opensensor.history.resources.history_no_value
 import space.opensensor.history.resources.history_none_yet
 import space.opensensor.history.resources.history_nothing_indexed
 import space.opensensor.history.resources.history_of
-import space.opensensor.history.resources.history_other_station
+import space.opensensor.history.resources.history_other_thing
 import space.opensensor.history.resources.history_page_earlier
 import space.opensensor.history.resources.history_page_later
 import space.opensensor.history.resources.history_peak
@@ -112,8 +112,8 @@ import space.opensensor.history.resources.history_range_year
 import space.opensensor.history.resources.history_read_failed
 import space.opensensor.history.resources.history_readings
 import space.opensensor.history.resources.history_span_utc
-import space.opensensor.history.resources.history_station_chip
 import space.opensensor.history.resources.history_tap_day
+import space.opensensor.history.resources.history_thing_chip
 import space.opensensor.history.resources.history_title
 import space.opensensor.history.resources.history_untimed
 import space.opensensor.history.resources.history_untimed_files
@@ -129,7 +129,7 @@ import space.opensensor.settings.DetailLevel
 import space.opensensor.units.UnitFormatter
 
 /**
- * Day, Week, Month and Year of one station from the phone archive, the same screen on Android and
+ * Day, Week, Month and Year of one thing from the phone archive, the same screen on Android and
  * iOS. It works offline and without a session, because the tiers and rows come from files already
  * verified on this phone. Every number says which window it describes and how much of that window
  * has readings. [topBar] is the platform header (Android, the device tabs, iOS, [HistoryTopBar]).
@@ -158,8 +158,8 @@ fun HistoryScreen(
                 item(key = "loading") { HistoryStateMessage(stringResource(Res.string.history_loading), PeacockExpression.WORKING) }
                 return@LazyColumn
             }
-            if (state.stations.size > 1) {
-                item(key = "station-epochs") { StationChips(state, level, controller::selectStation) }
+            if (state.things.size > 1) {
+                item(key = "thing-epochs") { ThingChips(state, level, controller::selectThing) }
             }
             item(key = "range") {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -219,7 +219,7 @@ fun HistoryScreen(
                         )
                         StatLine(stringResource(Res.string.history_dev_points), s?.points?.size?.toString() ?: noValue)
                         StatLine(stringResource(Res.string.history_dev_valid_rows), s?.validRows?.toString() ?: noValue)
-                        StatLine(stringResource(Res.string.history_dev_station), state.station ?: noValue)
+                        StatLine(stringResource(Res.string.history_dev_thing), state.thing ?: noValue)
                     }
                 }
             }
@@ -245,22 +245,22 @@ fun HistoryTopBar(onBack: (() -> Unit)?) {
 fun historyTitle(): String = stringResource(Res.string.history_title)
 
 /**
- * Station generations as chips. The newest is "Current", older ones "Earlier", and Developer adds
- * the first characters of the station id. The spoken label names the full station.
+ * Thing generations as chips. The newest is "Current", older ones "Earlier", and Developer adds
+ * the first characters of the thing id. The spoken label names the full thing.
  */
 @Composable
-private fun StationChips(state: HistoryUiState, level: DetailLevel, onSelect: (String) -> Unit) {
+private fun ThingChips(state: HistoryUiState, level: DetailLevel, onSelect: (String) -> Unit) {
     Column {
         Text(stringResource(Res.string.history_from), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            state.stations.forEach { station ->
-                val current = station == state.stations.last()
+            state.things.forEach { thing ->
+                val current = thing == state.things.last()
                 val base = stringResource(if (current) Res.string.history_current else Res.string.history_earlier)
-                val label = if (level.developer) "$base · ${station.take(8)}" else base
-                val chipDescription = stringResource(Res.string.history_station_chip, label, station)
+                val label = if (level.developer) "$base · ${thing.take(8)}" else base
+                val chipDescription = stringResource(Res.string.history_thing_chip, label, thing)
                 FilterChip(
-                    selected = state.station == station,
-                    onClick = { onSelect(station) },
+                    selected = state.thing == thing,
+                    onClick = { onSelect(thing) },
                     label = { Text(label) },
                     shape = FloatingControl.SmallShape,
                     colors = FloatingControl.chipColors(),
@@ -303,7 +303,7 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
         val unreadable = state.series?.unreadableSources ?: 0
         if (unreadable > 0) StatLine(stringResource(Res.string.history_read_failed), unreadable.toString())
         if (files.estimated > 0) StatLine(stringResource(Res.string.history_estimated), files.estimated.toString())
-        if (files.otherStation > 0) InfoNote(pluralStringResource(Res.plurals.history_other_station, files.otherStation, files.otherStation))
+        if (files.otherThing > 0) InfoNote(pluralStringResource(Res.plurals.history_other_thing, files.otherThing, files.otherThing))
         if (files.untimed > 0) InfoNote(pluralStringResource(Res.plurals.history_untimed_files, files.untimed, files.untimed))
     }
 }
@@ -343,7 +343,7 @@ private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, l
             }
             Spacer(Modifier.height(8.dp))
             when {
-                state.station == null -> HistoryStateMessage(stringResource(Res.string.history_never_connected))
+                state.thing == null -> HistoryStateMessage(stringResource(Res.string.history_never_connected))
                 s == null -> HistoryStateMessage(stringResource(Res.string.history_loading_short), PeacockExpression.WORKING)
                 s.isEmpty -> EmptySpan(state)
                 else -> {

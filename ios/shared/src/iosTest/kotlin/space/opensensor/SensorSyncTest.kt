@@ -55,7 +55,7 @@ class SensorSyncTest {
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Default)
     private val database = IosArchiveDatabase(store, "$base/database")
     private val sync = SensorSync(store, database.index, Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     @AfterTest
     fun cleanUp() {
@@ -69,8 +69,8 @@ class SensorSyncTest {
     }
 
     private val files = linkedMapOf(
-        "station=$station/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet" to parquet(1, 5_000),
-        "station=$station/year=2026/month=09/day=15/data_1015_b41d_15090-15179-90.parquet" to parquet(2, 3_000),
+        "station=$thing/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet" to parquet(1, 5_000),
+        "station=$thing/year=2026/month=09/day=15/data_1015_b41d_15090-15179-90.parquet" to parquet(2, 3_000),
     )
 
     /** Requests seen by the sensor, by opcode. */
@@ -143,7 +143,7 @@ class SensorSyncTest {
 
     private fun run(link: IosLink, progress: MutableList<SyncProgress> = ArrayList()): SyncResult = runBlocking {
         val done = CompletableDeferred<SyncResult>()
-        sync.start(link, station, "a1b2c3d4e5f6", 4096, { progress += it }) { done.complete(it) }
+        sync.start(link, thing, "a1b2c3d4e5f6", 4096, { progress += it }) { done.complete(it) }
         withTimeout(20_000) { done.await() }
     }
 
@@ -159,7 +159,7 @@ class SensorSyncTest {
         assertTrue(result.keepsLink)
         assertEquals(2, progress.last().filesDone)
         files.forEach { (name, bytes) ->
-            val saved = NSFileManager.defaultManager.contentsAtPath("$finals/$station/$name")!!.toByteArray()
+            val saved = NSFileManager.defaultManager.contentsAtPath("$finals/$thing/$name")!!.toByteArray()
             assertContentEquals(bytes, saved)
         }
         assertFalse(Opcode.SET_CONFIG in requests || Opcode.REBOOT in requests)
@@ -217,17 +217,17 @@ class SensorSyncTest {
             (req[0].toInt() and 0xFF == Opcode.STATUS).also {
                 if (it) link.offerStatus("{\"utc\":1,\"clk\":1,\"clk_age_s\":60}")
             }
-        }.also { it.identify(station, "same-boot", 1024) }
+        }.also { it.identify(thing, "same-boot", 1024) }
         val done = CompletableDeferred<SyncResult>()
-        runner.start(link, station, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
+        runner.start(link, thing, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
         assertEquals(SyncEnd.COMPLETE, withTimeout(20_000) { done.await() }.end)
         assertEquals(0, anchorCount)
         assertFalse(Opcode.SET_TIME in requests)
     }
 
     @Test
-    fun theAcknowledgedAnchorKeepsTheFullStationAndBootIdentity() = runBlocking {
-        data class Anchor(val station: String, val boot: String, val utc: Long, val mono: Long)
+    fun theAcknowledgedAnchorKeepsTheFullThingAndBootIdentity() = runBlocking {
+        data class Anchor(val thing: String, val boot: String, val utc: Long, val mono: Long)
         val anchors = mutableListOf<Anchor>()
         val runner = SensorSync(
             store,
@@ -237,11 +237,11 @@ class SensorSyncTest {
             recordClockAnchor = { st, boot, utc, mono -> anchors += Anchor(st, boot, utc, mono) },
             budget = FakeStorageBudget(),
         )
-        val link = sensor().also { it.identify(station, "full-boot-identity", 1024) }
+        val link = sensor().also { it.identify(thing, "full-boot-identity", 1024) }
         val done = CompletableDeferred<SyncResult>()
-        runner.start(link, station, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
+        runner.start(link, thing, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
         assertEquals(SyncEnd.COMPLETE, withTimeout(20_000) { done.await() }.end)
-        assertEquals(listOf(Anchor(station, "full-boot-identity", 1_789_581_931_123_000_000L, 12_345_678L)), anchors)
+        assertEquals(listOf(Anchor(thing, "full-boot-identity", 1_789_581_931_123_000_000L, 12_345_678L)), anchors)
     }
 
     @Test
@@ -290,12 +290,12 @@ class SensorSyncTest {
     }
 
     @Test
-    fun aStationSyncsOverOneLinkAtATime() = runBlocking {
+    fun aThingSyncsOverOneLinkAtATime() = runBlocking {
         val first = CompletableDeferred<SyncResult>()
         val second = CompletableDeferred<SyncResult>()
         val quiet = sensor { _, _ -> true }
-        val handle = sync.start(quiet, station, "a1b2c3d4e5f6", 4096, {}) { first.complete(it) }
-        sync.start(sensor(), station, "a1b2c3d4e5f6", 4096, {}) { second.complete(it) }
+        val handle = sync.start(quiet, thing, "a1b2c3d4e5f6", 4096, {}) { first.complete(it) }
+        sync.start(sensor(), thing, "a1b2c3d4e5f6", 4096, {}) { second.complete(it) }
 
         assertEquals(SyncEnd.IN_USE, withTimeout(5_000) { second.await() }.end)
         handle.cancel()
@@ -303,7 +303,7 @@ class SensorSyncTest {
     }
 
     @Test
-    fun aCancelBeforeTheWorkStartsStillFinishesOnceAndFreesTheStation() = runBlocking {
+    fun aCancelBeforeTheWorkStartsStillFinishesOnceAndFreesTheThing() = runBlocking {
         // Work waits in this queue until the test runs it, so cancel() lands before dispatch.
         val queue = Channel<Runnable>(Channel.UNLIMITED)
         val held = object : CoroutineDispatcher() {
@@ -320,7 +320,7 @@ class SensorSyncTest {
 
         val calls = AtomicInt(0)
         val first = CompletableDeferred<SyncResult>()
-        gated.start(sensor(), station, "a1b2c3d4e5f6", 4096, {}) {
+        gated.start(sensor(), thing, "a1b2c3d4e5f6", 4096, {}) {
             calls.incrementAndGet()
             first.complete(it)
         }.cancel()
@@ -328,7 +328,7 @@ class SensorSyncTest {
         assertEquals(SyncEnd.STOPPED, first.await().end)
 
         val second = CompletableDeferred<SyncResult>()
-        gated.start(sensor(), station, "a1b2c3d4e5f6", 4096, {}) { second.complete(it) }
+        gated.start(sensor(), thing, "a1b2c3d4e5f6", 4096, {}) { second.complete(it) }
         pumpUntil(second)
         assertEquals(SyncEnd.COMPLETE, second.await().end)
         assertEquals(1, calls.value)
@@ -338,7 +338,7 @@ class SensorSyncTest {
     fun aFileThisPhoneCannotStoreFailsAloneAndKeepsTheLink() {
         val (blocked, other) = files.keys.toList()
         // A directory where the archived file belongs, so the move into the archive fails.
-        assertTrue(NSFileManager.defaultManager.createDirectoryAtPath("$finals/$station/$blocked", true, null, null))
+        assertTrue(NSFileManager.defaultManager.createDirectoryAtPath("$finals/$thing/$blocked", true, null, null))
 
         val result = run(sensor())
 
@@ -346,7 +346,7 @@ class SensorSyncTest {
         assertTrue(result.keepsLink)
         assertEquals(1, result.saved)
         assertEquals(1, result.notSaved)
-        assertContentEquals(files.getValue(other), NSFileManager.defaultManager.contentsAtPath("$finals/$station/$other")!!.toByteArray())
+        assertContentEquals(files.getValue(other), NSFileManager.defaultManager.contentsAtPath("$finals/$thing/$other")!!.toByteArray())
     }
 
     @Test
@@ -387,7 +387,7 @@ class SensorSyncTest {
             }
         }
         val first = CompletableDeferred<SyncResult>()
-        val handle = sync.start(link, station, "a1b2c3d4e5f6", 4096, {}) { first.complete(it) }
+        val handle = sync.start(link, thing, "a1b2c3d4e5f6", 4096, {}) { first.complete(it) }
         withTimeout(5_000) { reading.await() }
         handle.cancel()
         assertEquals(SyncEnd.STOPPED, withTimeout(5_000) { first.await() }.end)
@@ -538,10 +538,10 @@ class SensorSyncTest {
 
     @Test
     fun theProviderLendsASyncLeaseAndReleaseGivesItBackOnce() = runBlocking {
-        val link = sensor().also { it.identify(station, "boot", 1024) }
+        val link = sensor().also { it.identify(thing, "boot", 1024) }
         val provider = IosLinkProvider({ link }, 5.seconds, Dispatchers.Default)
         val lent = provider.connect("a1b2c3d4e5f6", LinkPreference.ANY)
-        assertEquals(station, lent.station)
+        assertEquals(thing, lent.thing)
         assertEquals(1024, lent.maxRead)
         assertTrue(link.syncRunning)
         lent.release()
@@ -552,7 +552,7 @@ class SensorSyncTest {
 
     @Test
     fun aProviderConnectTimesOutOrCancelsAndLendsNothing() = runBlocking {
-        val link = sensor().also { it.identify(station, "boot", 1024) }
+        val link = sensor().also { it.identify(thing, "boot", 1024) }
         val held = link.acquire(LeaseKind.DEBUG)
         val provider = IosLinkProvider({ link }, 200.milliseconds, Dispatchers.Default)
         val timedOut = assertFailsWith<LinkClosedException> { provider.connect("a1b2c3d4e5f6", LinkPreference.ANY) }
@@ -570,7 +570,7 @@ class SensorSyncTest {
 
     @Test
     fun aCancelRightAfterTheProviderTookTheLeaseGivesItBack() = runBlocking {
-        val link = sensor().also { it.identify(station, "boot", 1024) }
+        val link = sensor().also { it.identify(thing, "boot", 1024) }
         val took = CompletableDeferred<Unit>()
         val provider = IosLinkProvider({ link }, 5.seconds, EmptyCoroutineContext, granted = {
             took.complete(Unit)

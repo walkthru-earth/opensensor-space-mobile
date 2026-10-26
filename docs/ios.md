@@ -40,7 +40,7 @@ and the browse keeps going so allowing access resumes it.
 A phone first connects over bonded Bluetooth and taps Save Wi-Fi access. `GET_TOKEN` goes over the
 encrypted BLE characteristics, and the token is saved in the Keychain with
 `AfterFirstUnlockThisDeviceOnly`. It never enters Kotlin, the UI or a log. The `OSS1` HELLO must
-match the enrolled station and full hardware ID, so discovery alone cannot enroll a replacement.
+match the enrolled thing and full hardware ID, so discovery alone cannot enroll a replacement.
 A LAN `AUTH_FAILED` drops the saved token. Each `LanSession` is an actor on its own serial queue,
 keeps one receive of up to 64 KiB outstanding, splits `len` u16 frames and forbids cellular
 interfaces. Frames cross into Kotlin as `NSData` (`SyncWireData.kt`).
@@ -53,8 +53,8 @@ File sync runs the shared engine from `:core:sync`. Each connection holds one `I
 and Auto-sync steps all call `runs.collect`, and a retry with no open link asks Swift to dial
 again. `SensorSync` reports progress at most four times a second and finishes with one result.
 
-The archive is `Application Support/SensorArchive/<station>/<Hive path>`, with partials under
-`archive-partial/<station>/`, through `IosArchiveStore` in `:core:archive`. The index and pruned marks
+The archive is `Application Support/SensorArchive/<thing>/<Hive path>`, with partials under
+`archive-partial/<thing>/`, through `IosArchiveStore` in `:core:archive`. The index and pruned marks
 live in the shared Room database `Application Support/database/opensensor.db` (`IosArchiveDatabase` in
 `:core:database`), which uses the same protection class and is excluded from backup. A final name
 appears only after size, CRC-32 and `PAR1` pass, and its record also holds SHA-256. On its first open
@@ -65,7 +65,7 @@ written. The next launch deletes the old files without touching Room, then write
 after which the import does nothing. The root uses
 `completeUntilFirstUserAuthentication`, so collection keeps writing after the phone locks, and is excluded from backup. `IosArchive` builds History tiers through the shared
 indexer and `DayPass`, persists them with `IosFileTierStore` and repairs the index at launch.
-`SensorArchive.swift` holds only the station ID check Swift applies before saving a credential.
+`SensorArchive.swift` holds only the thing ID check Swift applies before saving a credential.
 
 Sync messages use `:ui:strings`. Link and Wi-Fi access events outside a run reach `CompanionState`
 as a typed `CompanionNotice`, so iOS shows Android's words in English and Arabic.

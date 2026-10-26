@@ -38,7 +38,7 @@ class RowKeyTest {
     }
 
     private fun hourRows(vararg files: ParquetFile): Int {
-        val agg = Aggregator("station", setOf(Resolution.HOUR), templates = CoreS3Files)
+        val agg = Aggregator("thing", setOf(Resolution.HOUR), templates = CoreS3Files)
         files.forEach { agg.add(it) }
         return agg.buckets().sumOf { it.rows }
     }

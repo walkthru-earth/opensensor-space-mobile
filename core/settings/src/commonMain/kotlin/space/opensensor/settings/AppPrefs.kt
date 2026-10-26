@@ -28,7 +28,7 @@ enum class DiscoverSource {
     /** The bundled sample feed. */
     SAMPLE,
 
-    /** Live licensed stations (OpenAQ). */
+    /** Live licensed things (OpenAQ). */
     OPENAQ,
 }
 

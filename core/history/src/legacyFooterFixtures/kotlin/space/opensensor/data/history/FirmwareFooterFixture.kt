@@ -5,7 +5,7 @@ package space.opensensor.data.history
 
 /**
  * A full stac-opensensor v0.1.0 `opensensor` footer value, shaped member for member like the footer
- * firmware writes (aq-parquet #105), naming [dict], [desc], [intervalMs], [station], [purpose] and [boot]. A null
+ * firmware writes (aq-parquet #105), naming [dict], [desc], [intervalMs], [thing], [purpose] and [boot]. A null
  * leaves that member out. The firmware version is a placeholder, so no test pins a release string.
  * Every member the app does not read is there so the reader is shown to ignore it.
  */
@@ -15,11 +15,11 @@ fun opensensorFooterJson(
     intervalMs: Long?,
     board: String = "m5stack-cores3",
     schema: String = "cores3-telemetry-v5",
-    station: String? = null,
+    thing: String? = null,
     purpose: String? = "telemetry",
     boot: String = "0123456789abcdef0123456789abcdef",
 ): String {
-    val id = station?.let { """"id":"$it",""" }.orEmpty()
+    val id = thing?.let { """"id":"$it",""" }.orEmpty()
     val dictionary = dict?.let {
         """"dictionary":{"sha256":"$it","version":"$schema","uri":"https://example.invalid/dictionaries/$schema.inc"},"""
     }.orEmpty()

@@ -30,7 +30,7 @@ import java.io.ByteArrayOutputStream
 /** A synthetic UTC day of 8,640 rows in 96 files, fixed across before and after runs. */
 @State(Scope.Benchmark)
 open class HistoryBenchmark {
-    private val station = "benchmark-station"
+    private val thing = "benchmark-thing"
     private val day = 20_000L
     private lateinit var sources: List<DailyParquetSource>
     private lateinit var raw: HistorySeriesReader
@@ -53,7 +53,7 @@ open class HistoryBenchmark {
                     ParquetWriter.Column(Metrics.PM25.column, ParquetType.INT32),
                     ParquetWriter.Column(Metrics.BOARD_TEMP.column, ParquetType.FLOAT),
                 ),
-                keyValueMetadata = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = null, intervalMs = null, station = station))
+                keyValueMetadata = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = null, intervalMs = null, thing = thing))
             )
             writer.begin()
             writer.rowGroup(
@@ -71,7 +71,7 @@ open class HistoryBenchmark {
             val data = sink.bytes()
             val summary = ParquetFile.wrap(data).use(ParquetIndexer::index)
             ArchiveRecord(
-                station, "part-$file.parquet", data.size.toLong(), file.toLong(), "synthetic", 1, "benchmark",
+                thing, "part-$file.parquet", data.size.toLong(), file.toLong(), "synthetic", 1, "benchmark",
                 indexedAtEpochMs = 1, rows = summary.rows, utcRows = summary.utcRows,
                 firstUtcNs = summary.firstUtcNs, lastUtcNs = summary.lastUtcNs
             ).also { bytes[it.key] = data }
@@ -81,7 +81,7 @@ open class HistoryBenchmark {
         val store = Store(bytes)
         val tiers = ArchiveHistoryTiers(store, index)
         val daily = Sink()
-        DailyParquetBuilder.build(station, day, sources, daily, nowEpochS = (day + 2) * 86_400)
+        DailyParquetBuilder.build(thing, day, sources, daily, nowEpochS = (day + 2) * 86_400)
         val derivedBytes = daily.bytes()
         raw = HistorySeriesReader(store, index, tiers, io = Dispatchers.Unconfined)
         derived = HistorySeriesReader(
@@ -93,34 +93,34 @@ open class HistoryBenchmark {
         )
         window = HistoryWindow.endingAt((day + 1) * 86_400, HistoryRange.DAY, TimeZone.UTC)
         check(
-            runBlocking { raw.observe(station, Metrics.PM25, HistoryRange.DAY, window).first() } ==
-                runBlocking { derived.observe(station, Metrics.PM25, HistoryRange.DAY, window).first() }
+            runBlocking { raw.observe(thing, Metrics.PM25, HistoryRange.DAY, window).first() } ==
+                runBlocking { derived.observe(thing, Metrics.PM25, HistoryRange.DAY, window).first() }
         )
     }
 
     @Benchmark
-    open fun aggregatorBefore(): Any = LegacyAggregator(station).also { agg -> sources.forEach { it.open().use { file -> agg.add(file) } } }.buckets()
+    open fun aggregatorBefore(): Any = LegacyAggregator(thing).also { agg -> sources.forEach { it.open().use { file -> agg.add(file) } } }.buckets()
 
     @Benchmark
-    open fun aggregatorAfter(): Any = Aggregator(station).also { agg -> sources.forEach { it.open().use { file -> agg.add(file) } } }.buckets()
+    open fun aggregatorAfter(): Any = Aggregator(thing).also { agg -> sources.forEach { it.open().use { file -> agg.add(file) } } }.buckets()
 
     @Benchmark
-    open fun dailyBefore(): Any? = LegacyDailyParquetBuilder.build(station, day, sources, Sink(), nowEpochS = (day + 2) * 86_400)
+    open fun dailyBefore(): Any? = LegacyDailyParquetBuilder.build(thing, day, sources, Sink(), nowEpochS = (day + 2) * 86_400)
 
     @Benchmark
-    open fun dailyAfter(): Any? = DailyParquetBuilder.build(station, day, sources, Sink(), nowEpochS = (day + 2) * 86_400)
+    open fun dailyAfter(): Any? = DailyParquetBuilder.build(thing, day, sources, Sink(), nowEpochS = (day + 2) * 86_400)
 
     @Benchmark
     open fun deriveBefore(): Any = aggregatorBefore() to dailyBefore()
 
     @Benchmark
-    open fun deriveAfter(): Any = DayPass.run(station, day, sources, Sink(), nowEpochS = (day + 2) * 86_400)
+    open fun deriveAfter(): Any = DayPass.run(thing, day, sources, Sink(), nowEpochS = (day + 2) * 86_400)
 
     @Benchmark
-    open fun fromRaw(): Any = runBlocking { raw.observe(station, Metrics.PM25, HistoryRange.DAY, window).first() }
+    open fun fromRaw(): Any = runBlocking { raw.observe(thing, Metrics.PM25, HistoryRange.DAY, window).first() }
 
     @Benchmark
-    open fun fromDerived(): Any = runBlocking { derived.observe(station, Metrics.PM25, HistoryRange.DAY, window).first() }
+    open fun fromDerived(): Any = runBlocking { derived.observe(thing, Metrics.PM25, HistoryRange.DAY, window).first() }
 
     private class Sink : ParquetSink {
         private val out = ByteArrayOutputStream()
@@ -129,24 +129,24 @@ open class HistoryBenchmark {
     }
 
     private class Store(private val data: Map<ArchiveKey, ByteArray>) : ArchiveStore {
-        override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
+        override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = key in data
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader = ByteArrayReader(data.getValue(key))
         override suspend fun commit(key: ArchiveKey) = Unit
-        override suspend fun listFinal(station: String?): List<ArchiveKey> = data.keys.filter { station == null || it.station == station }
+        override suspend fun listFinal(thing: String?): List<ArchiveKey> = data.keys.filter { thing == null || it.thing == thing }
     }
 
     private class Index(private val records: List<ArchiveRecord>) : ArchiveIndex {
         override fun observeAll(): Flow<List<ArchiveRecord>> = flowOf(records)
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = flowOf(records.filter { it.station == station })
+        override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = flowOf(records.filter { it.thing == thing })
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = records.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) = error("read only")
         override suspend fun remove(key: ArchiveKey) = error("read only")
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = emptyList()
-        override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = records.filter { it.station == station && it.onTimeline(fromNs, toNs) }
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = records.filter { it.station == station }
-        override suspend fun stations(): List<String> = listOf("benchmark-station")
+        override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = records.filter { it.thing == thing && it.onTimeline(fromNs, toNs) }
+        override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = records.filter { it.thing == thing }
+        override suspend fun things(): List<String> = listOf("benchmark-thing")
     }
 }

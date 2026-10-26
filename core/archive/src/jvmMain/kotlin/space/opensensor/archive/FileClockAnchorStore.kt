@@ -23,17 +23,17 @@ class FileClockAnchorStore(
 ) : ClockAnchorStore {
     private val mutex = Mutex()
 
-    override suspend fun anchors(station: String): List<ClockAnchor> = withContext(Dispatchers.IO) {
-        require(ArchiveLayout.isSafeStation(station)) { "unsafe station id" }
+    override suspend fun anchors(thing: String): List<ClockAnchor> = withContext(Dispatchers.IO) {
+        require(ArchiveLayout.isSafeThing(thing)) { "unsafe thing id" }
         mutex.withLock {
-            val directory = checked(File(root, station))
+            val directory = checked(File(root, thing))
             val anchors = directory.listFiles().orEmpty().flatMap { boot ->
                 if (!Files.isDirectory(boot.toPath(), NOFOLLOW_LINKS)) return@flatMap emptyList()
                 boot.listFiles().orEmpty().mapNotNull { receipt ->
                     if (!Files.isRegularFile(receipt.toPath(), NOFOLLOW_LINKS) || receipt.length() > ClockAnchorReceipt.MAX_BYTES) {
                         return@mapNotNull null
                     }
-                    ClockAnchorReceipt.decode(receipt.readBytes(), station, "${boot.name}/${receipt.name}")
+                    ClockAnchorReceipt.decode(receipt.readBytes(), thing, "${boot.name}/${receipt.name}")
                 }
             }
             ClockAnchorReceipt.earliest(anchors)
@@ -42,8 +42,8 @@ class FileClockAnchorStore(
 
     override suspend fun put(anchor: ClockAnchor) = withContext(Dispatchers.IO) {
         mutex.withLock {
-            val receipt = checked(File(root, "${anchor.station}/${ClockAnchorReceipt.relativePath(anchor)}"))
-            // AtomicFiles creates the station and boot directories and syncs each new level.
+            val receipt = checked(File(root, "${anchor.thing}/${ClockAnchorReceipt.relativePath(anchor)}"))
+            // AtomicFiles creates the thing and boot directories and syncs each new level.
             val bytes = ClockAnchorReceipt.encode(anchor)
             try {
                 atomic.createNoReplace(receipt.path, bytes, StorageClass.Durable)

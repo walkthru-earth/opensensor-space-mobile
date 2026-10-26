@@ -64,26 +64,26 @@ class ConcurrentArchiveTest {
         return fake to DeviceSession.over(fake, scope).also { it.link.open() }
     }
 
-    private suspend fun download(device: Pair<FakeTransport, DeviceSession>, station: String, progress: (FileProgress) -> Unit = {}): FileOutcome =
-        engine.download(device.second, station, device.first.address, name, device.first.files.single().bytes.size.toLong(), device.first.maxRead, progress)
+    private suspend fun download(device: Pair<FakeTransport, DeviceSession>, thing: String, progress: (FileProgress) -> Unit = {}): FileOutcome =
+        engine.download(device.second, thing, device.first.address, name, device.first.files.single().bytes.size.toLong(), device.first.maxRead, progress)
 
     @Test
-    fun `station identities cannot select the archive root or its parent`() {
-        for (station in listOf(".", "..")) {
+    fun `thing identities cannot select the archive root or its parent`() {
+        for (thing in listOf(".", "..")) {
             try {
-                archive.fileFor(station, name)
-                fail("station must remain a child namespace")
+                archive.fileFor(thing, name)
+                fail("thing must remain a child namespace")
             } catch (_: IllegalArgumentException) {
-                assertFalse(archive.fileFor("station-a", name).exists())
+                assertFalse(archive.fileFor("thing-a", name).exists())
             }
         }
     }
 
     @Test
-    fun `different stations transfer the same relative filename at the same time`() = runBlocking {
+    fun `different things transfer the same relative filename at the same time`() = runBlocking {
         withTimeout(10_000) {
-            val aBytes = stationParquetFixture(bytes, "station-a")
-            val bBytes = stationParquetFixture(bytes, "station-b")
+            val aBytes = thingParquetFixture(bytes, "thing-a")
+            val bBytes = thingParquetFixture(bytes, "thing-b")
             val a = device(aBytes)
             val b = device(bBytes)
             val bothStarted = java.util.concurrent.CountDownLatch(2)
@@ -93,25 +93,25 @@ class ConcurrentArchiveTest {
                     assertTrue("distinct archive identities must open concurrently", bothStarted.await(5, java.util.concurrent.TimeUnit.SECONDS))
                 }
             }
-            val first = async(kotlinx.coroutines.Dispatchers.Default) { download(a, "station-a", ::started) }
-            val second = async(kotlinx.coroutines.Dispatchers.Default) { download(b, "station-b", ::started) }
+            val first = async(kotlinx.coroutines.Dispatchers.Default) { download(a, "thing-a", ::started) }
+            val second = async(kotlinx.coroutines.Dispatchers.Default) { download(b, "thing-b", ::started) }
             val outcomes = listOf(first.await(), second.await())
             assertTrue(outcomes.all { it is FileOutcome.Synced })
             assertEquals(0, outcomes.filterIsInstance<FileOutcome.Synced>().count { it.alreadyArchived })
-            assertArrayEquals(aBytes, archive.fileFor("station-a", name).readBytes())
-            assertArrayEquals(bBytes, archive.fileFor("station-b", name).readBytes())
+            assertArrayEquals(aBytes, archive.fileFor("thing-a", name).readBytes())
+            assertArrayEquals(bBytes, archive.fileFor("thing-b", name).readBytes())
             assertEquals(2, dao.rows.size)
             assertTrue(dao.rows.values.all { it.isIndexed })
         }
     }
 
     @Test
-    fun `same station and filename has one writer and the waiter rechecks verified bytes`() = runBlocking {
+    fun `same thing and filename has one writer and the waiter rechecks verified bytes`() = runBlocking {
         withTimeout(10_000) {
             val a = device()
             val b = device()
-            val first = async { download(a, "station-a") }
-            val second = async { download(b, "station-a") }
+            val first = async { download(a, "thing-a") }
+            val second = async { download(b, "thing-a") }
             val outcomes = listOf(first.await(), second.await())
             assertTrue(outcomes.all { it is FileOutcome.Synced })
             assertEquals(1, outcomes.filterIsInstance<FileOutcome.Synced>().count { it.alreadyArchived })
@@ -119,7 +119,7 @@ class ConcurrentArchiveTest {
             assertEquals(windows, a.first.readCount + b.first.readCount)
             assertEquals(1, dao.rows.size)
             assertEquals(1, dao.upserts)
-            assertArrayEquals(bytes, archive.fileFor("station-a", name).readBytes())
+            assertArrayEquals(bytes, archive.fileFor("thing-a", name).readBytes())
             assertFalse(archive.partialRoot.walkTopDown().any { it.isFile })
         }
     }
@@ -127,24 +127,24 @@ class ConcurrentArchiveTest {
     @Test
     fun `changed producer bytes never replace an existing verified archive`() = runBlocking {
         val a = device()
-        assertTrue(download(a, "station-a") is FileOutcome.Synced)
+        assertTrue(download(a, "thing-a") is FileOutcome.Synced)
         val changed = bytes.copyOf().also { it[100] = (it[100].toInt() xor 1).toByte() }
         val b = device(changed)
-        assertTrue(download(b, "station-a") is FileOutcome.Mismatch)
+        assertTrue(download(b, "thing-a") is FileOutcome.Mismatch)
         assertEquals(0, b.first.readCount)
-        assertArrayEquals(bytes, archive.fileFor("station-a", name).readBytes())
+        assertArrayEquals(bytes, archive.fileFor("thing-a", name).readBytes())
         assertEquals(1, dao.upserts)
     }
 
     @Test
     fun `corrupted local archive is preserved and surfaced instead of silently overwritten`() = runBlocking {
         val a = device()
-        assertTrue(download(a, "station-a") is FileOutcome.Synced)
+        assertTrue(download(a, "thing-a") is FileOutcome.Synced)
         val corrupted = bytes.copyOf().also { it[100] = (it[100].toInt() xor 1).toByte() }
-        archive.fileFor("station-a", name).writeBytes(corrupted)
+        archive.fileFor("thing-a", name).writeBytes(corrupted)
         val b = device()
-        assertTrue(download(b, "station-a") is FileOutcome.Mismatch)
-        assertArrayEquals(corrupted, archive.fileFor("station-a", name).readBytes())
+        assertTrue(download(b, "thing-a") is FileOutcome.Mismatch)
+        assertArrayEquals(corrupted, archive.fileFor("thing-a", name).readBytes())
         assertEquals(0, b.first.readCount)
     }
 
@@ -152,15 +152,15 @@ class ConcurrentArchiveTest {
     fun `corrupted resumable prefix is retried from zero in the same download`() = runBlocking {
         val crc32 = CRC32().also { it.update(bytes) }.value
         val prefix = bytes.size / 2
-        archive.openPartial("station-a", name, bytes.size.toLong(), crc32).first.use { writer ->
+        archive.openPartial("thing-a", name, bytes.size.toLong(), crc32).first.use { writer ->
             writer.writeAt(0, bytes.copyOfRange(0, prefix).also { it[100] = (it[100].toInt() xor 1).toByte() })
         }
 
         val source = device()
-        val result = download(source, "station-a")
+        val result = download(source, "thing-a")
 
         assertTrue(result is FileOutcome.Synced)
-        assertArrayEquals(bytes, archive.fileFor("station-a", name).readBytes())
+        assertArrayEquals(bytes, archive.fileFor("thing-a", name).readBytes())
         assertFalse(archive.partialRoot.walkTopDown().any { it.isFile })
         val fullWindows = (bytes.size + source.first.maxRead - 1) / source.first.maxRead
         assertTrue("a clean re-read must follow the corrupt resume", source.first.readCount > fullWindows)
@@ -169,39 +169,39 @@ class ConcurrentArchiveTest {
 
     @Test
     fun `recorded hash conflict preserves bytes and provenance`() = runBlocking {
-        assertTrue(download(device(), "station-a") is FileOutcome.Synced)
-        val key = "station-a" to name
+        assertTrue(download(device(), "thing-a") is FileOutcome.Synced)
+        val key = "thing-a" to name
         val original = requireNotNull(dao.rows[key])
         dao.rows[key] = original.copy(sha256 = "invalid-recorded-fingerprint")
         val b = device()
-        assertTrue(download(b, "station-a") is FileOutcome.Mismatch)
+        assertTrue(download(b, "thing-a") is FileOutcome.Mismatch)
         assertEquals(0, b.first.readCount)
         assertEquals(original.sourceDevice, dao.rows[key]!!.sourceDevice)
-        assertArrayEquals(bytes, archive.fileFor("station-a", name).readBytes())
+        assertArrayEquals(bytes, archive.fileFor("thing-a", name).readBytes())
     }
 
     @Test
     fun `commit refuses to replace an archive even if a competing writer bypasses the lease`() = runBlocking {
-        assertTrue(download(device(), "station-a") is FileOutcome.Synced)
-        archive.openPartial("station-a", name, bytes.size.toLong(), 0L).first.use { it.writeAt(0L, bytes) }
+        assertTrue(download(device(), "thing-a") is FileOutcome.Synced)
+        archive.openPartial("thing-a", name, bytes.size.toLong(), 0L).first.use { it.writeAt(0L, bytes) }
         try {
-            archive.commit("station-a", name)
+            archive.commit("thing-a", name)
             fail("existing archive must not be replaced")
         } catch (_: AlreadyCommitted) {
-            assertArrayEquals(bytes, archive.fileFor("station-a", name).readBytes())
-            assertTrue(archive.partialLengths("station-a").containsKey(name))
+            assertArrayEquals(bytes, archive.fileFor("thing-a", name).readBytes())
+            assertTrue(archive.partialLengths("thing-a").containsKey(name))
         }
     }
 
     @Test
     fun aDirectoryAtTheFinalPathFailsOnlyThatFileAndKeepsTheVerifiedPartial() = runBlocking {
-        assertTrue(archive.fileFor("station-a", name).mkdirs())
+        assertTrue(archive.fileFor("thing-a", name).mkdirs())
 
-        val outcome = download(device(), "station-a")
+        val outcome = download(device(), "thing-a")
 
         assertTrue(outcome is FileOutcome.Failed && outcome.storage)
-        assertTrue(archive.fileFor("station-a", name).isDirectory)
-        assertTrue(archive.partialLengths("station-a").containsKey(name))
+        assertTrue(archive.fileFor("thing-a", name).isDirectory)
+        assertTrue(archive.partialLengths("thing-a").containsKey(name))
         assertTrue(dao.rows.isEmpty())
     }
 
@@ -211,23 +211,23 @@ class ConcurrentArchiveTest {
             private set
         private fun snapshot() = rows.values.toList()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(snapshot())
-        override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(snapshot().filter { it.station == station })
-        override suspend fun forStation(station: String) = snapshot().filter { it.station == station }
-        override suspend fun get(station: String, name: String) = rows[station to name]
+        override fun observeForThing(thing: String): Flow<List<ArchivedFile>> = flowOf(snapshot().filter { it.thing == thing })
+        override suspend fun forThing(thing: String) = snapshot().filter { it.thing == thing }
+        override suspend fun get(thing: String, name: String) = rows[thing to name]
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override fun observeTotalBytes(): Flow<Long> = flowOf(snapshot().sumOf { it.bytes })
         override suspend fun unindexed(limit: Int) = snapshot().filter { !it.isIndexed }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(snapshot().count { !it.isIndexed })
-        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) = snapshot().filter {
-            it.station == station && it.isIndexed && it.hasUtc && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs
+        override suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long) = snapshot().filter {
+            it.thing == thing && it.isIndexed && it.hasUtc && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs
         }
-        override suspend fun indexedForStation(station: String) = snapshot().filter { it.station == station && it.isIndexed }
-        override suspend fun stations() = snapshot().map { it.station }.distinct()
+        override suspend fun indexedForThing(thing: String) = snapshot().filter { it.thing == thing && it.isIndexed }
+        override suspend fun things() = snapshot().map { it.thing }.distinct()
         override suspend fun upsert(file: ArchivedFile) {
-            synchronized(rows) { upserts++; rows[file.station to file.name] = file }
+            synchronized(rows) { upserts++; rows[file.thing to file.name] = file }
         }
         override suspend fun insertIfAbsent(file: ArchivedFile): Long =
-            synchronized(rows) { if (rows.putIfAbsent(file.station to file.name, file) == null) rows.size.toLong() else -1L }
-        override suspend fun delete(station: String, name: String) { rows.remove(station to name) }
+            synchronized(rows) { if (rows.putIfAbsent(file.thing to file.name, file) == null) rows.size.toLong() else -1L }
+        override suspend fun delete(thing: String, name: String) { rows.remove(thing to name) }
     }
 }

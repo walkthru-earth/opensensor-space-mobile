@@ -51,7 +51,7 @@ class FileExportSpaceTest {
 
     @Test
     fun twoControllersStagingAtOnceKeepBoth() {
-        // Two station controllers, each with its own space over the same root.
+        // Two thing controllers, each with its own space over the same root.
         val one = zip(space(), a, "one.zip")
         val two = zip(space(), b, "two.zip")
         assertTrue(File(one.path).isFile)

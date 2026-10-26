@@ -7,7 +7,7 @@ import space.opensensor.collection.SyncEndReason
 import space.opensensor.data.SyncProgress
 import space.opensensor.data.ble.ConfigSnapshot
 import space.opensensor.data.ble.ConnectionState
-import space.opensensor.data.ble.StationStatus
+import space.opensensor.data.ble.ThingStatus
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.TodaySoFar
@@ -25,7 +25,7 @@ data class TodayArchive(
 ) {
     companion object {
         /**
-         * The summary of one station's archive records, the rule Android's repository applies to its
+         * The summary of one thing's archive records, the rule Android's repository applies to its
          * Room rows: indexed telemetry files only, estimated when placed by an estimate alone,
          * unplaced when neither real nor estimated UTC exists.
          */
@@ -65,13 +65,13 @@ data class TodaySnapshot(
     val reconnecting: TodayReconnect? = null,
     /** The link failed because the phone and the sensor disagree about the pairing. The platform decides. */
     val needsPairingRepair: Boolean = false,
-    /** Today (local calendar day) from the phone archive, once it has timed rows for this station. */
+    /** Today (local calendar day) from the phone archive, once it has timed rows for this thing. */
     val todaySoFar: TodaySoFar? = null,
     /** A background worker or Collect all holds this device. The page waits, it never offers Reconnect. */
     val heldInBackground: Boolean = false,
 ) {
-    /** The status every station page reads, see [StationStatus]. */
-    val station: StationStatus get() = StationStatus(connection, reconnecting != null, sync.running, heldInBackground)
+    /** The status every thing page reads, see [ThingStatus]. */
+    val thing: ThingStatus get() = ThingStatus(connection, reconnecting != null, sync.running, heldInBackground)
 }
 
 /** A device command Today can send. Each one is confirmed by the user first. */
@@ -128,7 +128,7 @@ data class TodayUiState(
     val liveSupport: LiveSupport
         get() = when {
             snapshot.info == null -> LiveSupport.PENDING
-            capabilities.station == null -> LiveSupport.UNSUPPORTED
+            capabilities.thing == null -> LiveSupport.UNSUPPORTED
             else -> LiveSupport.READY
         }
 

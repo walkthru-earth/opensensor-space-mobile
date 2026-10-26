@@ -125,12 +125,12 @@
     <!-- The attribution in Real mode, it opens the OpenAQ licenses. -->
     <string name="discover_data_openaq">Data OpenAQ</string>
     <string name="discover_real_title">OpenAQ data</string>
-    <string name="discover_real_info">Real data comes from OpenAQ, as daily means from one or more public stations per area, for the latest day of data. Each data provider keeps its own license.</string>
+    <string name="discover_real_info">Real data comes from OpenAQ, as daily means from one or more public sensors per area, for the latest day of data. Each data provider keeps its own license.</string>
     <!-- The real feed could not be read, with Retry beside it. -->
     <string name="discover_load_failed">Could not load public sensors</string>
     <string name="discover_window_latest_day">Latest day</string>
     <string name="discover_window_short_latest_day">Day</string>
-    <string name="discover_scale_info2_real">Each area shows daily means from one or more public stations, for the latest day of data. A faded area has no value in the last 2 days of data. An outline only means the area does not measure this.</string>
+    <string name="discover_scale_info2_real">Each area shows daily means from one or more public sensors, for the latest day of data. A faded area has no value in the last 2 days of data. An outline only means the area does not measure this.</string>
 
     <!-- Names of the feed properties and categories the app knows (DiscoverLabels.kt). An unknown id keeps the feed label. PM2.5 uses pm25_raw from the design system. -->
     <string name="discover_property_pm10">PM10</string>

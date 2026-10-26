@@ -68,16 +68,16 @@ class HistoryGoldenTest {
         fun source() = DailyParquetSource(record) { ParquetFile.wrap(bytes, record.name) }
     }
 
-    /** Every fixture, indexed, by station. Unsynced files get one anchor per boot, a copy of each file is synced again. */
+    /** Every fixture, indexed, by thing. Unsynced files get one anchor per boot, a copy of each file is synced again. */
     private fun archive(): Pair<Map<String, List<Entry>>, Map<String, TimeEstimate.Anchor>> {
         val anchors = HashMap<String, TimeEstimate.Anchor>()
         val synthetic = listOf("synthetic/midnight.parquet" to respread(20_000), "synthetic/midnight-later-sync.parquet" to respread(20_000, nullBefore = 70))
         val entries = (corpus.map { it to fixtureBytes("parquet/$it") } + synthetic).mapIndexed { n, (path, bytes) ->
             val file = ParquetFile.wrap(bytes)
             val index = ParquetIndexer.index(file, templates = CoreS3Files)
-            val station = file.metadata.footer?.stationId ?: "golden-station"
+            val thing = file.metadata.footer?.thingId ?: "golden-thing"
             var record = ArchiveRecord(
-                station, "golden/$n/${path.substringAfterLast('/')}", bytes.size.toLong(), n.toLong(), "sha-$n", 1, "fixture",
+                thing, "golden/$n/${path.substringAfterLast('/')}", bytes.size.toLong(), n.toLong(), "sha-$n", 1, "fixture",
                 indexedAtEpochMs = 1, rows = index.rows, bootId = index.bootId, utcRows = index.utcRows,
                 firstUtcNs = index.firstUtcNs, lastUtcNs = index.lastUtcNs, firstMonoUs = index.firstMonoUs, lastMonoUs = index.lastMonoUs,
                 firstSeq = index.firstSeq, lastSeq = index.lastSeq,
@@ -90,34 +90,34 @@ class HistoryGoldenTest {
             Entry(record, bytes)
         }
         val copies = entries.map { Entry(it.record.copy(name = it.record.name.replace("golden/", "golden-copy/")), it.bytes) }
-        return (entries + copies).groupBy { it.record.station } to anchors
+        return (entries + copies).groupBy { it.record.thing } to anchors
     }
 
     @Test
     fun theSinglePassGivesTheSameTiersAndDailyRowsAsTheTwoPasses() {
-        val (stations, anchors) = archive()
+        val (things, anchors) = archive()
         var days = 0
         var rows = 0
-        for ((station, entries) in stations) {
-            for (day in StationDays.of(entries.map { it.record })[station].orEmpty().sorted()) {
-                val from = day * StationDays.DAY_NS
-                val dayEntries = entries.filter { it.record.onTimeline(from, from + StationDays.DAY_NS) }
+        for ((thing, entries) in things) {
+            for (day in ThingDays.of(entries.map { it.record })[thing].orEmpty().sorted()) {
+                val from = day * ThingDays.DAY_NS
+                val dayEntries = entries.filter { it.record.onTimeline(from, from + ThingDays.DAY_NS) }
                 // The old tier pipeline read timeline order. Keep its actual order in the oracle.
                 val ordered = dayEntries.sortedWith(compareBy(ArchiveRecord.TIMELINE_ORDER) { it.record })
                 val now = (day + 2) * 86_400
 
-                val legacy = LegacyAggregator(station)
+                val legacy = LegacyAggregator(thing)
                 for (e in ordered) ParquetFile.wrap(e.bytes).use { legacy.add(it, if (e.record.hasEstimatedUtc) anchors[e.record.bootId] else null) }
                 val legacyBuckets = legacy.buckets().filter { it.startEpochS >= day * 86_400 && it.startEpochS < (day + 1) * 86_400 }
                 val legacySink = MemorySink()
-                val legacyDaily = LegacyDailyParquetBuilder.build(station, day, dayEntries.map { it.source() }, legacySink, anchors, now)
+                val legacyDaily = LegacyDailyParquetBuilder.build(thing, day, dayEntries.map { it.source() }, legacySink, anchors, now)
 
                 val sink = MemorySink()
-                val pass = DayPass.run(station, day, dayEntries.map { it.source() }, sink, anchors, now, templates = CoreS3Files)
-                assertEquals(legacyBuckets, pass.buckets, "tiers of $station day $day")
+                val pass = DayPass.run(thing, day, dayEntries.map { it.source() }, sink, anchors, now, templates = CoreS3Files)
+                assertEquals(legacyBuckets, pass.buckets, "tiers of $thing day $day")
                 assertEquals(emptyList(), pass.failedSources)
                 if (legacyDaily == null) {
-                    assertEquals(null, pass.daily, "no daily file on $station day $day")
+                    assertEquals(null, pass.daily, "no daily file on $thing day $day")
                     continue
                 }
                 val daily = assertNotNull(pass.daily)
@@ -130,60 +130,60 @@ class HistoryGoldenTest {
                 rows += daily.rows
             }
         }
-        assertTrue(days >= 6, "the corpus covers $days station-days")
+        assertTrue(days >= 6, "the corpus covers $days thing-days")
         assertTrue(rows > 500, "the corpus covers $rows rows")
     }
 
     /**
-     * #98. The streaming builder decodes a source only while its hours are written. On every station-day
+     * #98. The streaming builder decodes a source only while its hours are written. On every thing-day
      * of the corpus it writes the same bytes, and gives the same tiers and result, as the builder that
      * held every column of the day ([PreStreamingDailyParquetBuilder]).
      */
     @Test
     fun theStreamingBuilderWritesTheSameBytesAsTheOneThatHeldTheWholeDay() {
-        val (stations, anchors) = archive()
+        val (things, anchors) = archive()
         var days = 0
         var groups = 0
-        for ((station, entries) in stations) {
-            for (day in StationDays.of(entries.map { it.record })[station].orEmpty().sorted()) {
-                val from = day * StationDays.DAY_NS
-                val dayEntries = entries.filter { it.record.onTimeline(from, from + StationDays.DAY_NS) }
+        for ((thing, entries) in things) {
+            for (day in ThingDays.of(entries.map { it.record })[thing].orEmpty().sorted()) {
+                val from = day * ThingDays.DAY_NS
+                val dayEntries = entries.filter { it.record.onTimeline(from, from + ThingDays.DAY_NS) }
                 val now = (day + 2) * 86_400
                 val oldSink = MemorySink()
-                val old = PreStreamingDailyParquetBuilder.pass(station, day, dayEntries.map { it.source() }, oldSink, anchors, now, Aggregator(station, templates = CoreS3Files), strict = false)
+                val old = PreStreamingDailyParquetBuilder.pass(thing, day, dayEntries.map { it.source() }, oldSink, anchors, now, Aggregator(thing, templates = CoreS3Files), strict = false)
                 val newSink = MemorySink()
-                val new = DayPass.run(station, day, dayEntries.map { it.source() }, newSink, anchors, now, templates = CoreS3Files)
-                assertEquals(old.buckets, new.buckets, "tiers of $station day $day")
+                val new = DayPass.run(thing, day, dayEntries.map { it.source() }, newSink, anchors, now, templates = CoreS3Files)
+                assertEquals(old.buckets, new.buckets, "tiers of $thing day $day")
                 assertEquals(old.rowsRead, new.rowsRead)
                 assertEquals(old.failedSources, new.failedSources)
                 assertEquals(old.daily?.rows, new.daily?.rows)
                 assertEquals(old.daily?.columns, new.daily?.columns)
                 assertEquals(old.daily?.rowGroups, new.daily?.rowGroups)
                 assertEquals(old.daily?.sources, new.daily?.sources)
-                assertContentEquals(oldSink.toByteArray(), newSink.toByteArray(), "daily bytes of $station day $day")
+                assertContentEquals(oldSink.toByteArray(), newSink.toByteArray(), "daily bytes of $thing day $day")
 
                 val strictOld = MemorySink()
                 val strictNew = MemorySink()
                 assertEquals(
-                    PreStreamingDailyParquetBuilder.build(station, day, dayEntries.map { it.source() }, strictOld, anchors, now),
-                    DailyParquetBuilder.build(station, day, dayEntries.map { it.source() }, strictNew, anchors, now),
+                    PreStreamingDailyParquetBuilder.build(thing, day, dayEntries.map { it.source() }, strictOld, anchors, now),
+                    DailyParquetBuilder.build(thing, day, dayEntries.map { it.source() }, strictNew, anchors, now),
                 )
-                assertContentEquals(strictOld.toByteArray(), strictNew.toByteArray(), "strict daily bytes of $station day $day")
+                assertContentEquals(strictOld.toByteArray(), strictNew.toByteArray(), "strict daily bytes of $thing day $day")
                 if (new.daily != null) days++
                 groups += new.daily?.rowGroups ?: 0
             }
         }
-        assertTrue(days >= 6, "the corpus covers $days station-days")
+        assertTrue(days >= 6, "the corpus covers $days thing-days")
         assertTrue(groups > days, "some days span several hours, $groups row groups")
     }
 
     @Test
     fun aTiersOnlyPassGivesTheSameTiersWithoutADailyFile() {
-        val (stations, anchors) = archive()
-        val (station, entries) = stations.entries.first { (_, list) -> list.any { it.record.hasUtc && it.record.rows!! > 100 } }
-        val day = StationDays.of(entries.map { it.record })[station]!!.first()
-        val withDaily = DayPass.run(station, day, entries.map { it.source() }, MemorySink(), anchors, 0, templates = CoreS3Files)
-        val tiersOnly = DayPass.run(station, day, entries.map { it.source() }, null, anchors, 0, templates = CoreS3Files)
+        val (things, anchors) = archive()
+        val (thing, entries) = things.entries.first { (_, list) -> list.any { it.record.hasUtc && it.record.rows!! > 100 } }
+        val day = ThingDays.of(entries.map { it.record })[thing]!!.first()
+        val withDaily = DayPass.run(thing, day, entries.map { it.source() }, MemorySink(), anchors, 0, templates = CoreS3Files)
+        val tiersOnly = DayPass.run(thing, day, entries.map { it.source() }, null, anchors, 0, templates = CoreS3Files)
         assertEquals(withDaily.buckets, tiersOnly.buckets)
         assertEquals(null, tiersOnly.daily)
     }

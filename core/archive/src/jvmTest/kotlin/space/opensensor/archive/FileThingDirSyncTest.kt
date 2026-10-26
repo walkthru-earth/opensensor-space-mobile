@@ -10,9 +10,9 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-/** [FileClockAnchorStore] leaves a new station directory to [AtomicFiles], which syncs it. */
-class FileStationDirSyncTest {
-    private val base = Files.createTempDirectory("station-sync-test-").toFile()
+/** [FileClockAnchorStore] leaves a new thing directory to [AtomicFiles], which syncs it. */
+class FileThingDirSyncTest {
+    private val base = Files.createTempDirectory("thing-sync-test-").toFile()
 
     @AfterTest
     fun cleanUp() {
@@ -20,16 +20,16 @@ class FileStationDirSyncTest {
     }
 
     @Test
-    fun clockAnchorStorePutSyncsANewStationDir() = runTest {
+    fun clockAnchorStorePutSyncsANewThingDir() = runTest {
         val root = File(base, "clock-receipts").apply { mkdirs() }
         val recording = RecordingAtomicFiles(JvmAtomicFiles(File(base, AtomicFiles.TEMP_DIR))) { Files.isDirectory(File(it).toPath(), NOFOLLOW_LINKS) }
-        val stationDir = File(root, clockTestAnchor.station).path
+        val thingDir = File(root, clockTestAnchor.thing).path
 
         FileClockAnchorStore(root, recording).put(clockTestAnchor)
 
-        assertTrue(File(stationDir, ClockAnchorReceipt.relativePath(clockTestAnchor)).isFile)
-        assertTrue(stationDir in recording.created, "$stationDir was not left to AtomicFiles, created ${recording.created}")
-        assertTrue(stationDir in recording.synced, "$stationDir was not synced, synced ${recording.synced}")
+        assertTrue(File(thingDir, ClockAnchorReceipt.relativePath(clockTestAnchor)).isFile)
+        assertTrue(thingDir in recording.created, "$thingDir was not left to AtomicFiles, created ${recording.created}")
+        assertTrue(thingDir in recording.synced, "$thingDir was not synced, synced ${recording.synced}")
         assertTrue(root.path in recording.synced, "${root.path} was not synced, synced ${recording.synced}")
     }
 }

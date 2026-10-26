@@ -21,7 +21,7 @@ class DailyFeedReaderTest {
     private fun source() = MemoryRangeSource(bytes, OpenAqFixture.CELLS)
 
     @Test
-    fun `every daily row keeps its date and its stations and null stays null`() = runTest {
+    fun `every daily row keeps its date and its things and null stays null`() = runTest {
         val table = ParquetFeedReader().readCells(source(), ranges = null)
         assertFalse(table.info.sample)
         assertEquals("1d", table.info.window)
@@ -35,9 +35,9 @@ class DailyFeedReaderTest {
         val cairo = table.rows.single { it.h3 == CAIRO && it.date == oct(5) }
         assertEquals(3, cairo.devices)
         assertEquals(mapOf("pm25" to CellStat(3, 50.0, 35.0, 70.0), "temperature" to CellStat(3, 28.0, 22.0, 33.0)), cairo.stats)
-        // One station is a valid public cell.
+        // One thing is a valid public cell.
         assertEquals(1, table.rows.single { it.h3 == ACCRA && it.date == LocalDate(2026, 9, 29) }.devices)
-        // A day with stations but nothing measured has no stats, never zeros.
+        // A day with things but nothing measured has no stats, never zeros.
         val empty = table.rows.single { it.h3 == NAIROBI && it.date == oct(8) }
         assertEquals(4, empty.devices)
         assertTrue(empty.stats.isEmpty())

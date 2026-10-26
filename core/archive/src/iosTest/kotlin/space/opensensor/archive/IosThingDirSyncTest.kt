@@ -14,13 +14,13 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-/** Each iOS store leaves a new station directory to [AtomicFiles], which syncs it. */
-class IosStationDirSyncTest {
-    private val base = NSTemporaryDirectory().trimEnd('/') + "/station-sync-test-" + NSUUID().UUIDString()
+/** Each iOS store leaves a new thing directory to [AtomicFiles], which syncs it. */
+class IosThingDirSyncTest {
+    private val base = NSTemporaryDirectory().trimEnd('/') + "/thing-sync-test-" + NSUUID().UUIDString()
     private val finals = "$base/SensorArchive"
-    private val station = "station-a"
-    private val stationDir = "$finals/$station"
-    private val key = ArchiveKey(station, "station=$station/year=2026/month=10/day=11/data_0930.parquet")
+    private val thing = "thing-a"
+    private val thingDir = "$finals/$thing"
+    private val key = ArchiveKey(thing, "station=$thing/year=2026/month=10/day=11/data_0930.parquet")
     private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
     private val recording = RecordingAtomicFiles(IosAtomicFiles("$base/${AtomicFiles.TEMP_DIR}")) {
         IosFiles.kind(it) == IosFiles.Kind.DIRECTORY
@@ -31,33 +31,33 @@ class IosStationDirSyncTest {
         NSFileManager.defaultManager.removeItemAtPath(base, null)
     }
 
-    private fun assertStationDirSynced(stationDir: String) {
-        assertTrue(stationDir in recording.created, "$stationDir was not left to AtomicFiles, created ${recording.created}")
-        assertTrue(stationDir in recording.synced, "$stationDir was not synced, synced ${recording.synced}")
-        val parent = stationDir.substringBeforeLast('/')
+    private fun assertThingDirSynced(thingDir: String) {
+        assertTrue(thingDir in recording.created, "$thingDir was not left to AtomicFiles, created ${recording.created}")
+        assertTrue(thingDir in recording.synced, "$thingDir was not synced, synced ${recording.synced}")
+        val parent = thingDir.substringBeforeLast('/')
         assertTrue(parent in recording.synced, "$parent was not synced, synced ${recording.synced}")
     }
 
     @Test
-    fun archiveStoreCommitSyncsANewStationDir() = runTest {
+    fun archiveStoreCommitSyncsANewThingDir() = runTest {
         val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Unconfined, recording)
         store.openPartial(key, PartialMeta(bytes.size.toLong(), ParquetVerify.crc32(bytes))).use { it.writeAt(0, bytes) }
-        assertTrue(IosFiles.kind(stationDir) == IosFiles.Kind.ABSENT)
+        assertTrue(IosFiles.kind(thingDir) == IosFiles.Kind.ABSENT)
 
         store.commit(key)
 
         assertTrue(store.exists(key))
-        assertStationDirSynced(stationDir)
+        assertThingDirSynced(thingDir)
     }
 
     @Test
-    fun clockAnchorStorePutSyncsANewStationDir() = runTest {
+    fun clockAnchorStorePutSyncsANewThingDir() = runTest {
         val root = "$base/clock-receipts"
         val store = IosClockAnchorStore(root, recording)
 
         store.put(clockTestAnchor)
 
-        assertTrue(IosFiles.kind("$root/${clockTestAnchor.station}/${ClockAnchorReceipt.relativePath(clockTestAnchor)}") == IosFiles.Kind.FILE)
-        assertStationDirSynced("$root/${clockTestAnchor.station}")
+        assertTrue(IosFiles.kind("$root/${clockTestAnchor.thing}/${ClockAnchorReceipt.relativePath(clockTestAnchor)}") == IosFiles.Kind.FILE)
+        assertThingDirSynced("$root/${clockTestAnchor.thing}")
     }
 }

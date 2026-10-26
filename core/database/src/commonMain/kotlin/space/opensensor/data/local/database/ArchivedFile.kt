@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import space.opensensor.data.history.IndexedFileInfo
 
 /**
- * One verified Parquet file in the local archive. Identity is `(station, name)`; the file is
+ * One verified Parquet file in the local archive. Identity is `(thing, name)`; the file is
  * immutable, so `bytes` and `crc32` are consistency checks against the device manifest.
  *
  * A row exists only after the file passed size + CRC-32 + `PAR1` verification and was renamed
@@ -20,11 +20,11 @@ import space.opensensor.data.history.IndexedFileInfo
  */
 @Entity(
     tableName = "archived_file",
-    indices = [Index(value = ["station", "name"], unique = true)],
+    indices = [Index(value = ["thing", "name"], unique = true)],
 )
 data class ArchivedFile(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val station: String,
+    val thing: String,
     /** Relative Hive path exactly as the device reported it. */
     val name: String,
     val bytes: Long,
@@ -45,7 +45,7 @@ data class ArchivedFile(
     val rows: Long? = null,
     val rowGroups: Int? = null,
     val bootId: String? = null,
-    /** `file.purpose` of the `opensensor` footer, `telemetry` for station data, `codec-comparison-duplicate-rows` for benchmark copies. */
+    /** `file.purpose` of the `opensensor` footer, `telemetry` for thing data, `codec-comparison-duplicate-rows` for benchmark copies. */
     val purpose: String? = null,
     /** Rows with a UTC timestamp and their span (the event time column, held in nanoseconds). 0 / null for unsynced files. */
     val utcRows: Long? = null,
@@ -83,17 +83,17 @@ data class ArchivedFile(
  * The identity columns of one archived file, all the sync planner compares against a listing. A
  * projection, so a planner input never loads the history index columns (#63).
  */
-data class ArchivedFileIdentity(val station: String, val name: String, val bytes: Long, val crc32: Long)
+data class ArchivedFileIdentity(val thing: String, val name: String, val bytes: Long, val crc32: Long)
 
-/** A station's newest timed end, null when its timed files carry no end. */
-data class StationTimedEnd(val station: String, val lastNs: Long?)
+/** A thing's newest timed end, null when its timed files carry no end. */
+data class ThingTimedEnd(val thing: String, val lastNs: Long?)
 
-/** Per-station archive totals for the device list, computed in SQL instead of over every row. */
-data class StationArchiveGlance(
-    val station: String,
+/** Per-thing archive totals for the device list, computed in SQL instead of over every row. */
+data class ThingArchiveGlance(
+    val thing: String,
     val files: Int,
     val lastSyncedMs: Long?,
-    /** Newest `lastUtcNs` of the station, null when no file has UTC rows. */
+    /** Newest `lastUtcNs` of the thing, null when no file has UTC rows. */
     val lastDataUtcNs: Long?,
 )
 
@@ -102,46 +102,46 @@ interface ArchivedFileDao {
     @Query("SELECT * FROM archived_file ORDER BY name")
     fun observeAll(): Flow<List<ArchivedFile>>
 
-    @Query("SELECT * FROM archived_file WHERE station = :station ORDER BY name")
-    fun observeForStation(station: String): Flow<List<ArchivedFile>>
+    @Query("SELECT * FROM archived_file WHERE thing = :thing ORDER BY name")
+    fun observeForThing(thing: String): Flow<List<ArchivedFile>>
 
-    @Query("SELECT * FROM archived_file WHERE station = :station")
-    suspend fun forStation(station: String): List<ArchivedFile>
+    @Query("SELECT * FROM archived_file WHERE thing = :thing")
+    suspend fun forThing(thing: String): List<ArchivedFile>
 
-    /** Identity columns of one station's files. Room re-runs it only when `archived_file` changes. */
-    @Query("SELECT station, name, bytes, crc32 FROM archived_file WHERE station = :station ORDER BY name")
-    fun observeIdentitiesForStation(station: String): Flow<List<ArchivedFileIdentity>>
+    /** Identity columns of one thing's files. Room re-runs it only when `archived_file` changes. */
+    @Query("SELECT thing, name, bytes, crc32 FROM archived_file WHERE thing = :thing ORDER BY name")
+    fun observeIdentitiesForThing(thing: String): Flow<List<ArchivedFileIdentity>>
 
-    @Query("SELECT station, name, bytes, crc32 FROM archived_file WHERE station = :station ORDER BY name")
-    suspend fun identitiesForStation(station: String): List<ArchivedFileIdentity>
+    @Query("SELECT thing, name, bytes, crc32 FROM archived_file WHERE thing = :thing ORDER BY name")
+    suspend fun identitiesForThing(thing: String): List<ArchivedFileIdentity>
 
-    @Query("SELECT COUNT(*) FROM archived_file WHERE station = :station")
-    fun observeCountForStation(station: String): Flow<Int>
+    @Query("SELECT COUNT(*) FROM archived_file WHERE thing = :thing")
+    fun observeCountForThing(thing: String): Flow<Int>
 
-    @Query("SELECT EXISTS(SELECT 1 FROM archived_file WHERE station = :station)")
-    fun observeAnyForStation(station: String): Flow<Boolean>
+    @Query("SELECT EXISTS(SELECT 1 FROM archived_file WHERE thing = :thing)")
+    fun observeAnyForThing(thing: String): Flow<Boolean>
 
-    /** One row per station with files, for the device list (count, last sync, newest data). */
+    /** One row per thing with files, for the device list (count, last sync, newest data). */
     @Query(
-        "SELECT station, COUNT(*) AS files, MAX(syncedAtEpochMs) AS lastSyncedMs, MAX(lastUtcNs) AS lastDataUtcNs " +
-            "FROM archived_file GROUP BY station"
+        "SELECT thing, COUNT(*) AS files, MAX(syncedAtEpochMs) AS lastSyncedMs, MAX(lastUtcNs) AS lastDataUtcNs " +
+            "FROM archived_file GROUP BY thing"
     )
-    fun observeStationGlances(): Flow<List<StationArchiveGlance>>
+    fun observeThingGlances(): Flow<List<ThingArchiveGlance>>
 
     /** True while any file waits for its first index pass, without reading the rows. */
     @Query("SELECT EXISTS(SELECT 1 FROM archived_file WHERE indexedAtEpochMs IS NULL)")
     fun observeAnyNeverIndexed(): Flow<Boolean>
 
-    /** The newest real or estimated end per station over files History can place, as `ArchiveIndex.latestTimedEnds`. */
+    /** The newest real or estimated end per thing over files History can place, as `ArchiveIndex.latestTimedEnds`. */
     @Query(
-        "SELECT station, MAX(CASE WHEN utcRows > 0 THEN lastUtcNs ELSE estLastUtcNs END) AS lastNs FROM archived_file " +
+        "SELECT thing, MAX(CASE WHEN utcRows > 0 THEN lastUtcNs ELSE estLastUtcNs END) AS lastNs FROM archived_file " +
             "WHERE indexedAtEpochMs IS NOT NULL AND indexError IS NULL AND (purpose IS NULL OR purpose = 'telemetry') " +
-            "AND (utcRows > 0 OR (estFirstUtcNs IS NOT NULL AND estLastUtcNs IS NOT NULL)) GROUP BY station"
+            "AND (utcRows > 0 OR (estFirstUtcNs IS NOT NULL AND estLastUtcNs IS NOT NULL)) GROUP BY thing"
     )
-    fun observeLatestTimed(): Flow<List<StationTimedEnd>>
+    fun observeLatestTimed(): Flow<List<ThingTimedEnd>>
 
-    @Query("SELECT * FROM archived_file WHERE station = :station AND name = :name")
-    suspend fun get(station: String, name: String): ArchivedFile?
+    @Query("SELECT * FROM archived_file WHERE thing = :thing AND name = :name")
+    suspend fun get(thing: String, name: String): ArchivedFile?
 
     @Query("SELECT COUNT(*) FROM archived_file")
     fun observeCount(): Flow<Int>
@@ -151,24 +151,24 @@ interface ArchivedFileDao {
 
     /**
      * `REPLACE`, not `@Upsert`, for the same reason as `DerivedDayDao.upsert`: auto-generated id plus a
-     * unique `(station, name)` index means `@Upsert` cannot update a row it did not fetch first. The
+     * unique `(thing, name)` index means `@Upsert` cannot update a row it did not fetch first. The
      * indexer passes fetched rows (id set), but `SyncEngine` writes a fresh row after a verified
      * download and must win over any stale row of the same name.
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(file: ArchivedFile)
 
-    /** Inserts only when (station, name) has no row. Returns the new row id, or -1 when one exists. */
+    /** Inserts only when (thing, name) has no row. Returns the new row id, or -1 when one exists. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIfAbsent(file: ArchivedFile): Long
 
     /**
-     * Reads the row of `(station, name)` and writes [transform] of it in one transaction, the same as
+     * Reads the row of `(thing, name)` and writes [transform] of it in one transaction, the same as
      * Room's `withTransaction`, so two writers of different columns never lose each other's change (#60).
      */
     @Transaction
-    suspend fun update(station: String, name: String, transform: (ArchivedFile) -> ArchivedFile) {
-        get(station, name)?.let { upsert(transform(it)) }
+    suspend fun update(thing: String, name: String, transform: (ArchivedFile) -> ArchivedFile) {
+        get(thing, name)?.let { upsert(transform(it)) }
     }
 
     /** Rows not yet indexed (pre-v4 rows, or a previous attempt that failed and should be retried after an app update). */
@@ -178,30 +178,30 @@ interface ArchivedFileDao {
     @Query("SELECT COUNT(*) FROM archived_file WHERE indexedAtEpochMs IS NULL OR indexError IS NOT NULL")
     fun observeUnindexedCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM archived_file WHERE station = :station AND (indexedAtEpochMs IS NULL OR indexError IS NOT NULL)")
-    fun observeUnindexedCountForStation(station: String): Flow<Int>
+    @Query("SELECT COUNT(*) FROM archived_file WHERE thing = :thing AND (indexedAtEpochMs IS NULL OR indexError IS NOT NULL)")
+    fun observeUnindexedCountForThing(thing: String): Flow<Int>
 
     /**
-     * Indexed telemetry files of one station on the timeline between [fromNs, toNs): real UTC rows,
+     * Indexed telemetry files of one thing on the timeline between [fromNs, toNs): real UTC rows,
      * or an estimated span (§4.6) when the file has none. A file with no start or no end stays out,
      * as in `ArchiveRecord.onTimeline`. Ordered by (real or estimated) first time.
      */
     @Query(
-        "SELECT * FROM archived_file WHERE station = :station AND indexedAtEpochMs IS NOT NULL AND indexError IS NULL " +
+        "SELECT * FROM archived_file WHERE thing = :thing AND indexedAtEpochMs IS NOT NULL AND indexError IS NULL " +
             "AND (purpose IS NULL OR purpose = 'telemetry') " +
             "AND (CASE WHEN utcRows > 0 THEN lastUtcNs ELSE estLastUtcNs END) >= :fromNs " +
             "AND (CASE WHEN utcRows > 0 THEN firstUtcNs ELSE estFirstUtcNs END) < :toNs " +
             "ORDER BY CASE WHEN utcRows > 0 THEN firstUtcNs ELSE estFirstUtcNs END"
     )
-    suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long): List<ArchivedFile>
+    suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long): List<ArchivedFile>
 
-    /** Indexed files of one station (for the time-estimate pass). */
-    @Query("SELECT * FROM archived_file WHERE station = :station AND indexedAtEpochMs IS NOT NULL AND indexError IS NULL")
-    suspend fun indexedForStation(station: String): List<ArchivedFile>
+    /** Indexed files of one thing (for the time-estimate pass). */
+    @Query("SELECT * FROM archived_file WHERE thing = :thing AND indexedAtEpochMs IS NOT NULL AND indexError IS NULL")
+    suspend fun indexedForThing(thing: String): List<ArchivedFile>
 
-    @Query("SELECT DISTINCT station FROM archived_file")
-    suspend fun stations(): List<String>
+    @Query("SELECT DISTINCT thing FROM archived_file")
+    suspend fun things(): List<String>
 
-    @Query("DELETE FROM archived_file WHERE station = :station AND name = :name")
-    suspend fun delete(station: String, name: String)
+    @Query("DELETE FROM archived_file WHERE thing = :thing AND name = :name")
+    suspend fun delete(thing: String, name: String)
 }

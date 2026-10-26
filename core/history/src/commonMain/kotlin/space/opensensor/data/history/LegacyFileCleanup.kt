@@ -45,12 +45,12 @@ data class UtcDayRange(val fromEpochDay: Long, val toEpochDay: Long) {
 
     private companion object {
         /** The last epoch day whose start still fits a Long of nanoseconds, in 2262. */
-        const val MAX_DAY = Long.MAX_VALUE / StationDays.DAY_NS
+        const val MAX_DAY = Long.MAX_VALUE / ThingDays.DAY_NS
 
         fun dayStartNs(day: Long): Long = when {
             day > MAX_DAY -> Long.MAX_VALUE
             day < -MAX_DAY -> Long.MIN_VALUE
-            else -> day * StationDays.DAY_NS
+            else -> day * ThingDays.DAY_NS
         }
     }
 }
@@ -65,7 +65,7 @@ data class UtcDayRange(val fromEpochDay: Long, val toEpochDay: Long) {
  * [plan] is the dry run, it reads each footer and changes nothing. [remove] works through a plan one
  * file at a time under the coordinator's writer lease of that file, so a sync of the same file waits,
  * and once it runs the engine finds the tombstone before `OPEN` and skips the file. It checks the file
- * is still old, then under the station gate re-reads the live record, writes the [PrunedFile], removes
+ * is still old, then under the thing gate re-reads the live record, writes the [PrunedFile], removes
  * the index record and deletes the final file. Repair, sync and the janitor take the same gate, so
  * none of them writes the record back in between. A crash between the record and
  * the file leaves a final file without a record, which the startup janitor adopts again, so the
@@ -76,7 +76,7 @@ data class UtcDayRange(val fromEpochDay: Long, val toEpochDay: Long) {
  * re-adopt check, finish under [NonCancellable], and [afterRemoval] runs for the files already removed
  * even when the caller is cancelled.
  *
- * Logs carry counts and exception class names only, never paths or station ids.
+ * Logs carry counts and exception class names only, never paths or thing ids.
  */
 class LegacyFileCleanup(
     private val store: ArchiveStore,
@@ -86,7 +86,7 @@ class LegacyFileCleanup(
     /** The archive's one coordinator, shared with sync, repair and the janitor. */
     private val coordinator: DeviceCoordinator,
     private val io: CoroutineDispatcher,
-    /** Rebuilds the derived days of the removed files, per station. */
+    /** Rebuilds the derived days of the removed files, per thing. */
     private val afterRemoval: suspend (Map<String, Set<Long>>) -> Unit = {},
     private val log: (String) -> Unit = {},
     private val nowEpochMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
@@ -94,7 +94,7 @@ class LegacyFileCleanup(
     private val pruned: PrunedFiles get() = coordinator.pruned
 
     /** Old layout files the dry run found. [skipped] counts files whose footer could not be read, which are kept. */
-    data class Plan(val keys: List<ArchiveKey>, val bytes: Long, val stations: Int, val skipped: Int) {
+    data class Plan(val keys: List<ArchiveKey>, val bytes: Long, val things: Int, val skipped: Int) {
         val files: Int get() = keys.size
     }
 
@@ -122,7 +122,7 @@ class LegacyFileCleanup(
         val keys = ArrayList<ArchiveKey>()
         var bytes = 0L
         var skipped = 0
-        val stations = HashSet<String>()
+        val things = HashSet<String>()
         val unreadable = UnreadableLog()
         for (record in index.observeAll().first()) {
             if (range != null && !range.covers(record)) continue
@@ -130,14 +130,14 @@ class LegacyFileCleanup(
                 true -> {
                     keys += record.key
                     bytes += record.bytes
-                    stations += record.station
+                    things += record.thing
                 }
                 false -> Unit
                 null -> skipped++
             }
         }
-        log("old file cleanup: found ${keys.size} files in ${stations.size} stations, skipped $skipped")
-        return Plan(keys, bytes, stations.size, skipped)
+        log("old file cleanup: found ${keys.size} files in ${things.size} things, skipped $skipped")
+        return Plan(keys, bytes, things.size, skipped)
     }
 
     /**
@@ -153,7 +153,7 @@ class LegacyFileCleanup(
             if (f < first) first = f
             if (l > last) last = l
         }
-        return if (first <= last) UtcDayRange(StationDays.dayOf(first), StationDays.dayOf(last)) else null
+        return if (first <= last) UtcDayRange(ThingDays.dayOf(first), ThingDays.dayOf(last)) else null
     }
 
     /** Removes the files of [plan] that are still old. */
@@ -181,11 +181,11 @@ class LegacyFileCleanup(
         return report
     }
 
-    /** Runs [afterRemoval] for the stations and days of [removed]. False when it threw. */
+    /** Runs [afterRemoval] for the things and days of [removed]. False when it threw. */
     private suspend fun rebuild(removed: List<ArchiveRecord>): Boolean {
         val days = HashMap<String, Set<Long>>()
-        for (r in removed) days[r.station] = days[r.station].orEmpty()
-        days.putAll(StationDays.of(removed))
+        for (r in removed) days[r.thing] = days[r.thing].orEmpty()
+        days.putAll(ThingDays.of(removed))
         return try {
             afterRemoval(days)
             true
@@ -206,7 +206,7 @@ class LegacyFileCleanup(
         val checked = index.get(key) ?: return Outcome.Kept
         if (isLegacy(key, unreadable) != true) return Outcome.Kept
         val path = finalPath(key) ?: return Outcome.Kept
-        return withContext(NonCancellable) { coordinator.withStation(key.station) { drop(key, checked, path, removed) } }
+        return withContext(NonCancellable) { coordinator.withThing(key.thing) { drop(key, checked, path, removed) } }
     }
 
     /** Under the gate. The live record must still be the [checked] file, else the file is kept. */
@@ -221,7 +221,7 @@ class LegacyFileCleanup(
         }
         if (record == null || record.bytes != checked.bytes || record.crc32 != checked.crc32) return Outcome.Kept
         try {
-            pruned.put(PrunedFile(key.station, key.name, record.bytes, record.crc32, nowEpochMs()))
+            pruned.put(PrunedFile(key.thing, key.name, record.bytes, record.crc32, nowEpochMs()))
             index.remove(key)
             withContext(io) { tree.delete(path) }
         } catch (e: CancellationException) {
@@ -270,7 +270,7 @@ class LegacyFileCleanup(
      */
     private fun finalPath(key: ArchiveKey): String? {
         val root = roots[StorageRole.Archive] ?: return null
-        val path = "$root/${key.station}/${key.name}"
+        val path = "$root/${key.thing}/${key.name}"
         if (!path.startsWith("$root/") || roots.classOf(path) != StorageClass.Durable) return null
         return path
     }

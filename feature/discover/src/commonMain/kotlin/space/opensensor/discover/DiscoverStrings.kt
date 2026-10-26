@@ -117,7 +117,7 @@ class DiscoverStrings internal constructor(
     val sampleData: String,
     val sampleInfo: InfoText,
     val scaleInfo: InfoText,
-    /** [scaleInfo] for the daily public feed, one or more stations, the latest day. */
+    /** [scaleInfo] for the daily public feed, one or more things, the latest day. */
     val scaleInfoReal: InfoText,
     val osm: String,
     val mapInfo: InfoText,

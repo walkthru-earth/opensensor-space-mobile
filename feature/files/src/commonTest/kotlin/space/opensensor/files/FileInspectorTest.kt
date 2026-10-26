@@ -138,13 +138,13 @@ class FileInspectorTest {
     }
 
     private class Store(val finals: Map<ArchiveKey, ByteArray>) : ArchiveStore {
-        override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
+        override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = error("read only")
         override suspend fun exists(key: ArchiveKey): Boolean = key in finals
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader = ByteArrayReader(finals.getValue(key))
         override suspend fun commit(key: ArchiveKey) = error("read only")
-        override suspend fun listFinal(station: String?): List<ArchiveKey> = finals.keys.toList()
+        override suspend fun listFinal(thing: String?): List<ArchiveKey> = finals.keys.toList()
     }
 
     @Test

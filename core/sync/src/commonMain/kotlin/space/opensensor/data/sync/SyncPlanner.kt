@@ -13,12 +13,12 @@ import space.opensensor.data.protocol.SafeName
  */
 sealed interface HivePartition {
     /** Rows with UTC: `station=…/year=YYYY/month=MM/day=DD/`. */
-    data class Dated(val station: String, val year: Int, val month: Int, val day: Int) : HivePartition {
+    data class Dated(val thing: String, val year: Int, val month: Int, val day: Int) : HivePartition {
         val isoDate: String get() = "${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}"
     }
 
     /** Rows sampled before the clock was set: `station=…/unsynced/boot=<id>/`. */
-    data class Unsynced(val station: String, val boot: String) : HivePartition
+    data class Unsynced(val thing: String, val boot: String) : HivePartition
 
     /** `benchmarks/boot=<id>/…` */
     data class Benchmarks(val boot: String?) : HivePartition
@@ -38,12 +38,12 @@ sealed interface HivePartition {
 
         fun of(name: String): HivePartition {
             DATED.matchEntire(name)?.let {
-                val (station, y, m, d) = it.destructured
-                return Dated(station, y.toInt(), m.toInt(), d.toInt())
+                val (thing, y, m, d) = it.destructured
+                return Dated(thing, y.toInt(), m.toInt(), d.toInt())
             }
             UNSYNCED.matchEntire(name)?.let {
-                val (station, boot) = it.destructured
-                return Unsynced(station, boot)
+                val (thing, boot) = it.destructured
+                return Unsynced(thing, boot)
             }
             BENCH.matchEntire(name)?.let { return Benchmarks(it.groupValues[1].ifEmpty { null }) }
             if (name.startsWith("legacy-parquet/")) return Legacy
@@ -53,7 +53,7 @@ sealed interface HivePartition {
 }
 
 /** Identity of a file already held in the local archive. */
-data class ArchivedIdentity(val station: String, val name: String, val bytes: Long, val crc32: Long?)
+data class ArchivedIdentity(val thing: String, val name: String, val bytes: Long, val crc32: Long?)
 
 /**
  * Per-manifest-entry state as shown in the Files screen. [REMOVED] is a file the user removed from
@@ -74,7 +74,7 @@ data class ManifestEntry(
 data class SyncPlan(
     val entries: List<ManifestEntry>,
     val toDownload: List<ManifestEntry>,
-    /** Removed records of this station whose name the listing no longer has. See [SyncPlanner]. */
+    /** Removed records of this thing whose name the listing no longer has. See [SyncPlanner]. */
     val unlistedRemoved: List<PrunedFile> = emptyList(),
 ) {
     val missingBytes: Long get() = toDownload.sumOf { it.bytes - it.partialBytes }
@@ -85,9 +85,9 @@ data class SyncPlan(
 /**
  * Pure decision logic for "which files still need to come over".
  *
- * Archive identity is `(station, relative name)`. The file is immutable, so a differing `bytes`
+ * Archive identity is `(thing, relative name)`. The file is immutable, so a differing `bytes`
  * for an already-archived name is a mismatch to surface, never a version to merge. A [PrunedFile]
- * with the same station, name and size marks the entry [FileSyncState.REMOVED]. A held copy wins
+ * with the same thing, name and size marks the entry [FileSyncState.REMOVED]. A held copy wins
  * over it, and a different size is a new file that downloads as usual. A record whose name the
  * listing no longer has goes to [SyncPlan.unlistedRemoved]. The device dropped that file, so a later
  * file under the same name is new even at the same size, and a caller with a whole listing forgets
@@ -95,14 +95,14 @@ data class SyncPlan(
  */
 object SyncPlanner {
     fun plan(
-        station: String,
+        thing: String,
         manifest: List<Frame.File>,
         archived: Collection<ArchivedIdentity>,
         partials: Map<String, Long> = emptyMap(),
         pruned: Collection<PrunedFile> = emptyList(),
     ): SyncPlan {
-        val byName = archived.filter { it.station == station }.associateBy { it.name }
-        val prunedByName = pruned.filter { it.station == station }.associateBy { it.name }
+        val byName = archived.filter { it.thing == thing }.associateBy { it.name }
+        val prunedByName = pruned.filter { it.thing == thing }.associateBy { it.name }
         val entries = manifest.map { file ->
             val partition = HivePartition.of(file.name)
             val local = byName[file.name]

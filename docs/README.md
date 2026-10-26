@@ -82,4 +82,4 @@ beside your own devices. `cross-platform-guide` holds the rules that keep both p
 - Host/JVM tests, iOS simulator builds, Android phone runs, and iPhone runs are separate
   evidence. A result for one platform does not qualify another.
 
-Private station setup: [device-location.md](device-location.md) describes tap-only H3 provisioning, precision and country policy.
+Private thing setup: [device-location.md](device-location.md) describes tap-only H3 provisioning, precision and country policy.

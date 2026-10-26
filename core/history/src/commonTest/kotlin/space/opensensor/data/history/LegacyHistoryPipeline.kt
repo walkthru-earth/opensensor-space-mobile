@@ -35,7 +35,7 @@ private class LegacyGate(private val gate: ValidityGate, private val column: Col
 }
 
 internal class LegacyAggregator(
-    private val station: String,
+    private val thing: String,
     private val resolutions: Set<Resolution> = Resolution.entries.toSet(),
     private val metrics: List<MetricSpec> = Metrics.all,
 ) {
@@ -107,22 +107,22 @@ internal class LegacyAggregator(
             for ((k, spec) in metrics.withIndex()) {
                 if (a.n[k] > 0) per[spec.id] = MetricAgg(a.n[k], (a.sum[k] / a.n[k]).toFloat(), a.min[k], a.max[k], a.settling[k])
             }
-            Bucket(station, key.first, key.second, a.rows, a.estimated, per, a.intervalMs)
+            Bucket(thing, key.first, key.second, a.rows, a.estimated, per, a.intervalMs)
         }
 }
 
 internal object LegacyDailyParquetBuilder {
     fun build(
-        station: String,
+        thing: String,
         epochDay: Long,
         sources: List<DailyParquetSource>,
         sink: ParquetSink,
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long,
     ): DailyParquetResult? {
-        require(ArchiveLayout.isSafeStation(station)) { "unsafe station id" }
-        val dayStartNs = epochDay * StationDays.DAY_NS
-        val dayEndNs = dayStartNs + StationDays.DAY_NS
+        require(ArchiveLayout.isSafeThing(thing)) { "unsafe thing id" }
+        val dayStartNs = epochDay * ThingDays.DAY_NS
+        val dayEndNs = dayStartNs + ThingDays.DAY_NS
 
         // 1. Open one source at a time, gather its columns and the row indices that belong to this day,
         // decode what the day needs and close it before the next (#61). Estimated times (§4.6) per source:
@@ -141,10 +141,10 @@ internal object LegacyDailyParquetBuilder {
         val seen = LegacyRowKeys()
         for (source in sources.sortedWith(compareBy({ it.record.firstUtcNs ?: Long.MAX_VALUE }, { it.record.name }))) {
             val src = source.record
-            require(src.station == station) { "source belongs to another station" }
+            require(src.thing == thing) { "source belongs to another thing" }
             opened += source.open().use { pf ->
                 val md = pf.metadata
-                require(md.footer?.stationId == null || md.footer?.stationId == station) { "Parquet source belongs to another station" }
+                require(md.footer?.thingId == null || md.footer?.thingId == thing) { "Parquet source belongs to another thing" }
                 val utc = UtcColumns.readEventNs(pf) ?: return@use null
                 val bootHi = md.leaf("boot_id_hi")?.let { pf.readColumn(it) }
                 val bootLo = md.leaf("boot_id_lo")?.let { pf.readColumn(it) }

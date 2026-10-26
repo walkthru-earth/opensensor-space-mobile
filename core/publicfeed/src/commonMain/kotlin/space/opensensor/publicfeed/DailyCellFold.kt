@@ -5,7 +5,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
 
 /**
- * Folds the daily rows of one cells file (one row per `h3_index` and station local `date`, as in the
+ * Folds the daily rows of one cells file (one row per `h3_index` and thing local `date`, as in the
  * OpenAQ aggregates) into one [CellRow] per cell for a window. Pure, no I/O.
  *
  * - Only days in the 7 days ending at `asOf` (asOf minus 6 through asOf) count. Rows without a date

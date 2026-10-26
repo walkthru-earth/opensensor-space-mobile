@@ -39,8 +39,8 @@ class HistoryIndexer internal constructor(
     val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
 
     /** Only the durable receipt; reconciliation stays in a cancellable history pass. */
-    suspend fun persistClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
-        clockAnchors.put(ClockAnchor(station, boot, utcNs, monotonicUs))
+    suspend fun persistClockAnchor(thing: String, boot: String, utcNs: Long, monotonicUs: Long) {
+        clockAnchors.put(ClockAnchor(thing, boot, utcNs, monotonicUs))
     }
 
     /** The shared repair, which the [HistoryOrchestrator] runs as its backfill. */

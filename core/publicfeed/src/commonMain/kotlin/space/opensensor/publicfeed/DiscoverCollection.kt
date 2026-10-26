@@ -7,7 +7,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
 import space.opensensor.airquality.WhoGuidelines
 import space.opensensor.model.Scale
-import space.opensensor.model.StationCollection
+import space.opensensor.model.ThingCollection
 import kotlin.math.abs
 
 /**
@@ -22,7 +22,7 @@ import kotlin.math.abs
  * that has ([resolutionNear]).
  */
 class DiscoverCollection private constructor(
-    private val stac: StationCollection,
+    private val stac: ThingCollection,
     val asOf: LocalDate?,
     val generation: String?,
     val cells: Map<Int, String>,
@@ -87,7 +87,7 @@ class DiscoverCollection private constructor(
          * @throws IllegalArgumentException when [json] is not a Collection.
          */
         fun parse(json: String, root: String): DiscoverCollection {
-            val stac = StationCollection.parse(withoutBrokenScales(json))
+            val stac = ThingCollection.parse(withoutBrokenScales(json))
             val dto = try {
                 FeedPaths.json.decodeFromString<Dto>(json)
             } catch (e: SerializationException) {

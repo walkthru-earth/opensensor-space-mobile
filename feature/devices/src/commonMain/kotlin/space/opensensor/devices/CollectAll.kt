@@ -7,7 +7,7 @@ enum class CollectRoute { WIFI, BLUETOOTH }
 data class CollectStep(
     val id: String,
     val name: String?,
-    val station: String?,
+    val thing: String?,
     val route: CollectRoute,
     val wifiName: String? = null,
 )
@@ -17,22 +17,22 @@ data class CollectStep(
  * iOS runs this plan through [CollectAllQueue].
  *
  * - A sensor with an open link is skipped. Its own screen already owns it.
- * - One step per station, so a station never syncs over two links at once.
- * - Wi-Fi when this phone holds the token and the station is on the Wi-Fi now, otherwise Bluetooth.
+ * - One step per thing, so a thing never syncs over two links at once.
+ * - Wi-Fi when this phone holds the token and the thing is on the Wi-Fi now, otherwise Bluetooth.
  * - Wi-Fi steps go first. They are faster and free the Bluetooth radio for the rest.
  */
 object CollectAllPlan {
     fun plan(known: List<KnownSensor>, wifi: List<WifiSensor>, activeIds: Set<String>): List<CollectStep> {
-        val wifiByStation = wifi.filter { it.station != null }.associateBy { it.station }
-        val seenStations = HashSet<String>()
+        val wifiByThing = wifi.filter { it.thing != null }.associateBy { it.thing }
+        val seenThings = HashSet<String>()
         val steps = known.distinctBy { it.id }.filter { it.id !in activeIds }.mapNotNull { k ->
-            val station = k.station
-            if (station != null && !seenStations.add(station)) return@mapNotNull null
-            val lan = station?.let(wifiByStation::get)
+            val thing = k.thing
+            if (thing != null && !seenThings.add(thing)) return@mapNotNull null
+            val lan = thing?.let(wifiByThing::get)
             if (k.hasWifiAccess && lan != null) {
-                CollectStep(k.id, k.name, station, CollectRoute.WIFI, lan.name)
+                CollectStep(k.id, k.name, thing, CollectRoute.WIFI, lan.name)
             } else {
-                CollectStep(k.id, k.name, station, CollectRoute.BLUETOOTH)
+                CollectStep(k.id, k.name, thing, CollectRoute.BLUETOOTH)
             }
         }
         return steps.sortedBy { it.route.ordinal }
@@ -87,8 +87,8 @@ class CollectAllQueue(steps: List<CollectStep>, private val parallel: Int = 1) {
         val started = ArrayList<CollectStep>()
         while (running.size < parallel && pending.isNotEmpty()) {
             val step = pending.removeFirst()
-            val busyStation = step.station != null && running.values.any { it.station == step.station }
-            if (busyStation) continue
+            val busyThing = step.thing != null && running.values.any { it.thing == step.thing }
+            if (busyThing) continue
             running[step.id] = step
             started += step
         }

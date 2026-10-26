@@ -11,11 +11,11 @@ import kotlin.test.assertNull
 import kotlin.time.Instant
 
 class FileGroupingTest {
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val boot = "b41d37a48c04031e9397e28ce48c2f43"
 
     private fun dated(day: Int, hhmm: String, seq: Int) =
-        entry("station=$station/year=2026/month=09/day=$day/data_${hhmm}_${boot}_$seq-${seq + 1}-1.parquet")
+        entry("station=$thing/year=2026/month=09/day=$day/data_${hhmm}_${boot}_$seq-${seq + 1}-1.parquet")
 
     private fun entry(name: String) = ManifestEntry(name, 1_000, HivePartition.of(name), FileSyncState.SYNCED)
 
@@ -24,7 +24,7 @@ class FileGroupingTest {
     @Test
     fun windowStartIsTheUtcDayFolderPlusTheNameHhmm() {
         assertEquals(Instant.parse("2026-09-17T22:45:00Z"), FileGrouping.windowStartUtc(dated(17, "2245", 1)))
-        assertNull(FileGrouping.windowStartUtc(entry("station=$station/unsynced/boot=$boot/data_unsynced_${boot}_0-26-0.parquet")))
+        assertNull(FileGrouping.windowStartUtc(entry("station=$thing/unsynced/boot=$boot/data_unsynced_${boot}_0-26-0.parquet")))
         assertNull(FileGrouping.windowStartUtc(entry("legacy-parquet/f1179d54856fa20c31038836e5ec177e-0-6-0.parquet")))
     }
 
@@ -35,10 +35,10 @@ class FileGroupingTest {
         assertEquals(2, groups.size)
         // Newest local day first.
         assertEquals(GroupTitle.LocalDay(LocalDate(2026, 9, 18)), groups[0].title)
-        assertEquals(GroupDetail(station = "53315f5f", utcFolders = listOf("2026-09-17", "2026-09-18")), groups[0].detail)
+        assertEquals(GroupDetail(thing = "53315f5f", utcFolders = listOf("2026-09-17", "2026-09-18")), groups[0].detail)
         assertEquals(listOf("06:00", "00:00"), groups[0].entries.map { it.localTime })
         assertEquals(GroupTitle.LocalDay(LocalDate(2026, 9, 17)), groups[1].title)
-        assertEquals(GroupDetail(station = "53315f5f", utcFolders = listOf("2026-09-17")), groups[1].detail)
+        assertEquals(GroupDetail(thing = "53315f5f", utcFolders = listOf("2026-09-17")), groups[1].detail)
         assertEquals(listOf("23:45"), groups[1].entries.map { it.localTime })
     }
 
@@ -64,7 +64,7 @@ class FileGroupingTest {
             listOf(
                 entry("legacy-parquet/f1179d54856fa20c31038836e5ec177e-0-6-0.parquet"),
                 entry("benchmarks/boot=e452563e96c72ca057a48924550779b6/lz4_raw_e452563e96c72ca057a48924550779b6_0-59-1.parquet"),
-                entry("station=$station/unsynced/boot=$boot/data_unsynced_${boot}_0-26-0.parquet"),
+                entry("station=$thing/unsynced/boot=$boot/data_unsynced_${boot}_0-26-0.parquet"),
                 dated(17, "0900", 1),
             ),
             "UTC",
@@ -78,7 +78,7 @@ class FileGroupingTest {
     }
 
     @Test
-    fun theSamePathOnTwoStationsGetsTwoRowsInOneGroup() {
+    fun theSamePathOnTwoThingsGetsTwoRowsInOneGroup() {
         val e = dated(17, "0900", 1)
         val groups = FileGrouping.group(listOf(e to "sensor-a", e to "sensor-b"), TimeZone.UTC)
         val keys = groups.single().entries.map { it.key }

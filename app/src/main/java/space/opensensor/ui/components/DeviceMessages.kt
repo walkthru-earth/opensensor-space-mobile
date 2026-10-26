@@ -70,7 +70,7 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
     is DeviceMessage.IdentityRejected -> res(reason.toStringRes())
     DeviceMessage.HardwareInUse -> res(R.string.msg_hardware_in_use)
     DeviceMessage.VerificationFailed -> res(R.string.msg_verification_failed)
-    DeviceMessage.StationChanged -> res(R.string.msg_station_changed)
+    DeviceMessage.ThingChanged -> res(R.string.msg_thing_changed)
     is DeviceMessage.Reconnecting -> res(R.string.msg_reconnecting, attempt, max)
     is DeviceMessage.ReconnectFailed -> plural(R.plurals.msg_reconnect_failed, attempts.toLong(), attempts)
     DeviceMessage.LanTokenRenewed -> res(R.string.msg_lan_token_renewed)
@@ -84,7 +84,7 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
         },
     )
     DeviceMessage.FileListNotReady -> res(R.string.msg_file_list_not_ready)
-    DeviceMessage.NoStationId -> res(R.string.msg_no_station)
+    DeviceMessage.NoThingId -> res(R.string.msg_no_thing)
     DeviceMessage.UpToDate -> res(R.string.msg_up_to_date)
     is DeviceMessage.FileNotSynced -> res(
         when (problem) {
@@ -149,11 +149,11 @@ fun DeviceContinuityPolicy.Reason.toStringRes(): Int = when (this) {
     DeviceContinuityPolicy.Reason.HARDWARE_CHANGED -> R.string.msg_identity_hardware_changed
     DeviceContinuityPolicy.Reason.HARDWARE_MISSING -> R.string.msg_identity_hardware_missing
     DeviceContinuityPolicy.Reason.HARDWARE_MALFORMED -> R.string.msg_identity_hardware_malformed
-    DeviceContinuityPolicy.Reason.STATION_MISSING -> R.string.msg_identity_station_missing
-    DeviceContinuityPolicy.Reason.STATION_MALFORMED -> R.string.msg_identity_station_malformed
+    DeviceContinuityPolicy.Reason.THING_MISSING -> R.string.msg_identity_thing_missing
+    DeviceContinuityPolicy.Reason.THING_MALFORMED -> R.string.msg_identity_thing_malformed
     DeviceContinuityPolicy.Reason.ENROLLMENT_REQUIRES_BLE -> R.string.msg_identity_enroll_ble
-    DeviceContinuityPolicy.Reason.STATION_CHANGE_REQUIRES_BLE -> R.string.msg_identity_station_ble
-    DeviceContinuityPolicy.Reason.STATION_CHANGE_REQUIRES_HARDWARE -> R.string.msg_identity_station_hardware
+    DeviceContinuityPolicy.Reason.THING_CHANGE_REQUIRES_BLE -> R.string.msg_identity_thing_ble
+    DeviceContinuityPolicy.Reason.THING_CHANGE_REQUIRES_HARDWARE -> R.string.msg_identity_thing_hardware
 }
 
 @StringRes

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="device_unnamed">جهاز بلا اسم</string>
-    <string name="today_station_short">المعرّف %1$s…</string>
+    <string name="today_thing_short">المعرّف %1$s…</string>
     <string name="nav_devices">الأجهزة</string>
     <string name="nav_debug">تصحيح الأخطاء</string>
     <string name="nav_disconnect">قطع الاتصال</string>
@@ -226,7 +226,7 @@
     <string name="device_protocol">البروتوكول</string>
     <string name="device_schema">المخطط</string>
     <string name="device_schema_cols">%1$s، %2$s أعمدة</string>
-    <string name="device_station">المحطة</string>
+    <string name="device_thing">معرّف المستشعر</string>
     <string name="device_id">معرّف الجهاز</string>
     <string name="device_boot">التشغيل</string>
     <string name="device_dictionary">القاموس</string>

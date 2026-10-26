@@ -109,7 +109,7 @@ class PermissionFlowTest {
 
     @Test
     fun openingASensorAsksNothing() {
-        // A station opens on its archive. Only Reconnect asks for Bluetooth (#147).
+        // A thing opens on its archive. Only Reconnect asks for Bluetooth (#147).
         assertTrue(PermissionTriggers.of(UserAction.OPEN_SENSOR).all.isEmpty())
     }
 

@@ -12,11 +12,11 @@ import kotlin.time.Instant
 
 /**
  * One file shown in the list, with its window start as `HH:mm` in the phone's zone (null when the
- * name carries no time). [station] is the archive folder the verified copy lives in, when known.
+ * name carries no time). [thing] is the archive folder the verified copy lives in, when known.
  */
-data class FileItem(val entry: ManifestEntry, val localTime: String?, val station: String? = null) {
-    /** Unique across stations, for list keys. */
-    val key: String get() = "${station.orEmpty()}/${entry.name}"
+data class FileItem(val entry: ManifestEntry, val localTime: String?, val thing: String? = null) {
+    /** Unique across things, for list keys. */
+    val key: String get() = "${thing.orEmpty()}/${entry.name}"
 }
 
 /**
@@ -50,7 +50,7 @@ sealed interface GroupTitle {
 
 /** Developer facts under a group header, identifiers and never sentences. */
 data class GroupDetail(
-    val station: String? = null,
+    val thing: String? = null,
     val boot: String? = null,
     val utcFolders: List<String> = emptyList(),
     val unrecognised: Boolean = false,
@@ -69,7 +69,7 @@ object FileGrouping {
         return runCatching { LocalDateTime(p.year, p.month, p.day, hh.toInt(), mm.toInt()).toInstant(TimeZone.UTC) }.getOrNull()
     }
 
-    /** Groups [entries], each with the station folder it belongs to (null when unknown). */
+    /** Groups [entries], each with the thing folder it belongs to (null when unknown). */
     fun group(entries: List<Pair<ManifestEntry, String?>>, zone: TimeZone): List<PartitionGroup> {
         data class Key(val rank: Int, val partition: HivePartition, val localDay: LocalDate?)
 
@@ -84,8 +84,8 @@ object FileGrouping {
             when {
                 p is HivePartition.Dated && start != null -> {
                     val day = start.toLocalDateTime(zone).date
-                    // One group per station and local day.
-                    Key(0, HivePartition.Dated(p.station, day.year, day.month.ordinal + 1, day.day), day)
+                    // One group per thing and local day.
+                    Key(0, HivePartition.Dated(p.thing, day.year, day.month.ordinal + 1, day.day), day)
                 }
                 else -> Key(rank(p), p, null)
             }
@@ -94,14 +94,14 @@ object FileGrouping {
             val p = key.partition
             val items = list
                 .sortedWith(compareByDescending<Pair<ManifestEntry, String?>> { windowStartUtc(it.first) ?: Instant.DISTANT_PAST }.thenByDescending { it.first.name })
-                .map { (e, station) -> FileItem(e, windowStartUtc(e)?.let(::hhmm), station) }
+                .map { (e, thing) -> FileItem(e, windowStartUtc(e)?.let(::hhmm), thing) }
             val (title, detail) = when (p) {
                 is HivePartition.Dated if key.localDay != null -> {
                     val utcDays = list.map { (it.first.partition as HivePartition.Dated).isoDate }.distinct().sorted()
-                    GroupTitle.LocalDay(key.localDay) to GroupDetail(station = p.station.take(8), utcFolders = utcDays)
+                    GroupTitle.LocalDay(key.localDay) to GroupDetail(thing = p.thing.take(8), utcFolders = utcDays)
                 }
                 // A dated folder whose file names carry no window time, shown as the UTC day it came from.
-                is HivePartition.Dated -> GroupTitle.UtcDay(p.isoDate) to GroupDetail(station = p.station.take(8))
+                is HivePartition.Dated -> GroupTitle.UtcDay(p.isoDate) to GroupDetail(thing = p.thing.take(8))
                 is HivePartition.Unsynced -> GroupTitle.Unsynced to GroupDetail(boot = p.boot.take(12))
                 is HivePartition.Benchmarks -> GroupTitle.Benchmarks to GroupDetail(boot = p.boot?.take(12))
                 HivePartition.Legacy -> GroupTitle.Legacy to GroupDetail()

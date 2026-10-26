@@ -32,7 +32,7 @@ class IosFileTierStoreTest {
     }
 
     @Test
-    fun savedTiersReadAfterRestartAndRetainIsStationScoped() = runTest {
+    fun savedTiersReadAfterRestartAndRetainIsThingScoped() = runTest {
         val store = IosFileTierStore(root, atomic)
         store.save("s1", day, "sig", sample)
         store.save("s1", day + 1, "next", sample)
@@ -47,7 +47,7 @@ class IosFileTierStoreTest {
     }
 
     @Test
-    fun savedDaysListOneStationAndLoadSavedKeepsTheirSignature() = runTest {
+    fun savedDaysListOneThingAndLoadSavedKeepsTheirSignature() = runTest {
         val store = IosFileTierStore(root, atomic)
         store.save("s1", day, "sig", sample)
         store.save("s1", day + 3, "later", sample)
@@ -78,7 +78,7 @@ class IosFileTierStoreTest {
         val fm = NSFileManager.defaultManager
         val relative = ArchiveLayout.derivedDayPath("s1", day).removeSuffix(".parquet") + ".tiers"
         val sentinel = TierCodec.encode("sig", sample)
-        // Cover a station parent and its higher derived parent, both before the root boundary.
+        // Cover a thing parent and its higher derived parent, both before the root boundary.
         for (parent in listOf("derived/v1/s1", "derived")) {
             fm.removeItemAtPath(root, null)
             fm.removeItemAtPath(outside, null)

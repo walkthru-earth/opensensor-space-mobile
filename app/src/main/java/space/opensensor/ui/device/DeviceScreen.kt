@@ -99,8 +99,8 @@ fun DeviceScreen(
                         IconButton(onClick = { onAction(DeviceAction.RefreshConfig) }, enabled = state.ready && state.isV2) {
                             Icon(AppIcons.Refresh, contentDescription = stringResource(R.string.device_refresh))
                         }
-                        // Reconnect and Disconnect live only here, in the station header, as on Today.
-                        if (state.station.offersReconnect) {
+                        // Reconnect and Disconnect live only here, in the thing header, as on Today.
+                        if (state.thing.offersReconnect) {
                             TextButton(onClick = { onAction(DeviceAction.Reconnect) }) { Text(stringResource(R.string.action_reconnect)) }
                         } else {
                             IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
@@ -120,7 +120,7 @@ fun DeviceScreen(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
-            if (state.station.showsBanner) {
+            if (state.thing.showsBanner) {
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                     ConnectionBanner(state.connection, technical = state.detailLevel.developer, heldInBackground = state.heldInBackground)
                 }

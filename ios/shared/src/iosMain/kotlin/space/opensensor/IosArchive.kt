@@ -74,7 +74,7 @@ internal object IosArchive {
     private val clockAnchorsRoot get() = store.finalRoot + "-clock-anchors"
     val clockAnchors by lazy { IosClockAnchorStore(clockAnchorsRoot) }
 
-    /** Files removed in Settings, which sync skips. Kept outside the station directories. */
+    /** Files removed in Settings, which sync skips. Kept outside the thing directories. */
     val pruned: PrunedFiles get() = database.pruned
 
     // Tiers persist beside the derived day files, so a cold History open decodes only new days (#63).
@@ -85,10 +85,10 @@ internal object IosArchive {
             clockAnchors = clockAnchors,
             tierStore = tierStore,
             shareScope = scope,
-            beforeBuild = { station, files, anchors ->
+            beforeBuild = { thing, files, anchors ->
                 derivedMutex.withLock {
                     try {
-                        derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
+                        derived.rebuild(thing, files, store, anchors, Clock.System.now().epochSeconds)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -114,7 +114,7 @@ internal object IosArchive {
 
     /**
      * The archive's one coordinator, shared by sync, the janitor, the index repair and [oldFiles]. It
-     * admits one sync per station and holds the writer leases, station gates and tombstones.
+     * admits one sync per thing and holds the writer leases, thing gates and tombstones.
      */
     val coordinator: DeviceCoordinator by lazy { DeviceCoordinator(pruned) }
 
@@ -212,7 +212,7 @@ internal object IosArchive {
 
             override suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan {
                 val plan = oldFiles.plan(range?.let { UtcDayRange(it.fromEpochDay, it.toEpochDay) })
-                return OldFilesPlan(plan.files, plan.bytes, plan.stations, range, skipped = plan.skipped, handle = plan)
+                return OldFilesPlan(plan.files, plan.bytes, plan.things, range, skipped = plan.skipped, handle = plan)
             }
 
             override suspend fun removeOldFiles(plan: OldFilesPlan): OldFilesResult {
@@ -232,7 +232,7 @@ internal object IosArchive {
     /**
      * The phone only cleanup of old format files behind Settings. The index change already
      * rebuilds the derived days through [startIndexRepair], the explicit rebuild runs it now and also
-     * visits the stations whose files all went, so their stale day files are removed.
+     * visits the things whose files all went, so their stale day files are removed.
      */
     private val oldFiles by lazy {
         LegacyFileCleanup(
@@ -266,33 +266,33 @@ internal object IosArchive {
     private var started = false
 
     /**
-     * Estimating times opens every indexed footer and the rebuild touches every station, so both run
+     * Estimating times opens every indexed footer and the rebuild touches every thing, so both run
      * here, never under the sync lease that recorded the anchor. A first sync starts downloading at once.
      */
     private val anchorFollowUp by lazy { clockAnchorFollowUp(scope, history) { rebuildDerived(emptyList()) } }
 
     /** Called under the SYNC or COMMAND lease. Only the anchor is saved there, the rest follows later. */
-    suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
-        clockAnchors.put(ClockAnchor(station, boot, utcNs, monotonicUs))
+    suspend fun recordClockAnchor(thing: String, boot: String, utcNs: Long, monotonicUs: Long) {
+        clockAnchors.put(ClockAnchor(thing, boot, utcNs, monotonicUs))
         anchorFollowUp.request()
     }
 
     /**
-     * Rebuilds the derived days of every station with records, and of each of the emptied stations it
-     * is given. An emptied station with no records left is rebuilt from no sources, which removes its
+     * Rebuilds the derived days of every thing with records, and of each of the emptied things it
+     * is given. An emptied thing with no records left is rebuilt from no sources, which removes its
      * stale day files. It is the one derive entry point, built by [HistoryOrchestrator.derivePassOf],
      * so every call is one pass and never runs beside a backfill. The History reader's own refresh of
-     * one station takes [derivedMutex] only, so History stays visible during a backfill and keeps the
+     * one thing takes [derivedMutex] only, so History stays visible during a backfill and keeps the
      * days a waiting record holds.
      */
     private val rebuildDerived: suspend (Collection<String>) -> Unit by lazy {
         history.derivePassOf { emptied: Collection<String> ->
             derivedMutex.withLock {
-                val byStation = index.observeAll().first().groupBy { it.station }
-                for (station in byStation.keys + emptied) {
-                    val files = byStation[station].orEmpty()
-                    val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(station))
-                    derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
+                val byThing = index.observeAll().first().groupBy { it.thing }
+                for (thing in byThing.keys + emptied) {
+                    val files = byThing[thing].orEmpty()
+                    val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(thing))
+                    derived.rebuild(thing, files, store, anchors, Clock.System.now().epochSeconds)
                 }
                 withContext(Dispatchers.IO) { derivedQuota.enforce() }
             }

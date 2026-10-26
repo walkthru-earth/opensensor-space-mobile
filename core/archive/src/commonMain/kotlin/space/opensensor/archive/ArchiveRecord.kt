@@ -9,7 +9,7 @@ package space.opensensor.archive
  * (schema v6) are set only for files without UTC rows whose boot later got a time anchor.
  */
 data class ArchiveRecord(
-    val station: String,
+    val thing: String,
     /** Relative Hive path exactly as the device reported it. */
     val name: String,
     val bytes: Long,
@@ -26,7 +26,7 @@ data class ArchiveRecord(
     val rows: Long? = null,
     val rowGroups: Int? = null,
     val bootId: String? = null,
-    /** `telemetry` for station data. Other purposes (benchmark copies) stay out of history. */
+    /** `telemetry` for thing data. Other purposes (benchmark copies) stay out of history. */
     val purpose: String? = null,
     val utcRows: Long? = null,
     val firstUtcNs: Long? = null,
@@ -39,7 +39,7 @@ data class ArchiveRecord(
     val estLastUtcNs: Long? = null,
     val estAnchorFile: String? = null,
 ) {
-    val key: ArchiveKey get() = ArchiveKey(station, name)
+    val key: ArchiveKey get() = ArchiveKey(thing, name)
 
     /** Indexed without error, the one test of whether a record's index columns can be read. */
     val isIndexed: Boolean get() = indexedAtEpochMs != null && indexError == null
@@ -50,7 +50,7 @@ data class ArchiveRecord(
      */
     val awaitsIndex: Boolean get() = indexedAtEpochMs == null
 
-    /** Station data, the only purpose history reads. */
+    /** Thing data, the only purpose history reads. */
     val isTelemetry: Boolean get() = purpose == null || purpose == TELEMETRY
 
     /** The file has real UTC rows. */
@@ -59,7 +59,7 @@ data class ArchiveRecord(
     /** The file is placed on the timeline by an estimate only. */
     val hasEstimatedUtc: Boolean get() = !hasUtc && estFirstUtcNs != null && estLastUtcNs != null
 
-    /** Indexed station data with a real or estimated time, so History can place it. */
+    /** Indexed thing data with a real or estimated time, so History can place it. */
     val hasHistoryTime: Boolean get() = isIndexed && isTelemetry && (hasUtc || hasEstimatedUtc)
 
     /** Real or estimated span start and end, whichever the file has. */

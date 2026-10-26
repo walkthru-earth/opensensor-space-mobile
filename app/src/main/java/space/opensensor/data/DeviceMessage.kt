@@ -47,7 +47,7 @@ sealed interface DeviceMessage {
     data class IdentityRejected(val reason: DeviceContinuityPolicy.Reason) : DeviceMessage
     data object HardwareInUse : DeviceMessage
     data object VerificationFailed : DeviceMessage
-    data object StationChanged : DeviceMessage
+    data object ThingChanged : DeviceMessage
     data class Reconnecting(val attempt: Int, val max: Int) : DeviceMessage
     data class ReconnectFailed(val attempts: Int) : DeviceMessage
 
@@ -59,7 +59,7 @@ sealed interface DeviceMessage {
 
     // Sync
     data object FileListNotReady : DeviceMessage
-    data object NoStationId : DeviceMessage
+    data object NoThingId : DeviceMessage
     data object UpToDate : DeviceMessage
     data class FileNotSynced(val name: String, val problem: FileProblem) : DeviceMessage
     data class SyncFinished(val synced: Int, val total: Int) : DeviceMessage

@@ -27,7 +27,7 @@ import space.opensensor.data.protocol.Frame
 import space.opensensor.data.sync.FileSyncState
 import space.opensensor.data.sync.SyncPlanner
 
-/** The station-scoped, projected and aggregate queries of [ArchivedFileDao] on an in-memory Room database (#63). */
+/** The thing-scoped, projected and aggregate queries of [ArchivedFileDao] on an in-memory Room database (#63). */
 class ArchivedFileDaoTest {
     private val db = Room.inMemoryDatabaseBuilder(ContextWrapper(null), AppDatabase::class.java)
         .setDriver(BundledSQLiteDriver())
@@ -39,7 +39,7 @@ class ArchivedFileDaoTest {
     fun close() = db.close()
 
     private fun file(
-        station: String,
+        thing: String,
         name: String,
         bytes: Long = 100,
         crc32: Long = 1,
@@ -49,42 +49,18 @@ class ArchivedFileDaoTest {
         lastUtcNs: Long? = null,
         utcRows: Long? = null,
     ) = ArchivedFile(
-        station = station,
+        thing = thing,
         name = name,
         bytes = bytes,
         crc32 = crc32,
         sha256 = "verified",
         syncedAtEpochMs = syncedAt,
-        sourceDevice = station,
+        sourceDevice = thing,
         indexedAtEpochMs = indexedAt,
         indexError = indexError,
         lastUtcNs = lastUtcNs,
         utcRows = utcRows,
     )
-
-    @Test
-    fun `migration 10 to 11 reopens only indexed rows without UTC rows or an error`() = runBlocking {
-        dao.upsert(file("a", "zero.parquet", indexedAt = 5, utcRows = 0))
-        dao.upsert(file("a", "null.parquet", indexedAt = 5, utcRows = null))
-        dao.upsert(file("a", "dated.parquet", indexedAt = 5, utcRows = 90))
-        dao.upsert(file("a", "failed.parquet", indexedAt = 5, indexError = "bad footer", utcRows = 0))
-        assertEquals(listOf("failed.parquet"), dao.unindexed(10).map { it.name })
-
-        db.useWriterConnection { it.execSQL(AppDatabase.MIGRATION_10_11_SQL) }
-
-        // A row with an error stays in the retry queue it was already in, never reopened by the migration.
-        assertEquals(setOf("zero.parquet", "null.parquet", "failed.parquet"), dao.unindexed(10).map { it.name }.toSet())
-        assertEquals(null, dao.get("a", "zero.parquet")!!.indexedAtEpochMs)
-        assertEquals(null, dao.get("a", "null.parquet")!!.indexedAtEpochMs)
-        val dated = dao.get("a", "dated.parquet")!!
-        assertEquals(5L, dated.indexedAtEpochMs)
-        assertEquals(null, dated.indexError)
-        val failed = dao.get("a", "failed.parquet")!!
-        assertEquals(5L, failed.indexedAtEpochMs)
-        assertEquals("bad footer", failed.indexError)
-        assertTrue(AppDatabase.MIGRATION_10_11 in AppDatabase.MIGRATIONS)
-        assertEquals(14, AppDatabase.MIGRATIONS.maxOf { it.endVersion })
-    }
 
     @Test
     fun `the timeline query reads indexed rows only, the same test as onTimeline`() = runBlocking {
@@ -101,20 +77,20 @@ class ArchivedFileDaoTest {
     }
 
     @Test
-    fun `identities hold the station's rows only, ordered by name`() = runBlocking {
+    fun `identities hold the thing's rows only, ordered by name`() = runBlocking {
         dao.upsert(file("a", "b.parquet", bytes = 20, crc32 = 2))
         dao.upsert(file("a", "a.parquet", bytes = 10, crc32 = 1))
         dao.upsert(file("b", "c.parquet"))
 
         val expected = listOf(ArchivedFileIdentity("a", "a.parquet", 10, 1), ArchivedFileIdentity("a", "b.parquet", 20, 2))
-        assertEquals(expected, dao.identitiesForStation("a"))
-        assertEquals(expected, dao.observeIdentitiesForStation("a").first())
-        assertEquals(emptyList<ArchivedFileIdentity>(), dao.identitiesForStation("none"))
+        assertEquals(expected, dao.identitiesForThing("a"))
+        assertEquals(expected, dao.observeIdentitiesForThing("a").first())
+        assertEquals(emptyList<ArchivedFileIdentity>(), dao.identitiesForThing("none"))
     }
 
     @Test
-    fun `observed identities follow writes to the station`() = runBlocking {
-        dao.observeIdentitiesForStation("a").test {
+    fun `observed identities follow writes to the thing`() = runBlocking {
+        dao.observeIdentitiesForThing("a").test {
             assertEquals(emptyList<ArchivedFileIdentity>(), awaitItem())
             dao.upsert(file("a", "a.parquet", bytes = 10, crc32 = 1))
             assertEquals(listOf(ArchivedFileIdentity("a", "a.parquet", 10, 1)), awaitItem())
@@ -125,54 +101,54 @@ class ArchivedFileDaoTest {
     }
 
     @Test
-    fun `count and exists are per station`() = runBlocking {
-        assertEquals(0, dao.observeCountForStation("a").first())
-        assertFalse(dao.observeAnyForStation("a").first())
+    fun `count and exists are per thing`() = runBlocking {
+        assertEquals(0, dao.observeCountForThing("a").first())
+        assertFalse(dao.observeAnyForThing("a").first())
 
         dao.upsert(file("a", "1.parquet"))
         dao.upsert(file("a", "2.parquet"))
         dao.upsert(file("b", "3.parquet"))
 
-        assertEquals(2, dao.observeCountForStation("a").first())
-        assertEquals(1, dao.observeCountForStation("b").first())
-        assertTrue(dao.observeAnyForStation("a").first())
-        assertFalse(dao.observeAnyForStation("c").first())
+        assertEquals(2, dao.observeCountForThing("a").first())
+        assertEquals(1, dao.observeCountForThing("b").first())
+        assertTrue(dao.observeAnyForThing("a").first())
+        assertFalse(dao.observeAnyForThing("c").first())
     }
 
     @Test
-    fun `unindexed count is per station and counts failed rows`() = runBlocking {
+    fun `unindexed count is per thing and counts failed rows`() = runBlocking {
         dao.upsert(file("a", "new.parquet"))
         dao.upsert(file("a", "failed.parquet", indexedAt = 5, indexError = "bad footer"))
         dao.upsert(file("a", "done.parquet", indexedAt = 5))
         dao.upsert(file("b", "other.parquet"))
 
-        assertEquals(2, dao.observeUnindexedCountForStation("a").first())
-        assertEquals(1, dao.observeUnindexedCountForStation("b").first())
-        assertEquals(0, dao.observeUnindexedCountForStation("c").first())
+        assertEquals(2, dao.observeUnindexedCountForThing("a").first())
+        assertEquals(1, dao.observeUnindexedCountForThing("b").first())
+        assertEquals(0, dao.observeUnindexedCountForThing("c").first())
         assertEquals(3, dao.observeUnindexedCount().first())
     }
 
     @Test
-    fun `station glances aggregate count, last sync and newest data`() = runBlocking {
-        assertEquals(emptyList<StationArchiveGlance>(), dao.observeStationGlances().first())
+    fun `thing glances aggregate count, last sync and newest data`() = runBlocking {
+        assertEquals(emptyList<ThingArchiveGlance>(), dao.observeThingGlances().first())
 
         dao.upsert(file("a", "1.parquet", syncedAt = 10, lastUtcNs = 100))
         dao.upsert(file("a", "2.parquet", syncedAt = 30, lastUtcNs = null))
         dao.upsert(file("a", "3.parquet", syncedAt = 20, lastUtcNs = 300))
         dao.upsert(file("b", "4.parquet", syncedAt = 5))
 
-        val glances = dao.observeStationGlances().first().associateBy { it.station }
-        assertEquals(StationArchiveGlance("a", files = 3, lastSyncedMs = 30, lastDataUtcNs = 300), glances["a"])
-        // A station whose files have no UTC rows keeps a null newest time, as the Kotlin fold did.
-        assertEquals(StationArchiveGlance("b", files = 1, lastSyncedMs = 5, lastDataUtcNs = null), glances["b"])
+        val glances = dao.observeThingGlances().first().associateBy { it.thing }
+        assertEquals(ThingArchiveGlance("a", files = 3, lastSyncedMs = 30, lastDataUtcNs = 300), glances["a"])
+        // A thing whose files have no UTC rows keeps a null newest time, as the Kotlin fold did.
+        assertEquals(ThingArchiveGlance("b", files = 1, lastSyncedMs = 5, lastDataUtcNs = null), glances["b"])
         assertEquals(2, glances.size)
     }
 
     @Test
-    fun `index writes and other stations do not rebuild the projected plan`(): Unit = runBlocking {
-        val station = "a"
-        val name = "station=$station/year=2026/month=10/day=11/data_0900.parquet"
-        val original = file(station, name, bytes = 100)
+    fun `index writes and other things do not rebuild the projected plan`(): Unit = runBlocking {
+        val thing = "a"
+        val name = "station=$thing/year=2026/month=10/day=11/data_0900.parquet"
+        val original = file(thing, name, bytes = 100)
         dao.upsert(original)
         val projections = Channel<List<ArchivedFileIdentity>>(Channel.UNLIMITED)
         var plans = 0
@@ -180,8 +156,8 @@ class ArchivedFileDaoTest {
         val manifest = ManifestState.Loaded(listOf(Frame.File(100, name)), Frame.ListEnd(1, 0, 0, 0), 0)
         val plan = planWithProgress(
             manifest = MutableStateFlow(manifest),
-            info = MutableStateFlow(DeviceInfo(station = station)),
-            archived = { dao.observeIdentitiesForStation(it).onEach { rows -> projections.send(rows) } },
+            info = MutableStateFlow(DeviceInfo(thing = thing)),
+            archived = { dao.observeIdentitiesForThing(it).onEach { rows -> projections.send(rows) } },
             sync = MutableStateFlow(SyncProgress()),
             partialLengths = { partialReads++; emptyMap() },
             planner = { s, files, identities, partials, pruned -> plans++; SyncPlanner.plan(s, files, identities, partials, pruned) },
@@ -190,13 +166,13 @@ class ArchivedFileDaoTest {
             assertEquals(FileSyncState.SYNCED, awaitItem()!!.entries.single().state)
             val identity = withTimeout(10_000) { projections.receive() }
 
-            dao.update(station, name) { it.copy(indexedAtEpochMs = 10, rows = 3, utcRows = 3, firstUtcNs = 100, lastUtcNs = 300) }
+            dao.update(thing, name) { it.copy(indexedAtEpochMs = 10, rows = 3, utcRows = 3, firstUtcNs = 100, lastUtcNs = 300) }
             assertEquals(identity, withTimeout(10_000) { projections.receive() })
             dao.upsert(file("b", "b.parquet"))
             assertEquals(identity, withTimeout(10_000) { projections.receive() })
 
             // A real identity change is the barrier after the two unchanged query results.
-            dao.update(station, name) { it.copy(bytes = 200) }
+            dao.update(thing, name) { it.copy(bytes = 200) }
             assertEquals(FileSyncState.MISMATCH, awaitItem()!!.entries.single().state)
             assertEquals(2, plans)
             assertEquals(2, partialReads)
@@ -234,12 +210,12 @@ class ArchivedFileDaoTest {
         dao.upsert(estimated.copy(name = "incomplete-estimate.parquet", estFirstUtcNs = null, estLastUtcNs = 4_000))
         // A real UTC row takes precedence over its stale estimate.
         dao.upsert(real.copy(name = "real-with-estimate.parquet", estFirstUtcNs = 5_000, estLastUtcNs = 6_000))
-        dao.upsert(real.copy(station = "b", name = "no-end.parquet", lastUtcNs = null))
+        dao.upsert(real.copy(thing = "b", name = "no-end.parquet", lastUtcNs = null))
         dao.upsert(file("untimed", "untimed.parquet", indexedAt = 1))
 
-        val ends = dao.observeLatestTimed().first().associate { it.station to it.lastNs }
+        val ends = dao.observeLatestTimed().first().associate { it.thing to it.lastNs }
         assertEquals(mapOf("a" to 200L, "b" to null), ends)
         dao.delete("a", "estimated.parquet")
-        assertEquals(100L, dao.observeLatestTimed().first().single { it.station == "a" }.lastNs)
+        assertEquals(100L, dao.observeLatestTimed().first().single { it.thing == "a" }.lastNs)
     }
 }

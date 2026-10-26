@@ -50,7 +50,7 @@ import java.security.MessageDigest
 class HistoryDeriverTest {
 
     private fun bytes(path: String) = migrateLegacyFooter(checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes())
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     @Test
     fun `tiers and daily cache of the previous derive version rebuild without a source change`() = runBlocking {
@@ -65,13 +65,13 @@ class HistoryDeriverTest {
             val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
-            val name = "station=$station/day=2026-09-17/raw.parquet"
-            val raw = archive.fileFor(station, name).apply {
+            val name = "station=$thing/day=2026-09-17/raw.parquet"
+            val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
             }
             val originalBytes = raw.readBytes()
-            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
             assertEquals(1, deriver.deriveStale().daysRebuilt)
             val expectedTiers = buckets.rows.toList()
             val originalSources = files.rows.toList()
@@ -87,11 +87,11 @@ class HistoryDeriverTest {
             days.upsert(current.copy(sourceSignature = oldSignature))
             buckets.rows.clear()
             buckets.rows += expectedTiers.map { it.copy(rows = 777, validRows = 777, mean = 999f, min = 999f, max = 999f) }
-            val daily = store.dayFile(station, current.epochDay)
+            val daily = store.dayFile(thing, current.epochDay)
             assertTrue(daily.isFile)
             assertTrue(days.rows.single().dailyFile != null)
             daily.writeText("obsolete daily bytes")
-            val manifest = store.manifestFile(station, current.epochDay)
+            val manifest = store.manifestFile(thing, current.epochDay)
             manifest.writeText(Json.encodeToString(Json.decodeFromString<DailyManifest>(manifest.readText()).copy(sourceSignature = oldSignature)))
 
             val upgraded = deriver.deriveStale()
@@ -119,12 +119,12 @@ class HistoryDeriverTest {
             val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val passes = indexer.passes(files)
             val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, DerivedStore(tmp), indexer, derivedQuota(tmp), passes)
-            val name = "station=$station/day=2026-09-17/raw.parquet"
-            val raw = archive.fileFor(station, name).apply {
+            val name = "station=$thing/day=2026-09-17/raw.parquet"
+            val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
             }
-            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
             val entries = listOf<Pair<String, suspend () -> Unit>>(
                 "deriveStale" to { deriver.deriveStale() },
                 "deriveAfterSync" to { deriver.deriveAfterSync(0) },
@@ -158,32 +158,32 @@ class HistoryDeriverTest {
             val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, store, indexer, derivedQuota(tmp), indexer.passes(files))
-            val name = "station=$station/day=2026-09-17/raw.parquet"
-            val raw = archive.fileFor(station, name).apply {
+            val name = "station=$thing/day=2026-09-17/raw.parquet"
+            val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
             }
-            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
             deriver.deriveStale()
             val reader = RoomDerivedDayFiles(store, days)
             val sources = files.rows.map { it.toRecord() }
-            val manifest = store.manifestFile(station, 20713)
+            val manifest = store.manifestFile(thing, 20713)
             val validReceipt = manifest.readText()
-            reader.open(station, 20713, sources, emptyMap())!!.close()
+            reader.open(thing, 20713, sources, emptyMap())!!.close()
 
             // Room still carries the old signature through file replacement. The manifest is the
             // receipt for the bytes at the path, so a missing or changed receipt forces raw reads.
             assertTrue(manifest.delete())
-            assertEquals(null, reader.open(station, 20713, sources, emptyMap()))
+            assertEquals(null, reader.open(thing, 20713, sources, emptyMap()))
             manifest.writeText(Json.encodeToString(Json.decodeFromString<DailyManifest>(validReceipt).copy(sourceSignature = "another-build")))
-            assertEquals(null, reader.open(station, 20713, sources, emptyMap()))
+            assertEquals(null, reader.open(thing, 20713, sources, emptyMap()))
             manifest.writeText("broken receipt")
-            assertEquals(null, reader.open(station, 20713, sources, emptyMap()))
+            assertEquals(null, reader.open(thing, 20713, sources, emptyMap()))
             manifest.writeText(validReceipt)
-            val opened = reader.open(station, 20713, sources, emptyMap())!!
+            val opened = reader.open(thing, 20713, sources, emptyMap())!!
             opened.use {
                 val tail = it.readTail(4).toByteArray()
-                store.atomic.writeAtomically(store.dayFile(station, 20713).path, ByteArray(32), StorageClass.Rebuildable)
+                store.atomic.writeAtomically(store.dayFile(thing, 20713).path, ByteArray(32), StorageClass.Rebuildable)
                 assertTrue(tail.contentEquals(it.readTail(4).toByteArray()))
             }
         } finally {
@@ -219,12 +219,12 @@ class HistoryDeriverTest {
                 val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
                 val store = DerivedStore(tmp, atomic)
                 val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
-                val name = "station=$station/day=2026-09-17/raw.parquet"
-                val raw = archive.fileFor(station, name).apply {
+                val name = "station=$thing/day=2026-09-17/raw.parquet"
+                val raw = archive.fileFor(thing, name).apply {
                     parentFile!!.mkdirs()
                     writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
                 }
-                files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+                files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
 
                 assertEquals(1, deriver.deriveStale().daysRebuilt)
                 assertEquals(105, buckets.rows.first { it.metricId == Metrics.PM25.id && it.resolution == 86_400L }.rows)
@@ -232,7 +232,7 @@ class HistoryDeriverTest {
                 assertTrue(days.rows.single().sourceSignature.endsWith(":no-daily-file"))
                 failing = false
                 assertEquals(1, deriver.deriveStale().daysRebuilt)
-                assertTrue(store.dayFile(station, 20713).isFile)
+                assertTrue(store.dayFile(thing, 20713).isFile)
                 assertTrue(days.rows.single().dailyFile != null)
                 assertEquals(0, deriver.deriveStale().daysRebuilt)
             } finally {
@@ -254,11 +254,11 @@ class HistoryDeriverTest {
         val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota, indexer.passes(files))
 
         suspend fun put(name: String, resource: String, crc: Long) {
-            archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
-            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = 1, crc32 = crc, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), archive.fileFor(station, name))
+            archive.fileFor(thing, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
+            files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = 1, crc32 = crc, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), archive.fileFor(thing, name))
         }
-        put("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet", "device/v3-board-2rg-105rows.parquet", 1)
-        put("station=$station/unsynced/boot=x/data_unsynced_x_0-89-0.parquet", "device/v2-none-90rows-unsynced.parquet", 2)
+        put("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet", "device/v3-board-2rg-105rows.parquet", 1)
+        put("station=$thing/unsynced/boot=x/data_unsynced_x_0-89-0.parquet", "device/v2-none-90rows-unsynced.parquet", 2)
 
         val first = deriver.deriveStale()
         assertEquals(1, first.daysChecked)
@@ -268,9 +268,9 @@ class HistoryDeriverTest {
         assertTrue(buckets.rows.any { it.metricId == Metrics.PM25.id } && buckets.rows.any { it.metricId == Metrics.BOARD_TEMP.id } && buckets.rows.none { it.metricId == Metrics.HUMIDITY.id })
         assertEquals(1, days.rows.size)
         // The derived daily file exists, is read back by our own reader, and carries the manifest index column.
-        val dayFile = store.dayFile(station, 20713)
+        val dayFile = store.dayFile(thing, 20713)
         assertTrue(dayFile.isFile)
-        assertEquals("station/day=2026-09-17.parquet".substringAfter('/'), dayFile.name)
+        assertEquals("thing/day=2026-09-17.parquet".substringAfter('/'), dayFile.name)
         val daily = space.opensensor.data.history.parquet.ParquetFile.open(dayFile)
         assertEquals(105L, daily.numRows)
         assertEquals(1, daily.rowGroupCount) // 09:42–09:59Z is one UTC hour
@@ -280,12 +280,12 @@ class HistoryDeriverTest {
         assertTrue(OpenSensorFooter.KEY !in daily.metadata.keyValueMetadata)
         assertTrue(daily.metadata.keyValueMetadata.keys.none(LegacyFooterKeys::isLegacy))
         assertTrue(daily.metadata.keyValueMetadata["complete"] in setOf("true", "false"))
-        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":105"))
+        assertTrue(store.manifestFile(thing, 20713).readText().contains("\"rows_used\":105"))
         assertEquals("day=2026-09-17.parquet", days.rows.single().dailyFile?.substringAfter('/'))
         // For tools/validate_parquet_samples.py (PyArrow + DuckDB): a real derived day built from the board's file.
         File("build/parquet-samples").apply { mkdirs() }.let { dir ->
             dayFile.copyTo(File(dir, "derived-day.parquet"), overwrite = true)
-            store.manifestFile(station, 20713).copyTo(File(dir, "derived-day.manifest.json"), overwrite = true)
+            store.manifestFile(thing, 20713).copyTo(File(dir, "derived-day.manifest.json"), overwrite = true)
         }
 
         val second = deriver.deriveStale()
@@ -303,21 +303,21 @@ class HistoryDeriverTest {
         assertEquals(0, deriver.deriveStale().daysRebuilt)
 
         // A second file for the same day (here: the same bytes under another name and CRC) changes the signature.
-        put("station=$station/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3)
+        put("station=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3)
         val third = deriver.deriveStale()
         assertEquals(1, third.daysRebuilt)
         assertEquals(210L, third.rowsAggregated) // rows read
         assertEquals(105, buckets.rows.first { it.resolution == 86_400L && it.metricId == Metrics.PM25.id }.rows) // rows counted: duplicates (same boot + sequence) skipped, like the daily file
         assertEquals(2, days.rows.single().sourceFiles)
         // Same rows under two names: the daily file de-duplicates on (boot, sequence) — 105 rows, 2 sources in the manifest.
-        assertEquals(105L, space.opensensor.data.history.parquet.ParquetFile.open(store.dayFile(station, 20713)).numRows)
-        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":0"))
+        assertEquals(105L, space.opensensor.data.history.parquet.ParquetFile.open(store.dayFile(thing, 20713)).numRows)
+        assertTrue(store.manifestFile(thing, 20713).readText().contains("\"rows_used\":0"))
 
         // A second real v6 file (the full 10:00–10:29Z window, 180 rows) joins the day: 285 rows, two UTC hours → two row groups.
-        put("station=$station/year=2026/month=09/day=17/data_1000_495ccef9f3eb8c5917070c921c9baec8_107-286-3.parquet", "device/v3-board-2rg-180rows.parquet", 4)
+        put("station=$thing/year=2026/month=09/day=17/data_1000_495ccef9f3eb8c5917070c921c9baec8_107-286-3.parquet", "device/v3-board-2rg-180rows.parquet", 4)
         val fifth = deriver.deriveStale()
         assertEquals(1, fifth.daysRebuilt)
-        val twoWindows = space.opensensor.data.history.parquet.ParquetFile.open(store.dayFile(station, 20713))
+        val twoWindows = space.opensensor.data.history.parquet.ParquetFile.open(store.dayFile(thing, 20713))
         assertEquals(285L, twoWindows.numRows)
         assertEquals(2, twoWindows.rowGroupCount)
         assertEquals(listOf(105L, 180L), twoWindows.metadata.rowGroups.map { it.numRows })
@@ -325,8 +325,8 @@ class HistoryDeriverTest {
         for (i in 1 until seq.size) assertEquals("contiguous across the two device files", seq.values[i - 1] + 1, seq.values[i])
         assertEquals(285, buckets.rows.first { it.resolution == 86_400L && it.metricId == Metrics.PM25.id }.rows)
         File("build/parquet-samples").apply { mkdirs() }.let { dir ->
-            store.dayFile(station, 20713).copyTo(File(dir, "derived-day-two-windows.parquet"), overwrite = true)
-            store.manifestFile(station, 20713).copyTo(File(dir, "derived-day-two-windows.manifest.json"), overwrite = true)
+            store.dayFile(thing, 20713).copyTo(File(dir, "derived-day-two-windows.parquet"), overwrite = true)
+            store.manifestFile(thing, 20713).copyTo(File(dir, "derived-day-two-windows.manifest.json"), overwrite = true)
         }
 
         // Removing every dated file removes the day's tiers.
@@ -335,7 +335,7 @@ class HistoryDeriverTest {
         assertEquals(1, fourth.daysRebuilt)
         assertTrue(buckets.rows.isEmpty())
         assertTrue(days.rows.isEmpty())
-        assertFalse(store.dayFile(station, 20713).exists())
+        assertFalse(store.dayFile(thing, 20713).exists())
     }
 
     @Test
@@ -352,16 +352,16 @@ class HistoryDeriverTest {
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files)) { backfills++ }
 
             suspend fun put(name: String, resource: String, crc: Long, syncedAt: Long) {
-                archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
-                files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = 1, crc32 = crc, sha256 = "s", syncedAtEpochMs = syncedAt, sourceDevice = "fake"), archive.fileFor(station, name))
+                archive.fileFor(thing, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
+                files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = 1, crc32 = crc, sha256 = "s", syncedAtEpochMs = syncedAt, sourceDevice = "fake"), archive.fileFor(thing, name))
             }
-            put("station=$station/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet", "device/v2-lz4-4rows-dated.parquet", 1, syncedAt = 1)
-            put("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet", "device/v3-board-2rg-105rows.parquet", 2, syncedAt = 1)
+            put("station=$thing/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet", "device/v2-lz4-4rows-dated.parquet", 1, syncedAt = 1)
+            put("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet", "device/v3-board-2rg-105rows.parquet", 2, syncedAt = 1)
             assertEquals(2, deriver.deriveStale().daysRebuilt)
 
             // The 09-08 tiers go stale without a sync (an older derive version), then a sync adds a 09-17 file.
             days.upsert(days.rows.single { it.epochDay == 20704L }.copy(sourceSignature = "old"))
-            put("station=$station/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3, syncedAt = 100)
+            put("station=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3, syncedAt = 100)
 
             val afterSync = deriver.deriveAfterSync(sinceEpochMs = 100)
             assertEquals(1, afterSync.daysRebuilt)
@@ -394,12 +394,12 @@ class HistoryDeriverTest {
             val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val passes = indexer.passes(files)
             val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), InMemoryDays(), DerivedStore(tmp), indexer, derivedQuota(tmp), passes)
-            val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
-            val raw = archive.fileFor(station, name).apply {
+            val name = "station=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
+            val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))
             }
-            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
             val before = files.rows.single()
             val utcNs = 1_788_912_000_123_456_000L
             val inPass = CompletableDeferred<Unit>()
@@ -407,8 +407,8 @@ class HistoryDeriverTest {
             // A derive in flight reads the estimate columns for its source sets.
             val other = launch(Dispatchers.Default) { passes.derivePass { inPass.complete(Unit); endPass.await() } }
             inPass.await()
-            deriver.persistClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
-            val receipt = launch(Dispatchers.Default) { deriver.deriveStation(station) }
+            deriver.persistClockAnchor(thing, before.bootId!!, utcNs, before.lastMonoUs!!)
+            val receipt = launch(Dispatchers.Default) { deriver.deriveThing(thing) }
             assertNull("the re-dating waits for the pass in flight", withTimeoutOrNull(2_000) { receipt.join() })
             assertNull("no estimate is written beside the derive", files.rows.single().estLastUtcNs)
             endPass.complete(Unit)
@@ -432,18 +432,18 @@ class HistoryDeriverTest {
             val store = DerivedStore(tmp)
             val quota = derivedQuota(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota, indexer.passes(files))
-            val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
-            val raw = archive.fileFor(station, name).apply {
+            val name = "station=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
+            val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))
             }
             val original = raw.readBytes()
-            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
             val before = files.rows.single()
             assertEquals(0, deriver.deriveStale().daysChecked)
             val utcNs = 1_788_912_000_123_456_000L // midnight + submillisecond fraction
-            deriver.persistClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
-            deriver.deriveStation(station)
+            deriver.persistClockAnchor(thing, before.bootId!!, utcNs, before.lastMonoUs!!)
+            deriver.deriveThing(thing)
             assertEquals(2, days.rows.size)
             assertEquals(64L, days.rows.sumOf { it.rows.toLong() })
             assertTrue(raw.readBytes().contentEquals(original))
@@ -455,76 +455,18 @@ class HistoryDeriverTest {
             assertEquals(utcNs, files.rows.single().estLastUtcNs)
             for (day in days.rows) {
                 File("build/parquet-samples").apply { mkdirs() }.let { outputs ->
-                    store.dayFile(station, day.epochDay).copyTo(File(outputs, "derived-clock-day-${day.epochDay}.parquet"), overwrite = true)
-                    store.manifestFile(station, day.epochDay).copyTo(File(outputs, "derived-clock-day-${day.epochDay}.manifest.json"), overwrite = true)
+                    store.dayFile(thing, day.epochDay).copyTo(File(outputs, "derived-clock-day-${day.epochDay}.parquet"), overwrite = true)
+                    store.manifestFile(thing, day.epochDay).copyTo(File(outputs, "derived-clock-day-${day.epochDay}.manifest.json"), overwrite = true)
                 }
-                val parquet = space.opensensor.data.history.parquet.ParquetFile.open(store.dayFile(station, day.epochDay))
+                val parquet = space.opensensor.data.history.parquet.ParquetFile.open(store.dayFile(thing, day.epochDay))
                 val actual = parquet.readColumn("event_time_utc_us")
                 val estimated = parquet.readColumn("event_time_utc_estimated_us")
                 for (row in 0 until actual.size) {
                     assertTrue(actual.isNull(row))
-                    assertEquals(day.epochDay, StationDays.dayOf(estimated.asLong(row)!! * 1_000))
+                    assertEquals(day.epochDay, ThingDays.dayOf(estimated.asLong(row)!! * 1_000))
                 }
             }
         } finally {
-            tmp.deleteRecursively()
-        }
-    }
-
-    @Test
-    fun `a day reopened by the v11 migration survives a derive pass before its backfill`() = runBlocking {
-        val tmp = java.nio.file.Files.createTempDirectory("aq-migration-derive").toFile()
-        val db = Room.inMemoryDatabaseBuilder(ContextWrapper(null), AppDatabase::class.java)
-            .setDriver(BundledSQLiteDriver())
-            .setQueryCoroutineContext(Dispatchers.IO)
-            .build()
-        try {
-            val archive = FileArchive(tmp)
-            val files = db.archivedFileDao()
-            val days = db.derivedDayDao()
-            val buckets = db.metricBucketDao()
-            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
-            val store = DerivedStore(tmp)
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
-            val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
-            val raw = archive.fileFor(station, name).apply {
-                parentFile!!.mkdirs()
-                writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))
-            }
-            files.upsert(indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw))
-            val indexed = files.forStation(station).single()
-            // An estimated file has no UTC rows, the shape the migration reopens.
-            deriver.persistClockAnchor(station, indexed.bootId!!, 1_788_912_000_123_456_000L, indexed.lastMonoUs!!)
-            deriver.deriveStation(station)
-            val before = days.forStation(station).map { it.epochDay }.toSet()
-            assertEquals(2, before.size)
-            val bucketDays = buckets.observeDayCount(station).first()
-            assertEquals(2, bucketDays)
-
-            db.useWriterConnection { it.execSQL(AppDatabase.MIGRATION_10_11_SQL) }
-            assertEquals(null, files.forStation(station).single().indexedAtEpochMs)
-
-            // The derive collector may run before the backfill. The waiting file still holds its days.
-            assertEquals(0, deriver.deriveStale().daysRebuilt)
-            assertEquals(before, days.forStation(station).map { it.epochDay }.toSet())
-            assertEquals(bucketDays, buckets.observeDayCount(station).first())
-            for (day in before) {
-                assertTrue(store.dayFile(station, day).isFile)
-                assertTrue(store.manifestFile(station, day).isFile)
-            }
-
-            indexer.backfillAll()
-            assertTrue(files.forStation(station).single().isIndexed)
-            deriver.deriveStale()
-            assertEquals(before, days.forStation(station).map { it.epochDay }.toSet())
-
-            // A deleted file still takes its days with it.
-            files.delete(station, name)
-            deriver.deriveStale()
-            assertTrue(days.forStation(station).isEmpty())
-            for (day in before) assertFalse(store.dayFile(station, day).exists())
-        } finally {
-            db.close()
             tmp.deleteRecursively()
         }
     }
@@ -547,20 +489,20 @@ class HistoryDeriverTest {
             val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
-            val name = "station=$station/unsynced/boot=00000000000000000000000000000000/raw.parquet"
-            val raw = archive.fileFor(station, name).apply {
+            val name = "station=$thing/unsynced/boot=00000000000000000000000000000000/raw.parquet"
+            val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))
             }
-            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
             val before = files.rows.single()
             val utcNs = 1_788_912_000_123_456_000L
-            deriver.persistClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
+            deriver.persistClockAnchor(thing, before.bootId!!, utcNs, before.lastMonoUs!!)
 
             // Restart reads the exact durable acknowledgement, while the older archive row and
             // derived caches stay untouched until a cancellable pass explicitly reconciles them.
             val restarted = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
-            val anchor = restarted.clockAnchors.anchors(station).single()
+            val anchor = restarted.clockAnchors.anchors(thing).single()
             assertEquals(before.bootId, anchor.boot)
             assertEquals(utcNs, anchor.utcNs)
             assertEquals(before.lastMonoUs, anchor.monoUs)
@@ -583,41 +525,41 @@ class HistoryDeriverTest {
     private class InMemoryFiles : DerivedArchivedFileQueries {
         val rows = mutableListOf<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows.toList())
-        override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows)
-        override suspend fun forStation(station: String) = rows.filter { it.station == station }
-        override suspend fun get(station: String, name: String) = rows.firstOrNull { it.station == station && it.name == name }
+        override fun observeForThing(thing: String): Flow<List<ArchivedFile>> = flowOf(rows)
+        override suspend fun forThing(thing: String) = rows.filter { it.thing == thing }
+        override suspend fun get(thing: String, name: String) = rows.firstOrNull { it.thing == thing && it.name == name }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override fun observeTotalBytes(): Flow<Long> = flowOf(rows.sumOf { it.bytes })
         override suspend fun upsert(file: ArchivedFile) {
-            rows.removeAll { it.station == file.station && it.name == file.name }
+            rows.removeAll { it.thing == file.thing && it.name == file.name }
             rows += file
         }
         override suspend fun insertIfAbsent(file: ArchivedFile): Long {
-            if (rows.any { it.station == file.station && it.name == file.name }) return -1L
+            if (rows.any { it.thing == file.thing && it.name == file.name }) return -1L
             rows += file
             return rows.size.toLong()
         }
-        override suspend fun delete(station: String, name: String) {
-            rows.removeAll { it.station == station && it.name == name }
+        override suspend fun delete(thing: String, name: String) {
+            rows.removeAll { it.thing == thing && it.name == name }
         }
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(0)
 
-        // The deriver lists a station once and splits it by day (#63), a time query per day is a regression.
-        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long): List<ArchivedFile> = error("the deriver must not query per day")
-        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.isIndexed }
-        override suspend fun stations() = rows.map { it.station }.distinct()
+        // The deriver lists a thing once and splits it by day (#63), a time query per day is a regression.
+        override suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long): List<ArchivedFile> = error("the deriver must not query per day")
+        override suspend fun indexedForThing(thing: String) = rows.filter { it.thing == thing && it.isIndexed }
+        override suspend fun things() = rows.map { it.thing }.distinct()
     }
 
     private class InMemoryBuckets : MetricBucketDao {
         val rows = mutableListOf<MetricBucket>()
-        override fun observe(station: String, metricId: String, resolution: Long, fromS: Long, toS: Long): Flow<List<MetricBucket>> = flowOf(rows)
-        override fun observeFirstDay(station: String): Flow<Long?> = flowOf(null)
-        override fun observeLastDay(station: String): Flow<Long?> = flowOf(null)
-        override fun observeDayCount(station: String): Flow<Int> = flowOf(0)
+        override fun observe(thing: String, metricId: String, resolution: Long, fromS: Long, toS: Long): Flow<List<MetricBucket>> = flowOf(rows)
+        override fun observeFirstDay(thing: String): Flow<Long?> = flowOf(null)
+        override fun observeLastDay(thing: String): Flow<Long?> = flowOf(null)
+        override fun observeDayCount(thing: String): Flow<Int> = flowOf(0)
         override fun observeAllDays(metricId: String): Flow<List<MetricBucket>> = flowOf(rows.filter { it.resolution == 86_400L && it.metricId == metricId })
-        override suspend fun deleteBetween(station: String, fromS: Long, toS: Long) {
-            rows.removeAll { it.station == station && it.startEpochS >= fromS && it.startEpochS < toS }
+        override suspend fun deleteBetween(thing: String, fromS: Long, toS: Long) {
+            rows.removeAll { it.thing == thing && it.startEpochS >= fromS && it.startEpochS < toS }
         }
         override suspend fun insertAll(rows: List<MetricBucket>) {
             this.rows += rows
@@ -626,17 +568,17 @@ class HistoryDeriverTest {
 
     private class InMemoryDays : DerivedDayDao {
         val rows = mutableListOf<DerivedDay>()
-        override suspend fun forStation(station: String) = rows.filter { it.station == station }
-        override suspend fun get(station: String, epochDay: Long) = rows.firstOrNull { it.station == station && it.epochDay == epochDay }
+        override suspend fun forThing(thing: String) = rows.filter { it.thing == thing }
+        override suspend fun get(thing: String, epochDay: Long) = rows.firstOrNull { it.thing == thing && it.epochDay == epochDay }
         override suspend fun upsert(day: DerivedDay) {
-            rows.removeAll { it.station == day.station && it.epochDay == day.epochDay }
+            rows.removeAll { it.thing == day.thing && it.epochDay == day.epochDay }
             rows += day
         }
-        override suspend fun delete(station: String, epochDay: Long) {
-            rows.removeAll { it.station == station && it.epochDay == epochDay }
+        override suspend fun delete(thing: String, epochDay: Long) {
+            rows.removeAll { it.thing == thing && it.epochDay == epochDay }
         }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
-        override suspend fun stations() = rows.map { it.station }.distinct()
+        override suspend fun things() = rows.map { it.thing }.distinct()
     }
 
     /** The shared pass order over this test's index, as the app wires it. */

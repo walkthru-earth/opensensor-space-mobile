@@ -35,10 +35,10 @@ sentence for them.
 | Index | Room `ArchiveIndex` | the same Room `ArchiveIndex` from `:core:database`. An older build's receipts are imported once, and a record with no hash is filled on the next verify |
 | Safe names | Shared check | Shared check, stricter than the old Swift whitelist. A name the plan rejects is reported and never downloaded |
 | Byte counter | Card shows bytes received | `receivedBytes` counts only this run. Today and Files show that run's planned remaining bytes and received bytes, including on LAN |
-| One link per station | Engine holds one writer | `SensorSync` refuses a second link for the same station with `msg_hardware_in_use` |
+| One link per thing | Engine holds one writer | `SensorSync` refuses a second link for the same thing with `msg_hardware_in_use` |
 | LAN `AUTH_FAILED` | Renews the token over BLE and falls back to Bluetooth | Drops the saved token and shows `msg_token_needs_ble`. A sensor open can fall back to an already permitted Bluetooth link; token renewal still requires the explicit BLE action |
 | LAN busy | `msg_lan_*` wording that names the Bluetooth fallback | A sensor open can fall back to Bluetooth when permitted; an already running sync reports `msg_busy` without interrupting its link |
-| HELLO mismatch | `msg_identity_*` | Same keys. A different hardware ID and a different station now give different notices |
+| HELLO mismatch | `msg_identity_*` | Same keys. A different hardware ID and a different thing now give different notices |
 | Today Smart Sync | Syncs over the link the router picked | Routes to Wi-Fi when an idle LAN session for the same sensor is open; the shared Today card shows its progress and result |
 | Phone storage fault | `msg_file_failed` for that file, the run goes on | The run goes on and ends with `companion_sync_storage_failed`. The link stays |
 | Lost foreground sync | Shared `CollectionController` retries preparation and transfer while PROCESS remains held | BLE and LAN each retry a transient link loss twice, then leave retained partial bytes for an explicit retry. Stop and disconnect cancel pending attempts |
@@ -85,7 +85,7 @@ run holds.
 
 On iOS each result carries `SyncResult.endReason` (`SyncEndReason`), mapped from the typed
 `DisconnectCause` and `CollectionFailure` as Android does. A lost or stale bond ends as
-`PAIRING_REPAIR`, which the station page and My devices show as a failed link that needs pairing
+`PAIRING_REPAIR`, which the thing page and My devices show as a failed link that needs pairing
 again. A stop by the user or the app reads `STOPPED` and one by the OS `INTERRUPTED`, from the
 shared `CollectionState.endReason()`. `SyncResult.dropsLanToken` is true for `TOKEN_REJECTED` and
 `TOKEN_ROTATED`, the causes `LanTokenPolicy.invalidatesToken` names, and Swift then removes the
@@ -106,10 +106,10 @@ sync, never a worker's.
 
 Groups the manifest by `HivePartition` (`Dated` / `Unsynced` boot / `Benchmarks` / `Other`),
 validates names, and diffs against `archived_file` + partials → `SyncPlan.toDownload` and
-`missingBytes`. Android supplies projected `station`, `name`, `bytes` and `crc32` archive
+`missingBytes`. Android supplies projected `thing`, `name`, `bytes` and `crc32` archive
 identities, not full history rows. Verified files are skipped, so a resume only pulls what
 is missing. Each controller attempt takes a fresh LIST and archive snapshot. A listed file with no
-phone copy and a `PrunedFiles` record of the same station, name and size is `REMOVED`. The user
+phone copy and a `PrunedFiles` record of the same thing, name and size is `REMOVED`. The user
 removed it in Settings, so it is not downloaded and counts as done. The FILE frame has no CRC, so
 the size is the match. A phone copy always wins. A whole LIST drops the records of names it no
 longer has, since the device dropped that file. A run for one selected file keeps them.
@@ -157,30 +157,30 @@ replaced. `commit` also refuses an existing destination with `AlreadyCommitted` 
 #60). The engine then adopts the existing file through the same size, CRC, `PAR1` and SHA-256
 check, so a final that appears between the plan and the commit is never replaced. A crash between
 the commit and the index record is repaired by `StorageJanitor` at the next start.
-Every archive index write also takes the coordinator's station gate, after the lease when there is
+Every archive index write also takes the coordinator's thing gate, after the lease when there is
 one. Sync, `ArchiveIndexRepair`, the janitor and `LegacyFileCleanup` share one coordinator per
 archive, made once by Hilt on Android and by `IosArchive` on iOS, so the cleanup's live record check, record removal and file delete never interleave
-with a row written back for the same station. Readers never take it. Host coverage: `ConcurrentArchiveTest`;
+with a row written back for the same thing. Readers never take it. Host coverage: `ConcurrentArchiveTest`;
 physical concurrent transfers remain unverified.
 
 The per-address controller reserves interactive/background ownership and the manager rejects
 competing full hardware IDs. Current proto 3 firmware has independent logical handles
 per BLE connection and LAN peer. Phone ownership policy remains per physical device.
-Raw Hive paths and outer INFO-station namespaces remain unchanged. After station regeneration,
-a retained inner Hive station mismatch is archived/exportable but excluded from the new station's
+Raw Hive paths and outer INFO-thing namespaces remain unchanged. After thing regeneration,
+a retained inner Hive thing mismatch is archived/exportable but excluded from the new thing's
 history. Earlier epochs remain separately selectable. Richer producer provenance and duplicate
-old-station downloads need an owner-contract decision ([device-identity.md](device-identity.md#files-from-another-station-on-the-same-sd-card)).
+old-thing downloads need an owner-contract decision ([device-identity.md](device-identity.md#files-from-another-thing-on-the-same-sd-card)).
 
 ## Archive layout (`FileArchive`)
 
 ```
-filesDir/archive/<station>/<relative hive name>          verified, immutable (drop-in mirror of the SD card / tools/export_parquet.py)
-filesDir/archive-partial/<station>/<name>.partial         in-progress, chunks at absolute offsets
-filesDir/archive-partial/<station>/<name>.partial.meta    "<size> <crc32>" from OPENED
+filesDir/archive/<thing>/<relative hive name>          verified, immutable (drop-in mirror of the SD card / tools/export_parquet.py)
+filesDir/archive-partial/<thing>/<name>.partial         in-progress, chunks at absolute offsets
+filesDir/archive-partial/<thing>/<name>.partial.meta    "<size> <crc32>" from OPENED
 ```
 
-Root for names without a station (`benchmarks/…`, `legacy-parquet/…`) is still
-`archive/<station uuid from info>/<name>`, so dated files sit at `…/<uuid>/station=<uuid>/year=…` —
+Root for names without a thing (`benchmarks/…`, `legacy-parquet/…`) is still
+`archive/<thing uuid from info>/<name>`, so dated files sit at `…/<uuid>/station=<uuid>/year=…` —
 redundant on purpose: two devices can never collide. Partials resume by absolute offset after a
 re-`OPEN` confirms `size`/`crc32` are unchanged.
 
@@ -353,7 +353,7 @@ STOPPED. `SyncProgress.endReason` names why a run ended (2026-10-12), set from
 `CollectionState.endReason()` (below). Each reason has its own short message
 (`DeviceMessage.SyncEnded`), pairing repair and not enough space keep their own paths. The last
 `SyncProgress` and the archive summary survive a disconnect. The summary reads Room for the bound
-station and counts every archived row, like the Stations card. `DeviceFacade.ownership` says
+thing and counts every archived row, like the Things card. `DeviceFacade.ownership` says
 whether a device is idle, held by an interactive run or by a background worker. A restart during
 cleanup takes over the old reservation and hands it back only after that run let go. A collection
 that ends on a dead link clears it, so workers do not skip the device. PROCESS lease ownership determines service lifetime, even during terminal cleanup.
@@ -433,7 +433,7 @@ phone UTC without a manual clock control or consent setting. Smart Sync retries 
 RTC-restored UTC automatically; phone and network anchors (`clk == 1` or `clk == 3`) continue
 without a second clock update. An old stored `clock_sync_mode` key is ignored.
 
-The accepted UTC/monotonic acknowledgement is bound to the full station and boot identity,
+The accepted UTC/monotonic acknowledgement is bound to the full thing and boot identity,
 allowing the local archive to reconcile earlier untimed rows from that boot. Android collection
 persists the exact accepted receipt before LIST, retaining its verified session identity even if
 the link then closes. Persistence completes independently of cancellation; reconciliation and

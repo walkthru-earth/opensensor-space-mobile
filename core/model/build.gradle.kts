@@ -1,9 +1,9 @@
 import java.security.MessageDigest
 
-// The shared core model of what a station measures (#183): board templates, app profiles, datastreams,
-// observed properties, scales and the station that joins them. Pure commonMain with kotlinx
+// The shared core model of what a thing measures (#183): board templates, app profiles, datastreams,
+// observed properties, scales and the thing that joins them. Pure commonMain with kotlinx
 // serialization parsing of the stac-opensensor v0.1.0 board template, the app's own profile JSON and
-// the station Collection. The bundled templates and profiles under `bundled/` are raw JSON files, so a
+// the thing Collection. The bundled templates and profiles under `bundled/` are raw JSON files, so a
 // new firmware digest is a file swap with no code change (#184). See [BundleFiles].
 plugins {
     id("opensensor.kmp.library")

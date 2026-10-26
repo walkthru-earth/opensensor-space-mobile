@@ -25,7 +25,7 @@ class DeviceListMergeTest {
         assertTrue(rowA.known)
         assertTrue(rowA.bonded)
         assertEquals("Kitchen", rowA.name, "the known name fills a nameless advertisement")
-        assertEquals("st-a", rowA.station)
+        assertEquals("st-a", rowA.thing)
         assertFalse(list.nearby[1].known)
         assertTrue(list.known.isEmpty(), "a nearby known sensor is listed once")
         assertEquals(1, list.knownCount)
@@ -40,7 +40,7 @@ class DeviceListMergeTest {
     }
 
     @Test
-    fun wifiTagsKnownStationsAndListsTheRestOnTheirOwn() {
+    fun wifiTagsKnownThingsAndListsTheRestOnTheirOwn() {
         val list = DeviceListMerge.merge(
             nearby = emptyList(),
             known = listOf(a, b),
@@ -60,11 +60,11 @@ class DeviceListMergeTest {
     }
 
     @Test
-    fun archiveIsKeyedByStation() {
+    fun archiveIsKeyedByThing() {
         val glance = ArchiveGlance(files = 4, lastSyncedMs = 1, lastDataUtcNs = 2)
         val list = DeviceListMerge.merge(listOf(NearbySensor("A", "Kitchen", -60)), listOf(a, c), emptyList(), emptyList(), mapOf("st-a" to glance))
         assertEquals(glance, list.nearby.single().archive)
-        assertNull(list.known.single().archive, "no station, no archive")
+        assertNull(list.known.single().archive, "no thing, no archive")
     }
 
     @Test

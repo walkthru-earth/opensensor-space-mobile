@@ -22,13 +22,13 @@ import space.opensensor.link.LinkState
  */
 class FakeLinks(
     private val scope: CoroutineScope,
-    val station: String = "00000000-0000-4000-8000-000000000001",
+    val thing: String = "00000000-0000-4000-8000-000000000001",
     private val kind: TransportKind = TransportKind.FAKE,
     private val keepOpen: Boolean = false,
     private val share: Boolean = false,
     private val configure: FakeArchiveDevice.(connect: Int) -> Unit = {},
 ) : LinkProvider {
-    private val template = FakeArchiveDevice(scope, station = station)
+    private val template = FakeArchiveDevice(scope, thing = thing)
     val files: MutableList<FakeArchiveDevice.FakeFile> = template.files
 
     /** Every fake opened, in order. */
@@ -69,14 +69,14 @@ class FakeLinks(
         refuse(n)?.let { throw LinkClosedException(it) }
         fail(n)?.let { throw it }
         val (fake, session) = last?.takeIf { share && it.second.link.state.value is LinkState.Ready } ?: run {
-            val fake = FakeArchiveDevice(scope, address = device, station = station, kind = kind)
+            val fake = FakeArchiveDevice(scope, address = device, thing = thing, kind = kind)
             fake.files.clear()
             fake.files += files
             fake.configure(n)
             devices += fake
             (fake to openSession(fake, scope)).also { last = it }
         }
-        val link = CollectionLink(session, station, fake.maxRead) {
+        val link = CollectionLink(session, thing, fake.maxRead) {
             releases++
             lent--
             if (!keepOpen) session.link.close("released")

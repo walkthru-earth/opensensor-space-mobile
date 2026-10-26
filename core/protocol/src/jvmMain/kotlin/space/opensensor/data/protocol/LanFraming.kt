@@ -30,7 +30,7 @@ object LanFraming {
 
     /** TXT keys advertised with the service. */
     const val TXT_PROTO = LanProtocol.TXT_PROTO
-    const val TXT_STATION = LanProtocol.TXT_STATION
+    const val TXT_THING = LanProtocol.TXT_THING
     const val TXT_DEV = LanProtocol.TXT_DEV
     const val TXT_FW = LanProtocol.TXT_FW
 

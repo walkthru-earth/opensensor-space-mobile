@@ -20,8 +20,6 @@ flowchart LR
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"   # JBR (JDK 25) or any JDK ≥ 17
 tools/setup-hooks.sh                 # once per clone
 ./gradlew --no-daemon clean verify   # the gate; on a Mac it includes verifyIos (needs Xcode)
-python3 tools/validate_station_epoch_migration.py        # stdlib SQLite, actual v8→v9 SQL vs Room exports
-python3 tools/validate_sensor_installation_migration.py  # v9→v10
 ./gradlew --no-daemon :app:assembleRelease -Popensensor.localRelease=true   # R8 check, debug key, never publish
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -62,7 +60,7 @@ phone radio, screen-off collection or board behavior.
 | | |
 | --- | --- |
 | Language / UI | Kotlin 2.4.21, Jetpack Compose (BOM 2026.09.00, material3 1.4.0), the shared `:ui:designsystem` theme and vendored icons (no dynamic color, no `material-icons-extended`), Navigation 3 (1.1.7) |
-| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v10**), DataStore Preferences 1.2.1, WorkManager 2.12.0 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, kotlinx-datetime 0.8.0 (shared calendar math, added 2026-10-08), coroutines 1.11.0 |
+| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v1**), DataStore Preferences 1.2.1, WorkManager 2.12.0 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, kotlinx-datetime 0.8.0 (shared calendar math, added 2026-10-08), coroutines 1.11.0 |
 | Native | `zstd-jni` 1.5.7-20 (`@aar`). Discover (W12, 2026-10-08) adds `maplibre-compose` (0.20.0 since 2026-10-11) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.0 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
 | Build | AGP 9.4.1, Gradle 9.8.0 (configuration cache on), KSP 2.3.12, version catalog, R8 for release. Every `:core` module (protocol, parquet, history, publicfeed, units, airquality, archive, storage, net, sync and settings) targets JVM (Java 17) and iOS. `:ui:designsystem` and `:feature:discover` use `opensensor.kmp.compose-feature`, Compose Multiplatform 1.12.1 for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. `:ios:shared` targets iOS only |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
@@ -186,12 +184,6 @@ does not require raising the app's iOS 18.5 deployment target. Recheck the
 [current requirements](https://developer.apple.com/news/upcoming-requirements/)
 before enabling distribution. No iOS signing or upload workflow is configured yet.
 
-Both host migration validators run in verification and release CI:
-`validate_station_epoch_migration.py` checks v8→v9, and
-`validate_sensor_installation_migration.py` checks v9→v10. Their SQL extraction
-stops at the next migration declaration so later migrations cannot contaminate
-earlier fixtures.
-
 ## Gradle settings (`gradle.properties`)
 
 The build cache, parallel execution and the configuration cache are on. The configuration cache
@@ -272,11 +264,6 @@ permission. Device provisioning sends only the selected H3 cell after explicit
 Save, never the phone fix. See [device-location.md](device-location.md). No analytics/crash SDKs, no accounts. `allowBackup` with
 `dataExtractionRules` ([data-model.md](data-model.md#backup)).
 
-CI verification and release builds also run the station-epoch migration validator. It checks
-SQL and exported schemas on the host. On 2026-09-29, an in-place USB `adb install -r` update
-succeeded on the GM1911 (Android 16 / API 36), and existing archive summaries of 99 and 1,151
-files remained visible. The previous installed schema was not inspected, so this does not
-qualify a controlled v8→v9 Android Room migration; that scenario remains unverified.
 
 ## Releases
 
@@ -355,7 +342,7 @@ Hosted publication must pass before this recovery is considered verified.
 
 After the repository rename and merge at `06ab6cc`, the
 [main verification run](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/36584773614)
-passed all hooks, the station-epoch validator, Gradle verification, and artifact uploads.
+passed all hooks, the thing-epoch validator, Gradle verification, and artifact uploads.
 Downloaded reports showed zero test failures and only the lint warnings known at the time.
 The renamed repository resolves the Actions versions and retains its existing keystore secrets.
 `RELEASE_CERT_SHA256` was added from the trusted local keystore's public certificate; no signing key changed.

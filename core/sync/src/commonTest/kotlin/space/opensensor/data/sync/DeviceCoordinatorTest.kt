@@ -62,16 +62,16 @@ class DeviceCoordinatorTest {
 
     private suspend fun SyncEngine.pull(d: Pair<FakeArchiveDevice, DeviceSession>, i: Int): FileOutcome {
         val f = d.first.files[i]
-        return download(d.second, d.first.station, d.first.address, f.name, f.bytes.size.toLong(), d.first.maxRead) {}
+        return download(d.second, d.first.thing, d.first.address, f.name, f.bytes.size.toLong(), d.first.maxRead) {}
     }
 
     @Test
-    fun aSecondCollectionOfTheSameStationIsRefusedUntilTheFirstIsReleased() = runTest {
+    fun aSecondCollectionOfTheSameThingIsRefusedUntilTheFirstIsReleased() = runTest {
         val d = device()
         val coordinator = DeviceCoordinator()
         var innerReleased = 0
         var handedBack = 0
-        fun link() = CollectionLink(d.second, d.first.station, d.first.maxRead) { innerReleased++ }
+        fun link() = CollectionLink(d.second, d.first.thing, d.first.maxRead) { innerReleased++ }
 
         val first = coordinator.admit(link()) { handedBack++ }
         val refused = assertFailsWith<LinkClosedException> { coordinator.admit(link()) }
@@ -92,7 +92,7 @@ class DeviceCoordinatorTest {
         val marks = Marks()
         val coordinator = DeviceCoordinator(marks)
         val file = d.first.files[0]
-        val key = ArchiveKey(d.first.station, file.name)
+        val key = ArchiveKey(d.first.thing, file.name)
         val held = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         // The old file cleanup holds the lease and writes the tombstone, after the sync planned the file.
@@ -100,7 +100,7 @@ class DeviceCoordinatorTest {
             coordinator.withWriter(key) {
                 held.complete(Unit)
                 release.await()
-                marks.put(PrunedFile(key.station, key.name, file.bytes.size.toLong(), 0, 1))
+                marks.put(PrunedFile(key.thing, key.name, file.bytes.size.toLong(), 0, 1))
             }
         }
         held.await()
@@ -123,7 +123,7 @@ class DeviceCoordinatorTest {
         val d = device()
         val coordinator = DeviceCoordinator()
         val file = d.first.files[0]
-        val key = ArchiveKey(d.first.station, file.name)
+        val key = ArchiveKey(d.first.thing, file.name)
         val reading = CompletableDeferred<Unit>()
         d.first.beforeRead = { reading.complete(Unit) }
         d.first.chunkDelayMs = 1_000
@@ -139,7 +139,7 @@ class DeviceCoordinatorTest {
             store = store,
             index = index,
             io = StandardTestDispatcher(testScheduler),
-            knownStations = { listOf(key.station) },
+            knownThings = { listOf(key.thing) },
             clock = { StorageJanitor.STALE_PARTIAL_AGE_MS * 2 },
             coordinator = coordinator,
         )

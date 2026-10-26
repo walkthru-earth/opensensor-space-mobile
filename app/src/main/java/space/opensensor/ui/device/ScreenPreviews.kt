@@ -27,7 +27,7 @@ internal object PreviewFakes {
         schema = "waveshare-sim7670g-telemetry-v5",
         cols = 62,
         dict = BundledCatalog.templates.first { it.schema.startsWith("waveshare-") }.dict,
-        station = "4f1c2a9e-0000-4000-8000-1234567890ab",
+        thing = "4f1c2a9e-0000-4000-8000-1234567890ab",
         dev = "a1b2c3d4e5f6",
         boot = "0123456789abcdef0123456789abcdef",
         maxRead = 16384,

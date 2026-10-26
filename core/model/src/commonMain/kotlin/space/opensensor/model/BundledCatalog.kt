@@ -68,20 +68,20 @@ object BundledCatalog {
     fun live(dict: String): LiveColumns? = template(dict)?.let { LiveColumns.of(it, AppProfile.select(it, profile(dict))) }
 
     /**
-     * The station for [dict] and [desc], joined with the bundled profile. Null when neither the bundled
+     * The thing for [dict] and [desc], joined with the bundled profile. Null when neither the bundled
      * nor the [served] templates resolve the key.
      */
-    fun station(
+    fun thing(
         uuid: String,
         dict: String,
         desc: String? = null,
         served: Iterable<BoardTemplate> = emptyList(),
-        collection: StationCollection? = null,
+        collection: ThingCollection? = null,
         deviceId: Long? = null,
         h3Cell: String? = null,
         runtimeSampleIntervalS: Double? = null,
-    ): Station? {
+    ): Thing? {
         val template = index(served).resolve(dict, desc) ?: return null
-        return Station.join(uuid, template, profile(dict), collection, deviceId, h3Cell, runtimeSampleIntervalS)
+        return Thing.join(uuid, template, profile(dict), collection, deviceId, h3Cell, runtimeSampleIntervalS)
     }
 }

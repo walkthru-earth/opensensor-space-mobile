@@ -10,14 +10,14 @@ import kotlin.test.assertFailsWith
 
 class ArchiveMutationGateTest {
     @Test
-    fun oneMutationPerStationAndOtherStationsRunMeanwhile() = runTest {
+    fun oneMutationPerThingAndOtherThingsRunMeanwhile() = runTest {
         val gate = ArchiveMutationGate()
         val release = CompletableDeferred<Unit>()
         val order = mutableListOf<String>()
-        val first = launch { gate.withStation("a") { order += "a1"; release.await(); order += "a1 done" } }
+        val first = launch { gate.withThing("a") { order += "a1"; release.await(); order += "a1 done" } }
         runCurrent()
-        val second = launch { gate.withStation("a") { order += "a2" } }
-        val other = launch { gate.withStation("b") { order += "b" } }
+        val second = launch { gate.withThing("a") { order += "a2" } }
+        val other = launch { gate.withThing("b") { order += "b" } }
         runCurrent()
         assertEquals(listOf("a1", "b"), order)
         assertEquals(1, gate.activeCount())
@@ -30,10 +30,10 @@ class ArchiveMutationGateTest {
     }
 
     @Test
-    fun aFailingBlockReleasesTheStation() = runTest {
+    fun aFailingBlockReleasesTheThing() = runTest {
         val gate = ArchiveMutationGate()
-        assertFailsWith<IllegalStateException> { gate.withStation("a") { error("disk") } }
+        assertFailsWith<IllegalStateException> { gate.withThing("a") { error("disk") } }
         assertEquals(0, gate.activeCount())
-        assertEquals(1, gate.withStation("a") { 1 })
+        assertEquals(1, gate.withThing("a") { 1 })
     }
 }

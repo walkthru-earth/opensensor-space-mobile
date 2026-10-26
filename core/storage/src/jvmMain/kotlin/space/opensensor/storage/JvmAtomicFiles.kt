@@ -100,7 +100,7 @@ class JvmAtomicFiles internal constructor(
     } catch (e: StorageException) {
         throw e
     } catch (e: IOException) {
-        // The class only: an IOException message from java.nio carries the path, and with it the station.
+        // The class only: an IOException message from java.nio carries the path, and with it the thing.
         throw StorageException("$step (${e::class.simpleName})", e)
     }
 

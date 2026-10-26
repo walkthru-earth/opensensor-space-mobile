@@ -89,7 +89,7 @@ class CollectionControllerTest {
     private fun intent(scope: CollectionScope = CollectionScope.All, device: String = "fake-0") =
         CollectionIntent(nextId++, device, scope, CollectionOrigin.USER_TAP)
 
-    private fun archived(links: FakeLinks, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(links.station, name))]
+    private fun archived(links: FakeLinks, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(links.thing, name))]
 
     private fun assertAllArchived(links: FakeLinks) =
         links.files.forEach { assertContentEquals(it.bytes, archived(links, it.name), it.name) }
@@ -203,7 +203,7 @@ class CollectionControllerTest {
                 observed += outcome
                 if (!receiptRemoved && outcome is FileOutcome.Synced) {
                     receiptRemoved = true
-                    backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { index.remove(ArchiveKey(links.station, outcome.name)) }
+                    backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { index.remove(ArchiveKey(links.thing, outcome.name)) }
                 }
             },
         )
@@ -832,7 +832,7 @@ class CollectionControllerTest {
         val controllerLinks = LinkProvider { device, prefer ->
             val link = links.connect(device, prefer)
             // Release runs in the job's finally, after Done is published and before PROCESS goes.
-            CollectionLink(link.session, link.station, link.maxRead) {
+            CollectionLink(link.session, link.thing, link.maxRead) {
                 lateStop = controller.stop(StopSource.USER)
                 link.release()
             }
@@ -1073,7 +1073,7 @@ class CollectionControllerTest {
         }
         links.files.clear()
         links.files += FakeArchiveDevice.FakeFile(
-            "station=${links.station}/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet",
+            "station=${links.thing}/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet",
             FakeArchiveDevice.fakeParquet(7, 4_000_000),
         )
         val controller = controller(links, keepAlive)
@@ -1161,8 +1161,8 @@ class CollectionControllerTest {
         val keepAliveB = CountingKeepAlive()
         val keepAliveC = CountingKeepAlive()
         val linksA = FakeLinks(backgroundScope) { chunkDelayMs = 5 }
-        val linksB = FakeLinks(backgroundScope, station = "00000000-0000-4000-8000-000000000002")
-        val linksC = FakeLinks(backgroundScope, station = "00000000-0000-4000-8000-000000000003")
+        val linksB = FakeLinks(backgroundScope, thing = "00000000-0000-4000-8000-000000000002")
+        val linksC = FakeLinks(backgroundScope, thing = "00000000-0000-4000-8000-000000000003")
         val a = controller(linksA, keepAliveA, device = "fake-a", permits = permits)
         val b = controller(linksB, keepAliveB, device = "fake-b", permits = permits)
         val c = controller(linksC, keepAliveC, device = "fake-c", permits = permits)
@@ -1255,7 +1255,7 @@ class CollectionControllerTest {
         val keepAliveA = CountingKeepAlive()
         val keepAliveB = CountingKeepAlive()
         val linksA = FakeLinks(backgroundScope) { chunkDelayMs = 5 }
-        val linksB = FakeLinks(backgroundScope, station = "00000000-0000-4000-8000-000000000002") { chunkDelayMs = 5 }
+        val linksB = FakeLinks(backgroundScope, thing = "00000000-0000-4000-8000-000000000002") { chunkDelayMs = 5 }
         val a = controller(linksA, keepAliveA, device = "fake-a")
         val b = controller(linksB, keepAliveB, device = "fake-b")
         val requestA = intent(device = "fake-a")
@@ -1285,7 +1285,7 @@ class CollectionControllerTest {
         assertIs<CollectionState.Done>(controller.state.value)
         // A file the firmware wrote after the first run. Only a new LIST can know it.
         val added = FakeArchiveDevice.FakeFile(
-            "station=${links.station}/year=2026/month=09/day=15/data_1030_b41d_15180-15269-90.parquet",
+            "station=${links.thing}/year=2026/month=09/day=15/data_1030_b41d_15180-15269-90.parquet",
             FakeArchiveDevice.fakeParquet(4, 12_000),
         )
         links.files += added
@@ -1300,7 +1300,7 @@ class CollectionControllerTest {
         assertEquals(listOf(0L), links.devices[1].readOffsets.distinct().take(1))
 
         links.files += FakeArchiveDevice.FakeFile(
-            "station=${links.station}/year=2026/month=09/day=15/data_1045_b41d_15270-15359-90.parquet",
+            "station=${links.thing}/year=2026/month=09/day=15/data_1045_b41d_15270-15359-90.parquet",
             FakeArchiveDevice.fakeParquet(5, 11_000),
         )
         controller.start(intent())
@@ -1317,7 +1317,7 @@ class CollectionControllerTest {
         val links = FakeLinks(backgroundScope)
         val controller = controller(links, CountingKeepAlive())
 
-        controller.start(intent(CollectionScope.One("station=${links.station}/year=2026/month=09/day=15/gone.parquet")))
+        controller.start(intent(CollectionScope.One("station=${links.thing}/year=2026/month=09/day=15/gone.parquet")))
         settle(controller)
 
         val done = assertIs<CollectionState.Done>(controller.state.value)
@@ -1433,7 +1433,7 @@ class CollectionControllerTest {
         val keepAliveA = CountingKeepAlive()
         val keepAliveB = CountingKeepAlive()
         val linksA = FakeLinks(backgroundScope).apply { refuse = { n -> if (n == 1) DisconnectCause.Unreachable else null } }
-        val linksB = FakeLinks(backgroundScope, station = "00000000-0000-4000-8000-000000000002")
+        val linksB = FakeLinks(backgroundScope, thing = "00000000-0000-4000-8000-000000000002")
         val a = controller(linksA, keepAliveA, device = "fake-a", permits = permits)
         val b = controller(linksB, keepAliveB, device = "fake-b", permits = permits)
 
@@ -1458,7 +1458,7 @@ class CollectionControllerTest {
     fun aStopWhileWaitingForThePermitAgainReleasesNothingTwice() = runTest {
         val permits = Semaphore(1)
         val linksA = FakeLinks(backgroundScope).apply { refuse = { n -> if (n == 1) DisconnectCause.Unreachable else null } }
-        val linksB = FakeLinks(backgroundScope, station = "00000000-0000-4000-8000-000000000002") { listDelayMs = 10_000 }
+        val linksB = FakeLinks(backgroundScope, thing = "00000000-0000-4000-8000-000000000002") { listDelayMs = 10_000 }
         val keepAliveA = CountingKeepAlive()
         val a = controller(linksA, keepAliveA, device = "fake-a", permits = permits)
         val b = controller(linksB, CountingKeepAlive(), device = "fake-b", permits = permits)

@@ -56,7 +56,7 @@ data class AppProfile(
 
         /**
          * The default profile of [template], so an unknown dictionary still renders. Its primary
-         * reading is the first `physicalMeasurement` column, and labels are [titles] from the station
+         * reading is the first `physicalMeasurement` column, and labels are [titles] from the thing
          * Collection, else column names. Units stay the template's own and no column gets a scale, so
          * nothing is guessed.
          */

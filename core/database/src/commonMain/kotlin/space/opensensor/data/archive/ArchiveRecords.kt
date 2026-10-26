@@ -7,7 +7,7 @@ import space.opensensor.data.local.database.ArchivedFile
 // mappers are the only place they meet, so the schema stays untouched.
 
 fun ArchivedFile.toRecord(): ArchiveRecord = ArchiveRecord(
-    station = station,
+    thing = thing,
     name = name,
     bytes = bytes,
     crc32 = crc32,
@@ -32,10 +32,10 @@ fun ArchivedFile.toRecord(): ArchiveRecord = ArchiveRecord(
     estAnchorFile = estAnchorFile,
 )
 
-/** [id] 0 lets Room assign one. The `(station, name)` unique index replaces an existing row. */
+/** [id] 0 lets Room assign one. The `(thing, name)` unique index replaces an existing row. */
 fun ArchiveRecord.toEntity(id: Long = 0): ArchivedFile = ArchivedFile(
     id = id,
-    station = station,
+    thing = thing,
     name = name,
     bytes = bytes,
     crc32 = crc32,

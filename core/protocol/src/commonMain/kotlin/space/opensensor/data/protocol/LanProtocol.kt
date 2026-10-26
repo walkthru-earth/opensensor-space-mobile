@@ -26,7 +26,7 @@ object LanProtocol {
 
     /** TXT keys advertised with the service. */
     const val TXT_PROTO = "proto"
-    const val TXT_STATION = "station"
+    const val TXT_THING = "station"
     const val TXT_DEV = "dev"
     const val TXT_FW = "fw"
 

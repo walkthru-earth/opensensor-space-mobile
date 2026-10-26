@@ -144,12 +144,12 @@
     <!-- The attribution in Real mode, it opens the OpenAQ licenses. -->
     <string name="discover_data_openaq">البيانات من OpenAQ</string>
     <string name="discover_real_title">بيانات OpenAQ</string>
-    <string name="discover_real_info">البيانات الحقيقية من OpenAQ، متوسطات يومية من محطة عامة واحدة أو أكثر لكل منطقة، لآخر يوم من البيانات. يحتفظ كل مزوّد بيانات برخصته الخاصة.</string>
+    <string name="discover_real_info">البيانات الحقيقية من OpenAQ، متوسطات يومية من مستشعر عام واحد أو أكثر لكل منطقة، لآخر يوم من البيانات. يحتفظ كل مزوّد بيانات برخصته الخاصة.</string>
     <!-- The real feed could not be read, with Retry beside it. -->
     <string name="discover_load_failed">تعذّر تحميل المستشعرات العامة</string>
     <string name="discover_window_latest_day">آخر يوم</string>
     <string name="discover_window_short_latest_day">يوم</string>
-    <string name="discover_scale_info2_real">تعرض كل منطقة متوسطات يومية من محطة عامة واحدة أو أكثر، لآخر يوم من البيانات. المنطقة الباهتة ليس لها قيمة في آخر يومين من البيانات. الحدود وحدها تعني أن المنطقة لا تقيس هذا.</string>
+    <string name="discover_scale_info2_real">تعرض كل منطقة متوسطات يومية من مستشعر عام واحد أو أكثر، لآخر يوم من البيانات. المنطقة الباهتة ليس لها قيمة في آخر يومين من البيانات. الحدود وحدها تعني أن المنطقة لا تقيس هذا.</string>
 
     <string name="discover_property_pm10">PM10</string>
     <string name="discover_property_pm1">PM1</string>

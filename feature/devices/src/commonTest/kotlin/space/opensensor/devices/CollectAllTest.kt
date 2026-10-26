@@ -7,10 +7,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CollectAllTest {
-    private fun known(id: String, station: String?, wifi: Boolean = false) = KnownSensor(id, id, station, null, wifi)
+    private fun known(id: String, thing: String?, wifi: Boolean = false) = KnownSensor(id, id, thing, null, wifi)
 
     @Test
-    fun wifiWhenTheTokenIsHeldAndTheStationIsOnTheWifiFirst() {
+    fun wifiWhenTheTokenIsHeldAndTheThingIsOnTheWifiFirst() {
         val plan = CollectAllPlan.plan(
             known = listOf(known("A", "st-a"), known("B", "st-b", wifi = true), known("C", "st-c", wifi = true)),
             wifi = listOf(WifiSensor("aq-b", "st-b")),
@@ -24,7 +24,7 @@ class CollectAllTest {
     }
 
     @Test
-    fun skipsOpenLinksAndKeepsOneStepPerStation() {
+    fun skipsOpenLinksAndKeepsOneStepPerThing() {
         val plan = CollectAllPlan.plan(
             known = listOf(known("A", "st-1"), known("A2", "st-1"), known("B", "st-2"), known("N1", null), known("N2", null)),
             wifi = emptyList(),
@@ -51,7 +51,7 @@ class CollectAllTest {
     }
 
     @Test
-    fun queueInParallelNeverRunsOneStationTwice() {
+    fun queueInParallelNeverRunsOneThingTwice() {
         val steps = listOf(
             CollectStep("A", null, "st-1", CollectRoute.WIFI, "aq-1"),
             CollectStep("A2", null, "st-1", CollectRoute.BLUETOOTH),

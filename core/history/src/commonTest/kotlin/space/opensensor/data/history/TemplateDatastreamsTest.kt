@@ -42,7 +42,7 @@ import kotlin.test.assertTrue
 class TemplateDatastreamsTest {
     private val day = 20_000L
     private val startS = day * 86_400 + 10 * 3_600
-    private val station = "soil-station"
+    private val thing = "soil-thing"
 
     private fun ds(name: String, type: String = "float", unit: String? = null, role: Role? = Role.PHYSICAL_MEASUREMENT, aggregate: String? = null, gate: ValidityGate? = null, settle: Double = 0.0, range: PlausibleRange? = null) =
         Datastream(name, type, role, unit, validWhen = gate, settleSeconds = settle, aggregate = aggregate?.let(::Aggregate), plausibleRange = range)
@@ -125,7 +125,7 @@ class TemplateDatastreamsTest {
     }
 
     private fun hour(files: FileTemplates, bytes: ByteArray = soilFile(), list: List<MetricSpec> = metrics): Bucket =
-        Aggregator(station, setOf(Resolution.HOUR), list, files).apply { add(ParquetFile.wrap(bytes)) }.buckets().single()
+        Aggregator(thing, setOf(Resolution.HOUR), list, files).apply { add(ParquetFile.wrap(bytes)) }.buckets().single()
 
     @Test
     fun theMetricListIsTheTemplatesMeasuredColumnsWithTheProfilePrimaryFirst() {
@@ -239,7 +239,7 @@ class TemplateDatastreamsTest {
         val bytes = soilFile()
         val store = Store()
         val index = Index()
-        val r = ArchiveRecord(station, "station=$station/soil.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        val r = ArchiveRecord(thing, "station=$thing/soil.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
         ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = soilFiles).backfillAll()
@@ -247,12 +247,12 @@ class TemplateDatastreamsTest {
         val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index, templates = soilFiles), templates = soilFiles)
         val window = HistoryWindow(day * 86_400, (day + 1) * 86_400, TimeZone.UTC)
         val moisture = metric("soil_moisture_percent")
-        val series = reader.observe(station, moisture, HistoryRange.DAY, window).first()
+        val series = reader.observe(thing, moisture, HistoryRange.DAY, window).first()
         assertEquals(7L, series.validRows)
         assertEquals(86_400L * 1000 / 30_000, series.expectedRows)
         assertEquals(26f, series.mean!!, 1e-4f)
         assertTrue(series.points.isNotEmpty())
-        val counted = reader.observe(station, metric("rain_tips"), HistoryRange.DAY, window).first()
+        val counted = reader.observe(thing, metric("rain_tips"), HistoryRange.DAY, window).first()
         assertEquals(7f, counted.mean)
         // The axis holds the data inside the template's plausible range, and with no data it is that range.
         val axis = ChartAxes.of(series.points.map { HistoryColumn(it.startS, it.endS, it.mean, it.max, it.coverage, 0f) }, moisture)
@@ -312,19 +312,19 @@ class TemplateDatastreamsTest {
 
     private class Store : ArchiveStore {
         val files = HashMap<ArchiveKey, ByteArray>()
-        override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
+        override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = key in files
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader = ByteArrayReader(files[key] ?: throw NoSuchElementException(key.name))
         override suspend fun commit(key: ArchiveKey) = Unit
-        override suspend fun listFinal(station: String?): List<ArchiveKey> = files.keys.filter { station == null || it.station == station }
+        override suspend fun listFinal(thing: String?): List<ArchiveKey> = files.keys.filter { thing == null || it.thing == thing }
     }
 
     private class Index : ArchiveIndex {
         val rows = MutableStateFlow<List<ArchiveRecord>>(emptyList())
         override fun observeAll(): Flow<List<ArchiveRecord>> = rows
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station } }
+        override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.thing == thing } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) {
             rows.value = rows.value.filterNot { it.key == record.key } + record
@@ -333,9 +333,9 @@ class TemplateDatastreamsTest {
             rows.value = rows.value.filterNot { it.key == key }
         }
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { !it.isIndexed }.take(limit)
-        override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
-            rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
-        override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
+        override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
+            rows.value.filter { it.thing == thing && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
+        override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = rows.value.filter { it.thing == thing && it.isIndexed }
+        override suspend fun things(): List<String> = rows.value.map { it.thing }.distinct()
     }
 }

@@ -126,7 +126,7 @@ class DailyCellFoldTest {
     }
 
     @Test
-    fun `one station keeps devices of one`() {
+    fun `one thing keeps devices of one`() {
         val rows = listOf(row(a, day(8), 1, "pm25" to stat(24, 8.0)))
         for (window in listOf(FeedWindow.DAY, FeedWindow.WEEK)) {
             val out = DailyCellFold.fold(rows, window, asOf).single()
@@ -139,7 +139,7 @@ class DailyCellFoldTest {
     fun `devices and updated come only from the days used`() {
         val rows = listOf(
             row(a, day(6), 2, "pm25" to stat(18, 10.0)),
-            // A newer day with more stations but no measured property is not used.
+            // A newer day with more things but no measured property is not used.
             row(a, day(8), 9, "pm25" to stat(null, null, null, null)),
         )
         for (window in listOf(FeedWindow.DAY, FeedWindow.WEEK)) {

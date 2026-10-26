@@ -50,7 +50,7 @@ class SettingsRowSemanticsTest {
 
         override suspend fun archiveDays(): OldFilesRange? = null
 
-        override suspend fun findOldFiles(range: OldFilesRange?) = OldFilesPlan(files = 3, bytes = 15 * MB, stations = 1, range = range, handle = "plan")
+        override suspend fun findOldFiles(range: OldFilesRange?) = OldFilesPlan(files = 3, bytes = 15 * MB, things = 1, range = range, handle = "plan")
 
         override suspend fun removeOldFiles(plan: OldFilesPlan) = OldFilesResult(plan.files, plan.bytes, kept = 0)
 

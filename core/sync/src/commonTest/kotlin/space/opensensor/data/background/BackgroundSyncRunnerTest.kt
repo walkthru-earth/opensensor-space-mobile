@@ -13,9 +13,9 @@ import kotlin.test.assertTrue
 
 /** The shared background run against a fake gateway, the same rules Android's worker and iOS's BGTask follow. */
 class BackgroundSyncRunnerTest {
-    private data class Dev(override val address: String, override val name: String? = "OS-6b40", override val station: String? = "st-$address", override val hasLanToken: Boolean = true) : BackgroundSyncDevice
+    private data class Dev(override val address: String, override val name: String? = "OS-6b40", override val thing: String? = "st-$address", override val hasLanToken: Boolean = true) : BackgroundSyncDevice
 
-    private data class Target(val station: String, override val isConnectable: Boolean = true) : BackgroundLanTarget
+    private data class Target(val thing: String, override val isConnectable: Boolean = true) : BackgroundLanTarget
 
     private class FakeGateway(
         val auto: List<Dev> = emptyList(),
@@ -34,9 +34,9 @@ class BackgroundSyncRunnerTest {
         override suspend fun knownDevice(address: String) = all.firstOrNull { it.address == address }
         override suspend fun allKnownDevices() = all
         override fun interactiveSessionAddress() = owned
-        override suspend fun browseLan(stations: Set<String>, timeoutMs: Long): Map<String, Target> {
-            browsed += stations
-            return lan.filterKeys { it in stations }
+        override suspend fun browseLan(things: Set<String>, timeoutMs: Long): Map<String, Target> {
+            browsed += things
+            return lan.filterKeys { it in things }
         }
         override fun isBonded(address: String) = address in bonded
         override suspend fun sync(device: Dev, link: BackgroundSyncLink<Target>): BackgroundSyncResult {
@@ -188,7 +188,7 @@ class BackgroundSyncRunnerTest {
             override suspend fun knownDevice(address: String) = null
             override suspend fun allKnownDevices() = devices
             override fun interactiveSessionAddress(): String? = null
-            override suspend fun browseLan(stations: Set<String>, timeoutMs: Long) = emptyMap<String, Target>()
+            override suspend fun browseLan(things: Set<String>, timeoutMs: Long) = emptyMap<String, Target>()
             override fun isBonded(address: String) = true
             override suspend fun sync(device: Dev, link: BackgroundSyncLink<Target>): BackgroundSyncResult {
                 active++

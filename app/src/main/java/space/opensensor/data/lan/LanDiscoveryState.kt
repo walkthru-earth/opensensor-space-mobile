@@ -14,7 +14,7 @@ import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Discovered LAN targets keyed by station, as the repository reads them. */
+/** Discovered LAN targets keyed by thing, as the repository reads them. */
 interface LanTargets {
     val devices: StateFlow<Map<String, LanDevice>>
     val error: StateFlow<String?>
@@ -53,7 +53,7 @@ class LanDiscoveryState @Inject constructor(private val discovery: LanDiscovery)
                         synchronized(this@LanDiscoveryState) {
                             if (run == generation) {
                                 when (event) {
-                                    is LanDiscovery.Event.Devices -> _devices.value = event.devices.values.filter { it.isConnectable }.associateBy { it.station!! }
+                                    is LanDiscovery.Event.Devices -> _devices.value = event.devices.values.filter { it.isConnectable }.associateBy { it.thing!! }
                                     is LanDiscovery.Event.Failed -> {
                                         _devices.value = emptyMap()
                                         _error.value = event.message

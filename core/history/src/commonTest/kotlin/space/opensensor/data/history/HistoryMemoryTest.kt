@@ -29,7 +29,7 @@ import kotlin.time.Duration.Companion.minutes
  * back on memory pressure, and every reader History opens is closed exactly once.
  */
 class HistoryMemoryTest {
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val firstDay = 20_000L // 2024-10-04, UTC epoch day
     private val board = fixtureBytes("parquet/device/v3-board-2rg-105rows.parquet")
 
@@ -47,20 +47,20 @@ class HistoryMemoryTest {
     private class Store : ArchiveStore {
         val files = HashMap<ArchiveKey, ByteArray>()
         val opened = ArrayList<CountingReader>()
-        override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
+        override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = key in files
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader =
             CountingReader(files[key] ?: throw NoSuchElementException(key.name)).also { opened += it }
         override suspend fun commit(key: ArchiveKey) = Unit
-        override suspend fun listFinal(station: String?): List<ArchiveKey> = files.keys.filter { station == null || it.station == station }
+        override suspend fun listFinal(thing: String?): List<ArchiveKey> = files.keys.filter { thing == null || it.thing == thing }
     }
 
     private class Index : ArchiveIndex {
         val rows = MutableStateFlow<List<ArchiveRecord>>(emptyList())
         override fun observeAll(): Flow<List<ArchiveRecord>> = rows
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station } }
+        override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.thing == thing } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) {
             rows.value = rows.value.filterNot { it.key == record.key } + record
@@ -69,14 +69,14 @@ class HistoryMemoryTest {
             rows.value = rows.value.filterNot { it.key == key }
         }
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { !it.isIndexed }.take(limit)
-        override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
-            rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
-        override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
+        override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
+            rows.value.filter { it.thing == thing && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
+        override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = rows.value.filter { it.thing == thing && it.isIndexed }
+        override suspend fun things(): List<String> = rows.value.map { it.thing }.distinct()
     }
 
-    private fun record(name: String, bytes: ByteArray, crc: Long = 1, owner: String = station) =
-        ArchiveRecord(station = owner, name = name, bytes = bytes.size.toLong(), crc32 = crc, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake")
+    private fun record(name: String, bytes: ByteArray, crc: Long = 1, owner: String = thing) =
+        ArchiveRecord(thing = owner, name = name, bytes = bytes.size.toLong(), crc32 = crc, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake")
 
     /** The board fixture's 105 rows spread over one UTC day, so every 15 minute bucket of the day has a row. */
     private fun dayFile(epochDay: Long): ByteArray {
@@ -98,13 +98,13 @@ class HistoryMemoryTest {
         return sink.toByteArray()
     }
 
-    /** [days] consecutive station-days, one indexed file each. */
+    /** [days] consecutive thing-days, one indexed file each. */
     private suspend fun archive(days: Int): Pair<Store, Index> {
         val store = Store()
         val index = Index()
         for (d in 0 until days) {
             val bytes = dayFile(firstDay + d)
-            val r = record("station=$station/day-$d/data_$d.parquet", bytes, crc = d.toLong())
+            val r = record("station=$thing/day-$d/data_$d.parquet", bytes, crc = d.toLong())
             store.files[r.key] = bytes
             index.put(r)
         }
@@ -121,7 +121,7 @@ class HistoryMemoryTest {
         val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val budget = ArchiveHistoryTiers.DEFAULT_BUDGET_BYTES
 
-        assertEquals(days, tiers.observeDays(station).first().count)
+        assertEquals(days, tiers.observeDays(thing).first().count)
         val full = tiers.cachedBytes()
         assertTrue("cached $full of $budget", full in (budget / 2 + 1)..budget)
         assertTrue("the budget bounded the cache", tiers.cachedDays() in 1 until days)
@@ -135,7 +135,7 @@ class HistoryMemoryTest {
         assertEquals(0L, tiers.cachedBytes())
 
         // Evicted days are rebuilt from the archive on the next read.
-        assertEquals(days, tiers.observeDays(station).first().count)
+        assertEquals(days, tiers.observeDays(thing).first().count)
         assertTrue(tiers.cachedBytes() in 1..budget)
     }
 
@@ -143,13 +143,13 @@ class HistoryMemoryTest {
     fun tiersCloseEveryReaderTheyOpenOnce() = runTest {
         val (store, index) = archive(3)
         // A file whose footer does not parse is skipped, and its reader is closed too.
-        val broken = record("station=$station/day-x/data_x.parquet", board.copyOf(board.size - 8), crc = 99)
+        val broken = record("station=$thing/day-x/data_x.parquet", board.copyOf(board.size - 8), crc = 99)
         store.files[broken.key] = board.copyOf(board.size - 8)
-        index.put(broken.copy(indexedAtEpochMs = 42L, rows = 1, utcRows = 1, firstUtcNs = firstDay * StationDays.DAY_NS, lastUtcNs = firstDay * StationDays.DAY_NS + 1))
+        index.put(broken.copy(indexedAtEpochMs = 42L, rows = 1, utcRows = 1, firstUtcNs = firstDay * ThingDays.DAY_NS, lastUtcNs = firstDay * ThingDays.DAY_NS + 1))
         store.opened.clear()
 
         val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
-        assertEquals(3, tiers.observeDays(station).first().count)
+        assertEquals(3, tiers.observeDays(thing).first().count)
 
         assertEquals(4, store.opened.size)
         assertEquals(List(4) { 1 }, store.opened.map { it.closes })
@@ -162,7 +162,7 @@ class HistoryMemoryTest {
         val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index), templates = CoreS3Files)
         val toS = (firstDay + 1) * 86_400L
 
-        val day = reader.observe(station, Metrics.PM25, HistoryRange.DAY, HistoryWindow.endingAt(toS, HistoryRange.DAY, TimeZone.UTC)).first()
+        val day = reader.observe(thing, Metrics.PM25, HistoryRange.DAY, HistoryWindow.endingAt(toS, HistoryRange.DAY, TimeZone.UTC)).first()
 
         assertTrue(day.points.isNotEmpty())
         assertTrue(store.opened.isNotEmpty())
@@ -177,7 +177,7 @@ class HistoryMemoryTest {
         assertNull(indexed.indexError)
         assertEquals(1, good.closes)
 
-        // The footer names another station: the check throws inside the open file.
+        // The footer names another thing: the check throws inside the open file.
         val foreign = CountingReader(board)
         val refused = repair.indexed(record("data.parquet", board, owner = "someone-else"), { foreign })
         assertNotNull(refused.indexError)
@@ -202,7 +202,7 @@ class HistoryMemoryTest {
         assertNull(repair.indexed(record("b.parquet", board), { ByteArrayReader(withCoreS3Dict(board, desc = null)) }).indexError)
         assertEquals(listOf(desc), digests)
 
-        // A file refused for another station reports nothing either.
+        // A file refused for another thing reports nothing either.
         assertNotNull(repair.indexed(record("c.parquet", board, owner = "someone-else"), { ByteArrayReader(withCoreS3Dict(board)) }).indexError)
         assertEquals(listOf(desc), digests)
     }

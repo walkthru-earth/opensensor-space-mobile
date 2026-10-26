@@ -19,8 +19,8 @@ import space.opensensor.storage.AtomicFiles
 import space.opensensor.storage.StorageClass
 
 /**
- * [TierStore] for iOS (#63): one small binary file per station-day next to the derived day file,
- * `derived/v1/<station>/day=YYYY-MM-DD.tiers` under `Library/Caches`, which iOS may purge. The quota
+ * [TierStore] for iOS (#63): one small binary file per thing-day next to the derived day file,
+ * `derived/v1/<thing>/day=YYYY-MM-DD.tiers` under `Library/Caches`, which iOS may purge. The quota
  * evicts day files and tiers, a purge or a Clear makes the next pass rebuild the tiers.
  */
 class IosFileTierStore(root: String, private val atomic: AtomicFiles) : TierStore {
@@ -28,15 +28,15 @@ class IosFileTierStore(root: String, private val atomic: AtomicFiles) : TierStor
     private val fm get() = NSFileManager.defaultManager
     private val protection = mapOf<Any?, Any?>(NSFileProtectionKey to NSFileProtectionCompleteUntilFirstUserAuthentication)
 
-    private fun path(station: String, epochDay: Long) = checked("$root/${ArchiveLayout.derivedDayPath(station, epochDay).removeSuffix(".parquet")}$SUFFIX")
+    private fun path(thing: String, epochDay: Long) = checked("$root/${ArchiveLayout.derivedDayPath(thing, epochDay).removeSuffix(".parquet")}$SUFFIX")
 
-    override suspend fun load(station: String, epochDay: Long, signature: String): DayTiers? =
-        read(station, epochDay) { TierCodec.decode(it, signature) }
+    override suspend fun load(thing: String, epochDay: Long, signature: String): DayTiers? =
+        read(thing, epochDay) { TierCodec.decode(it, signature) }
 
-    override suspend fun loadSaved(station: String, epochDay: Long): SavedDay? = read(station, epochDay, TierCodec::decodeSaved)
+    override suspend fun loadSaved(thing: String, epochDay: Long): SavedDay? = read(thing, epochDay, TierCodec::decodeSaved)
 
-    private suspend fun <T> read(station: String, epochDay: Long, decode: (ByteArray) -> T?): T? = withContext(Dispatchers.IO) {
-        val path = path(station, epochDay)
+    private suspend fun <T> read(thing: String, epochDay: Long, decode: (ByteArray) -> T?): T? = withContext(Dispatchers.IO) {
+        val path = path(thing, epochDay)
         if (fm.attributesOfItemAtPath(path, null)?.get(NSFileType) != NSFileTypeRegular) return@withContext null
         try {
             LocalFileReader(path).use { reader ->
@@ -50,8 +50,8 @@ class IosFileTierStore(root: String, private val atomic: AtomicFiles) : TierStor
         }
     }
 
-    override suspend fun savedDays(station: String): Set<Long> = withContext(Dispatchers.IO) {
-        val directory = checked("$root/${ArchiveLayout.derivedStationDir(station)}")
+    override suspend fun savedDays(thing: String): Set<Long> = withContext(Dispatchers.IO) {
+        val directory = checked("$root/${ArchiveLayout.derivedThingDir(thing)}")
         fm.contentsOfDirectoryAtPath(directory, null).orEmpty().filterIsInstance<String>().mapNotNullTo(HashSet()) { name ->
             if (!name.startsWith("day=") || !name.endsWith(SUFFIX)) return@mapNotNullTo null
             try {
@@ -62,8 +62,8 @@ class IosFileTierStore(root: String, private val atomic: AtomicFiles) : TierStor
         }
     }
 
-    override suspend fun save(station: String, epochDay: Long, signature: String, tiers: DayTiers) = withContext(Dispatchers.IO) {
-        val path = path(station, epochDay)
+    override suspend fun save(thing: String, epochDay: Long, signature: String, tiers: DayTiers) = withContext(Dispatchers.IO) {
+        val path = path(thing, epochDay)
         try {
             val directory = path.substringBeforeLast('/')
             check(fm.createDirectoryAtPath(directory, true, protection, null)) { "cannot create tier directory" }
@@ -76,9 +76,9 @@ class IosFileTierStore(root: String, private val atomic: AtomicFiles) : TierStor
         }
     }
 
-    override suspend fun retain(station: String, days: Set<Long>) = withContext(Dispatchers.IO) {
-        val directory = checked("$root/${ArchiveLayout.derivedStationDir(station)}")
-        val keep = days.mapTo(HashSet()) { path(station, it).substringAfterLast('/') }
+    override suspend fun retain(thing: String, days: Set<Long>) = withContext(Dispatchers.IO) {
+        val directory = checked("$root/${ArchiveLayout.derivedThingDir(thing)}")
+        val keep = days.mapTo(HashSet()) { path(thing, it).substringAfterLast('/') }
         for (name in fm.contentsOfDirectoryAtPath(directory, null).orEmpty().filterIsInstance<String>()) {
             if (name.startsWith("day=") && name.endsWith(SUFFIX) && name !in keep) fm.removeItemAtPath(checked("$directory/$name"), null)
         }

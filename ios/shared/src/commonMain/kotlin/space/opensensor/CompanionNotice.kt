@@ -34,7 +34,7 @@ import space.opensensor.strings.resources.msg_failed_get_token
 import space.opensensor.strings.resources.msg_hardware_in_use
 import space.opensensor.strings.resources.msg_identity_enroll_ble
 import space.opensensor.strings.resources.msg_identity_hardware_changed
-import space.opensensor.strings.resources.msg_identity_station_ble
+import space.opensensor.strings.resources.msg_identity_thing_ble
 import space.opensensor.strings.resources.msg_lan_token_stored
 import space.opensensor.strings.resources.msg_rejected_get_token
 import space.opensensor.strings.resources.msg_sync_aborted
@@ -55,8 +55,8 @@ enum class CompanionNotice {
     /** The sensor refused the saved Wi-Fi access. It is dropped and renews over Bluetooth. */
     TOKEN_NEEDS_BLUETOOTH,
 
-    /** HELLO named another station than the saved access. */
-    STATION_CHANGED,
+    /** HELLO named another thing than the saved access. */
+    THING_CHANGED,
 
     /** HELLO named other hardware than the saved access. */
     HARDWARE_CHANGED,
@@ -167,7 +167,7 @@ enum class CompanionNotice {
                 ENROLL_OVER_BLUETOOTH -> Res.string.msg_identity_enroll_ble
                 SAVE_WIFI_ACCESS -> Res.string.companion_lan_needs_access
                 TOKEN_NEEDS_BLUETOOTH -> Res.string.msg_token_needs_ble
-                STATION_CHANGED -> Res.string.msg_identity_station_ble
+                THING_CHANGED -> Res.string.msg_identity_thing_ble
                 HARDWARE_CHANGED -> Res.string.msg_identity_hardware_changed
                 VERIFICATION_FAILED -> Res.string.msg_verification_failed
                 BUSY -> Res.string.msg_busy

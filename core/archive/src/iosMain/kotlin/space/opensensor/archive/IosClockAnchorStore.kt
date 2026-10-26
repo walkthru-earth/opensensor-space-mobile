@@ -21,15 +21,15 @@ class IosClockAnchorStore(
     private val root = root.trimEnd('/')
     private val mutex = Mutex()
 
-    override suspend fun anchors(station: String): List<ClockAnchor> = withContext(Dispatchers.IO) {
-        require(ArchiveLayout.isSafeStation(station)) { "unsafe station id" }
+    override suspend fun anchors(thing: String): List<ClockAnchor> = withContext(Dispatchers.IO) {
+        require(ArchiveLayout.isSafeThing(thing)) { "unsafe thing id" }
         mutex.withLock {
-            val directory = checked("$root/$station")
+            val directory = checked("$root/$thing")
             val anchors = IosFiles.walk(directory).mapNotNull { relative ->
                 if (relative.count { it == '/' } != 1 || !relative.endsWith(".anchor")) return@mapNotNull null
                 val path = checked("$directory/$relative")
                 val bytes = IosFiles.readSmall(path, ClockAnchorReceipt.MAX_BYTES) ?: return@mapNotNull null
-                ClockAnchorReceipt.decode(bytes, station, relative)
+                ClockAnchorReceipt.decode(bytes, thing, relative)
             }
             ClockAnchorReceipt.earliest(anchors)
         }
@@ -37,9 +37,9 @@ class IosClockAnchorStore(
 
     override suspend fun put(anchor: ClockAnchor) = withContext(Dispatchers.IO) {
         mutex.withLock {
-            val path = checked("$root/${anchor.station}/${ClockAnchorReceipt.relativePath(anchor)}")
+            val path = checked("$root/${anchor.thing}/${ClockAnchorReceipt.relativePath(anchor)}")
             IosFiles.prepareRoot(root)
-            // AtomicFiles creates the station and boot directories and syncs each new level.
+            // AtomicFiles creates the thing and boot directories and syncs each new level.
             val bytes = ClockAnchorReceipt.encode(anchor)
             try {
                 atomic.createNoReplace(path, bytes, StorageClass.Durable)

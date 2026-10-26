@@ -75,8 +75,8 @@ import space.opensensor.data.local.database.ArchivedFile
 import space.opensensor.data.local.database.DerivedArchivedFileQueries
 import space.opensensor.data.local.database.KnownDevice
 import space.opensensor.data.local.database.KnownDeviceDao
-import space.opensensor.data.local.database.StationEpoch
-import space.opensensor.data.local.database.StationEpochDao
+import space.opensensor.data.local.database.ThingEpoch
+import space.opensensor.data.local.database.ThingEpochDao
 import space.opensensor.data.local.security.LanTokenCipherContract
 import space.opensensor.data.local.security.SecureKnownDeviceDao
 import space.opensensor.data.protocol.ConfigPatch
@@ -252,7 +252,7 @@ class DeviceFacadeTest {
         assertEquals(0, again.await().newFiles)
         assertEquals(listOf(receipt.name), h.committedNames)
         assertEquals(receipt, h.archived.rows.single())
-        assertArrayEquals(h.device.files.single().bytes, FileArchive(tmp).fileFor(receipt.station, receipt.name).readBytes())
+        assertArrayEquals(h.device.files.single().bytes, FileArchive(tmp).fileFor(receipt.thing, receipt.name).readBytes())
     }
 
     @Test
@@ -530,11 +530,11 @@ class DeviceFacadeTest {
     fun `a slow re-dating derive after a clock receipt never holds the link`() = harnessTest { h ->
         h.clockEpochOffset = 1_789_581_931_987L
         val gate = CompletableDeferred<Unit>()
-        h.stationDeriveGate = gate
+        h.thingDeriveGate = gate
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         // The derive waits behind a History pass, yet the connection lists and a collection completes.
         h.until { h.repo.plan.value != null }
-        assertEquals(listOf(h.device.station), h.stationDerives)
+        assertEquals(listOf(h.device.thing), h.thingDerives)
         h.repo.syncAll()
         h.until { h.archived.rows.size == h.device.files.size && h.repo.collectionState.value is CollectionState.Done && !h.repo.busy.value }
         assertFalse(gate.isCompleted)
@@ -701,7 +701,7 @@ class DeviceFacadeTest {
         // While the link is down the card changes: every file not yet archived is gone and one new
         // file appears. A resume driven by the previous plan would OPEN names that no longer exist.
         val replacement = FakeTransport.FakeFile(
-            "station=${h.device.station}/year=2026/month=09/day=17/data_0900_${h.device.bootId}_20000-20089-90.parquet",
+            "station=${h.device.thing}/year=2026/month=09/day=17/data_0900_${h.device.bootId}_20000-20089-90.parquet",
             h.device.files.first { it.name in done }.bytes,
         )
         h.device.disconnect()
@@ -751,7 +751,7 @@ class DeviceFacadeTest {
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN).copy(autoSync = true, companionAssociationId = 7))
         // The user turns Auto-sync off, the companion changes and BLE renews the credential, all
         // after enrollment read the row and before it writes (#106).
-        h.stationEpochs.beforeRecord = {
+        h.thingEpochs.beforeRecord = {
             h.repo.setAutoSync(ADDRESS, false)
             h.repo.setCompanionAssociation(ADDRESS, 9)
             h.knownDao.setLanToken(ADDRESS, NEW_TOKEN, 47391)
@@ -760,7 +760,7 @@ class DeviceFacadeTest {
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.connectionState.value.isReady }
 
-        assertNull("the hook ran", h.stationEpochs.beforeRecord)
+        assertNull("the hook ran", h.thingEpochs.beforeRecord)
         val row = h.knownDao.get(ADDRESS)!!
         assertFalse("Auto-sync stays off", row.autoSync)
         assertEquals(9, row.companionAssociationId)
@@ -777,7 +777,7 @@ class DeviceFacadeTest {
         val row = h.knownDao.get(ADDRESS)!!
         assertFalse(row.autoSync)
         assertNull(row.companionAssociationId)
-        assertEquals(h.device.station, row.station)
+        assertEquals(h.device.thing, row.thing)
         assertEquals(h.device.deviceId, row.deviceId)
         assertNotNull(row.lastConnectedEpochMs)
     }
@@ -785,7 +785,7 @@ class DeviceFacadeTest {
     @Test
     fun `rejected LAN token is cleared and the Bluetooth session renews it`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
-        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.lan.devices.value = mapOf(h.device.thing to h.lanTarget())
         h.factory.lanFailure = LanConnectException(LanFailure.AUTH_FAILED)
 
         h.repo.connect(ADDRESS, "OS-6b40")
@@ -803,7 +803,7 @@ class DeviceFacadeTest {
     @Test
     fun `a rotated LAN token is cleared and the Bluetooth session renews it`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
-        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.lan.devices.value = mapOf(h.device.thing to h.lanTarget())
         h.factory.lanClose = LinkClosedException(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), LanConnectException(LanFailure.AUTH_FAILED, "BYE token-rotated"))
 
         h.repo.connect(ADDRESS, "OS-6b40")
@@ -818,7 +818,7 @@ class DeviceFacadeTest {
     @Test
     fun `a LAN only lend after a rotated token ends as TOKEN_ROTATED`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
-        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.lan.devices.value = mapOf(h.device.thing to h.lanTarget())
         h.factory.lanClose = LinkClosedException(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), LanConnectException(LanFailure.AUTH_FAILED, "BYE token-rotated"))
 
         val e = async { runCatching { h.repo.lendLink(ADDRESS, LinkPreference.LAN) } }.also { h.until { it.isCompleted } }.await().exceptionOrNull()
@@ -830,7 +830,7 @@ class DeviceFacadeTest {
     @Test
     fun `a credential renewed before a rotated token is cleared survives`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
-        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.lan.devices.value = mapOf(h.device.thing to h.lanTarget())
         h.factory.lanClose = LinkClosedException(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), LanConnectException(LanFailure.AUTH_FAILED, "BYE token-rotated"))
         // BLE renews the credential after the LAN close proved the old one dead and before it is cleared.
         h.rawKnown.beforeClear = { h.rawKnown.renew(ADDRESS, "enc1:$NEW_TOKEN", 47391) }
@@ -846,7 +846,7 @@ class DeviceFacadeTest {
     @Test
     fun `an open LAN session the device ends with BYE 10 clears its token`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
-        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.lan.devices.value = mapOf(h.device.thing to h.lanTarget())
         h.factory.lanOpens = true
 
         val lent = async { h.repo.lendLink(ADDRESS, LinkPreference.LAN) }.also { h.until { it.isCompleted } }.await()
@@ -863,7 +863,7 @@ class DeviceFacadeTest {
     @Test
     fun `unexpected LAN failure closes the probe and falls back to Bluetooth`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
-        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.lan.devices.value = mapOf(h.device.thing to h.lanTarget())
         h.factory.lanFailure = IllegalStateException("socket factory exploded")
 
         h.repo.connect(ADDRESS, "OS-6b40")
@@ -890,7 +890,7 @@ class DeviceFacadeTest {
     @Test
     fun `LAN only failure closes probe without constructing Bluetooth`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
-        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.lan.devices.value = mapOf(h.device.thing to h.lanTarget())
         h.factory.lanFailure = LanConnectException(LanFailure.UNREACHABLE)
 
         h.repo.connect(ADDRESS, "OS-6b40", preference = TransportPreference.LAN_ONLY)
@@ -959,7 +959,7 @@ class DeviceFacadeTest {
     @Test
     fun `a secret refused on LAN reports the Bluetooth only code and sends nothing`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
-        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.lan.devices.value = mapOf(h.device.thing to h.lanTarget())
         h.factory.lanOpens = true
         h.repo.connect(ADDRESS, "AQ-6b40", preference = TransportPreference.LAN_ONLY)
         h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null && !h.repo.busy.value }
@@ -1121,7 +1121,7 @@ class DeviceFacadeTest {
     @Test
     fun `repeated LAN only lends retain a rejected token cause without retrying Bluetooth`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
-        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.lan.devices.value = mapOf(h.device.thing to h.lanTarget())
         h.factory.lanFailure = LanConnectException(LanFailure.AUTH_FAILED)
         repeat(2) {
             val e = async { runCatching { h.repo.lendLink(ADDRESS, LinkPreference.LAN) } }.also { h.until { it.isCompleted } }.await().exceptionOrNull()
@@ -1153,7 +1153,7 @@ class DeviceFacadeTest {
         assertNull("the uncounted link is not left in the slot", h.repo.interactiveSessionAddress)
 
         val again = async { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }.also { h.until { it.isCompleted } }.await()
-        assertEquals(h.device.station, again.station)
+        assertEquals(h.device.thing, again.thing)
         again.release()
     }
 
@@ -1175,16 +1175,16 @@ class DeviceFacadeTest {
     }
 
     @Test
-    fun `a second collection of a station already collecting is refused before any OPEN`() = harnessTest { h ->
+    fun `a second collection of a thing already collecting is refused before any OPEN`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = null))
-        // Another collection of the same station, on another link, holds its admission.
-        assertTrue(h.coordinator.tryAdmit(h.device.station))
+        // Another collection of the same thing, on another link, holds its admission.
+        assertTrue(h.coordinator.tryAdmit(h.device.thing))
         val refused = async { h.repo.syncInBackground(ADDRESS, null, owner = "synthetic-worker", protection = KeepAlive.None) }
         h.until(120_000) { refused.isCompleted }
         refused.await()
         assertFalse(h.factory.requests.contains(Opcode.OPEN))
         assertTrue(h.archived.rows.isEmpty())
-        h.coordinator.release(h.device.station)
+        h.coordinator.release(h.device.thing)
         val next = async { h.repo.syncInBackground(ADDRESS, null, owner = "synthetic-worker", protection = KeepAlive.None) }
         h.until { next.isCompleted }
         assertEquals(h.device.files.size, next.await().newFiles)
@@ -1269,9 +1269,9 @@ class DeviceFacadeTest {
     @Test
     fun `the archive summary counts every archived row before any connection`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = null))
-        val station = h.device.station
-        h.archived.upsert(archivedRow(station, "a.parquet", indexed = true))
-        h.archived.upsert(archivedRow(station, "b.parquet", indexed = false))
+        val thing = h.device.thing
+        h.archived.upsert(archivedRow(thing, "a.parquet", indexed = true))
+        h.archived.upsert(archivedRow(thing, "b.parquet", indexed = false))
         h.archived.upsert(archivedRow("other", "c.parquet", indexed = true))
         h.until { h.repo.archiveTimeSummary.value.files == 2 }
         assertNull(h.repo.session.value)
@@ -1331,8 +1331,8 @@ class DeviceFacadeTest {
         assertNull(h.repo.session.value)
     }
 
-    private fun archivedRow(station: String, name: String, indexed: Boolean) = ArchivedFile(
-        station = station,
+    private fun archivedRow(thing: String, name: String, indexed: Boolean) = ArchivedFile(
+        thing = thing,
         name = name,
         bytes = 100,
         crc32 = 1,
@@ -1367,7 +1367,7 @@ class DeviceFacadeTest {
         val appScope = CoroutineScope(SupervisorJob() + dispatcher)
         val factory = TestTransports(device, appScope)
         val identityClaims = DeviceIdentityClaims()
-        val stationEpochs = InMemoryStationEpochDao()
+        val thingEpochs = InMemoryThingEpochDao()
 
         var clockEpochOffset = 0L
         var partialFailuresRemaining = 0
@@ -1378,10 +1378,10 @@ class DeviceFacadeTest {
 
         /** When set, each post-sync derive waits for it, as a derive behind a slow backfill does. */
         var deriveGate: CompletableDeferred<Unit>? = null
-        val stationDerives = mutableListOf<String>()
+        val thingDerives = mutableListOf<String>()
 
         /** When set, each re-dating derive after a clock receipt waits for it, as one behind a History pass does. */
-        var stationDeriveGate: CompletableDeferred<Unit>? = null
+        var thingDeriveGate: CompletableDeferred<Unit>? = null
         val owner: DeviceLinkOwner
         val repo: DeviceFacade
         var refuseProcess = false
@@ -1405,12 +1405,12 @@ class DeviceFacadeTest {
                         deriveGate?.await()
                         return deriveStale()
                     }
-                    override suspend fun deriveStation(station: String) {
-                        stationDerives += station
-                        stationDeriveGate?.await()
+                    override suspend fun deriveThing(thing: String) {
+                        thingDerives += thing
+                        thingDeriveGate?.await()
                     }
-                    override suspend fun persistClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
-                        assertEquals(device.station, station)
+                    override suspend fun persistClockAnchor(thing: String, boot: String, utcNs: Long, monotonicUs: Long) {
+                        assertEquals(device.thing, thing)
                         assertEquals(device.bootId, boot)
                         assertTrue(utcNs > 0)
                         clockAnchorsBeforeList += factory.requests.count { it == Opcode.LIST }
@@ -1418,7 +1418,7 @@ class DeviceFacadeTest {
                 },
                 companionPresence = { _, _ -> },
                 identityClaims = identityClaims,
-                stationEpochDao = stationEpochs,
+                thingEpochDao = thingEpochs,
                 applicationScope = appScope,
                 io = dispatcher,
                 clock = { clockEpochOffset + test.testScheduler.currentTime },
@@ -1477,7 +1477,7 @@ class DeviceFacadeTest {
         fun enrolled(token: String?) = KnownDevice(
             address = endpoint,
             name = "OS-6b40",
-            station = device.station,
+            thing = device.thing,
             deviceId = device.deviceId,
             firmware = "fake",
             lastSeenEpochMs = 1,
@@ -1487,7 +1487,7 @@ class DeviceFacadeTest {
         )
 
         fun newFile() = FakeTransport.FakeFile(
-            "station=${device.station}/year=2026/month=09/day=17/data_0900_${device.bootId}_20000-20089-90.parquet",
+            "station=${device.thing}/year=2026/month=09/day=17/data_0900_${device.bootId}_20000-20089-90.parquet",
             device.files.first().bytes,
         )
 
@@ -1495,7 +1495,7 @@ class DeviceFacadeTest {
             serviceName = "OS-6b40",
             host = InetAddress.getLoopbackAddress(),
             port = 47390,
-            txt = mapOf(LanFraming.TXT_STATION to device.station, LanFraming.TXT_DEV to device.deviceId),
+            txt = mapOf(LanFraming.TXT_THING to device.thing, LanFraming.TXT_DEV to device.deviceId),
             lastSeenEpochMs = 0,
         )
 
@@ -1747,12 +1747,12 @@ class DeviceFacadeTest {
             replace(row.copy(lanToken = null, lanPort = null))
             return 1
         }
-        override suspend fun recordConnection(address: String, name: String?, station: String?, deviceId: String?, firmware: String?, epochMs: Long) {
+        override suspend fun recordConnection(address: String, name: String?, thing: String?, deviceId: String?, firmware: String?, epochMs: Long) {
             get(address)?.let {
-                replace(it.copy(name = name ?: it.name, station = station, deviceId = deviceId, firmware = firmware, lastSeenEpochMs = epochMs, lastConnectedEpochMs = epochMs))
+                replace(it.copy(name = name ?: it.name, thing = thing, deviceId = deviceId, firmware = firmware, lastSeenEpochMs = epochMs, lastConnectedEpochMs = epochMs))
             }
         }
-        override suspend fun findByStation(station: String) = rows.firstOrNull { it.station == station }
+        override suspend fun findByThing(thing: String) = rows.firstOrNull { it.thing == thing }
         override suspend fun setAutoSync(address: String, enabled: Boolean) {
             get(address)?.let { replace(it.copy(autoSync = enabled)) }
         }
@@ -1776,43 +1776,43 @@ class DeviceFacadeTest {
         private val state = MutableStateFlow<List<ArchivedFile>>(emptyList())
         val rows: List<ArchivedFile> get() = state.value
         override fun observeAll(): Flow<List<ArchivedFile>> = state
-        override fun observeForStation(station: String): Flow<List<ArchivedFile>> = state.map { all -> all.filter { it.station == station } }
-        override suspend fun forStation(station: String) = rows.filter { it.station == station }
-        override suspend fun get(station: String, name: String) = rows.firstOrNull { it.station == station && it.name == name }
+        override fun observeForThing(thing: String): Flow<List<ArchivedFile>> = state.map { all -> all.filter { it.thing == thing } }
+        override suspend fun forThing(thing: String) = rows.filter { it.thing == thing }
+        override suspend fun get(thing: String, name: String) = rows.firstOrNull { it.thing == thing && it.name == name }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override fun observeTotalBytes(): Flow<Long> = flowOf(rows.sumOf { it.bytes })
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
-        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) = emptyList<ArchivedFile>()
-        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.isIndexed }
-        override suspend fun stations() = rows.map { it.station }.distinct()
+        override suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long) = emptyList<ArchivedFile>()
+        override suspend fun indexedForThing(thing: String) = rows.filter { it.thing == thing && it.isIndexed }
+        override suspend fun things() = rows.map { it.thing }.distinct()
         override suspend fun upsert(file: ArchivedFile) {
-            state.value = rows.filterNot { it.station == file.station && it.name == file.name } + file
+            state.value = rows.filterNot { it.thing == file.thing && it.name == file.name } + file
         }
         override suspend fun insertIfAbsent(file: ArchivedFile): Long {
-            if (rows.any { it.station == file.station && it.name == file.name }) return -1L
+            if (rows.any { it.thing == file.thing && it.name == file.name }) return -1L
             state.value = rows + file
             return rows.size.toLong()
         }
-        override suspend fun delete(station: String, name: String) {
-            state.value = rows.filterNot { it.station == station && it.name == name }
+        override suspend fun delete(thing: String, name: String) {
+            state.value = rows.filterNot { it.thing == thing && it.name == name }
         }
     }
 
-    private class InMemoryStationEpochDao : StationEpochDao {
-        private val rows = CopyOnWriteArrayList<StationEpoch>()
+    private class InMemoryThingEpochDao : ThingEpochDao {
+        private val rows = CopyOnWriteArrayList<ThingEpoch>()
 
         /** Runs once inside the next epoch write, the suspension between enrollment's read and its write. */
         var beforeRecord: (suspend () -> Unit)? = null
 
-        override suspend fun recordIfAbsent(epoch: StationEpoch): Long {
+        override suspend fun recordIfAbsent(epoch: ThingEpoch): Long {
             beforeRecord?.also { beforeRecord = null }?.invoke()
-            if (rows.any { it.address == epoch.address && it.station == epoch.station }) return -1
+            if (rows.any { it.address == epoch.address && it.thing == epoch.thing }) return -1
             rows += epoch
             return 1
         }
         override suspend fun forDevice(address: String) = rows.filter { it.address == address }
-        override fun observeForDevice(address: String): Flow<List<StationEpoch>> = flowOf(forDeviceNow(address))
+        override fun observeForDevice(address: String): Flow<List<ThingEpoch>> = flowOf(forDeviceNow(address))
         private fun forDeviceNow(address: String) = rows.filter { it.address == address }
     }
 

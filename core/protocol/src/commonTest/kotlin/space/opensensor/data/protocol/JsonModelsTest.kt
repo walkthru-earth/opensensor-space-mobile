@@ -22,7 +22,7 @@ class JsonModelsTest {
     fun `info parses identities`() {
         val parsed = WireJson.decodeFromString(DeviceInfo.serializer(), info)
         assertEquals(1, parsed.proto)
-        assertEquals("53315f5f-cb85-4d8d-b623-d56266084189", parsed.station)
+        assertEquals("53315f5f-cb85-4d8d-b623-d56266084189", parsed.thing)
         assertEquals("441bf6e26b40", parsed.dev)
         assertEquals(16384, parsed.maxRead)
         assertEquals(77, parsed.cols)

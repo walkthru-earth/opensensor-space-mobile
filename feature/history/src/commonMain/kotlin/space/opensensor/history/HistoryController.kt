@@ -33,9 +33,9 @@ import kotlin.time.Clock
 data class HistoryUiState(
     /** The first archive reads for the selected query have not finished yet. */
     val initializing: Boolean = true,
-    val station: String? = null,
-    /** Station generations to choose from, oldest first. The last one is the current station. */
-    val stations: List<String> = emptyList(),
+    val thing: String? = null,
+    /** Thing generations to choose from, oldest first. The last one is the current thing. */
+    val things: List<String> = emptyList(),
     val metric: MetricSpec = Metrics.default,
     val availableMetrics: List<MetricSpec> = emptyList(),
     val range: HistoryRange = HistoryRange.DAY,
@@ -57,21 +57,21 @@ data class HistoryUiState(
  * pattern). Android wraps it in a Hilt ViewModel over Room's tiers and index, iOS builds it in
  * `AppRoot` over the receipt index and the in-memory tiers.
  *
- * [currentStation] is the station History opens on (Android, the known device's station, iOS, the
- * archived station with the latest reading). [stations] are the generations its chips offer.
+ * [currentThing] is the thing History opens on (Android, the known device's thing, iOS, the
+ * archived thing with the latest reading). [things] are the generations its chips offer.
  */
 class HistoryController(
     private val scope: CoroutineScope,
     private val reader: HistorySeriesReader,
     private val tiers: HistoryTiers,
     private val index: ArchiveIndex,
-    currentStation: Flow<String?>,
-    stations: Flow<List<String>>,
+    currentThing: Flow<String?>,
+    things: Flow<List<String>>,
     private val zone: TimeZone = TimeZone.currentSystemDefault(),
     private val clock: Clock = Clock.System,
     tickMs: Long = 60_000,
 ) {
-    private val selectedStation = MutableStateFlow<String?>(null)
+    private val selectedThing = MutableStateFlow<String?>(null)
     private val metric = MutableStateFlow(Metrics.default)
     private val range = MutableStateFlow(HistoryRange.DAY)
     private val toS = MutableStateFlow(nowRounded(HistoryRange.DAY))
@@ -83,10 +83,10 @@ class HistoryController(
      */
     private val followsNow = MutableStateFlow(true)
 
-    private val stationList = stations.distinctUntilChanged()
+    private val thingList = things.distinctUntilChanged()
 
-    private val station: Flow<String?> = combine(currentStation, stationList, index.observeLatestTimed(), selectedStation) { current, list, latest, selected ->
-        preferredHistoryStation(current, list, latest, selected)
+    private val thing: Flow<String?> = combine(currentThing, thingList, index.observeLatestTimed(), selectedThing) { current, list, latest, selected ->
+        preferredHistoryThing(current, list, latest, selected)
     }.distinctUntilChanged()
 
     init {
@@ -98,9 +98,9 @@ class HistoryController(
             }
         }
         scope.launch {
-            station.collectLatest { s ->
+            thing.collectLatest { s ->
                 if (s == null) return@collectLatest
-                val latest = latestHistoryDayEnd(index.observeStation(s).first(), zone)
+                val latest = latestHistoryDayEnd(index.observeThing(s).first(), zone)
                 val now = nowRounded(range.value)
                 nowToS.value = now
                 toS.value = minOf(latest ?: now, now)
@@ -109,42 +109,42 @@ class HistoryController(
         }
     }
 
-    private val availableMetrics = station.archiveQueryResults { s ->
+    private val availableMetrics = thing.archiveQueryResults { s ->
         if (s == null) flowOf(emptyList()) else tiers.observeMetricsWithData(s).map { ids -> Metrics.all.filter { it.id in ids } }
     }.onEach { result ->
         val available = result.value.orEmpty()
         if (available.isNotEmpty() && metric.value !in available) metric.value = Metrics.defaultOf(available) ?: available.first()
     }
 
-    private val series = combine(station, metric, range, toS) { s, m, r, t -> ArchiveSeriesQuery(s, m, r, HistoryWindow.endingAt(t, r, zone)) }
+    private val series = combine(thing, metric, range, toS) { s, m, r, t -> ArchiveSeriesQuery(s, m, r, HistoryWindow.endingAt(t, r, zone)) }
         .distinctUntilChanged()
-        .archiveQueryResults { q -> q.station?.let { reader.observe(it, q.metric, q.range, q.window) } ?: flowOf(null) }
+        .archiveQueryResults { q -> q.thing?.let { reader.observe(it, q.metric, q.range, q.window) } ?: flowOf(null) }
 
-    private val fileCounts = station.archiveQueryResults { s ->
-        if (s == null) flowOf(HistoryFileCounts()) else index.observeStation(s).map(::countHistoryFiles)
+    private val fileCounts = thing.archiveQueryResults { s ->
+        if (s == null) flowOf(HistoryFileCounts()) else index.observeThing(s).map(::countHistoryFiles)
     }
 
-    private val days = station.archiveQueryResults { s -> if (s == null) flowOf(DaySpan()) else tiers.observeDays(s) }
+    private val days = thing.archiveQueryResults { s -> if (s == null) flowOf(DaySpan()) else tiers.observeDays(s) }
 
-    private data class Selection(val station: String?, val stations: List<String>, val metric: MetricSpec, val range: HistoryRange, val toS: Long, val nowToS: Long)
+    private data class Selection(val thing: String?, val things: List<String>, val metric: MetricSpec, val range: HistoryRange, val toS: Long, val nowToS: Long)
 
     private val selection = combine(
-        combine(station, stationList, metric) { s, list, m -> Triple(s, list, m) },
+        combine(thing, thingList, metric) { s, list, m -> Triple(s, list, m) },
         range,
         toS,
         nowToS,
     ) { (s, list, m), r, t, now -> Selection(s, list, m, r, t, now) }
 
     val state: StateFlow<HistoryUiState> = combine(selection, series, fileCounts, days, availableMetrics) { sel, seriesResult, countsResult, daysResult, availableResult ->
-        val query = ArchiveSeriesQuery(sel.station, sel.metric, sel.range, HistoryWindow.endingAt(sel.toS, sel.range, zone))
+        val query = ArchiveSeriesQuery(sel.thing, sel.metric, sel.range, HistoryWindow.endingAt(sel.toS, sel.range, zone))
         val result = seriesResult.forQuery(query)
-        val counts = countsResult.forQuery(sel.station)
-        val dayResult = daysResult.forQuery(sel.station)
-        val available = availableResult.forQuery(sel.station)
+        val counts = countsResult.forQuery(sel.thing)
+        val dayResult = daysResult.forQuery(sel.thing)
+        val available = availableResult.forQuery(sel.thing)
         HistoryUiState(
-            initializing = sel.station != null && (result == null || counts == null || dayResult == null || available == null),
-            station = sel.station,
-            stations = sel.stations,
+            initializing = sel.thing != null && (result == null || counts == null || dayResult == null || available == null),
+            thing = sel.thing,
+            things = sel.things,
             metric = sel.metric,
             availableMetrics = available.orEmpty(),
             range = sel.range,
@@ -157,8 +157,8 @@ class HistoryController(
         )
     }.stateIn(scope, SharingStarted.Eagerly, HistoryUiState(zone = zone, toS = toS.value, nowToS = nowToS.value))
 
-    fun selectStation(station: String) {
-        selectedStation.value = station
+    fun selectThing(thing: String) {
+        selectedThing.value = thing
     }
 
     fun setMetric(m: MetricSpec) {

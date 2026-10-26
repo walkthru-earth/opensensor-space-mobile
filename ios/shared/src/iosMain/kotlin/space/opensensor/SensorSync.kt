@@ -61,8 +61,8 @@ class SyncHandle internal constructor(private val stop: () -> Unit) {
  * Make one per app. Swift syncs through [collections] and sends commands through [command]. The
  * direct single-link [start] is internal, for host tests of the runner. Work runs off the main
  * thread on a lease of the [IosLink]. Every callback arrives on the main thread, `progress` at
- * most four times a second and in order, `finished` exactly once, last. A station syncs over one link at a time, so a second
- * physical link to the same station (Bluetooth and Wi-Fi) waits its turn. The runner maintains UTC
+ * most four times a second and in order, `finished` exactly once, last. A thing syncs over one link at a time, so a second
+ * physical link to the same thing (Bluetooth and Wi-Fi) waits its turn. The runner maintains UTC
  * if needed, then lists, opens, reads and closes files. It never asks the sensor to delete, rename
  * or rewrite one.
  */
@@ -77,7 +77,7 @@ class SensorSync internal constructor(
     budget: StorageBudget,
     /**
      * The archive's one coordinator, shared with the index repair, the storage janitor and the old
-     * file cleanup. It admits one sync per station and holds the writer leases, station gates and
+     * file cleanup. It admits one sync per thing and holds the writer leases, thing gates and
      * the tombstones of files removed in Settings.
      */
     coordinator: DeviceCoordinator = DeviceCoordinator(),
@@ -90,23 +90,23 @@ class SensorSync internal constructor(
     private var shared: SensorCollections? = null
 
     /**
-     * Collects every file of [station] that this phone lacks over [link]. [device] is the hardware
+     * Collects every file of [thing] that this phone lacks over [link]. [device] is the hardware
      * id recorded with each file. [maxRead] is the sensor's advertised read window.
      */
     internal fun start(
         link: IosLink,
-        station: String,
+        thing: String,
         device: String,
         maxRead: Int,
         progress: (SyncProgress) -> Unit,
         finished: (SyncResult) -> Unit,
-    ): SyncHandle = startSelected(link, station, device, maxRead, null, progress, finished)
+    ): SyncHandle = startSelected(link, thing, device, maxRead, null, progress, finished)
 
-    /** One exact listed file, with the same verification and station writer lock. */
+    /** One exact listed file, with the same verification and thing writer lock. */
     @OptIn(DelicateCoroutinesApi::class)
     internal fun startSelected(
         link: IosLink,
-        station: String,
+        thing: String,
         device: String,
         maxRead: Int,
         onlyName: String?,
@@ -114,11 +114,11 @@ class SensorSync internal constructor(
         finished: (SyncResult) -> Unit,
     ): SyncHandle {
         IosSyncDiagnostics.record(device, "sync", "${link.kind.name.lowercase()} ${if (onlyName == null) "all files" else "one file"}")
-        if (!collector.coordinator.tryAdmit(station)) {
+        if (!collector.coordinator.tryAdmit(thing)) {
             scope.launch(callbacks) { finished(SyncResult(SyncEnd.IN_USE, 0, 0, 0)) }
             return SyncHandle(null)
         }
-        // ATOMIC runs the body even when cancel() lands before dispatch, so the station is released
+        // ATOMIC runs the body even when cancel() lands before dispatch, so the thing is released
         // and `finished` fires on every path.
         val job = scope.launch(work, CoroutineStart.ATOMIC) {
             var listed = 0
@@ -143,8 +143,8 @@ class SensorSync internal constructor(
                         syncLog("automatic UTC unavailable, ${e::class.simpleName}; collecting original files")
                     }
                     val (files, _) = session.list()
-                    val planned = collector.plan(station, files, onlyName)
-                    val summary = collector.transfer(session, planned, station, device, maxRead, onOutcome = { outcomes.record(it) }) { p: CollectionProgress ->
+                    val planned = collector.plan(thing, files, onlyName)
+                    val summary = collector.transfer(session, planned, thing, device, maxRead, onOutcome = { outcomes.record(it) }) { p: CollectionProgress ->
                         listed = p.filesTotal
                         if (initial < 0) initial = p.filesDone
                         done = p.filesDone
@@ -182,7 +182,7 @@ class SensorSync internal constructor(
             ticks.close()
             withContext(NonCancellable) { if (result.end == SyncEnd.STOPPED) reporter.cancel() else reporter.join() }
             withContext(NonCancellable + callbacks) {
-                collector.coordinator.release(station)
+                collector.coordinator.release(thing)
                 IosSyncDiagnostics.record(device, "result", "${result.end.name.lowercase()} · ${result.saved}/${result.files} saved")
                 finished(result)
             }
@@ -196,13 +196,13 @@ class SensorSync internal constructor(
      */
     private suspend fun synchronizeClock(session: DeviceSession, link: IosLink, automatic: Boolean = false) {
         if (automatic && link.clockChecked) return
-        val station = link.station
+        val thing = link.thing
         val boot = link.boot
         val anchor = if (automatic) session.synchronizeClockIfNeeded(::nowEpochMillis) else session.synchronizeClock(::nowEpochMillis)
         link.clockChecked = true
         if (anchor == null) return
-        if (station != null && boot != null) {
-            recordClockAnchor(station, boot, anchor.epochNanos, anchor.monotonicMicros)
+        if (thing != null && boot != null) {
+            recordClockAnchor(thing, boot, anchor.epochNanos, anchor.monotonicMicros)
         }
     }
 
@@ -267,7 +267,7 @@ class SensorSync internal constructor(
      * The shared collection controllers over this runner's archive (#81). [linkFor] returns the
      * open link Swift holds for a device, on the main thread. [dial] asks Swift to open one when a
      * retry finds none, and Swift calls its `done` once with whether the link opened and identified
-     * (see [IosLinkProvider]). A station admitted here or there syncs over one link at a time.
+     * (see [IosLinkProvider]). A thing admitted here or there syncs over one link at a time.
      *
      * The first call creates the controllers and every later call returns the same instance, so the
      * per-device busy guard and the run permits hold app wide. Later closures are ignored.

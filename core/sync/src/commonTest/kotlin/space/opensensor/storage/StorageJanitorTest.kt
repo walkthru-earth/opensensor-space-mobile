@@ -89,7 +89,7 @@ class StorageJanitorTest {
             store = store,
             index = index,
             io = StandardTestDispatcher(scheduler),
-            knownStations = { listOf(known) },
+            knownThings = { listOf(known) },
             clock = { now },
             coordinator = coordinator ?: DeviceCoordinator(pruned),
             quota = quota,
@@ -302,7 +302,7 @@ class StorageJanitorTest {
         val index = MemoryArchiveIndex()
         val key = ArchiveKey(known, "year=2026/month=10/day=01/data.parquet")
         store.files[ArchiveLayout.finalPath(key)] = parquet
-        val existing = ArchiveRecord(key.station, key.name, parquet.size.toLong(), 1L, "ab", 5L, "device")
+        val existing = ArchiveRecord(key.thing, key.name, parquet.size.toLong(), 1L, "ab", 5L, "device")
         index.put(existing)
 
         val report = janitor(FakeTree(), store, index, testScheduler).run()
@@ -317,7 +317,7 @@ class StorageJanitorTest {
         val index = MemoryArchiveIndex()
         val key = ArchiveKey(known, "year=2026/month=10/day=01/data.parquet")
         store.files[ArchiveLayout.finalPath(key)] = parquet
-        val engine = ArchiveRecord(key.station, key.name, parquet.size.toLong(), 1L, "ab", 5L, "device")
+        val engine = ArchiveRecord(key.thing, key.name, parquet.size.toLong(), 1L, "ab", 5L, "device")
         // The engine commits and records the file while the janitor parses its footer.
         val janitor = StorageJanitor(
             roots,

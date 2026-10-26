@@ -50,7 +50,7 @@ import kotlin.time.TimeSource
  * four times a second, `finished` exactly once, last, after the link and leases were handed back.
  * A run that ends early still reports the files it saved and the ones that failed.
  *
- * A station syncs over one link at a time, shared with [SensorSync]. The clock receipt of an
+ * A thing syncs over one link at a time, shared with [SensorSync]. The clock receipt of an
  * acknowledged `SET_TIME` is recorded against the exact link it was sent over.
  */
 @OptIn(ExperimentalAtomicApi::class, DelicateCoroutinesApi::class)
@@ -291,11 +291,11 @@ class SensorCollections internal constructor(
         request.listed = request.onlyName?.let { name -> files.count { it.name == name } } ?: files.size
     }
 
-    /** Lends a link only once its station is free of another sync on this phone. */
+    /** Lends a link only once its thing is free of another sync on this phone. */
     private val links = LinkProvider { device, prefer ->
         val (link, inner) = provider.lend(device, prefer)
-        // The archive's shared coordinator admits one sync per station, as on Android. Its release
-        // ends the IosLink lease before the station is free, so a sync it admits finds the link idle.
+        // The archive's shared coordinator admits one sync per thing, as on Android. Its release
+        // ends the IosLink lease before the thing is free, so a sync it admits finds the link idle.
         val outer = sync.collector.coordinator.admit(inner) { released -> locked { lent.remove(released) } }
         locked { lent[outer] = link }
         outer
@@ -306,7 +306,7 @@ class SensorCollections internal constructor(
         val ios = locked { lent[link] } ?: return
         ios.clockChecked = true
         val boot = ios.boot ?: return
-        recordClockAnchor(link.station, boot, set.epochNanos, set.monotonicMicros)
+        recordClockAnchor(link.thing, boot, set.epochNanos, set.monotonicMicros)
     }
 
     private fun resultOf(terminal: CollectionState, request: Request): SyncResult = when (terminal) {

@@ -1,11 +1,11 @@
 package space.opensensor.data.ble
 
 /**
- * The one link, owner and busy status that Today, Device, Files and Stations read on both
+ * The one link, owner and busy status that Today, Device, Files and Things read on both
  * platforms. [busy] means a sync runs or background work holds the device. A busy device takes no
  * command that needs the link, so Flush, device settings and a second Sync all wait.
  */
-data class StationStatus(
+data class ThingStatus(
     val connection: ConnectionState,
     val reconnecting: Boolean = false,
     val syncRunning: Boolean = false,

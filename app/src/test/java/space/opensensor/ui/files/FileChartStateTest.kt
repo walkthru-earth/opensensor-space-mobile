@@ -11,22 +11,22 @@ import space.opensensor.data.history.Metrics
 import space.opensensor.data.local.database.ArchivedFile
 
 class FileChartStateTest {
-    private fun file(station: String, name: String) = ArchivedFile(
-        station = station,
+    private fun file(thing: String, name: String) = ArchivedFile(
+        thing = thing,
         name = name,
         bytes = 100,
         crc32 = 1,
         sha256 = "verified",
         syncedAtEpochMs = 0,
-        sourceDevice = station,
+        sourceDevice = thing,
     )
 
     private fun summary(name: String) = FileSummary(name, 1, 1, 0, 0L, 0L, emptyMap())
 
     @Test
-    fun `old station results cannot appear while the new station is loading`() {
-        val first = FileSummaryRequest("station-a", listOf(file("station-a", "one.parquet")))
-        val second = FileSummaryRequest("station-b", listOf(file("station-b", "two.parquet")))
+    fun `old thing results cannot appear while the new thing is loading`() {
+        val first = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
+        val second = FileSummaryRequest("thing-b", listOf(file("thing-b", "two.parquet")))
         val oldResult = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(first, listOf(summary("one.parquet")))
 
         val loading = fileChartState(Metrics.PM25, true, null, second, oldResult)
@@ -41,8 +41,8 @@ class FileChartStateTest {
 
     @Test
     fun `archive refresh hides the previous file list until its result arrives`() {
-        val old = FileSummaryRequest("station-a", listOf(file("station-a", "one.parquet")))
-        val current = FileSummaryRequest("station-a", old.files + file("station-a", "two.parquet"))
+        val old = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
+        val current = FileSummaryRequest("thing-a", old.files + file("thing-a", "two.parquet"))
         val oldResult = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(old, listOf(summary("one.parquet")))
 
         val loading = fileChartState(Metrics.PM25, true, 80, current, oldResult)
@@ -62,7 +62,7 @@ class FileChartStateTest {
     @Test
     fun `the chart opens on corrected PM2_5 and Simple never offers raw beside it`() {
         // #92. Corrected is the default at every level. Raw is a chip only in Detailed.
-        val request = FileSummaryRequest("station-a", listOf(file("station-a", "one.parquet")))
+        val request = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
         val result = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, listOf(humid("one.parquet"), dry("two.parquet")))
         val simple = fileChartState(null, false, null, request, result)
         assertEquals(Metrics.PM25_CORRECTED, simple.metric)
@@ -78,7 +78,7 @@ class FileChartStateTest {
     @Test
     fun `files without humidity open on raw PM2_5 and offer no corrected chip`() {
         // A CoreS3, or a board whose RH column is all null. Raw is all there is, labelled raw, at every level.
-        val request = FileSummaryRequest("station-a", listOf(file("station-a", "one.parquet")))
+        val request = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
         val result = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, listOf(dry("one.parquet")))
         for (detailed in listOf(false, true)) {
             val state = fileChartState(null, detailed, null, request, result)
@@ -91,7 +91,7 @@ class FileChartStateTest {
     @Test
     fun `while the summaries load Simple opens on corrected PM2_5 never raw`() {
         // #136. No summary is read yet, so nothing says the files lack humidity. Simple keeps corrected.
-        val request = FileSummaryRequest("station-a", listOf(file("station-a", "one.parquet")))
+        val request = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
         val pending = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, null)
         val simple = fileChartState(null, false, null, request, pending)
         assertTrue(simple.loading)
@@ -101,7 +101,7 @@ class FileChartStateTest {
 
     @Test
     fun `Simple offers only the profile primary metrics and Detailed every metric`() {
-        val request = FileSummaryRequest("station-a", listOf(file("station-a", "one.parquet")))
+        val request = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
         val result = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, listOf(humid("one.parquet")))
         val simple = fileChartState(null, false, null, request, result).metrics
         assertTrue(simple.isNotEmpty() && simple.all { it.primary })

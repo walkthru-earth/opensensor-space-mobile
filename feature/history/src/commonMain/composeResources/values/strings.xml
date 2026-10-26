@@ -6,7 +6,7 @@
     <string name="history_from">History from</string>
     <string name="history_current">Current</string>
     <string name="history_earlier">Earlier</string>
-    <string name="history_station_chip">%1$s, station %2$s</string>
+    <string name="history_thing_chip">%1$s, sensor %2$s</string>
     <string name="history_range_day">Day</string>
     <string name="history_range_week">Week</string>
     <string name="history_range_month">Month</string>
@@ -25,9 +25,9 @@
     <string name="history_index_failed">could not index</string>
     <string name="history_read_failed">could not read</string>
     <string name="history_estimated">files with estimated time</string>
-    <plurals name="history_other_station">
-        <item quantity="one">%1$d copy belongs to another station</item>
-        <item quantity="other">%1$d copies belong to another station</item>
+    <plurals name="history_other_thing">
+        <item quantity="one">%1$d copy belongs to another sensor</item>
+        <item quantity="other">%1$d copies belong to another sensor</item>
     </plurals>
     <plurals name="history_untimed_files">
         <item quantity="one">%1$d file has no time</item>
@@ -60,7 +60,7 @@
     <string name="history_dev_raw">raw 10 s rows</string>
     <string name="history_dev_points">points</string>
     <string name="history_dev_valid_rows">valid rows</string>
-    <string name="history_dev_station">station</string>
+    <string name="history_dev_thing">sensor ID</string>
     <string name="chart_touch">Touch a column to read it</string>
     <string name="chart_who_24h">WHO 24 h guideline</string>
     <string name="chart_mean_hourly">Bars are hourly means.</string>
@@ -76,7 +76,7 @@
     <string name="info_history_body1">Averages use only readings the sensor marked valid, warmed up, fresh and without error.</string>
     <string name="info_history_body2">Coverage is the share of the window with such readings. Three readings in an hour is 1 percent, not an hourly average.</string>
     <string name="info_history_body3">Dashed stretches were logged before the sensor had a clock. Their time is estimated from a later time set on the same power on.</string>
-    <string name="info_history_body4">Earlier station readings stay available after a device reset.</string>
+    <string name="info_history_body4">Readings under an earlier sensor ID stay available after a device reset.</string>
     <string name="info_history_body5">PM2.5 and PM10 colours follow the WHO 2021 air quality guidelines. The guideline and its four interim targets are 24 hour means.</string>
     <!-- Screen reader summaries of the History charts (BandColumnChart, DayRing, CalendarHeatmap). -->
     <string name="chart_bars_title">Bar chart of %1$s</string>

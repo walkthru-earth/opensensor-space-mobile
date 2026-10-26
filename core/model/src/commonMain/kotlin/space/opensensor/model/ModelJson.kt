@@ -12,7 +12,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * kotlinx serialization of the board template, the station Collection and the app profile. The wire
+ * kotlinx serialization of the board template, the thing Collection and the app profile. The wire
  * shapes stay internal, callers get the model types. Unknown fields are ignored, so a newer template
  * or Collection still parses.
  */
@@ -57,12 +57,12 @@ internal object ModelJson {
         TemplateIndexEntry(dict = dict, desc = e.desc, href = e.href, schema = e.schema)
     }
 
-    fun parseCollection(text: String): StationCollection {
+    fun parseCollection(text: String): ThingCollection {
         val dto = decode<CollectionDto>(text)
-        require(dto.type == "Collection") { "not a station Collection, type is ${dto.type}" }
+        require(dto.type == "Collection") { "not a thing Collection, type is ${dto.type}" }
         val columns = dto.itemAssets?.data?.columns.orEmpty()
         val describedBy = dto.links.filter { it.rel == "describedby" }
-        return StationCollection(
+        return ThingCollection(
             id = dto.id,
             title = dto.title,
             license = dto.license,

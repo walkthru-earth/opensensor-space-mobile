@@ -18,9 +18,9 @@ data class OpenSensorFooter(
     val dictionarySha256: String? = null,
     /** `template.sha256`, the SHA-256 of the exact board template bytes. */
     val templateSha256: String? = null,
-    /** `station.id`, the station that wrote the file. */
-    val stationId: String? = null,
-    /** `file.purpose`, `telemetry` for station data. */
+    /** `station.id`, the thing that wrote the file. */
+    val thingId: String? = null,
+    /** `file.purpose`, `telemetry` for thing data. */
     val purpose: String? = null,
 ) {
     companion object {
@@ -32,7 +32,7 @@ data class OpenSensorFooter(
         private const val DICTIONARY = "dictionary"
         private const val TEMPLATE = "template"
         private const val ACQUISITION = "acquisition"
-        private const val STATION = "station"
+        private const val THING = "station"
         private const val FILE = "file"
         private const val ID = "id"
         private const val PURPOSE = "purpose"
@@ -59,7 +59,7 @@ data class OpenSensorFooter(
                 }?.takeIf { it > 0 },
                 dictionarySha256 = root.member(DICTIONARY, SHA256)?.let(::sha256),
                 templateSha256 = root.member(TEMPLATE, SHA256)?.let(::sha256),
-                stationId = root.member(STATION, ID)?.let(::text),
+                thingId = root.member(THING, ID)?.let(::text),
                 purpose = root.member(FILE, PURPOSE)?.let(::text),
             )
         } catch (_: Malformed) {

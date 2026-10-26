@@ -24,14 +24,14 @@ class HistoryIndexerTest {
         val archive = FileArchive(tmp)
         val dao = InMemoryDao()
         val indexer = HistoryIndexer(archive, dao, DeviceCoordinator())
-        val station = "53315f5f-cb85-4d8d-b623-d56266084189"
-        val good = "station=$station/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet"
-        val bogus = "station=$station/year=2026/month=09/day=08/data_bogus.parquet"
-        archive.fileFor(station, good).apply { parentFile!!.mkdirs(); writeBytes(bytes("device/v2-lz4-4rows-dated.parquet")) }
-        archive.fileFor(station, bogus).apply { parentFile!!.mkdirs(); writeBytes("PAR1 this is not parquet PAR1".toByteArray()) }
-        dao.rows += ArchivedFile(station = station, name = good, bytes = 9821, crc32 = 1, sha256 = "x", syncedAtEpochMs = 1, sourceDevice = "fake")
-        dao.rows += ArchivedFile(station = station, name = bogus, bytes = 27, crc32 = 2, sha256 = "y", syncedAtEpochMs = 1, sourceDevice = "fake")
-        dao.rows += ArchivedFile(station = station, name = "station=$station/unsynced/boot=0/missing.parquet", bytes = 0, crc32 = 3, sha256 = "z", syncedAtEpochMs = 1, sourceDevice = "fake")
+        val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
+        val good = "station=$thing/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet"
+        val bogus = "station=$thing/year=2026/month=09/day=08/data_bogus.parquet"
+        archive.fileFor(thing, good).apply { parentFile!!.mkdirs(); writeBytes(bytes("device/v2-lz4-4rows-dated.parquet")) }
+        archive.fileFor(thing, bogus).apply { parentFile!!.mkdirs(); writeBytes("PAR1 this is not parquet PAR1".toByteArray()) }
+        dao.rows += ArchivedFile(thing = thing, name = good, bytes = 9821, crc32 = 1, sha256 = "x", syncedAtEpochMs = 1, sourceDevice = "fake")
+        dao.rows += ArchivedFile(thing = thing, name = bogus, bytes = 27, crc32 = 2, sha256 = "y", syncedAtEpochMs = 1, sourceDevice = "fake")
+        dao.rows += ArchivedFile(thing = thing, name = "station=$thing/unsynced/boot=0/missing.parquet", bytes = 0, crc32 = 3, sha256 = "z", syncedAtEpochMs = 1, sourceDevice = "fake")
 
         assertEquals(3, indexer.backfill())
         val g = dao.rows.first { it.name == good }
@@ -46,24 +46,24 @@ class HistoryIndexerTest {
         // A second pass retries the failures, finds nothing new and stops the loop.
         assertEquals(0, indexer.backfill())
         // The time-range query sees only the indexed telemetry file.
-        val hit = dao.withUtcBetween(station, g.firstUtcNs!!, g.lastUtcNs!! + 1)
+        val hit = dao.withUtcBetween(thing, g.firstUtcNs!!, g.lastUtcNs!! + 1)
         assertEquals(listOf(good), hit.map { it.name })
     }
 
     @Test
-    fun `retained earlier station files are archived without being attributed to the reset station`() = runBlocking {
-        val tmp = java.nio.file.Files.createTempDirectory("opensensor-station-reset").toFile()
+    fun `retained earlier thing files are archived without being attributed to the reset thing`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("opensensor-thing-reset").toFile()
         try {
             val archive = FileArchive(tmp)
-            val name = "station=old-station/year=2026/month=09/day=08/retained.parquet"
+            val name = "station=old-thing/year=2026/month=09/day=08/retained.parquet"
             val payload = bytes("device/v2-lz4-4rows-dated.parquet")
-            val file = archive.fileFor("new-station", name).apply { parentFile!!.mkdirs(); writeBytes(payload) }
-            val row = ArchivedFile(station = "new-station", name = name, bytes = payload.size.toLong(), crc32 = 1, sha256 = "saved", syncedAtEpochMs = 1, sourceDevice = "same-device")
+            val file = archive.fileFor("new-thing", name).apply { parentFile!!.mkdirs(); writeBytes(payload) }
+            val row = ArchivedFile(thing = "new-thing", name = name, bytes = payload.size.toLong(), crc32 = 1, sha256 = "saved", syncedAtEpochMs = 1, sourceDevice = "same-device")
             val indexed = HistoryIndexer(archive, InMemoryDao(), DeviceCoordinator()).indexed(row, file)
             assertFalse(indexed.isIndexed)
-            assertTrue(indexed.indexError!!.contains("old-station"))
+            assertTrue(indexed.indexError!!.contains("old-thing"))
             org.junit.Assert.assertArrayEquals(payload, file.readBytes())
-            assertEquals("new-station", indexed.station)
+            assertEquals("new-thing", indexed.thing)
             assertEquals(name, indexed.name)
         } finally {
             tmp.deleteRecursively()
@@ -76,14 +76,14 @@ class HistoryIndexerTest {
         try {
             val archive = FileArchive(tmp)
             val dao = InMemoryDao()
-            val station = "station-1"
+            val thing = "thing-1"
             val boot = "boot-1"
             dao.rows += ArchivedFile(
-                station = station, name = "unsynced.parquet", bytes = 1, crc32 = 1, sha256 = "a", syncedAtEpochMs = 1, sourceDevice = "fake",
+                thing = thing, name = "unsynced.parquet", bytes = 1, crc32 = 1, sha256 = "a", syncedAtEpochMs = 1, sourceDevice = "fake",
                 indexedAtEpochMs = 1, rows = 2, utcRows = 0, bootId = boot, firstMonoUs = 1_000_000, lastMonoUs = 2_000_000,
             )
             dao.rows += ArchivedFile(
-                station = station, name = "anchor.parquet", bytes = 1, crc32 = 2, sha256 = "b", syncedAtEpochMs = 1, sourceDevice = "fake",
+                thing = thing, name = "anchor.parquet", bytes = 1, crc32 = 2, sha256 = "b", syncedAtEpochMs = 1, sourceDevice = "fake",
                 indexedAtEpochMs = 1, rows = 2, utcRows = 2, bootId = boot, firstUtcNs = 10_000_000_000, lastUtcNs = 11_000_000_000,
                 firstMonoUs = 3_000_000, lastMonoUs = 4_000_000,
             )
@@ -102,28 +102,28 @@ class HistoryIndexerTest {
     private class InMemoryDao : DerivedArchivedFileQueries {
         val rows = mutableListOf<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows)
-        override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows)
-        override suspend fun forStation(station: String) = rows.filter { it.station == station }
-        override suspend fun get(station: String, name: String) = rows.firstOrNull { it.station == station && it.name == name }
+        override fun observeForThing(thing: String): Flow<List<ArchivedFile>> = flowOf(rows)
+        override suspend fun forThing(thing: String) = rows.filter { it.thing == thing }
+        override suspend fun get(thing: String, name: String) = rows.firstOrNull { it.thing == thing && it.name == name }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override fun observeTotalBytes(): Flow<Long> = flowOf(rows.sumOf { it.bytes })
         override suspend fun upsert(file: ArchivedFile) {
-            rows.removeAll { it.station == file.station && it.name == file.name }
+            rows.removeAll { it.thing == file.thing && it.name == file.name }
             rows += file
         }
         override suspend fun insertIfAbsent(file: ArchivedFile): Long {
-            if (rows.any { it.station == file.station && it.name == file.name }) return -1L
+            if (rows.any { it.thing == file.thing && it.name == file.name }) return -1L
             rows += file
             return rows.size.toLong()
         }
-        override suspend fun delete(station: String, name: String) {
-            rows.removeAll { it.station == station && it.name == name }
+        override suspend fun delete(thing: String, name: String) {
+            rows.removeAll { it.thing == thing && it.name == name }
         }
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.sortedBy { it.indexedAtEpochMs != null }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
-        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
-            rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs }
-        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.isIndexed }
-        override suspend fun stations() = rows.map { it.station }.distinct()
+        override suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long) =
+            rows.filter { it.thing == thing && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs }
+        override suspend fun indexedForThing(thing: String) = rows.filter { it.thing == thing && it.isIndexed }
+        override suspend fun things() = rows.map { it.thing }.distinct()
     }
 }

@@ -2,8 +2,8 @@ package space.opensensor.data.history
 
 import space.opensensor.model.BundledCatalog
 import space.opensensor.model.GateValue
-import space.opensensor.model.Station
-import space.opensensor.model.StationDatastream
+import space.opensensor.model.Thing
+import space.opensensor.model.ThingDatastream
 import space.opensensor.model.ValidityGate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,11 +16,11 @@ import kotlin.test.assertTrue
  * health scale. Plausible ranges come only from the templates.
  */
 class MetricsParityTest {
-    private val stations: List<Station> = BundledCatalog.templates.map { assertNotNull(BundledCatalog.station("parity", it.dict)) }
+    private val things: List<Thing> = BundledCatalog.templates.map { assertNotNull(BundledCatalog.thing("parity", it.dict)) }
 
-    /** The stations that show [column], a column a profile hides is never shown. */
-    private fun showing(column: String): List<Pair<Station, StationDatastream>> = stations.mapNotNull { station ->
-        station.datastream(column)?.takeIf { column !in station.profile.hidden }?.let { station to it }
+    /** The things that show [column], a column a profile hides is never shown. */
+    private fun showing(column: String): List<Pair<Thing, ThingDatastream>> = things.mapNotNull { thing ->
+        thing.datastream(column)?.takeIf { column !in thing.profile.hidden }?.let { thing to it }
     }
 
     private fun gateMatches(spec: MetricSpec, gate: ValidityGate?): Boolean = when (val expected = spec.gate) {
@@ -33,8 +33,8 @@ class MetricsParityTest {
         Metrics.all.filter { it.humidityColumn == null }.forEach { spec ->
             val shown = showing(spec.column)
             assertTrue(shown.isNotEmpty(), "no bundled board shows ${spec.id}")
-            shown.forEach { (station, ds) ->
-                val at = "${spec.id} on ${station.template.id}"
+            shown.forEach { (thing, ds) ->
+                val at = "${spec.id} on ${thing.template.id}"
                 assertEquals(spec.label, ds.label("en"), at)
                 assertEquals(spec.unit, ds.displayUnit, at)
                 assertTrue(gateMatches(spec, ds.datastream.validWhen), "$at gate ${ds.datastream.validWhen} is not ${spec.gate}")
@@ -48,26 +48,26 @@ class MetricsParityTest {
     @Test
     fun theCorrectedPm25ReadsColumnsABundledBoardShows() {
         val spec = Metrics.PM25_CORRECTED
-        val boards = stations.filter { s -> listOf(spec.column, spec.humidityColumn!!).all { c -> showing(c).any { it.first === s } } }
+        val boards = things.filter { s -> listOf(spec.column, spec.humidityColumn!!).all { c -> showing(c).any { it.first === s } } }
         assertTrue(boards.isNotEmpty(), "no bundled board shows both ${spec.column} and ${spec.humidityColumn}")
-        boards.forEach { station ->
-            assertTrue(gateMatches(spec, station.datastream(spec.column)!!.datastream.validWhen), station.template.id)
-            assertEquals(spec.settleSeconds.toDouble(), station.datastream(spec.column)!!.datastream.settleSeconds, station.template.id)
+        boards.forEach { thing ->
+            assertTrue(gateMatches(spec, thing.datastream(spec.column)!!.datastream.validWhen), thing.template.id)
+            assertEquals(spec.settleSeconds.toDouble(), thing.datastream(spec.column)!!.datastream.settleSeconds, thing.template.id)
         }
     }
 
     @Test
     fun thePrimaryReadingIsTheMetricsPrimaryOnEveryBoard() {
-        stations.forEach { station ->
-            assertEquals(Metrics.PM25.column, station.primary.first().name, station.template.id)
-            assertEquals(Metrics.PM25.label, station.primary.first().label("en"), station.template.id)
+        things.forEach { thing ->
+            assertEquals(Metrics.PM25.column, thing.primary.first().name, thing.template.id)
+            assertEquals(Metrics.PM25.label, thing.primary.first().label("en"), thing.template.id)
         }
     }
 
     @Test
     fun aHiddenColumnIsNeverPrimary() {
-        stations.forEach { station ->
-            station.primary.forEach { assertTrue(it.name !in station.profile.hidden, "${station.template.id} shows hidden ${it.name}") }
+        things.forEach { thing ->
+            thing.primary.forEach { assertTrue(it.name !in thing.profile.hidden, "${thing.template.id} shows hidden ${it.name}") }
         }
     }
 }

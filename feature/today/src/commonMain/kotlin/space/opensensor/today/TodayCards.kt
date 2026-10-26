@@ -72,7 +72,7 @@ import space.opensensor.designsystem.pm25CorrectionInfo
 import space.opensensor.designsystem.pm25Label
 import space.opensensor.designsystem.rememberNowMillis
 import space.opensensor.designsystem.spokenList
-import space.opensensor.model.StationDatastream
+import space.opensensor.model.ThingDatastream
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.resources.Res
 import space.opensensor.today.resources.batch_explain
@@ -109,7 +109,7 @@ import space.opensensor.today.resources.device_payload
 import space.opensensor.today.resources.device_protocol
 import space.opensensor.today.resources.device_schema
 import space.opensensor.today.resources.device_schema_cols
-import space.opensensor.today.resources.device_station
+import space.opensensor.today.resources.device_thing
 import space.opensensor.today.resources.device_title
 import space.opensensor.today.resources.device_unnamed
 import space.opensensor.today.resources.env_title
@@ -190,7 +190,7 @@ import kotlin.time.Instant
 /** The display units for Today's readings, provided by [TodayScreen] from its `units` parameter. */
 internal val LocalTodayUnits = staticCompositionLocalOf { UnitFormatter.Metric }
 
-/** The size bins (label, column) LIVE shows for [reading]'s station. None without a station. */
+/** The size bins (label, column) LIVE shows for [reading]'s thing. None without a thing. */
 internal fun particleBins(reading: LiveReading?): List<Pair<String, String>> =
     PARTICLE_BINS.filter { (_, column) -> reading?.declares(column) == true }
 
@@ -212,11 +212,11 @@ private val PARTICLE_BINS = listOf(
 
 /** The column's label from the app profile in the app's language. */
 @Composable
-internal fun StationDatastream.localLabel(): String = label(Locale.current.language)
+internal fun ThingDatastream.localLabel(): String = label(Locale.current.language)
 
 /** A temperature in the reader's units, the unit from the column. */
 @Composable
-private fun TemperatureValue(datastream: StationDatastream, reading: LiveReading?, modifier: Modifier = Modifier) {
+private fun TemperatureValue(datastream: ThingDatastream, reading: LiveReading?, modifier: Modifier = Modifier) {
     val units = LocalTodayUnits.current
     val unit = datastream.displayUnit.orEmpty()
     BigValue(datastream.localLabel(), fmt(units.value(reading?.value(datastream.name), unit)), units.unit(unit), modifier)
@@ -515,7 +515,7 @@ internal fun SmartSyncCard(
             )
         }
         Spacer(Modifier.height(14.dp))
-        // The one Sync of this station. Stop sits beside it while this phone's own run is going.
+        // The one Sync of this thing. Stop sits beside it while this phone's own run is going.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             PillButton(
                 text = stringResource(if (sync.running) Res.string.sync_button_running else Res.string.sync_button),
@@ -885,7 +885,7 @@ internal fun DeviceInfoCard(
         }
         if (level.developer) {
             StatLine(stringResource(Res.string.device_schema), stringResource(Res.string.device_schema_cols, info?.schema ?: NO_VALUE, info?.cols?.toString() ?: NO_VALUE))
-            StatLine(stringResource(Res.string.device_station), info?.station ?: NO_VALUE)
+            StatLine(stringResource(Res.string.device_thing), info?.thing ?: NO_VALUE)
             StatLine(stringResource(Res.string.device_id), info?.dev ?: NO_VALUE)
             StatLine(stringResource(Res.string.device_boot), info?.boot?.take(16)?.plus("…") ?: NO_VALUE)
             StatLine(stringResource(Res.string.device_dictionary), info?.dict?.take(12)?.plus("…") ?: NO_VALUE)

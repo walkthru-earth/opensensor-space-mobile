@@ -36,7 +36,7 @@ import kotlin.coroutines.resume
  * background, and the bridge that runs the shared BackgroundSyncRunner (`:core:sync`) over the Swift
  * adapters. Swift owns BGTaskScheduler, Core Bluetooth, Network.framework and UserNotifications.
  * Kotlin decides which sensors are due, which link to try and what the summary says. Only peripheral
- * ids, names, stations and counts cross. Never a PIN or token. Call everything on the main thread.
+ * ids, names, things and counts cross. Never a PIN or token. Call everything on the main thread.
  */
 
 /**
@@ -183,12 +183,12 @@ object AutoSyncSchedule {
 internal data class IosSyncDevice(
     override val address: String,
     override val name: String?,
-    override val station: String?,
+    override val thing: String?,
     override val hasLanToken: Boolean,
 ) : BackgroundSyncDevice
 
 /** A Wi-Fi sensor the browse resolved, by its service name. */
-internal data class IosLanTarget(val serviceName: String, val station: String) : BackgroundLanTarget {
+internal data class IosLanTarget(val serviceName: String, val thing: String) : BackgroundLanTarget {
     override val isConnectable: Boolean get() = serviceName.isNotBlank()
 }
 
@@ -249,7 +249,7 @@ class BackgroundRunHandle internal constructor(val total: Int, private val job: 
 /**
  * Runs the shared runner over the Swift adapters. Swift passes these ports.
  * [browse] looks for `_ossync._tcp` for up to the timeout and answers with service names and their
- * TXT stations. [sync] opens one sensor (over Wi-Fi when the service name is given, otherwise its
+ * TXT things. [sync] opens one sensor (over Wi-Fi when the service name is given, otherwise its
  * bonded peripheral), collects the missing files, closes it and answers. [isOwned] is true while the
  * user holds a link to that sensor.
  */
@@ -257,7 +257,7 @@ class BackgroundSyncBridge internal constructor(
     private val devices: DevicesBridge,
     private val settings: AutoSyncSettings,
     private val scope: CoroutineScope,
-    private val browse: (timeoutMs: Long, done: (names: List<String>, stations: List<String>) -> Unit) -> Unit,
+    private val browse: (timeoutMs: Long, done: (names: List<String>, things: List<String>) -> Unit) -> Unit,
     private val sync: (id: String, wifiName: String?, done: (BackgroundStepResult) -> Unit) -> Unit,
     private val isOwned: (id: String) -> Boolean,
     private val log: (String) -> Unit,
@@ -308,7 +308,7 @@ class BackgroundSyncBridge internal constructor(
     private fun nowMs(): Long = devices.nowMs()
 
     private fun all(): List<IosSyncDevice> = devices.knownNow().filter { IosKnown.isPeripheral(it.id) }.map {
-        IosSyncDevice(it.id, it.name, it.station, it.hasWifiAccess)
+        IosSyncDevice(it.id, it.name, it.thing, it.hasWifiAccess)
     }
 
     private fun enabled(): List<IosSyncDevice> = all().filter { settings.isOn(it.address) }
@@ -338,10 +338,10 @@ class BackgroundSyncBridge internal constructor(
         override fun interactiveSessionAddress(): String? = null
         override fun isDeviceOwned(address: String): Boolean = isOwned(address)
 
-        override suspend fun browseLan(stations: Set<String>, timeoutMs: Long): Map<String, IosLanTarget> = suspendCancellableCoroutine { cont ->
+        override suspend fun browseLan(things: Set<String>, timeoutMs: Long): Map<String, IosLanTarget> = suspendCancellableCoroutine { cont ->
             browse(timeoutMs) { names, found ->
                 if (cont.isActive) {
-                    val map = names.indices.filter { it < found.size && found[it] in stations }.associate { found[it] to IosLanTarget(names[it], found[it]) }
+                    val map = names.indices.filter { it < found.size && found[it] in things }.associate { found[it] to IosLanTarget(names[it], found[it]) }
                     cont.resume(map)
                 }
             }

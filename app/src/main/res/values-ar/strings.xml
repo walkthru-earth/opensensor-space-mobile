@@ -49,7 +49,7 @@
     <string name="device_firmware">البرنامج الثابت</string>
     <string name="device_protocol">البروتوكول</string>
     <string name="device_schema">المخطط</string>
-    <string name="device_station">المحطة</string>
+    <string name="device_thing">معرّف المستشعر</string>
     <string name="device_id">معرّف الجهاز</string>
     <string name="device_boot">التشغيل</string>
     <string name="device_dictionary">القاموس</string>
@@ -190,7 +190,7 @@
     <string name="msg_firmware_update_required_unknown">حدّث برنامج المستشعر للاتصال. يحتاج هذا التطبيق إلى البروتوكول %1$d.</string>
     <string name="msg_hardware_in_use">هذا المستشعر متصل بالفعل بطريقة أخرى.</string>
     <string name="msg_verification_failed">تعذّر التحقق من المستشعر. حاول مرة أخرى.</string>
-    <string name="msg_station_changed">أُعيد ضبط المستشعر. يُحتفظ بالسجل السابق ويتجدد الوصول عبر Wi-Fi من خلال Bluetooth.</string>
+    <string name="msg_thing_changed">أُعيد ضبط المستشعر. يُحتفظ بالسجل السابق ويتجدد الوصول عبر Wi-Fi من خلال Bluetooth.</string>
     <string name="msg_reconnecting">انقطع الاتصال. جارٍ إعادة الاتصال، المحاولة %1$d من %2$d…</string>
     <plurals name="msg_reconnect_failed">
         <item quantity="zero">تعذّرت إعادة الاتصال بعد %1$d محاولة. اضغط إعادة الاتصال عندما يعود المستشعر.</item>
@@ -207,7 +207,7 @@
     <string name="msg_token_rotated_stored">تغيّر رمز الوصول وحُفظ الرمز الجديد على هذا الهاتف.</string>
     <string name="msg_token_rotated_fetch">تغيّر رمز الوصول. استخدم جلب الرمز لحفظ الرمز الجديد.</string>
     <string name="msg_file_list_not_ready">قائمة الملفات ليست جاهزة بعد. حاول مرة أخرى بعد لحظة.</string>
-    <string name="msg_no_station">لم يُبلغ المستشعر عن محطته. أعد الاتصال وحاول مرة أخرى.</string>
+    <string name="msg_no_thing">لم يُبلغ المستشعر عن معرّفه. أعد الاتصال وحاول مرة أخرى.</string>
     <string name="msg_up_to_date">كل شيء موجود على هذا الهاتف بالفعل.</string>
     <string name="msg_file_check_failed">لم يجتز %1$s الفحوصات. يبقى على المستشعر.</string>
     <string name="msg_file_refused">رفض المستشعر إرسال %1$s.</string>
@@ -274,13 +274,13 @@
     <string name="msg_identity_hardware_changed">هذا عتاد مختلف. أقرنه كمستشعر جديد.</string>
     <string name="msg_identity_hardware_missing">لم يعد المستشعر يُبلغ عن معرّف العتاد.</string>
     <string name="msg_identity_hardware_malformed">يُبلغ المستشعر عن معرّف عتاد غير صالح.</string>
-    <string name="msg_identity_station_missing">لم يُبلغ المستشعر عن محطته.</string>
-    <string name="msg_identity_station_malformed">يُبلغ المستشعر عن محطة غير صالحة.</string>
+    <string name="msg_identity_thing_missing">لم يُبلغ المستشعر عن معرّفه.</string>
+    <string name="msg_identity_thing_malformed">يُبلغ المستشعر عن معرّف غير صالح.</string>
     <string name="msg_identity_enroll_ble">اتصل بهذا المستشعر عبر Bluetooth أولًا.</string>
-    <string name="msg_identity_station_ble">تغيّرت محطة المستشعر. أعد الاتصال عبر Bluetooth للتحقق منها.</string>
-    <string name="msg_identity_station_hardware">تغيّرت محطة المستشعر دون معرّف عتاد مطابق.</string>
+    <string name="msg_identity_thing_ble">تغيّر معرّف المستشعر. أعد الاتصال عبر Bluetooth للتحقق منه.</string>
+    <string name="msg_identity_thing_hardware">تغيّر معرّف المستشعر دون معرّف عتاد مطابق.</string>
 
-    <!-- Station label in the scan list. The Files screen strings live in :feature:files. -->
+    <!-- Sensor ID label in the scan list. The Files screen strings live in :feature:files. -->
 
     <!-- Scan archive line. Mood, metric, value, unit, day. -->
     <!-- Relative time -->

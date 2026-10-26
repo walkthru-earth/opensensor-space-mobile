@@ -19,9 +19,9 @@ class StorageRootsTest {
 
     @Test
     fun classifiesPathsByTheirRoot() {
-        assertEquals(StorageClass.Durable, roots.classOf("/data/files/archive/station/a.parquet"))
+        assertEquals(StorageClass.Durable, roots.classOf("/data/files/archive/thing/a.parquet"))
         assertEquals(StorageClass.Durable, roots.classOf("/data/files/archive"))
-        assertEquals(StorageClass.Scratch, roots.classOf("/data/files/archive-partial/station/a.parquet.partial"))
+        assertEquals(StorageClass.Scratch, roots.classOf("/data/files/archive-partial/thing/a.parquet.partial"))
         assertEquals(StorageClass.Rebuildable, roots.classOf("/data/files/derived/v1/day.parquet"))
         assertNull(roots.classOf("/data/files/archived"))
         assertNull(roots.classOf("/elsewhere"))

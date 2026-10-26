@@ -4,7 +4,7 @@ import platform.Foundation.NSDate
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.timeIntervalSince1970
 
-/** The known records in UserDefaults. Names, stations and ids only, never a credential. */
+/** The known records in UserDefaults. Names, things and ids only, never a credential. */
 private class UserDefaultsKnownRecords(private val defaults: NSUserDefaults) : KnownRecordStorage {
     override fun load(): String? = defaults.stringForKey(KEY)
     override fun save(text: String) = defaults.setObject(text, KEY)

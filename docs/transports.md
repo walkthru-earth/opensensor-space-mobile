@@ -8,7 +8,7 @@
 
 ```mermaid
 flowchart TD
-  C[connect address] --> Q{station discovered on mDNS<br/>AND token stored?}
+  C[connect address] --> Q{thing discovered on mDNS<br/>AND token stored?}
   Q -- yes --> L[TcpLinkDriver OSS1 handshake]
   L -- HELLO --> R[Ready · chip Wi-Fi LAN]
   L -- ERROR 14 / BYE 3 / BYE 10 --> X[clear token, mark stale] --> B
@@ -24,9 +24,9 @@ Existing access permits discovery while the screen is visible; the tap requests 
 Bluetooth and Local Network permissions. Each radio can still show results if the other is
 unavailable. LAN-only results without an enrolled Bluetooth identity and saved token are
 informational. Opening an enrolled sensor never asks for Bluetooth. With Bluetooth allowed and on it uses the AUTO rule below. Otherwise,
-a known sensor with a saved token, station and current mDNS discovery may open LAN only. That
+a known sensor with a saved token, thing and current mDNS discovery may open LAN only. That
 path has no BLE fallback or BLE auto-reconnect; if LAN cannot connect, its archive remains
-available offline. Reconnect on the station page is the tap that asks for Bluetooth. `TransportFactory` throws `TransportUnavailableException` (RADIO_OFF,
+available offline. Reconnect on the thing page is the tap that asks for Bluetooth. `TransportFactory` throws `TransportUnavailableException` (RADIO_OFF,
 PERMISSION_MISSING or NO_ADAPTER) before any Bluetooth open. Connect and collection turn it into
 `DisconnectCause.Unavailable`, which is never retried, and say which one applies (2026-10-12).
 A LAN connect refused with EPERM, the Local Network permission refusal, is the same
@@ -192,14 +192,14 @@ plaintext bearer-token handshake authenticates the phone rather than the server.
 
 | Observed change | Implemented app policy |
 | --- | --- |
-| Same enrolled endpoint/full hardware ID/station; new boot, firmware or dictionary | Accept the connection; refresh the manifest and use the normal resume policy |
-| Same enrolled BLE endpoint/full hardware ID; changed station | Preserve old history, record a new station epoch, clear old LAN token/port and refetch over BLE |
-| Changed station learned over LAN | Reject; reconnect over the enrolled BLE link before accepting a generation |
+| Same enrolled endpoint/full hardware ID/thing; new boot, firmware or dictionary | Accept the connection; refresh the manifest and use the normal resume policy |
+| Same enrolled BLE endpoint/full hardware ID; changed thing | Preserve old history, record a new thing epoch, clear old LAN token/port and refetch over BLE |
+| Changed thing learned over LAN | Reject; reconnect over the enrolled BLE link before accepting a generation |
 | Changed full hardware ID, missing previously pinned ID, malformed ID or changed endpoint | Reject automatic continuity; replacement needs explicit enrollment/ownership handling |
-| Legacy optional `dev` absent; same station | Allow generic collection; a new station cannot be automatically linked without a previously matching full hardware ID |
+| Legacy optional `dev` absent; same thing | Allow generic collection; a new thing cannot be automatically linked without a previously matching full hardware ID |
 
-Normal reset and uploads that preserve NVS should retain station, BLE bonds, LAN token and Wi-Fi
-configuration. A full NVS erase creates a new station/PIN/token and loses bonds and provisioned
+Normal reset and uploads that preserve NVS should retain thing, BLE bonds, LAN token and Wi-Fi
+configuration. A full NVS erase creates a new thing/PIN/token and loses bonds and provisioned
 Wi-Fi. Android may still report `BOND_BONDED` after firmware lost its keys. The app does not silently
 forget bonds, downgrade security or pair from a worker: stale-bond repair requires the foreground
 and Android's pairing/settings interaction. There is no guaranteed fully automatic reconnection
@@ -214,8 +214,8 @@ because Android may encrypt a bonded link right after connect but flaky stacks a
 bonds do at the edge of range.
 
 The reflash for firmware #93 (aq-parquet #102) is a partial erase. The settings namespace `oscfg`
-starts empty, and nothing is copied from the old one. `parquet` keeps the station UUID and the
-codec, so the app sees the same station and keeps its archive. Lost on the board, back to first
+starts empty, and nothing is copied from the old one. `parquet` keeps the thing UUID and the
+codec, so the app sees the same thing and keeps its archive. Lost on the board, back to first
 boot defaults.
 
 - Pairing mode and PIN (`<dev pin>`) and the display flag. A headless board makes a new random
@@ -245,8 +245,8 @@ The display flag is detected again at first boot and has no setting. The app has
 so NTP runs on the firmware defaults (on, DHCP servers, public fallback, one hour interval).
 Custom NTP servers or interval need the host tools.
 
-Station generations preserve the original archive and Hive paths; they do not reparent old data
-([data model](data-model.md#station-generations-and-device-continuity)). The policies and migration
+Thing generations preserve the original archive and Hive paths; they do not reparent old data
+([data model](data-model.md#thing-generations-and-device-continuity)). The policies and migration
 are covered by host checks; multi-device radio behavior, erased-NVS Android recovery and fingerprint
 replacement have **not been verified on a phone**. Measured runs remain in the
 [CoreS3 bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#phone-over-lan-and-ble-oneplus-7-pro-android-16);
@@ -265,7 +265,7 @@ stateDiagram-v2
   Stored --> Stale: LAN BYE 10 (rotated), at the handshake or mid-session → lanToken cleared
   Stale --> Stored: Android next BLE session refetches, snackbar LanTokenRenewed. iOS Get Wi-Fi token
   Stored --> Stale: unreadable encrypted value → token + port cleared
-  Stored --> Stale: verified BLE station-generation change → token + port cleared
+  Stored --> Stale: verified BLE thing-generation change → token + port cleared
   Stored --> None: Forget device / deliberate Rotate token
 ```
 
@@ -280,7 +280,7 @@ invalidated for good, or a malformed `enc1` value clears only the token and port
 known-device row, and falls back to BLE. The next bonded BLE session fetches a fresh token. A
 `KeyStoreException`, an `UnrecoverableKeyException` or another transient Keystore error keeps the
 credential and uses BLE for this connect only.
-An accepted same-hardware station-generation change also clears the token and port before the
+An accepted same-hardware thing-generation change also clears the token and port before the
 post-INFO identity write and requests a fresh token on that BLE connection. Rejected identity changes
 cannot overwrite credentials or trigger automatic trust replacement.
 Any LAN failure other than `AUTH_FAILED` keeps a readable token. Unrelated DAO/programmer failures are
@@ -345,9 +345,9 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 | `TcpLinkDriver` reader loop | push demux (`LIVE` between `CHUNK`s) — `TcpLinkDriverTest` asserts it |
 | `BleLinkDriver.allowBonding` / timeouts | `AutoSyncRunner` path (`bleUnattended`) — a passkey dialog in the background is a bug |
 | `LanTokenPolicy` | repository `tryLan`, token refetch after Ready, snackbar copy |
-| `DeviceContinuityPolicy` / `DeviceIdentityClaims` | INFO acceptance, station epochs, credential renewal and prevention of duplicate physical-device owners |
+| `DeviceContinuityPolicy` / `DeviceIdentityClaims` | INFO acceptance, thing epochs, credential renewal and prevention of duplicate physical-device owners |
 | `DeviceConnectionManager` | per-device ownership and snapshots; selection must not close another controller |
-| `LanDiscovery` TXT parsing | `BackgroundSyncPolicy.linksFor` (station match), Device screen LAN card |
+| `LanDiscovery` TXT parsing | `BackgroundSyncPolicy.linksFor` (thing match), Device screen LAN card |
 | `DeviceFacade.activeTransport` | the top-bar chip on four screens |
 
 ## Automatic UTC on connection
@@ -361,6 +361,6 @@ are unavailable on both platforms.
 
 The shared session sends epoch seconds plus microseconds and falls back to the legacy
 seconds-only request only on MALFORMED_REQUEST. Reconciliation records the acknowledged UTC
-and device monotonic pair, bound to the full station and boot identity from INFO or HELLO.
+and device monotonic pair, bound to the full thing and boot identity from INFO or HELLO.
 A legacy reply contributes whole seconds only; request fractions are never invented in an
 acknowledgement. Hardware radio and power-loss qualification remains separate from host tests.

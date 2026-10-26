@@ -416,7 +416,7 @@ class SemanticsTest {
                                 modifier = Modifier.testTag("stat-line-short"),
                             )
                             StatLine(
-                                label = "Last recorded reading from station",
+                                label = "Last recorded reading from thing",
                                 value = "24 µg/m³",
                                 modifier = Modifier.testTag("stat-line"),
                             )

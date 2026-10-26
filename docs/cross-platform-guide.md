@@ -274,7 +274,7 @@ The rules for a new screen or component.
 6. **Text scaling and wrapping.** No text breaks a line inside a word, in English or Arabic.
    `brandTypography` gives every style `Hyphens.None`, `LineBreak.Paragraph` for body styles and
    `LineBreak.Heading` for the rest. A short label (bottom bar tab, section tab, button, segment,
-   chip, eyebrow, legend word, caption, screen or station title) uses `FitText` in `FitText.kt`. It
+   chip, eyebrow, legend word, caption, screen or thing title) uses `FitText` in `FitText.kt`. It
    keeps the user's size while the label fits on one line, then shrinks on one line no lower than its
    own size at font scale 1.0, then to `FitTextLimits.FloorFraction` (85 percent) of that. The 1.0
    size is `Typography.oneScaleSize(style)`, the style's own sp for every style except the display
@@ -470,7 +470,7 @@ Everything not listed here is shared Kotlin and behaves the same.
 | Backup | Settings to cloud, archive device-to-device only | Settings backed up, archive excluded |
 | Sticker scan | Google Code Scanner, no camera permission | VisionKit `DataScannerViewController`, camera asked on the Scan tap, Scan hidden where unsupported |
 | Fake devices | Debug builds only (`TransportFactory`) | None |
-| Idle Bluetooth link | Kept while the station is open | Closed when the last page for the sensor leaves or the app leaves the screen |
+| Idle Bluetooth link | Kept while the thing is open | Closed when the last page for the sensor leaves or the app leaves the screen |
 
 Both apps keep the raw command denylist (`REBOOT`, `SET_CONFIG`) and frame redaction in
 `:core:sync`. Neither app has widgets, Live Activities, App Intents or deep links.

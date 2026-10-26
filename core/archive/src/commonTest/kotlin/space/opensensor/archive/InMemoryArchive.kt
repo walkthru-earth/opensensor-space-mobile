@@ -12,8 +12,8 @@ class InMemoryArchiveStore : ArchiveStore {
     /** Path relative to the root (as [ArchiveLayout] builds it) to bytes. */
     val files = LinkedHashMap<String, ByteArray>()
 
-    override suspend fun partialLengths(station: String): Map<String, Long> {
-        val dir = ArchiveLayout.partialStationDir(station) + "/"
+    override suspend fun partialLengths(thing: String): Map<String, Long> {
+        val dir = ArchiveLayout.partialThingDir(thing) + "/"
         return files.filterKeys { it.startsWith(dir) }.mapNotNull { (path, bytes) ->
             ArchiveLayout.nameOfPartial(path.removePrefix(dir))?.let { it to bytes.size.toLong() }
         }.toMap()
@@ -61,11 +61,11 @@ class InMemoryArchiveStore : ArchiveStore {
         files.remove(ArchiveLayout.partialMetaPath(key))
     }
 
-    override suspend fun listFinal(station: String?): List<ArchiveKey> = files.keys.mapNotNull { path ->
+    override suspend fun listFinal(thing: String?): List<ArchiveKey> = files.keys.mapNotNull { path ->
         val parts = path.split('/', limit = 3)
         if (parts.size != 3 || parts[0] != ArchiveLayout.ARCHIVE) return@mapNotNull null
-        if (station != null && parts[1] != station) return@mapNotNull null
-        if (!ArchiveLayout.isSafeStation(parts[1]) || !ArchiveLayout.isArchiveName(parts[2])) null else ArchiveKey(parts[1], parts[2])
+        if (thing != null && parts[1] != thing) return@mapNotNull null
+        if (!ArchiveLayout.isSafeThing(parts[1]) || !ArchiveLayout.isArchiveName(parts[2])) null else ArchiveKey(parts[1], parts[2])
     }
 }
 
@@ -75,16 +75,16 @@ class InMemoryArchiveIndex : ArchiveIndex {
 
     override fun observeAll(): Flow<List<ArchiveRecord>> = rows.map { list -> list.sortedBy { it.name } }
 
-    override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station }.sortedBy { it.name } }
+    override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.thing == thing }.sortedBy { it.name } }
 
-    override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.station == key.station && it.name == key.name }
+    override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.thing == key.thing && it.name == key.name }
 
     override suspend fun put(record: ArchiveRecord) {
-        rows.value = rows.value.filterNot { it.station == record.station && it.name == record.name } + record
+        rows.value = rows.value.filterNot { it.thing == record.thing && it.name == record.name } + record
     }
 
     override suspend fun remove(key: ArchiveKey) {
-        rows.value = rows.value.filterNot { it.station == key.station && it.name == key.name }
+        rows.value = rows.value.filterNot { it.thing == key.thing && it.name == key.name }
     }
 
     override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value
@@ -92,10 +92,10 @@ class InMemoryArchiveIndex : ArchiveIndex {
         .sortedWith(compareBy<ArchiveRecord> { !it.awaitsIndex }.thenBy { it.name })
         .take(limit)
 
-    override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
-        rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
+    override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
+        rows.value.filter { it.thing == thing && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
 
-    override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
+    override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = rows.value.filter { it.thing == thing && it.isIndexed }
 
-    override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
+    override suspend fun things(): List<String> = rows.value.map { it.thing }.distinct()
 }

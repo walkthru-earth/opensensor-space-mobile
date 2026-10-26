@@ -35,8 +35,8 @@ class IosArchiveDatabaseTest {
     private val finals = "$base/SensorArchive"
     private val dir = "$base/database"
     private val store = IosArchiveStore(finals, "$base/archive-partial")
-    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
-    private val name = "station=$station/year=2026/month=09/day=17/data_0930.parquet"
+    private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val name = "station=$thing/year=2026/month=09/day=17/data_0930.parquet"
     private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
     private val fm = NSFileManager.defaultManager
 
@@ -51,12 +51,12 @@ class IosArchiveDatabaseTest {
 
     @Test
     fun theFirstOpenImportsTheReceiptsAndALaterOpenDeletesThemAndSettles() = runTest {
-        val receipt = "$finals/$station/$name${ArchiveLayout.LEGACY_RECEIPT_SUFFIX}"
+        val receipt = "$finals/$thing/$name${ArchiveLayout.LEGACY_RECEIPT_SUFFIX}"
         val prunedFile = "$finals-pruned/pruned.v1"
-        write("$finals/$station/$name", bytes)
+        write("$finals/$thing/$name", bytes)
         write(receipt, """{"size":${bytes.size},"crc":${ParquetVerify.crc32(bytes)},"sourceDevice":"dev"}""".encodeToByteArray())
-        write(prunedFile, "pruned-v1\n$station\tother.parquet\t46\t5\t11\n".encodeToByteArray())
-        val mark = PrunedFile(station, "other.parquet", 46, 5, 11)
+        write(prunedFile, "pruned-v1\n$thing\tother.parquet\t46\t5\t11\n".encodeToByteArray())
+        val mark = PrunedFile(thing, "other.parquet", 46, 5, 11)
 
         IosArchiveDatabase(store, dir).apply {
             assertEquals(listOf(name), index.observeAll().first().map { it.name })
@@ -71,8 +71,8 @@ class IosArchiveDatabaseTest {
         // A later launch reads the same rows from the file, deletes the old files and replaces nothing.
         write(receipt, """{"size":${bytes.size},"crc":${ParquetVerify.crc32(bytes)},"sourceDevice":"later"}""".encodeToByteArray())
         IosArchiveDatabase(store, dir).apply {
-            assertEquals("dev", index.get(ArchiveKey(station, name))?.sourceDevice)
-            assertEquals(listOf(mark), pruned.forStation(station))
+            assertEquals("dev", index.get(ArchiveKey(thing, name))?.sourceDevice)
+            assertEquals(listOf(mark), pruned.forThing(thing))
             close()
         }
         assertFalse(fm.fileExistsAtPath(receipt))
@@ -82,8 +82,8 @@ class IosArchiveDatabaseTest {
 
     @Test
     fun aBusyCheckpointWritesNoMarkerAndDeletesNothing() = runTest {
-        val receipt = "$finals/$station/$name${ArchiveLayout.LEGACY_RECEIPT_SUFFIX}"
-        write("$finals/$station/$name", bytes)
+        val receipt = "$finals/$thing/$name${ArchiveLayout.LEGACY_RECEIPT_SUFFIX}"
+        write("$finals/$thing/$name", bytes)
         write(receipt, """{"size":${bytes.size},"crc":${ParquetVerify.crc32(bytes)}}""".encodeToByteArray())
         val path = "$dir/${AppDatabase.FILE_NAME}"
         openAppDatabase(path).apply {
@@ -97,7 +97,7 @@ class IosArchiveDatabaseTest {
             reader.prepare("SELECT count(*) FROM archived_file").use { it.step() }
 
             IosArchiveDatabase(store, dir).apply {
-                assertFails { index.get(ArchiveKey(station, name)) }
+                assertFails { index.get(ArchiveKey(thing, name)) }
                 close()
             }
             assertFalse(fm.fileExistsAtPath("$dir/${IosArchiveDatabase.IMPORT_MARKER}"))

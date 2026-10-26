@@ -5,7 +5,7 @@ package space.opensensor.data.history
 
 /**
  * [bytes] with the old unprefixed footer keys replaced by one `opensensor` entry shaped like the footer
- * firmware writes ([opensensorFooterJson]). The old station, purpose, boot, schema, dict, template digest
+ * firmware writes ([opensensorFooterJson]). The old thing, purpose, boot, schema, dict, template digest
  * and interval move into it. Firmware always writes every member, so a fixture without a dict or a
  * template digest gets [UNKNOWN_DIGEST], which no template carries, and one without an interval or a
  * purpose gets the firmware's 10 s cadence and `telemetry`. The dropped `reconciliation_anchor_*` keys go.
@@ -27,7 +27,7 @@ fun migrateLegacyFooter(bytes: ByteArray): ByteArray {
         desc = old[LegacyFooterKeys.TEMPLATE_SHA256] ?: UNKNOWN_DIGEST,
         intervalMs = old[LegacyFooterKeys.SAMPLE_INTERVAL_MS]?.toLongOrNull() ?: 10_000,
         schema = old[LegacyFooterKeys.SCHEMA_VERSION] ?: "unknown",
-        station = old[LegacyFooterKeys.STATION_ID]?.takeIf { it.isNotEmpty() },
+        thing = old[LegacyFooterKeys.THING_ID]?.takeIf { it.isNotEmpty() },
         purpose = old[LegacyFooterKeys.PURPOSE]?.takeIf { it.isNotEmpty() } ?: "telemetry",
         boot = old[LegacyFooterKeys.BOOT_ID] ?: UNKNOWN_DIGEST.take(32),
     )

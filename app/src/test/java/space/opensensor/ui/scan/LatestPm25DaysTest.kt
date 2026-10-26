@@ -8,8 +8,8 @@ import space.opensensor.data.history.Metrics
 import space.opensensor.data.local.database.MetricBucket
 
 class LatestPm25DaysTest {
-    private fun day(station: String, metric: String, startS: Long, mean: Float, valid: Int = 100) = MetricBucket(
-        station = station, metricId = metric, resolution = 86_400L, startEpochS = startS,
+    private fun day(thing: String, metric: String, startS: Long, mean: Float, valid: Int = 100) = MetricBucket(
+        thing = thing, metricId = metric, resolution = 86_400L, startEpochS = startS,
         rows = 100, validRows = valid, estimatedRows = 0, mean = mean, min = mean, max = mean, sampleIntervalMs = 10_000,
     )
 

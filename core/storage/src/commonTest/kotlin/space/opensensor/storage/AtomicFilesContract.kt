@@ -28,7 +28,7 @@ abstract class AtomicFilesContract {
 
     @Test
     fun commitNoReplaceRefusesAFinalThatAppearedAfterThePlan() {
-        val final = "$root/archive/station-a/2026/day.parquet"
+        val final = "$root/archive/thing-a/2026/day.parquet"
         val partial = files.createTemp()
         writeRaw(partial, "downloaded".encodeToByteArray())
         // Planned with the final absent. Another writer commits first.
@@ -43,7 +43,7 @@ abstract class AtomicFilesContract {
 
     @Test
     fun commitNoReplaceMovesIntoNewDirectories() {
-        val final = "$root/archive/station-a/2026/10/day.parquet"
+        val final = "$root/archive/thing-a/2026/10/day.parquet"
         val partial = files.createTemp()
         writeRaw(partial, "bytes".encodeToByteArray())
 
@@ -61,15 +61,15 @@ abstract class AtomicFilesContract {
         val partial = files.createTemp()
         writeRaw(partial, "bytes".encodeToByteArray())
 
-        files.commitNoReplace(partial, "$root/archive/station-a/year=2026/month=10/day.parquet", StorageClass.Durable)
-        files.createNoReplace("$root/archive/station-b/boot/1.anchor", "receipt".encodeToByteArray(), StorageClass.Durable)
+        files.commitNoReplace(partial, "$root/archive/thing-a/year=2026/month=10/day.parquet", StorageClass.Durable)
+        files.createNoReplace("$root/archive/thing-b/boot/1.anchor", "receipt".encodeToByteArray(), StorageClass.Durable)
 
         val expected = listOf(
-            "$root/archive/station-a/year=2026/month=10",
-            "$root/archive/station-a/year=2026",
-            "$root/archive/station-a",
-            "$root/archive/station-b/boot",
-            "$root/archive/station-b",
+            "$root/archive/thing-a/year=2026/month=10",
+            "$root/archive/thing-a/year=2026",
+            "$root/archive/thing-a",
+            "$root/archive/thing-b/boot",
+            "$root/archive/thing-b",
             "$root/archive",
         )
         for (dir in expected) assertTrue(dir in synced, "$dir was not synced, synced $synced")

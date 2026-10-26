@@ -73,7 +73,7 @@ private class FakeStorage : StorageControls {
         ranges += range
         gate?.await()
         if (failFind) error("unreadable")
-        return OldFilesPlan(oldFiles, oldBytes, stations = 1, range = range, handle = "plan-${ranges.size}")
+        return OldFilesPlan(oldFiles, oldBytes, things = 1, range = range, handle = "plan-${ranges.size}")
     }
 
     override suspend fun removeOldFiles(plan: OldFilesPlan): OldFilesResult {

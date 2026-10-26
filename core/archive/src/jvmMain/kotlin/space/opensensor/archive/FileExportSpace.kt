@@ -10,7 +10,7 @@ import java.util.UUID
 /**
  * [ExportSpace] in a JVM directory. Android passes `cacheDir/export`, the folder its `FileProvider`
  * serves, so each run is `export/run-<uuid>/` and a staged file is shareable as a content URI. Every
- * space over the same root shares the leases of [ExportRuns], so two station controllers never sweep
+ * space over the same root shares the leases of [ExportRuns], so two thing controllers never sweep
  * each other's staging. [clock] is wall time, the clock of `File.lastModified`.
  */
 class FileExportSpace(private val root: File, private val clock: () -> Long = System::currentTimeMillis) : ExportSpace {

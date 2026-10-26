@@ -36,7 +36,7 @@ class IosDailyDerivedStoreTest {
 
     private var reads = 0
     private val archive = object : ArchiveStore {
-        override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
+        override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = true
@@ -45,7 +45,7 @@ class IosDailyDerivedStoreTest {
             return ByteArrayReader(fixtureBytes("parquet/device/v1-none-64rows-unsynced.parquet"))
         }
         override suspend fun commit(key: ArchiveKey) = Unit
-        override suspend fun listFinal(station: String?): List<ArchiveKey> = emptyList()
+        override suspend fun listFinal(thing: String?): List<ArchiveKey> = emptyList()
     }
 
     @Test
@@ -53,18 +53,18 @@ class IosDailyDerivedStoreTest {
         val (source, anchor) = dailyFixture()
         val record = source.record
         val now = anchor.utcNs / 1_000_000_000L + 200_000L
-        val paths = IosDailyDerivedStore(root).rebuild(record.station, listOf(record), archive, mapOf(anchor.boot to anchor), now)
+        val paths = IosDailyDerivedStore(root).rebuild(record.thing, listOf(record), archive, mapOf(anchor.boot to anchor), now)
         assertEquals(2, paths.size)
         assertEquals(64L, paths.sumOf { ParquetFile.open(LocalFileReader(it)).use { f -> f.numRows } })
         val manifest = paths.first().removeSuffix(".parquet") + ".manifest.json"
         fun manifestText(): String = LocalFileReader(manifest).use { reader -> reader.read(0, reader.size.toInt()).decodeToString() }
         val firstManifest = manifestText()
         assertTrue(firstManifest.contains("time_anchor"))
-        assertEquals(paths, IosDailyDerivedStore(root).rebuild(record.station, listOf(record), archive, mapOf(anchor.boot to anchor), now + 1))
+        assertEquals(paths, IosDailyDerivedStore(root).rebuild(record.thing, listOf(record), archive, mapOf(anchor.boot to anchor), now + 1))
         assertEquals(firstManifest, manifestText(), "restart preserves unchanged cache files")
-        val shifted = anchor.copy(utcNs = anchor.utcNs + 2 * StationDays.DAY_NS)
-        val changed = record.copy(estFirstUtcNs = record.estFirstUtcNs!! + 2 * StationDays.DAY_NS, estLastUtcNs = shifted.utcNs)
-        val corrected = IosDailyDerivedStore(root).rebuild(record.station, listOf(changed), archive, mapOf(shifted.boot to shifted), now + 200_000L)
+        val shifted = anchor.copy(utcNs = anchor.utcNs + 2 * ThingDays.DAY_NS)
+        val changed = record.copy(estFirstUtcNs = record.estFirstUtcNs!! + 2 * ThingDays.DAY_NS, estLastUtcNs = shifted.utcNs)
+        val corrected = IosDailyDerivedStore(root).rebuild(record.thing, listOf(changed), archive, mapOf(shifted.boot to shifted), now + 200_000L)
         assertEquals(2, corrected.size)
         assertEquals(64L, corrected.sumOf { ParquetFile.open(LocalFileReader(it)).use { f -> f.numRows } })
         assertTrue(paths.none { it in corrected })
@@ -78,19 +78,19 @@ class IosDailyDerivedStoreTest {
         val anchors = mapOf(anchor.boot to anchor)
         val now = anchor.utcNs / 1_000_000_000L + 200_000L
         val store = IosDailyDerivedStore(root)
-        val paths = store.rebuild(record.station, listOf(record), archive, anchors, now)
+        val paths = store.rebuild(record.thing, listOf(record), archive, anchors, now)
         assertEquals(2, paths.size)
         fun allExist() = paths.all { NSFileManager.defaultManager.fileExistsAtPath(it) && NSFileManager.defaultManager.fileExistsAtPath(it.removeSuffix(".parquet") + ".manifest.json") }
 
         // Reopened by an index migration, the record keeps its span and holds both days (#87).
-        assertEquals(emptyList(), store.rebuild(record.station, listOf(record.copy(indexedAtEpochMs = null)), archive, anchors, now + 1))
+        assertEquals(emptyList(), store.rebuild(record.thing, listOf(record.copy(indexedAtEpochMs = null)), archive, anchors, now + 1))
         assertTrue(allExist())
         // Without a span it could land on any day, so every day stays.
         val spanless = record.copy(indexedAtEpochMs = null, estFirstUtcNs = null, estLastUtcNs = null)
-        store.rebuild(record.station, listOf(spanless), archive, anchors, now + 2)
+        store.rebuild(record.thing, listOf(spanless), archive, anchors, now + 2)
         assertTrue(allExist())
         // A failed index holds nothing, so its days go.
-        store.rebuild(record.station, listOf(record.copy(indexError = "bad")), archive, anchors, now + 3)
+        store.rebuild(record.thing, listOf(record.copy(indexError = "bad")), archive, anchors, now + 3)
         paths.forEach { assertFalse(NSFileManager.defaultManager.fileExistsAtPath(it)) }
     }
 
@@ -104,22 +104,22 @@ class IosDailyDerivedStoreTest {
         val anchors = mapOf(anchor.boot to anchor)
         val index = object : space.opensensor.archive.ArchiveIndex {
             override fun observeAll() = kotlinx.coroutines.flow.flowOf(listOf(record))
-            override fun observeStation(station: String) = observeAll()
+            override fun observeThing(thing: String) = observeAll()
             override suspend fun get(key: ArchiveKey) = record.takeIf { it.key == key }
             override suspend fun put(record: space.opensensor.archive.ArchiveRecord) = error("read only")
             override suspend fun remove(key: ArchiveKey) = error("read only")
             override suspend fun unindexed(limit: Int) = emptyList<space.opensensor.archive.ArchiveRecord>()
-            override suspend fun timeline(station: String, fromNs: Long, toNs: Long) = listOf(record).filter { it.onTimeline(fromNs, toNs) }
-            override suspend fun indexedForStation(station: String) = listOf(record)
-            override suspend fun stations() = listOf(record.station)
+            override suspend fun timeline(thing: String, fromNs: Long, toNs: Long) = listOf(record).filter { it.onTimeline(fromNs, toNs) }
+            override suspend fun indexedForThing(thing: String) = listOf(record)
+            override suspend fun things() = listOf(record.thing)
         }
         val derived = IosDailyDerivedStore(root, atomic, disk, CoreS3Files)
         var prepares = 0
-        val tiers = ArchiveHistoryTiers(archive, index, io = StandardTestDispatcher(testScheduler), tierStore = disk, shareScope = backgroundScope, templates = CoreS3Files, beforeBuild = { station, files, _ ->
+        val tiers = ArchiveHistoryTiers(archive, index, io = StandardTestDispatcher(testScheduler), tierStore = disk, shareScope = backgroundScope, templates = CoreS3Files, beforeBuild = { thing, files, _ ->
             prepares++
-            derived.rebuild(station, files, archive, anchors, now)
+            derived.rebuild(thing, files, archive, anchors, now)
         })
-        val spans = List(3) { async { tiers.observeDays(record.station).first() } }.awaitAll()
+        val spans = List(3) { async { tiers.observeDays(record.thing).first() } }.awaitAll()
         val daySpan = spans.first()
         assertTrue(spans.all { it == daySpan })
         assertEquals(1, prepares, "concurrent observers prepare the daily pass once")
@@ -128,7 +128,7 @@ class IosDailyDerivedStoreTest {
         assertEquals(4, reads, "two source opens for each UTC day build both daily files and tiers")
         assertEquals(0, tiers.decodedDays)
         val restarted = ArchiveHistoryTiers(archive, index, tierStore = IosFileTierStore(root, atomic), templates = CoreS3Files)
-        assertEquals(daySpan, restarted.observeDays(record.station).first())
+        assertEquals(daySpan, restarted.observeDays(record.thing).first())
         assertEquals(4, reads, "a restart reads the tiers from disk, not the source")
         assertEquals(0, restarted.decodedDays)
     }
@@ -141,10 +141,10 @@ class IosDailyDerivedStoreTest {
         val now = anchor.utcNs / 1_000_000_000L + 200_000L
         val atomic = space.opensensor.storage.IosAtomicFiles("$root/temps")
         val derived = IosDailyDerivedStore(root, atomic)
-        val path = derived.rebuild(record.station, listOf(record), archive, anchors, now).first()
-        val day = StationDays.dayOf(record.estFirstUtcNs!!)
-        assertNotNull(derived.open(record.station, day, listOf(record), anchors)).close()
-        assertNull(derived.open(record.station, day, listOf(record.copy(crc32 = record.crc32 + 1)), anchors))
+        val path = derived.rebuild(record.thing, listOf(record), archive, anchors, now).first()
+        val day = ThingDays.dayOf(record.estFirstUtcNs!!)
+        assertNotNull(derived.open(record.thing, day, listOf(record), anchors)).close()
+        assertNull(derived.open(record.thing, day, listOf(record.copy(crc32 = record.crc32 + 1)), anchors))
         val manifest = path.removeSuffix(".parquet") + ".manifest.json"
         val text = LocalFileReader(manifest).use { reader -> reader.read(0, reader.size.toInt()).decodeToString() }
         val oldSignatureText = "${DailyParquetBuilder.BUILDER}:true\n${record.name}:${record.bytes}:${record.crc32}:${record.sha256}:est${anchor.boot}:${anchor.utcNs}:${anchor.monoUs}\n"
@@ -153,12 +153,12 @@ class IosDailyDerivedStoreTest {
             kotlinx.serialization.json.JsonObject((parsed as kotlinx.serialization.json.JsonObject) + ("source_signature" to kotlinx.serialization.json.JsonPrimitive(oldSignature)))
         }
         atomic.writeAtomically(manifest, legacy.toString().encodeToByteArray(), space.opensensor.storage.StorageClass.Rebuildable)
-        assertNull(derived.open(record.station, day, listOf(record), anchors))
+        assertNull(derived.open(record.thing, day, listOf(record), anchors))
         NSFileManager.defaultManager.removeItemAtPath(manifest, null)
-        assertNull(derived.open(record.station, day, listOf(record), anchors))
-        derived.rebuild(record.station, listOf(record), archive, anchors, now)
+        assertNull(derived.open(record.thing, day, listOf(record), anchors))
+        derived.rebuild(record.thing, listOf(record), archive, anchors, now)
         NSFileManager.defaultManager.removeItemAtPath(path, null)
-        assertNull(derived.open(record.station, day, listOf(record), anchors))
+        assertNull(derived.open(record.thing, day, listOf(record), anchors))
     }
 
     @Test
@@ -168,17 +168,17 @@ class IosDailyDerivedStoreTest {
         val anchors = mapOf(anchor.boot to anchor)
         val now = anchor.utcNs / 1_000_000_000L + 200_000L
         val derived = IosDailyDerivedStore(root)
-        derived.rebuild(record.station, listOf(record), archive, anchors, now)
-        val day = StationDays.dayOf(record.estFirstUtcNs!!)
-        val opened = assertNotNull(derived.open(record.station, day, listOf(record), anchors))
+        derived.rebuild(record.thing, listOf(record), archive, anchors, now)
+        val day = ThingDays.dayOf(record.estFirstUtcNs!!)
+        val opened = assertNotNull(derived.open(record.thing, day, listOf(record), anchors))
         try {
             val snapshot = opened.readRanges(listOf(0L until opened.id().size)).single().toByteArray()
             val shifted = anchor.copy(utcNs = anchor.utcNs + 1_000_000_000L)
             val changed = record.copy(estFirstUtcNs = record.estFirstUtcNs!! + 1_000_000_000L, estLastUtcNs = record.estLastUtcNs!! + 1_000_000_000L)
             val changedAnchors = mapOf(shifted.boot to shifted)
-            derived.rebuild(record.station, listOf(changed), archive, changedAnchors, now)
+            derived.rebuild(record.thing, listOf(changed), archive, changedAnchors, now)
             assertContentEquals(snapshot, opened.readRanges(listOf(0L until opened.id().size)).single().toByteArray())
-            val current = assertNotNull(derived.open(record.station, day, listOf(changed), changedAnchors))
+            val current = assertNotNull(derived.open(record.thing, day, listOf(changed), changedAnchors))
             try {
                 assertFalse(snapshot.contentEquals(current.readRanges(listOf(0L until current.id().size)).single().toByteArray()), "the replacement contains the shifted timeline")
             } finally {

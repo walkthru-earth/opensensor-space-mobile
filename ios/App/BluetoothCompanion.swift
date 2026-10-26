@@ -39,7 +39,7 @@ final class BluetoothCompanion {
     /// Held while this side writes `GET_TOKEN` itself, so no Kotlin request shares the link.
     private var nativeLease: IosNativeLease?
     var onCredentialSaved: (() -> Void)?
-    /// INFO named the sensor the user opened: peripheral id, advertised name, station and hardware id.
+    /// INFO named the sensor the user opened: peripheral id, advertised name, thing and hardware id.
     var onSensorOpened: ((String, String?, String, String) -> SensorOpenResult)?
     /// A Collect all step ended: the sensor id and whether every listed file is on this phone.
     var onCollectFinished: ((String, Bool) -> Void)?
@@ -753,7 +753,7 @@ extension BluetoothCompanion {
             disconnect(notice: .infoInvalid)
             return
         }
-        guard let result = onSensorOpened?(id, name, observed.station, observed.device) else {
+        guard let result = onSensorOpened?(id, name, observed.thing, observed.device) else {
             disconnect(notice: .infoInvalid)
             return
         }
@@ -801,7 +801,7 @@ extension BluetoothCompanion {
         }
         do {
             try credentials.save(
-                LanCredential(station: identity.station, device: identity.device, peripheral: id, token: payload, port: port))
+                LanCredential(thing: identity.thing, device: identity.device, peripheral: id, token: payload, port: port))
             finishTokenRequest(.tokenStored)
             onCredentialSaved?()
         } catch { finishTokenRequest(LanFailure.credentialsUnavailable.notice) }

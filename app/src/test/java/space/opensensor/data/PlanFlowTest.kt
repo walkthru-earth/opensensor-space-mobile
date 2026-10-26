@@ -27,17 +27,17 @@ import space.opensensor.data.sync.SyncPlanner
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlanFlowTest {
-    private val station = "station-a"
-    private val name = "station=$station/year=2026/month=10/day=11/data_0900.parquet"
-    private val second = "station=$station/year=2026/month=10/day=11/data_0915.parquet"
+    private val thing = "thing-a"
+    private val name = "station=$thing/year=2026/month=10/day=11/data_0900.parquet"
+    private val second = "station=$thing/year=2026/month=10/day=11/data_0915.parquet"
     private val size = 1_000_000L
 
     private fun listing(vararg names: String) = ManifestState.Loaded(names.map { Frame.File(size, it) }, Frame.ListEnd(names.size.toLong(), 0, 0, 0), 0)
 
     /** A plan flow over fakes that counts planner and partial-directory calls. */
-    private class Harness(station: String, listing: ManifestState) {
+    private class Harness(thing: String, listing: ManifestState) {
         val manifest = MutableStateFlow(listing)
-        val info = MutableStateFlow<DeviceInfo?>(DeviceInfo(station = station))
+        val info = MutableStateFlow<DeviceInfo?>(DeviceInfo(thing = thing))
         val archives = mutableMapOf<String, MutableStateFlow<List<ArchivedFileIdentity>>>()
         val sync = MutableStateFlow(SyncProgress())
         val pruned = MutableStateFlow<List<PrunedFile>>(emptyList())
@@ -45,7 +45,7 @@ class PlanFlowTest {
         var plans = 0
         var partials = 0
 
-        fun archive(station: String) = archives.getOrPut(station) { MutableStateFlow(emptyList()) }
+        fun archive(thing: String) = archives.getOrPut(thing) { MutableStateFlow(emptyList()) }
 
         val plan: Flow<SyncPlan?> = planWithProgress(
             manifest,
@@ -64,7 +64,7 @@ class PlanFlowTest {
 
     @Test
     fun `progress ticks reuse the base plan and only redo the overlay`() = runTest(UnconfinedTestDispatcher()) {
-        val h = Harness(station, listing(name))
+        val h = Harness(thing, listing(name))
         var last: SyncPlan? = null
         val job = h.plan.onEach { last = it }.launchIn(backgroundScope)
 
@@ -87,7 +87,7 @@ class PlanFlowTest {
 
     @Test
     fun `the planner runs once per manifest or archive change and never on a tick`() = runTest {
-        val h = Harness(station, listing(name))
+        val h = Harness(thing, listing(name))
         h.plan.test {
             assertEquals(1, awaitItem()?.entries?.size)
             assertEquals(1 to 1, h.plans to h.partials)
@@ -96,7 +96,7 @@ class PlanFlowTest {
             assertEquals(2, awaitItem()?.entries?.size)
             assertEquals(2 to 2, h.plans to h.partials)
 
-            h.archive(station).value = listOf(ArchivedFileIdentity(station, name, size, 7))
+            h.archive(thing).value = listOf(ArchivedFileIdentity(thing, name, size, 7))
             assertEquals(FileSyncState.SYNCED, awaitItem()!!.entries.first { it.name == name }.state)
             assertEquals(3 to 3, h.plans to h.partials)
 
@@ -109,18 +109,18 @@ class PlanFlowTest {
             assertEquals(1_000L, expectMostRecentItemAfter(PROGRESS_SAMPLE_MS)!!.entries.first { it.name == second }.partialBytes)
             assertEquals(plans to partials, h.plans to h.partials)
 
-            // Another station's archive is not observed at all.
-            assertEquals(listOf(station), h.observed)
+            // Another thing's archive is not observed at all.
+            assertEquals(listOf(thing), h.observed)
             cancelAndIgnoreRemainingEvents()
         }
     }
 
     @Test
     fun `a removed file shows as removed until its record is cleared`() = runTest {
-        val h = Harness(station, listing(name, second))
+        val h = Harness(thing, listing(name, second))
         h.plan.test {
             assertEquals(FileSyncState.NOT_SYNCED, awaitItem()!!.entries.first { it.name == name }.state)
-            h.pruned.value = listOf(PrunedFile(station, name, size, 7, 1))
+            h.pruned.value = listOf(PrunedFile(thing, name, size, 7, 1))
             val removed = awaitItem()!!
             assertEquals(FileSyncState.REMOVED, removed.entries.first { it.name == name }.state)
             assertEquals(listOf(second), removed.toDownload.map { it.name })
@@ -131,16 +131,16 @@ class PlanFlowTest {
     }
 
     @Test
-    fun `a station switch plans against the new station only`() = runTest {
-        val h = Harness(station, listing(name))
-        h.archive("station-b").value = listOf(ArchivedFileIdentity("station-b", name, size, 7))
+    fun `a thing switch plans against the new thing only`() = runTest {
+        val h = Harness(thing, listing(name))
+        h.archive("thing-b").value = listOf(ArchivedFileIdentity("thing-b", name, size, 7))
         h.plan.test {
             assertEquals(FileSyncState.NOT_SYNCED, awaitItem()!!.entries.single().state)
-            h.info.value = DeviceInfo(station = "station-b")
+            h.info.value = DeviceInfo(thing = "thing-b")
             assertEquals(FileSyncState.SYNCED, awaitItem()!!.entries.single().state)
-            assertEquals(listOf(station, "station-b"), h.observed)
+            assertEquals(listOf(thing, "thing-b"), h.observed)
             val plans = h.plans
-            h.archive(station).value = listOf(ArchivedFileIdentity(station, name, size, 8))
+            h.archive(thing).value = listOf(ArchivedFileIdentity(thing, name, size, 8))
             runCurrent()
             expectNoEvents()
             assertEquals(plans, h.plans)
@@ -152,7 +152,7 @@ class PlanFlowTest {
 
     @Test
     fun `ticks are sampled and the end of a run is emitted at once`() = runTest {
-        val h = Harness(station, listing(name, second))
+        val h = Harness(thing, listing(name, second))
         h.plan.test {
             awaitItem()
             // The running flag reaches both the base and the overlay, so it may emit twice.

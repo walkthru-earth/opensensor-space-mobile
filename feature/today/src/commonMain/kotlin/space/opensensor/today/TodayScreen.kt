@@ -54,7 +54,7 @@ import space.opensensor.today.resources.msg_rejected_set_time
 import space.opensensor.today.resources.nav_debug
 import space.opensensor.today.resources.nav_devices
 import space.opensensor.today.resources.nav_disconnect
-import space.opensensor.today.resources.today_station_short
+import space.opensensor.today.resources.today_thing_short
 import space.opensensor.units.UnitFormatter
 
 /**
@@ -178,9 +178,9 @@ fun TodayContent(
                                     // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.
                                     if (level.detailed) TransportChip(snapshot.transport)
                                     if (level.developer) {
-                                        snapshot.info?.station?.let {
+                                        snapshot.info?.thing?.let {
                                             FitText(
-                                                stringResource(Res.string.today_station_short, it.take(8)),
+                                                stringResource(Res.string.today_thing_short, it.take(8)),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontFamily = FontFamily.Monospace,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -196,8 +196,8 @@ fun TodayContent(
                             if (level.developer) {
                                 IconButton(onClick = { onAction(TodayAction.OpenDebug) }) { Icon(AppIcons.BugReport, contentDescription = stringResource(Res.string.nav_debug)) }
                             }
-                            // Reconnect and Disconnect live only here, in the station header.
-                            if (snapshot.station.offersReconnect) {
+                            // Reconnect and Disconnect live only here, in the thing header.
+                            if (snapshot.thing.offersReconnect) {
                                 TextButton(onClick = { onAction(TodayAction.Reconnect) }) { Text(stringResource(Res.string.action_reconnect)) }
                             } else {
                                 IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(Res.string.nav_disconnect)) }
@@ -218,8 +218,8 @@ fun TodayContent(
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
                 // The banner lives outside the list, so no list index shifts when it comes and goes.
-                val station = snapshot.station
-                if (station.showsBanner) {
+                val thing = snapshot.thing
+                if (thing.showsBanner) {
                     Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                         ConnectionBanner(
                             snapshot.connection,
@@ -227,7 +227,7 @@ fun TodayContent(
                             technical = level.developer,
                             pairingRepair = snapshot.needsPairingRepair,
                             onOpenBluetoothSettings = { onAction(TodayAction.OpenBluetoothSettings) },
-                            heldInBackground = station.heldInBackground,
+                            heldInBackground = thing.heldInBackground,
                         )
                     }
                 }
@@ -247,7 +247,7 @@ fun TodayContent(
                                 TodayCard.SMART_SYNC -> SmartSyncCard(
                                     sync = snapshot.sync,
                                     archive = snapshot.archive,
-                                    enabled = snapshot.station.canCommand,
+                                    enabled = snapshot.thing.canCommand,
                                     level = level,
                                     onSync = { onAction(TodayAction.SmartSync) },
                                     onStop = { onAction(TodayAction.StopSync) }.takeIf { snapshot.sync.running && !snapshot.heldInBackground },
@@ -255,7 +255,7 @@ fun TodayContent(
                                 TodayCard.CLOCK -> ClockCard(
                                     status = snapshot.status,
                                     live = live,
-                                    enabled = snapshot.station.canCommand,
+                                    enabled = snapshot.thing.canCommand,
                                     level = level,
                                     onFlush = onRequestFlush,
                                 )

@@ -37,7 +37,7 @@ fun FilesRoute(
     onOpenToday: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenDevice: () -> Unit,
-    onOpenFileMetrics: (station: String, name: String) -> Unit,
+    onOpenFileMetrics: (thing: String, name: String) -> Unit,
     onDisconnected: () -> Unit,
     viewModel: FilesViewModel = hiltViewModel<FilesViewModel, FilesViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
@@ -83,7 +83,7 @@ fun FilesRoute(
                 }
             }
         },
-        banner = if (state.station.showsBanner) {
+        banner = if (state.thing.showsBanner) {
             { ConnectionBanner(state.connection, reconnecting = state.reconnecting, technical = level.developer, heldInBackground = state.heldInBackground) }
         } else {
             null
@@ -114,8 +114,8 @@ fun FilesRoute(
 
 /** The shared inspector of one archived file. Purely descriptive, nothing here changes the archive. */
 @Composable
-fun FileMetricsRoute(station: String, name: String, onBack: () -> Unit, viewModel: FileMetricsViewModel = hiltViewModel()) {
-    LaunchedEffect(station, name) { viewModel.metrics.load(station, name) }
+fun FileMetricsRoute(thing: String, name: String, onBack: () -> Unit, viewModel: FileMetricsViewModel = hiltViewModel()) {
+    LaunchedEffect(thing, name) { viewModel.metrics.load(thing, name) }
     val state by viewModel.metrics.state.collectAsStateWithLifecycle()
     val level by viewModel.detailLevel.collectAsStateWithLifecycle()
     val rows by viewModel.metrics.rows.collectAsStateWithLifecycle()

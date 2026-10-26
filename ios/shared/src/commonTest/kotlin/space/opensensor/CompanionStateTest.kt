@@ -22,12 +22,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CompanionStateTest {
-    /** The bundled Waveshare dictionary, so LIVE has a station to read through. */
+    /** The bundled Waveshare dictionary, so LIVE has a thing to read through. */
     private val dict = "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb"
 
-    private fun lanConnected(state: CompanionState, name: String, station: String = "station-$name") {
+    private fun lanConnected(state: CompanionState, name: String, thing: String = "thing-$name") {
         state.lanSessionChanged(name, true, false, "connected", 0, 0, 0)
-        state.lanInfoReceived(name, "{\"proto\":3,\"station\":\"$station\",\"dev\":\"112233445566\",\"dict\":\"$dict\"}")
+        state.lanInfoReceived(name, "{\"proto\":3,\"station\":\"$thing\",\"dev\":\"112233445566\",\"dict\":\"$dict\"}")
     }
 
     @Test fun pausedCollectionRetainsProgressWithoutShowingAStaleTransferRate() {
@@ -148,17 +148,17 @@ class CompanionStateTest {
         assertFalse("a" in state.lanReadings)
     }
 
-    @Test fun lanTodaySnapshotBelongsOnlyToConnectedStationAndClearsOnClose() {
+    @Test fun lanTodaySnapshotBelongsOnlyToConnectedThingAndClearsOnClose() {
         val state = CompanionState()
-        lanConnected(state, "kitchen", station = "station-a")
+        lanConnected(state, "kitchen", thing = "thing-a")
         state.lanStatusReceived("kitchen", "{\"utc\":1,\"clk\":1}")
         state.lanReadingReceived("kitchen", "{\"pms\":4,\"pm25\":12.0}")
-        assertEquals("kitchen", state.connectedLanForStation("station-a"))
-        assertNull(state.connectedLanForStation("station-b"))
+        assertEquals("kitchen", state.connectedLanForThing("thing-a"))
+        assertNull(state.connectedLanForThing("thing-b"))
         assertEquals("112233445566", state.lanInfo["kitchen"]?.dev)
         assertEquals(12.0, state.lanLive["kitchen"]?.get("pm25"))
         state.lanSessionChanged("kitchen", false, false, "disconnected", 0, 0, 0)
-        assertNull(state.connectedLanForStation("station-a"))
+        assertNull(state.connectedLanForThing("thing-a"))
         assertFalse("kitchen" in state.lanInfo)
         assertFalse("kitchen" in state.lanStatus)
         assertFalse("kitchen" in state.lanLive)
@@ -354,9 +354,9 @@ class CompanionStateTest {
         assertTrue(state.heldInBackground("ble-a", null))
         assertFalse(state.heldInBackground("ble-b", null))
         state.lanScanStarted()
-        state.lanSensorsFound(listOf("aq-b"), listOf("station-b"))
+        state.lanSensorsFound(listOf("aq-b"), listOf("thing-b"))
         state.lanBackgroundOwned("aq-b", true)
-        assertTrue(state.heldInBackground("ble-b", "station-b"))
-        assertFalse(state.heldInBackground("ble-c", "station-c"))
+        assertTrue(state.heldInBackground("ble-b", "thing-b"))
+        assertFalse(state.heldInBackground("ble-c", "thing-c"))
     }
 }

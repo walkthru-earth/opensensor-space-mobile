@@ -24,9 +24,9 @@ import kotlin.time.Duration.Companion.seconds
  * - **Retry.** A backfill that leaves a record waiting for its index, because the index threw, runs
  *   again after each of [retryDelays], then waits for the next index change.
  * - **Held days.** A derive that still runs while a record waits for its index keeps that record's
- *   days in History, the shared rule of [StationDays.kept].
+ *   days in History, the shared rule of [ThingDays.kept].
  * - **Prune.** The old file cleanup writes its tombstone under the writer lease of the
- *   [space.opensensor.data.sync.DeviceCoordinator], then its `afterRemoval` derives the stations
+ *   [space.opensensor.data.sync.DeviceCoordinator], then its `afterRemoval` derives the things
  *   it emptied through [derivePass], ordered like any derive.
  *
  * [derivePass] is not reentrant. A platform derive takes it once, around its whole pass.

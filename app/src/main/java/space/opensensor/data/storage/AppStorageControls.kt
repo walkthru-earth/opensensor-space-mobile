@@ -77,7 +77,7 @@ class AppStorageControls @Inject constructor(
 
     override suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan {
         val plan = cleanup.plan(range?.let { UtcDayRange(it.fromEpochDay, it.toEpochDay) })
-        return OldFilesPlan(plan.files, plan.bytes, plan.stations, range, skipped = plan.skipped, handle = plan)
+        return OldFilesPlan(plan.files, plan.bytes, plan.things, range, skipped = plan.skipped, handle = plan)
     }
 
     override suspend fun removeOldFiles(plan: OldFilesPlan): OldFilesResult {

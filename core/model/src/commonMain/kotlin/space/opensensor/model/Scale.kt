@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonElement
 data class ScaleStep(val upper: Double?, val label: LocalizedText, val colorHint: String? = null)
 
 /**
- * A published scale from the station Collection's `opensensor:scales`, keyed by [id]. [source] is the
+ * A published scale from the thing Collection's `opensensor:scales`, keyed by [id]. [source] is the
  * citation URL and [guideline] an optional reference line.
  */
 data class Scale(

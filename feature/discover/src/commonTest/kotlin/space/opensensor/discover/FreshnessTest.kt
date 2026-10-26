@@ -16,7 +16,7 @@ class FreshnessTest {
     fun aDailyValueIsNamedByItsDayNeverByHoursOnTheClock() {
         val asOf = LocalDate(2026, 10, 8)
         assertEquals(Freshness.DataTo(LocalDate(2026, 10, 8)), freshnessOf(endOf8Oct, endOf8Oct + 98 * hour, asOf))
-        // An older station in the same partition shows its own day, so a 6 day old value is not passed off as current.
+        // An older thing in the same partition shows its own day, so a 6 day old value is not passed off as current.
         assertEquals(Freshness.DataTo(LocalDate(2026, 10, 3)), freshnessOf(endOf8Oct - 5 * 24 * hour, endOf8Oct, asOf))
     }
 

@@ -8,11 +8,11 @@ package space.opensensor.airquality
 data class MoodBlock(val step: WhoStep?, val weight: Float = 1f)
 
 /**
- * What one station or one public cell says about one property, ready for a mood surface.
+ * What one thing or one public cell says about one property, ready for a mood surface.
  * [scaled] is false for a property without a WHO scale. Its number still shows and no mood is
  * invented, so [step] is null and [blocks] is empty. [blocks] run oldest first.
  */
-data class StationSummary(
+data class ThingSummary(
     val propertyId: String,
     val value: Double?,
     val unit: String,
@@ -23,10 +23,10 @@ data class StationSummary(
 ) {
     companion object {
         /** Missing and non finite values stay null, never zero. */
-        fun of(propertyId: String, unit: String, value: Double?, updatedEpochMs: Long?, history: List<Double?>): StationSummary {
+        fun of(propertyId: String, unit: String, value: Double?, updatedEpochMs: Long?, history: List<Double?>): ThingSummary {
             val scale = WhoGuidelines.forProperty(propertyId)
             val shown = value?.takeIf { it.isFinite() }
-            return StationSummary(
+            return ThingSummary(
                 propertyId = propertyId,
                 value = shown,
                 unit = unit,

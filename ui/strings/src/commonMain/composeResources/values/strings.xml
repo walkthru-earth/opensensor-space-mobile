@@ -97,7 +97,7 @@
     <string name="msg_busy_before_sync">Wait for the current sensor task to finish before syncing.</string>
     <string name="msg_verification_failed">Could not verify the sensor. Try again.</string>
     <string name="msg_identity_enroll_ble">Connect this sensor over Bluetooth first.</string>
-    <string name="msg_identity_station_ble">The sensor station changed. Reconnect over Bluetooth to check it.</string>
+    <string name="msg_identity_thing_ble">The sensor ID changed. Reconnect over Bluetooth to check it.</string>
     <string name="msg_identity_hardware_changed">This is different hardware. Pair it as a new sensor.</string>
     <string name="msg_lan_token_stored">Wi-Fi token stored on this phone.</string>
     <string name="msg_failed_get_token">Could not get the Wi-Fi token. Try again.</string>

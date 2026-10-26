@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="device_unnamed">Unnamed device</string>
-    <string name="today_station_short">ID %1$s…</string>
+    <string name="today_thing_short">ID %1$s…</string>
     <string name="nav_devices">Devices</string>
     <string name="nav_debug">Debug</string>
     <string name="nav_disconnect">Disconnect</string>
@@ -194,7 +194,7 @@
     <string name="device_protocol">protocol</string>
     <string name="device_schema">schema</string>
     <string name="device_schema_cols">%1$s, %2$s columns</string>
-    <string name="device_station">station</string>
+    <string name="device_thing">sensor ID</string>
     <string name="device_id">device id</string>
     <string name="device_boot">boot</string>
     <string name="device_dictionary">dictionary</string>

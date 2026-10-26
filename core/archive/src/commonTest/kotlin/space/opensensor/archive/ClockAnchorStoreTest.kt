@@ -6,12 +6,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
-internal val clockTestAnchor = ClockAnchor("station-a", "0123456789abcdef0123456789abcdef", 1_790_000_000_123_456_000L, 123_456L)
+internal val clockTestAnchor = ClockAnchor("thing-a", "0123456789abcdef0123456789abcdef", 1_790_000_000_123_456_000L, 123_456L)
 
 class ClockAnchorReceiptTest {
     @Test
     fun validatesClockEvidenceAndPathComponents() {
-        assertFailsWith<IllegalArgumentException> { clockTestAnchor.copy(station = "../elsewhere") }
+        assertFailsWith<IllegalArgumentException> { clockTestAnchor.copy(thing = "../elsewhere") }
         assertFailsWith<IllegalArgumentException> { clockTestAnchor.copy(boot = "boot-1") }
         assertFailsWith<IllegalArgumentException> { clockTestAnchor.copy(boot = "F".repeat(32)) }
         assertFailsWith<IllegalArgumentException> { clockTestAnchor.copy(utcNs = Long.MAX_VALUE) }
@@ -26,10 +26,10 @@ class ClockAnchorReceiptTest {
         val anchor = clockTestAnchor
         val path = ClockAnchorReceipt.relativePath(anchor)
         val encoded = ClockAnchorReceipt.encode(anchor)
-        assertEquals(anchor, ClockAnchorReceipt.decode(encoded, anchor.station, path))
-        assertNull(ClockAnchorReceipt.decode(encoded.copyOf(encoded.size - 1), anchor.station, path))
-        assertNull(ClockAnchorReceipt.decode(encoded, "another-station", path))
-        assertNull(ClockAnchorReceipt.decode(encoded, anchor.station, "0".repeat(32) + "/" + path.substringAfter('/')))
+        assertEquals(anchor, ClockAnchorReceipt.decode(encoded, anchor.thing, path))
+        assertNull(ClockAnchorReceipt.decode(encoded.copyOf(encoded.size - 1), anchor.thing, path))
+        assertNull(ClockAnchorReceipt.decode(encoded, "another-thing", path))
+        assertNull(ClockAnchorReceipt.decode(encoded, anchor.thing, "0".repeat(32) + "/" + path.substringAfter('/')))
     }
 }
 
@@ -43,18 +43,18 @@ abstract class ClockAnchorStoreContract {
         val early = clockTestAnchor
         val later = early.copy(monoUs = early.monoUs + 1_000_000L, utcNs = early.utcNs + 1_000_000_000L)
         val secondBoot = early.copy(boot = "f".repeat(32))
-        val otherStation = early.copy(station = "station-b")
+        val otherThing = early.copy(thing = "thing-b")
         newStore().apply {
             put(later)
             put(early)
             put(early)
             put(secondBoot)
-            put(otherStation)
+            put(otherThing)
         }
         writeMalformedReceipt()
-        assertEquals(listOf(early, secondBoot), newStore().anchors(early.station))
-        assertEquals(listOf(otherStation), newStore().anchors(otherStation.station))
+        assertEquals(listOf(early, secondBoot), newStore().anchors(early.thing))
+        assertEquals(listOf(otherThing), newStore().anchors(otherThing.thing))
         assertEquals(emptyList(), newStore().anchors("unknown"))
-        assertFailsWith<IllegalArgumentException> { newStore().anchors("../station-a") }
+        assertFailsWith<IllegalArgumentException> { newStore().anchors("../thing-a") }
     }
 }

@@ -16,7 +16,7 @@ kotlin {
             api(project(":core:parquet"))
             // History reads the archive through its records (ArchiveRecord) and, later, its ports.
             api(project(":core:archive"))
-            // The Hive partition parser names a file's producer station, which index repair checks.
+            // The Hive partition parser names a file's producer thing, which index repair checks.
             api(project(":core:sync"))
             // HistoryStartup applies the feed block quota of the public feed cache after the janitor.
             api(project(":core:net"))

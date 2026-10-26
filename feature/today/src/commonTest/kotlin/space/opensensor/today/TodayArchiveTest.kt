@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 
 class TodayArchiveTest {
     private fun record(name: String, rows: Long, utcRows: Long? = null, estimated: Boolean = false, indexed: Boolean = true, purpose: String? = null) = ArchiveRecord(
-        station = "st-1",
+        thing = "st-1",
         name = name,
         bytes = 100,
         crc32 = 1,

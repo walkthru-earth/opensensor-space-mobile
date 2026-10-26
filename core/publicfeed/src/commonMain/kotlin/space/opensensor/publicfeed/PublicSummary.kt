@@ -1,7 +1,7 @@
 package space.opensensor.publicfeed
 
 import space.opensensor.airquality.MoodBlock
-import space.opensensor.airquality.StationSummary
+import space.opensensor.airquality.ThingSummary
 
 /**
  * The public summary of one cell. The windows of its feed, oldest first (7 days, 24 hours, last hour),
@@ -15,12 +15,12 @@ import space.opensensor.airquality.StationSummary
 object PublicSummary {
     val ORDER: List<FeedWindow> = listOf(FeedWindow.WEEK, FeedWindow.DAY, FeedWindow.LAST_HOUR)
 
-    fun of(property: FeedProperty, windows: Map<FeedWindow, CellRow?>, offered: List<FeedWindow> = ORDER): StationSummary {
+    fun of(property: FeedProperty, windows: Map<FeedWindow, CellRow?>, offered: List<FeedWindow> = ORDER): ThingSummary {
         val id = property.id
         val who = property.scale?.let { StepScale.of(id, it) }?.who
         val value = windows[FeedWindow.DAY]?.mean(id)?.takeIf { it.isFinite() }
         val history = ORDER.filter { it in offered }.map { windows[it]?.mean(id) }
-        return StationSummary(
+        return ThingSummary(
             propertyId = id,
             value = value,
             unit = property.unit,

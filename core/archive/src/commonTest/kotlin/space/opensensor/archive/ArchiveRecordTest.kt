@@ -7,9 +7,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ArchiveRecordTest {
-    private val station = "s"
+    private val thing = "s"
     private fun record(name: String, utcRows: Long? = null, first: Long? = null, last: Long? = null, estFirst: Long? = null, estLast: Long? = null, purpose: String? = "telemetry", error: String? = null) =
-        ArchiveRecord(station, name, 1, 1, "sha", 1, "d", indexedAtEpochMs = 1, indexError = error, purpose = purpose, utcRows = utcRows, firstUtcNs = first, lastUtcNs = last, estFirstUtcNs = estFirst, estLastUtcNs = estLast)
+        ArchiveRecord(thing, name, 1, 1, "sha", 1, "d", indexedAtEpochMs = 1, indexError = error, purpose = purpose, utcRows = utcRows, firstUtcNs = first, lastUtcNs = last, estFirstUtcNs = estFirst, estLastUtcNs = estLast)
 
     @Test
     fun `the timeline uses real UTC when the file has it and the estimate otherwise`() {
@@ -68,11 +68,11 @@ class ArchiveRecordTest {
         val noEnd = record("n.parquet", utcRows = 3, first = 100)
         val lowEnd = record("lo.parquet", utcRows = 1, first = Long.MIN_VALUE, last = Long.MIN_VALUE)
         val end = record("e.parquet", utcRows = 1, first = 1, last = 5)
-        assertEquals(mapOf<String, Long?>(station to null), ArchiveIndex.latestTimedEnds(listOf(noEnd)))
-        assertEquals(mapOf<String, Long?>(station to Long.MIN_VALUE), ArchiveIndex.latestTimedEnds(listOf(noEnd, lowEnd)))
-        assertEquals(mapOf<String, Long?>(station to Long.MIN_VALUE), ArchiveIndex.latestTimedEnds(listOf(lowEnd, noEnd)))
-        assertEquals(mapOf<String, Long?>(station to 5L), ArchiveIndex.latestTimedEnds(listOf(noEnd, end, lowEnd)))
-        assertEquals(mapOf<String, Long?>(station to 5L), ArchiveIndex.latestTimedEnds(listOf(end, noEnd)))
+        assertEquals(mapOf<String, Long?>(thing to null), ArchiveIndex.latestTimedEnds(listOf(noEnd)))
+        assertEquals(mapOf<String, Long?>(thing to Long.MIN_VALUE), ArchiveIndex.latestTimedEnds(listOf(noEnd, lowEnd)))
+        assertEquals(mapOf<String, Long?>(thing to Long.MIN_VALUE), ArchiveIndex.latestTimedEnds(listOf(lowEnd, noEnd)))
+        assertEquals(mapOf<String, Long?>(thing to 5L), ArchiveIndex.latestTimedEnds(listOf(noEnd, end, lowEnd)))
+        assertEquals(mapOf<String, Long?>(thing to 5L), ArchiveIndex.latestTimedEnds(listOf(end, noEnd)))
         assertEquals(emptyMap<String, Long?>(), ArchiveIndex.latestTimedEnds(listOf(record("u.parquet"))))
     }
 
@@ -90,6 +90,6 @@ class ArchiveRecordTest {
         index.put(record("late.parquet", 1, 500, 600))
         index.put(record("early.parquet", 0, estFirst = 100, estLast = 150))
         index.put(record("off.parquet", 1, 5_000, 6_000))
-        assertEquals(listOf("early.parquet", "late.parquet"), index.timeline(station, 0, 1_000).map { it.name })
+        assertEquals(listOf("early.parquet", "late.parquet"), index.timeline(thing, 0, 1_000).map { it.name })
     }
 }

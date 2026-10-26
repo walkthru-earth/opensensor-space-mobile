@@ -24,7 +24,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Where the derived layer lives, `cacheDir/derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json`
+ * Where the derived layer lives, `cacheDir/derived/v1/<thing>/day=YYYY-MM-DD.parquet` + `.manifest.json`
  * ([ArchiveLayout]). Never inside `archive/`. It is a cache the OS or the quota may clear, the derive
  * pass and [HistoryDeriver.ensureDailyFiles] rebuild it from the archive (#61).
  */
@@ -44,10 +44,10 @@ class DerivedStore(
     /** Receipt and target replacement share one short lock with opening a read descriptor. */
     internal val commitLock = Any()
 
-    fun dayFile(station: String, epochDay: Long): File = File(base, ArchiveLayout.derivedDayPath(station, epochDay))
-    fun manifestFile(station: String, epochDay: Long): File = File(base, ArchiveLayout.derivedManifestPath(station, epochDay))
+    fun dayFile(thing: String, epochDay: Long): File = File(base, ArchiveLayout.derivedDayPath(thing, epochDay))
+    fun manifestFile(thing: String, epochDay: Long): File = File(base, ArchiveLayout.derivedManifestPath(thing, epochDay))
 
-    /** Every daily file on this phone, as (station, file). */
+    /** Every daily file on this phone, as (thing, file). */
     fun listAll(): List<Pair<String, File>> =
         (root.listFiles { f -> f.isDirectory } ?: emptyArray()).flatMap { dir -> (dir.listFiles { f -> f.isFile && f.extension == "parquet" } ?: emptyArray()).map { dir.name to it } }
 
@@ -69,12 +69,12 @@ class DerivedStore(
  */
 @Singleton
 class RoomDerivedDayFiles @Inject constructor(private val store: DerivedStore, private val dayDao: DerivedDayDao) : DerivedDayFiles {
-    override suspend fun open(station: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): LocalRangeSource? {
-        val day = dayDao.get(station, epochDay) ?: return null
+    override suspend fun open(thing: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): LocalRangeSource? {
+        val day = dayDao.get(thing, epochDay) ?: return null
         val signature = HistoryDeriver.signatureOf(sources)
         if (day.dailyFile == null || day.sourceSignature != signature) return null
         return synchronized(store.commitLock) {
-            val manifest = store.manifestFile(station, epochDay)
+            val manifest = store.manifestFile(thing, epochDay)
             val receipt = try {
                 if (!manifest.isFile || manifest.length() > 1_048_576) return@synchronized null
                 Json.decodeFromString<DailyManifest>(manifest.readText())
@@ -82,8 +82,8 @@ class RoomDerivedDayFiles @Inject constructor(private val store: DerivedStore, p
                 return@synchronized null
             }
             // A file from an older builder may store UTC in another unit or layout, so it is rebuilt.
-            if (receipt.builder != DailyParquetBuilder.BUILDER || receipt.sourceSignature != signature || receipt.station != station || receipt.day != DerivedStore.dayLabel(epochDay)) return@synchronized null
-            val file = store.dayFile(station, epochDay)
+            if (receipt.builder != DailyParquetBuilder.BUILDER || receipt.sourceSignature != signature || receipt.thing != thing || receipt.day != DerivedStore.dayLabel(epochDay)) return@synchronized null
+            val file = store.dayFile(thing, epochDay)
             // LocalRangeSource opens its channel in the constructor. A later replace cannot change
             // this descriptor's bytes after the lock is released.
             if (file.isFile) LocalRangeSource(file) else null
@@ -93,9 +93,9 @@ class RoomDerivedDayFiles @Inject constructor(private val store: DerivedStore, p
 
 @Serializable
 data class DailyManifest(
-    val station: String,
+    val thing: String,
     val day: String,
-    /** Verified device files the day was built from (`archive/<station>/<name>`), in time order. */
+    /** Verified device files the day was built from (`archive/<thing>/<name>`), in time order. */
     val sources: List<Source>,
     val rows: Int,
     val columns: List<String>,
@@ -126,18 +126,18 @@ class DailyDerivedPass(val pass: DayPassResult, val daily: DailyBuildResult?)
 class DailyDerivedBuilder(
     private val store: DerivedStore,
     private val templates: FileTemplates = FileTemplates.BUNDLED,
-    private val fileFor: (station: String, name: String) -> File,
+    private val fileFor: (thing: String, name: String) -> File,
 ) {
     /** The daily file alone, as the export's rebuild of an evicted file needs it. Throws when a source fails. */
     fun build(
-        station: String,
+        thing: String,
         epochDay: Long,
         sources: List<ArchivedFile>,
         sourceSignature: String,
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long = System.currentTimeMillis() / 1000,
     ): DailyBuildResult? {
-        val run = pass(station, epochDay, sources, sourceSignature, anchors, nowEpochS, tiers = false)
+        val run = pass(thing, epochDay, sources, sourceSignature, anchors, nowEpochS, tiers = false)
         run.pass.dailyError?.let { throw it }
         return run.daily
     }
@@ -148,7 +148,7 @@ class DailyDerivedBuilder(
      * [DayPassResult.dailyError] says why.
      */
     fun pass(
-        station: String,
+        thing: String,
         epochDay: Long,
         sources: List<ArchivedFile>,
         sourceSignature: String,
@@ -157,10 +157,10 @@ class DailyDerivedBuilder(
         tiers: Boolean = true,
     ): DailyDerivedPass {
         // The pass opens and closes one source at a time (#61).
-        val daily = sources.map { source -> DailyParquetSource(source.toRecord()) { ParquetFile.open(fileFor(source.station, source.name)) } }
-        val target = store.dayFile(station, epochDay)
+        val daily = sources.map { source -> DailyParquetSource(source.toRecord()) { ParquetFile.open(fileFor(source.thing, source.name)) } }
+        val target = store.dayFile(thing, epochDay)
         val atomic = store.atomic
-        val manifestFile = store.manifestFile(station, epochDay)
+        val manifestFile = store.manifestFile(thing, epochDay)
         var tmp: File? = null
         var decoded: DayPassResult? = null
         try {
@@ -177,13 +177,13 @@ class DailyDerivedBuilder(
                     }
                     override fun flush() { buffered.flush(); output.fd.sync() }
                 }
-                DayPass.run(station, epochDay, daily, sink, anchors, nowEpochS, tiers, templates = templates).also { decoded = it }
+                DayPass.run(thing, epochDay, daily, sink, anchors, nowEpochS, tiers, templates = templates).also { decoded = it }
             }
             val result = pass.daily ?: return DailyDerivedPass(pass, null)
             // The writer counted the rows, the synced length says every byte reached the file. No footer re-parse.
             check(temporary.length() == written) { "derived file is short" }
             val manifest = DailyManifest(
-                station = station,
+                thing = thing,
                 day = DerivedStore.dayLabel(epochDay),
                 sources = result.sources.map { s -> DailyManifest.Source(s.record.name, s.record.bytes, s.record.crc32, s.record.sha256, s.rowsUsed, s.timeAnchor) },
                 rows = result.rows,
@@ -205,7 +205,7 @@ class DailyDerivedBuilder(
         } catch (e: Exception) {
             // Decode without a sink only if cache setup failed before the pass. A later write or commit
             // failure keeps the buckets from that same pass, so no source is opened twice.
-            val pass = decoded ?: DayPass.run(station, epochDay, daily, null, anchors, nowEpochS, tiers, templates = templates)
+            val pass = decoded ?: DayPass.run(thing, epochDay, daily, null, anchors, nowEpochS, tiers, templates = templates)
             return DailyDerivedPass(DayPassResult(pass.buckets, null, pass.rowsRead, pass.failedSources, e), null)
         } finally {
             tmp?.delete()

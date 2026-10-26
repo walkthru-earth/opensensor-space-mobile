@@ -4,7 +4,7 @@ import OpenSensorShared
 import Synchronization
 
 enum LanFailure: Error {
-    case invalidReply, credentialsUnavailable, enrollmentRequired, stationChanged, hardwareChanged, authentication,
+    case invalidReply, credentialsUnavailable, enrollmentRequired, thingChanged, hardwareChanged, authentication,
         busy, timeout, disconnected
 
     /// The words for a session that failed or ended. The shared state shows Android's wording.
@@ -13,7 +13,7 @@ enum LanFailure: Error {
         case .invalidReply: return .verificationFailed
         case .credentialsUnavailable: return .tokenFailed
         case .enrollmentRequired: return .enrollOverBluetooth
-        case .stationChanged: return .stationChanged
+        case .thingChanged: return .thingChanged
         case .hardwareChanged: return .hardwareChanged
         case .authentication: return .tokenNeedsBluetooth
         case .busy: return .busy
@@ -34,7 +34,7 @@ enum LanFailure: Error {
 /// Who a collection talks to, read from HELLO or INFO.
 struct CollectTarget: Sendable {
     let boot: String?
-    let station: String
+    let thing: String
     let device: String
     let maxRead: Int32
     let mtu: Int32
@@ -45,7 +45,7 @@ extension IosLink: @retroactive @unchecked Sendable {
     /// The only way Swift makes a link. Its identity is bound before any other domain can see it.
     static func make(port: any IosLinkPort, overWifi: Bool, identity: SyncIdentity) -> IosLink {
         let link = IosLink(port: port, overWifi: overWifi, address: identity.device)
-        link.identify(station: identity.station, boot: identity.boot, maxRead: identity.maxRead)
+        link.identify(thing: identity.thing, boot: identity.boot, maxRead: identity.maxRead)
         // Waits for the link to open, then asks for the board template only when no known one matches.
         link.fetchBoardTemplate(dict: identity.dict, desc: identity.desc)
         return link
@@ -172,7 +172,7 @@ actor LanSession {
             let identity = wire.identity(json: hello.json)
         else { throw LanFailure.invalidReply }
         guard identity.device == credential.device else { throw LanFailure.hardwareChanged }
-        guard identity.station == credential.station else { throw LanFailure.stationChanged }
+        guard identity.thing == credential.thing else { throw LanFailure.thingChanged }
         frames.cap = Int(hello.count)
         payloadMax = Int(hello.count)
         self.identity = identity
@@ -180,7 +180,7 @@ actor LanSession {
         startHeartbeat()
     }
 
-    /// HELLO payload after the token and saved station/hardware identity were verified.
+    /// HELLO payload after the token and saved thing/hardware identity were verified.
     func infoJson() -> String? { closed ? nil : verifiedInfo }
 
     func requestStatus() {
@@ -192,7 +192,7 @@ actor LanSession {
     func target() -> CollectTarget? {
         guard let identity, !closed else { return nil }
         return CollectTarget(
-            boot: identity.boot, station: identity.station, device: identity.device, maxRead: identity.maxRead, mtu: Int32(payloadMax + 3))
+            boot: identity.boot, thing: identity.thing, device: identity.device, maxRead: identity.maxRead, mtu: Int32(payloadMax + 3))
     }
 
     /// The shared link for this socket, made once after HELLO and kept until the socket closes. Nil

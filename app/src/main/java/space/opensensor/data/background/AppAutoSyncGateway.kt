@@ -51,7 +51,7 @@ class AppAutoSyncGateway @Inject constructor(
         override suspend fun sync(device: KnownDevice, link: AutoSyncLink): BackgroundSyncResult = syncOwned(device, link, owner, protection, stopSource)
     }
 
-    override suspend fun browseLan(stations: Set<String>, timeoutMs: Long): Map<String, LanDevice> {
+    override suspend fun browseLan(things: Set<String>, timeoutMs: Long): Map<String, LanDevice> {
         if (!LanPermission.isGranted(context)) {
             Log.i(TAG, "LAN permission not granted; Bluetooth only")
             return emptyMap()
@@ -69,9 +69,9 @@ class AppAutoSyncGateway @Inject constructor(
                 lanDiscovery.discover().collect { ev ->
                     when (ev) {
                         is LanDiscovery.Event.Devices -> {
-                            latest = ev.devices.values.filter { it.isConnectable }.associateBy { it.station!! }
+                            latest = ev.devices.values.filter { it.isConnectable }.associateBy { it.thing!! }
                             // Everything we came for is resolved: stop browsing early.
-                            if (stations.all { it in latest }) throw BrowseDone()
+                            if (things.all { it in latest }) throw BrowseDone()
                         }
                         is LanDiscovery.Event.Failed -> {
                             Log.i(TAG, "mDNS browse failed: ${ev.message}")

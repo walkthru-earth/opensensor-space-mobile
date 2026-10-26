@@ -106,7 +106,7 @@ data class DevicesPlatform(
  * controller and the permission dialogs.
  *
  * Bluetooth is asked for only from a tap on Scan or Collect from all. Opening a sensor never asks,
- * see [openStation]. Once it is allowed and the radio is on, the screen scans while it is visible
+ * see [openThing]. Once it is allowed and the radio is on, the screen scans while it is visible
  * and stops when it leaves.
  */
 @Composable
@@ -131,7 +131,7 @@ fun MyDevicesScreen(
         onStopOrDispose { onAction(DevicesAction.StopScan) }
     }
 
-    fun open(id: String, name: String?) = openStation(id, name, bluetooth, onAction)
+    fun open(id: String, name: String?) = openThing(id, name, bluetooth, onAction)
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -278,7 +278,7 @@ fun MyDevicesScreen(
                 items(list.wifiOnly, key = { "w:" + it.name }) { sensor -> WifiOnlyRow(sensor, level) }
             }
 
-            // Several sensors, one pass over all of them, Wi-Fi first, then Bluetooth, one link per station.
+            // Several sensors, one pass over all of them, Wi-Fi first, then Bluetooth, one link per thing.
             if (state.showCollectAll) {
                 item(key = "collect") {
                     CollectAllRow(
@@ -302,12 +302,12 @@ fun MyDevicesScreen(
 internal const val SCAN_BUTTON_TAG = "devices-scan"
 
 /**
- * Opens a station from My devices. It never asks for Bluetooth, so a Deny is never asked again on
- * the next tap (#147). The station opens on the phone archive and connects only over a link that is
+ * Opens a thing from My devices. It never asks for Bluetooth, so a Deny is never asked again on
+ * the next tap (#147). The thing opens on the phone archive and connects only over a link that is
  * ready now, Bluetooth when it is allowed and on, else Wi-Fi when the platform has one. Reconnect in
- * the station header is the tap that asks for Bluetooth.
+ * the thing header is the tap that asks for Bluetooth.
  */
-internal fun openStation(id: String, name: String?, bluetooth: RuntimeAccess, onAction: (DevicesAction) -> Unit) {
+internal fun openThing(id: String, name: String?, bluetooth: RuntimeAccess, onAction: (DevicesAction) -> Unit) {
     onAction(DevicesAction.Open(id, name, connect = bluetooth.ready))
 }
 

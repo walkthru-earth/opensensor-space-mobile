@@ -55,7 +55,7 @@ import space.opensensor.files.filesTitle
 import space.opensensor.history.HistoryController
 import space.opensensor.history.HistoryScreen
 import space.opensensor.history.HistoryTopBar
-import space.opensensor.history.archiveStations
+import space.opensensor.history.archiveThings
 import space.opensensor.history.historyTitle
 import space.opensensor.net.UrlSessionRangeEngine
 import space.opensensor.permissions.AccessDialogs
@@ -244,7 +244,7 @@ internal fun AppRoot(
                                 TodayAction.OpenDevice -> nav.push(DeviceKey(key.address))
                                 // Debug borrows the authenticated link for this sensor, whether Wi-Fi or Bluetooth.
                                 TodayAction.OpenDebug -> {
-                                    val lan = today.state.connectedLanForStation(devices.stationFor(key.address))
+                                    val lan = today.state.connectedLanForThing(devices.thingFor(key.address))
                                     val device = lan?.let(today.state.lanInfo::get)?.dev
                                         ?: today.state.info?.dev?.takeIf { today.state.selectedId == key.address }
                                     device?.let { nav.openDebug(it, level.developer) }
@@ -275,11 +275,11 @@ internal fun AppRoot(
                         actions = filesActions,
                         level = level,
                         onBack = { nav.pop() },
-                        onOpenFileMetrics = { station, name -> nav.push(FileMetricsKey(station, name)) },
+                        onOpenFileMetrics = { thing, name -> nav.push(FileMetricsKey(thing, name)) },
                     )
                 }
                 entry<FileMetricsKey> { key ->
-                    FileMetricsEntry(station = key.station, name = key.name, level = level, onBack = { nav.pop() })
+                    FileMetricsEntry(thing = key.thing, name = key.name, level = level, onBack = { nav.pop() })
                 }
                 entry<DebugKey> { key ->
                     val controller = viewModel(key = "debug-${key.address}") { DebugHolder(key.address, devices.state, openDebugLink) }.controller
@@ -439,22 +439,22 @@ private fun DiscoverEntry(networkAllowed: Boolean, source: DiscoverSource, level
 
 /**
  * History reads the same offline index the sync runner writes. A sensor entry offers only that
- * sensor's station generations; the My devices shortcut offers the whole phone archive.
+ * sensor's thing generations; the My devices shortcut offers the whole phone archive.
  */
 private class HistoryHolder(address: String, devices: DevicesBridge) : ViewModel() {
     private val wholePhone = address == PHONE_ARCHIVE
-    private val stations = if (wholePhone) {
-        IosArchive.index.observeAll().map(::archiveStations)
+    private val things = if (wholePhone) {
+        IosArchive.index.observeAll().map(::archiveThings)
     } else {
-        devices.known.map { devices.stationsFor(address).asReversed() }
+        devices.known.map { devices.thingsFor(address).asReversed() }
     }
     val controller = HistoryController(
         scope = viewModelScope,
         reader = IosArchive.reader,
         tiers = IosArchive.tiers,
         index = IosArchive.index,
-        currentStation = if (wholePhone) stations.map { it.lastOrNull() } else devices.known.map { devices.stationFor(address) },
-        stations = stations,
+        currentThing = if (wholePhone) things.map { it.lastOrNull() } else devices.known.map { devices.thingFor(address) },
+        things = things,
     )
 }
 
@@ -475,7 +475,7 @@ private fun HistoryEntry(address: String, devices: DevicesBridge, units: UnitSys
 }
 
 /**
- * Sensor Files has a station owner and device manifest; the My devices shortcut has no owner and
+ * Sensor Files has a thing owner and device manifest; the My devices shortcut has no owner and
  * shows the whole phone archive. Exports stage into a temporary run removed after the sheet closes.
  */
 private class FilesHolder(address: String, devices: DevicesBridge, actions: DeviceFilesActions) : ViewModel() {
@@ -485,7 +485,7 @@ private class FilesHolder(address: String, devices: DevicesBridge, actions: Devi
         index = IosArchive.index,
         space = IosExportSpace.inTemporaryDirectory(),
         // A forgotten sensor must never fall through to the whole-phone archive.
-        owner = if (address == PHONE_ARCHIVE) flowOf(null) else devices.known.map { devices.stationFor(address) ?: "" },
+        owner = if (address == PHONE_ARCHIVE) flowOf(null) else devices.known.map { devices.thingFor(address) ?: "" },
         daily = null,
     )
     val sensor = if (address == PHONE_ARCHIVE) null else IosDeviceFiles(address, devices, actions, viewModelScope)
@@ -520,9 +520,9 @@ private fun FilesEntry(
 
 /** The inspector of one archived file. It only reads the file. */
 @Composable
-private fun FileMetricsEntry(station: String, name: String, level: DetailLevel, onBack: () -> Unit) {
-    val controller = viewModel(key = "$station/$name") { FileMetricsHolder() }.controller
-    LaunchedEffect(station, name) { controller.load(station, name) }
+private fun FileMetricsEntry(thing: String, name: String, level: DetailLevel, onBack: () -> Unit) {
+    val controller = viewModel(key = "$thing/$name") { FileMetricsHolder() }.controller
+    LaunchedEffect(thing, name) { controller.load(thing, name) }
     val state by controller.state.collectAsState()
     val rows by controller.rows.collectAsState()
     FileMetricsScreen(state = state, level = level, name = name, rows = rows, onRowPage = controller::page, onBack = onBack)

@@ -27,19 +27,19 @@ import kotlin.test.assertTrue
  * so the time estimates wait for a History pass in flight and the derive comes after them.
  */
 class ClockAnchorFollowUpTest {
-    /** An empty index that counts the estimate's station reads, the first thing an estimate does. */
+    /** An empty index that counts the estimate's thing reads, the first thing an estimate does. */
     private class CountingIndex : ArchiveIndex {
-        var stationReads = 0
+        var thingReads = 0
         override fun observeAll(): Flow<List<ArchiveRecord>> = MutableStateFlow(emptyList())
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = MutableStateFlow(emptyList())
+        override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = MutableStateFlow(emptyList())
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = null
         override suspend fun put(record: ArchiveRecord) = error("the estimate of an empty index writes nothing")
         override suspend fun remove(key: ArchiveKey) = error("the estimate of an empty index removes nothing")
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = emptyList()
-        override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = emptyList()
-        override suspend fun stations(): List<String> {
-            stationReads++
+        override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
+        override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = emptyList()
+        override suspend fun things(): List<String> {
+            thingReads++
             return emptyList()
         }
     }
@@ -53,7 +53,7 @@ class ClockAnchorFollowUpTest {
         val history = HistoryOrchestrator(ArchiveIndexRepair(IosArchiveStore("$base/final", "$base/partial", dispatcher), index, io = dispatcher), index)
         val events = ArrayList<String>()
         val followUp = clockAnchorFollowUp(CoroutineScope(backgroundScope.coroutineContext + dispatcher), history) {
-            history.derivePass { events += "derive after ${index.stationReads} estimate" }
+            history.derivePass { events += "derive after ${index.thingReads} estimate" }
         }
 
         val inPass = CompletableDeferred<Unit>()
@@ -63,7 +63,7 @@ class ClockAnchorFollowUpTest {
 
         followUp.request()
         runCurrent()
-        assertEquals(0, index.stationReads, "the estimates wait for the pass in flight")
+        assertEquals(0, index.thingReads, "the estimates wait for the pass in flight")
         assertTrue(events.isEmpty(), "the derive waits for the estimates")
 
         endPass.complete(Unit)

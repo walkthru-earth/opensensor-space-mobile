@@ -21,7 +21,7 @@ class DeviceCapabilitiesTest {
 
     @Test fun waveshareHasEveryCapability() {
         val caps = DeviceCapabilities.from(waveshare)
-        assertEquals(Family.AIR, caps.station?.profile?.family)
+        assertEquals(Family.AIR, caps.thing?.profile?.family)
         assertEquals("ambient_temperature_c", caps.temperature?.name)
         assertTrue(caps.ambientTemperature)
         assertEquals("relative_humidity_percent", caps.humidity?.name)
@@ -33,10 +33,10 @@ class DeviceCapabilitiesTest {
         assertFalse(caps.showsBatchEstimate(null))
     }
 
-    @Test fun unknownDictionaryHasNoStationAndNothingIsGuessed() {
+    @Test fun unknownDictionaryHasNoThingAndNothingIsGuessed() {
         val live = LiveSample.parse("""{"pms":4,"pm25":7.0,"t":22.0,"rh":50.0,"bstate":2}""")
         val caps = DeviceCapabilities.from(waveshare.copy(dict = "0".repeat(64)))
-        assertNull(caps.station)
+        assertNull(caps.thing)
         assertNull(caps.reading(live))
         assertFalse(caps.sensorIdentity, "identity comes from the template column, never the schema string")
         assertFalse(caps.batchEstimate, "an unknown dictionary must not show the estimate")
@@ -45,13 +45,13 @@ class DeviceCapabilitiesTest {
         assertNull(caps.temperature)
     }
 
-    @Test fun infoWithoutADictionaryHasNoStation() {
-        assertNull(DeviceCapabilities.from(DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5")).station)
+    @Test fun infoWithoutADictionaryHasNoThing() {
+        assertNull(DeviceCapabilities.from(DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5")).thing)
     }
 
     @Test fun protocolV1IsNotConfigurable() {
         val caps = DeviceCapabilities.from(cores3)
-        assertNotNull(caps.station)
+        assertNotNull(caps.thing)
         assertFalse(caps.configurable)
         assertFalse(caps.sensorIdentity)
         assertFalse(DeviceCapabilities.from(DeviceInfo(schema = "x")).configurable, "absent proto reads as v1")
@@ -79,7 +79,7 @@ class DeviceCapabilitiesTest {
     @Test fun aRetiredWaveshareDictionaryHasNoBatchEstimate() {
         val v4 = "0a024b85c632f621c0e1223f1ecafe3a9c4524a1ec3c0d03d910d191aaee2f82"
         val caps = DeviceCapabilities.from(DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v4", dict = v4))
-        assertNull(caps.station)
+        assertNull(caps.thing)
         assertFalse(caps.batchEstimate)
     }
 }

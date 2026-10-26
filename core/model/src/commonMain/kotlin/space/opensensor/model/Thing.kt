@@ -1,11 +1,11 @@
 package space.opensensor.model
 
 /**
- * What the app reads from a station Collection (stac-opensensor station profile). Column titles,
+ * What the app reads from a thing Collection (stac-opensensor thing profile). Column titles,
  * the scale each column points at and the scales themselves. [dict] and [desc] come from the
  * `file:checksum` of its two `describedby` links, the dictionary and the board template.
  */
-data class StationCollection(
+data class ThingCollection(
     val id: String,
     val title: String? = null,
     val license: String? = null,
@@ -19,18 +19,18 @@ data class StationCollection(
 ) {
     companion object {
         /**
-         * Parses a station Collection. Unknown fields are ignored.
+         * Parses a thing Collection. Unknown fields are ignored.
          *
-         * @throws IllegalArgumentException when the JSON is not a station Collection.
+         * @throws IllegalArgumentException when the JSON is not a thing Collection.
          */
-        fun parse(json: String): StationCollection = ModelJson.parseCollection(json)
+        fun parse(json: String): ThingCollection = ModelJson.parseCollection(json)
     }
 }
 
-/** One datastream of a [Station], with the presentation the station and its profile give it. */
-data class StationDatastream(
+/** One datastream of a [Thing], with the presentation the thing and its profile give it. */
+data class ThingDatastream(
     val datastream: Datastream,
-    /** Column `title` from the station Collection. */
+    /** Column `title` from the thing Collection. */
     val title: String?,
     /** Profile label, if the profile has one. */
     val profileLabel: LocalizedText?,
@@ -43,16 +43,16 @@ data class StationDatastream(
 ) {
     val name: String get() = datastream.name
 
-    /** The profile label in [language], else the station title, else the column name. */
+    /** The profile label in [language], else the thing title, else the column name. */
     fun label(language: String): String = profileLabel?.get(language) ?: title ?: datastream.name
 }
 
 /**
- * A station joined from one board template, one app profile and the station Collection. Construct it
+ * A thing joined from one board template, one app profile and the thing Collection. Construct it
  * with [join].
  */
-class Station private constructor(
-    /** Station UUID from the file footer or `info`. */
+class Thing private constructor(
+    /** Thing UUID from the file footer or `info`. */
     val uuid: String,
     val deviceId: Long?,
     /** H3 cell of the owner's chosen resolution, never a coordinate. */
@@ -60,18 +60,18 @@ class Station private constructor(
     val template: BoardTemplate,
     /** The bundled profile for [dict], else one derived from [template]. */
     val profile: AppProfile,
-    val collection: StationCollection?,
+    val collection: ThingCollection?,
     /** The interval the device reports at runtime, from `info` or the file footer. */
     val runtimeSampleIntervalS: Double?,
 ) {
     val dict: String get() = template.dict
 
-    /** Seconds between samples for the station as a whole, [sampleIntervalFor] without a file footer. */
+    /** Seconds between samples for the thing as a whole, [sampleIntervalFor] without a file footer. */
     val sampleIntervalS: Double get() = sampleIntervalFor(footerSampleIntervalMs = null)
 
     /**
      * Seconds between samples in one file. The file footer `acquisition.sample_interval_ms` wins, then the runtime
-     * value, then the station Collection, then the template default. Valid and expected row counts
+     * value, then the thing Collection, then the template default. Valid and expected row counts
      * use this. A value of zero or less counts as absent.
      */
     fun sampleIntervalFor(footerSampleIntervalMs: Long?): Double =
@@ -81,9 +81,9 @@ class Station private constructor(
             ?: template.defaultSampleIntervalS
 
     /** Every datastream in template order, whatever its role. The profile picks what is shown first. */
-    val datastreams: List<StationDatastream> = template.datastreams.map { ds ->
+    val datastreams: List<ThingDatastream> = template.datastreams.map { ds ->
         val scaleId = collection?.columnScales?.get(ds.name)
-        StationDatastream(
+        ThingDatastream(
             datastream = ds,
             title = collection?.columnTitles?.get(ds.name),
             profileLabel = profile.labels[ds.name],
@@ -94,24 +94,24 @@ class Station private constructor(
         )
     }
 
-    private val byName: Map<String, StationDatastream> = datastreams.associateBy { it.name }
+    private val byName: Map<String, ThingDatastream> = datastreams.associateBy { it.name }
 
     /** The profile's primary columns that this template has and the profile does not hide, in profile order. */
-    val primary: List<StationDatastream> = profile.primary.filter { it !in profile.hidden }.mapNotNull { byName[it] }
+    val primary: List<ThingDatastream> = profile.primary.filter { it !in profile.hidden }.mapNotNull { byName[it] }
 
-    fun datastream(name: String): StationDatastream? = byName[name]
+    fun datastream(name: String): ThingDatastream? = byName[name]
 
-    /** What LIVE shows for this station. */
+    /** What LIVE shows for this thing. */
     val live: LiveColumns = LiveColumns.of(template, profile)
 
     /** The datastream a LIVE [key] carries, or null for a key the template does not map. */
-    fun datastreamForLiveKey(key: String): StationDatastream? = template.columnForLiveKey(key)?.let { byName[it] }
+    fun datastreamForLiveKey(key: String): ThingDatastream? = template.columnForLiveKey(key)?.let { byName[it] }
 
     companion object {
         private const val MS_PER_S = 1000.0
 
         /**
-         * Joins [template] with [profile] and the station [collection]. A profile for another
+         * Joins [template] with [profile] and the thing [collection]. A profile for another
          * dictionary, a missing one, or one with none of its primary columns in [template] is replaced
          * by [AppProfile.derive], so an unknown digest still renders.
          */
@@ -119,11 +119,11 @@ class Station private constructor(
             uuid: String,
             template: BoardTemplate,
             profile: AppProfile? = null,
-            collection: StationCollection? = null,
+            collection: ThingCollection? = null,
             deviceId: Long? = null,
             h3Cell: String? = null,
             runtimeSampleIntervalS: Double? = null,
-        ): Station = Station(
+        ): Thing = Thing(
             uuid = uuid,
             deviceId = deviceId,
             h3Cell = h3Cell,
