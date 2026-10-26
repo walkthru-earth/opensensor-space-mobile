@@ -15,9 +15,15 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.settings.DetailLevel
+import earth.walkthru.opensensor.device.resources.Res
+import earth.walkthru.opensensor.device.resources.lan_reconnect_ble
+import earth.walkthru.opensensor.device.resources.msg_busy
+import earth.walkthru.opensensor.device.resources.msg_secret_needs_bluetooth
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
+import org.jetbrains.compose.resources.getString
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -50,6 +56,13 @@ class DeviceConfigEffectsTest {
     private var reconnects = 0
 
     private fun ComposeUiTest.showEffects() {
+        // The first string read loads Compose resources in real time, about 5 s on the simulator.
+        // Pay it here, untimed, so the timed wait in [show] does not race the cold load.
+        runBlocking {
+            getString(Res.string.msg_secret_needs_bluetooth)
+            getString(Res.string.lan_reconnect_ble)
+            getString(Res.string.msg_busy)
+        }
         setContent {
             val scope = rememberCoroutineScope()
             val controller = remember { DeviceConfigController(scope, source, flowOf(DetailLevel.SIMPLE)) }
@@ -64,12 +77,14 @@ class DeviceConfigEffectsTest {
 
     /**
      * Sends [notice] and waits until [text] shows. The snackbar text comes from Compose resources,
-     * and their first load runs in real time, off the test clock. On a slow CI runner that took
-     * longer than a fixed number of clock steps, so this waits on the wall clock instead, up to
-     * [SHOW_TIMEOUT_MS]. A short snackbar stays for 4 s of test clock, long enough to find it.
+     * which load in real time, off the test clock. [showEffects] warms them, and this still waits
+     * on the wall clock, up to [SHOW_TIMEOUT_MS], in case a load is slow on CI. A short snackbar
+     * stays for 4 s of test clock, and the wait sees it one frame after it shows.
      */
     private fun ComposeUiTest.show(notice: DeviceConfigNotice, text: String) {
-        // The notice is not replayed, so a send before the controller collects would be lost.
+        // Guards the source to controller hop only. The source does not replay, so a send before the
+        // controller collects would be lost. The controller to DeviceConfigEffects hop starts in
+        // the same composition, and the waitForIdle in [showEffects] covers it.
         waitUntil("the controller collects notices", SHOW_TIMEOUT_MS) { source.notices.subscriptionCount.value > 0 }
         source.notices.tryEmit(notice)
         waitUntil("a snackbar reads \"$text\"", SHOW_TIMEOUT_MS) {
@@ -97,7 +112,11 @@ class DeviceConfigEffectsTest {
     }
 
     private companion object {
-        /** Wall clock time for one wait. Locally the first snackbar shows within a few frames. */
-        const val SHOW_TIMEOUT_MS = 10_000L
+        /**
+         * Wall clock time for one wait. A cold resource load took about 5 s locally and 6.4 s on CI.
+         * With the strings warm the snackbar shows within a few frames. A passing test never waits
+         * the full budget, so this is a wide safety net.
+         */
+        const val SHOW_TIMEOUT_MS = 30_000L
     }
 }
