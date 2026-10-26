@@ -4,6 +4,15 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-26, Thing contract and dictionary v7 templates (code only)
+
+Host tests and the iOS simulator only. No phone run is recorded.
+
+- The bundled templates are byte copies of aq-parquet 9915aec `docs/shared/templates`, CoreS3
+  (`3b4d8500…`, firmware v6.21) and Waveshare (`50a53393…`, firmware v2.15). The two H3 centre
+  columns become `location_source` and `geometry`. The v6 digests are retired.
+- To check on phones. LIVE and History on boards flashed from aq-parquet main.
+
 ## 2026-10-26, History reads template datastreams (code only)
 
 Host tests and the iOS simulator only. No phone run is recorded.
@@ -82,8 +91,8 @@ build and `verify` only. No phone run against the new firmware yet.
   every cached day once.
 - LIVE. `LiveSample` is a map by key name (#185), read through the station of the dictionary digest,
   the bundled board template joined with its app profile (#184). A newer schema keeps its view. Only
-  the current digest of each board is bundled, CoreS3 (`3b4d8500…`) and Waveshare
-  (`50a53393…`). An unknown or older digest syncs files but has no LIVE view. A null key is no
+  the current digest of each board is bundled, CoreS3 (`4f80c26c…`) and Waveshare
+  (`6f567b38…`). An unknown or older digest syncs files but has no LIVE view. A null key is no
   reading now and shows a dash, as does a declared key missing from a sample. Cards follow the
   template declaration, and an overflow sample clears every live value. CoreS3
   board temperature comes from `imu_t`, Waveshare air temperature from `t`. Particle bins show only
