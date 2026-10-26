@@ -24,6 +24,7 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
+            implementation(project(":core:model"))
         }
     }
 }

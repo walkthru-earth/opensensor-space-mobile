@@ -7,7 +7,6 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
-import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.ThemePreviews
@@ -18,15 +17,16 @@ import earth.walkthru.opensensor.today.TodayArchive
 import earth.walkthru.opensensor.today.TodayContent
 import earth.walkthru.opensensor.today.TodaySnapshot
 import earth.walkthru.opensensor.today.TodayUiState
+import space.opensensor.model.BundledCatalog
 
 /** Fake state for previews only. No transport, no Room, no ViewModel. */
 internal object PreviewFakes {
     val info = DeviceInfo(
         proto = 3,
-        fw = "idf-waveshare-parquet-v2.6",
-        schema = "waveshare-sim7670g-telemetry-v4",
-        cols = 56,
-        dict = LiveProfiles.WAVESHARE_DICTIONARY,
+        fw = "idf-waveshare-parquet-v2.7",
+        schema = "waveshare-sim7670g-telemetry-v5",
+        cols = 62,
+        dict = BundledCatalog.templates.first { it.schema.startsWith("waveshare-") }.dict,
         station = "4f1c2a9e-0000-4000-8000-1234567890ab",
         dev = "a1b2c3d4e5f6",
         boot = "0123456789abcdef0123456789abcdef",

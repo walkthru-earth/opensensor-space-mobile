@@ -4,8 +4,8 @@
 The firmware freezes every released LIVE key set in aq-parquet
 tools/fixtures/live_keys/*.json. The app copies them into LiveKeyFixturesTest.
 A digest that is only on the firmware side means a firmware release the app has
-no reviewed profile for, so its live readings fall back to the unreviewed key
-vocabulary (issue #153).
+no bundled board template for, so it shows no live readings until the template
+and profile files are swapped in (issues #153 and #184).
 
 Usage: check_live_key_drift.py <aq-parquet fixtures dir> <LiveKeyFixturesTest.kt>
 """

@@ -44,7 +44,9 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   a code branch or a schema string check in a screen. Today add metrics through
   `history/.../Metrics.kt` (`MetricSpec`), with column, unit, validity gate and
   an optional scale. A missing column produces no value. `:core:model` holds
-  the data model they move onto (#183), callers switch from #184 onward. Read `docs/devices-and-discovery.md` first. New shared types use generic
+  the data model they move onto (#183) and the bundled board templates and app
+  profiles under `core/model/bundled/` (#184). LIVE profiles and the batch
+  estimate read them. The screens switch in #185 and #186. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading`, or a future `MetricCard`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and
   the privacy rules. The phone uses H3 (`publicfeed`, `H3Grid`) for geometry, viewport cover, descendant

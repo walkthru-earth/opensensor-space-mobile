@@ -25,13 +25,13 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
    `HistorySeriesReader.readDerived` scales by the stored unit. `DERIVE_VERSION` 6 rebuilds the
    cache, and Android refuses a manifest from another builder.
 4. Files inspector. Shows the stored unit (ms, us, ns) and scales row group statistics.
-5. LIVE (`:core:protocol`). `LiveProfiles.resolve` by dictionary digest only. `LiveSample.imuT`
-   for CoreS3 `imu_t`, shown as board temperature. Waveshare `t` stays air temperature. Profiles
-   list the board's keys, and Today shows only those particle bins. Unknown keys are ignored and
-   missing keys are null. LIVE `utc` stays nanoseconds. Older dictionaries keep a profile, with
-   CoreS3 v6.11 and earlier reading board temperature from `t`. The current CoreS3 profile falls
-   back to `t` when `imu_t` is missing. Waveshare v2.7 (`67688d0f…`, first build `d0d01294…`) adds
-   `bstate`, the battery health code, which `LiveSample.bstate` parses. Showing it is #90.
+5. LIVE (`:core:protocol`). `LiveProfiles.resolve` by dictionary digest only, through the bundled
+   board templates and app profiles in `:core:model` (#184). `LiveSample.imuT` for CoreS3 `imu_t`,
+   shown as board temperature. Waveshare `t` stays air temperature. Profiles list the board's keys,
+   and Today shows only those particle bins. Unknown keys are ignored and missing keys are null. LIVE
+   `utc` stays nanoseconds. Only the current digest of each board is bundled, so older dictionaries
+   have no LIVE profile. Waveshare v2.7 (`67688d0f…`) adds `bstate`, the battery health code, which
+   `LiveSample.bstate` parses. Showing it is #90.
 6. Watchdog. `LOG_TAIL` watchdog lines are informational. A storage stall reset ends the link,
    and the existing `RetryPolicy` and a fresh LIST resume the run. No code change.
 7. Index reopen. Room v11 and iOS receipt layout 2 reopen indexed rows without UTC rows or an

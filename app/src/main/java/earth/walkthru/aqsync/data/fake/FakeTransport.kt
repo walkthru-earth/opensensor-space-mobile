@@ -6,7 +6,6 @@ import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
-import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
@@ -26,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import space.opensensor.model.BundledCatalog
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.random.Random
@@ -521,8 +521,8 @@ class FakeTransport(
     }
 
     private fun infoJson(): String =
-        """{"proto":3,"fw":"idf-cores3-parquet-v6.12 (fake)","schema":"cores3-telemetry-v5","cols":81,""" +
-            """"dict":"${LiveProfiles.CORES3_DICTIONARY}","station":"$station","dev":"$deviceId","boot":"$bootId","max_read":$maxRead}"""
+        """{"proto":3,"fw":"idf-cores3-parquet-v6.13 (fake)","schema":"cores3-telemetry-v5","cols":81,""" +
+            """"dict":"$CORES3_DICT","station":"$station","dev":"$deviceId","boot":"$bootId","max_read":$maxRead}"""
 
     private fun statusJson(): String =
         """{"up_s":$upSeconds,"int_s":900,"buf":$buffered,"fin":$finalized,"drop":0,"err":0,"miss":0,""" +
@@ -547,6 +547,9 @@ class FakeTransport(
         private const val SD_KIB = 31_166_976L
         private const val LOG_RING = 8192
         private const val LAN_PORT = 47390
+
+        /** The bundled CoreS3 dictionary, so the fake board resolves like a current CoreS3. */
+        private val CORES3_DICT = BundledCatalog.templates.first { it.schema.startsWith("cores3-") }.dict
 
         /** `PAR1` + random body + 4-byte footer length + `PAR1`. Not a real Parquet file, but passes the head/tail check. */
         fun fakeParquet(rnd: Random, size: Int): ByteArray {

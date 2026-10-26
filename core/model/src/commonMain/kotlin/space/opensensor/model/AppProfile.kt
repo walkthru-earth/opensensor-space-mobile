@@ -19,6 +19,12 @@ data class AppProfile(
     val displayStep: Map<String, Double> = emptyMap(),
     /** Column labels by language. */
     val labels: Map<String, LocalizedText> = emptyMap(),
+    /** Unit text per column, such as `µg/m³` for `ug/m3`. A column without one shows its template unit. */
+    val displayUnit: Map<String, String> = emptyMap(),
+    /** Health scale id per column, such as `pm25`, the property id of a published scale. */
+    val scales: Map<String, String> = emptyMap(),
+    /** Columns the board writes but never fills, such as the CoreS3 ambient columns. Never shown, not even in LIVE. */
+    val hidden: Set<String> = emptySet(),
     /** True when [derive] built it from a template, false for a bundled profile. */
     val isDerived: Boolean = false,
 ) {
@@ -41,9 +47,18 @@ data class AppProfile(
         fun parse(json: String): AppProfile = ModelJson.parseProfile(json)
 
         /**
+         * [profile] when it is for [template]'s dictionary and names one of its columns as primary,
+         * else [derive] of [template], so an unknown digest still renders.
+         */
+        fun select(template: BoardTemplate, profile: AppProfile?, titles: Map<String, String> = emptyMap()): AppProfile =
+            profile?.takeIf { p -> p.dict == template.dict && p.primary.any { template.datastream(it) != null } }
+                ?: derive(template, titles)
+
+        /**
          * The default profile of [template], so an unknown dictionary still renders. Its primary
          * reading is the first `physicalMeasurement` column, and labels are [titles] from the station
-         * Collection, else column names.
+         * Collection, else column names. Units stay the template's own and no column gets a scale, so
+         * nothing is guessed.
          */
         fun derive(template: BoardTemplate, titles: Map<String, String> = emptyMap()): AppProfile = AppProfile(
             dict = template.dict,

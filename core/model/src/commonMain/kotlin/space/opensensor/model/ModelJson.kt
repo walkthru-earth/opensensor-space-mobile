@@ -76,6 +76,9 @@ internal object ModelJson {
             hero = dto.hero,
             displayStep = dto.displayStep,
             labels = dto.labels.mapValues { (_, label) -> LocalizedText(label) },
+            displayUnit = dto.displayUnit,
+            scales = dto.scales,
+            hidden = dto.hidden.toSet(),
         )
     }
 
@@ -256,4 +259,7 @@ internal class ProfileDto(
     val hero: String? = null,
     @SerialName("display_step") val displayStep: Map<String, Double> = emptyMap(),
     val labels: Map<String, Map<String, String>> = emptyMap(),
+    @SerialName("display_unit") val displayUnit: Map<String, String> = emptyMap(),
+    val scales: Map<String, String> = emptyMap(),
+    val hidden: List<String> = emptyList(),
 )

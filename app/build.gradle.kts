@@ -213,6 +213,8 @@ android.sourceSets.getByName("test") {
 dependencies {
     // Pure modules: contract mirror, file format, analysis. Nothing Android below :app.
     implementation(project(":core:protocol"))
+    // The bundled board templates, for the fake board and previews to name a current dictionary.
+    implementation(project(":core:model"))
     implementation(project(":core:parquet"))
     implementation(project(":core:history"))
     // Request session, sync policies, planner and progress maths, shared with iOS.
