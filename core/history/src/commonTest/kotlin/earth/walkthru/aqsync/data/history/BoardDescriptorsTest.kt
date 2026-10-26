@@ -7,6 +7,7 @@ import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.sha256Hex
+import earth.walkthru.aqsync.net.BlockStore
 import earth.walkthru.aqsync.net.MemoryBlockStore
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -15,6 +16,7 @@ import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -25,8 +27,20 @@ class BoardDescriptorsTest {
     private val sha = ParquetVerify.sha256Hex(bytes)
     private val info = DeviceInfo(proto = 3, dict = dict, desc = sha.take(16), station = "s")
 
+    /** A [MemoryBlockStore] whose next [failDeletes] deletes throw, as a cache directory the OS locked. */
+    private class FlakyStore(private val inner: MemoryBlockStore = MemoryBlockStore()) : BlockStore by inner {
+        var failDeletes = 0
+        override fun delete(name: String) {
+            if (failDeletes > 0) {
+                failDeletes--
+                throw IllegalStateException("delete failed")
+            }
+            inner.delete(name)
+        }
+    }
+
     private class Harness(scope: TestScope) {
-        val store = MemoryBlockStore()
+        val store = FlakyStore()
         val served = ServedTemplates()
         val descriptors = BoardDescriptors(store, served, bundled = emptyList(), io = StandardTestDispatcher(scope.testScheduler))
         var downloads = 0
@@ -187,6 +201,29 @@ class BoardDescriptorsTest {
     }
 
     @Test
+    fun uppercaseFooterDigestIsTakenAsLowercase() = runTest {
+        val h = harness()
+        h.descriptors.ensure(info) { bytes }
+        assertEquals(1, h.descriptors.confirm(samePrefixOtherDigest.uppercase()))
+        assertTrue(h.store.list().isEmpty())
+        assertTrue(h.served.all.value.isEmpty())
+    }
+
+    @Test
+    fun failedDiskDeleteStillUnservesAndTheNextConfirmRetries() = runTest {
+        val h = harness()
+        h.descriptors.ensure(info) { bytes }
+        h.store.failDeletes = 1
+        assertFailsWith<IllegalStateException> { h.descriptors.confirm(samePrefixOtherDigest) }
+        assertTrue(h.served.all.value.isEmpty())
+        assertEquals(1, h.store.list().size)
+        // The digest was not taken, so the same footer tries the disk again.
+        assertEquals(1, h.descriptors.confirm(samePrefixOtherDigest))
+        assertTrue(h.store.list().isEmpty())
+        assertIs<DescriptorOutcome.Rejected>(h.descriptors.ensure(info) { bytes })
+    }
+
+    @Test
     fun cachedTemplateContradictedBeforeItLoadsIsDeleted() = runTest {
         val h = harness()
         h.store.write("$sha.json", bytes)
@@ -212,7 +249,11 @@ class BoardDescriptorsTest {
         val h = harness()
         h.descriptors.ensure(info) { bytes }
         assertEquals(0, h.descriptors.confirm("f".repeat(64)))
-        assertEquals(0, h.descriptors.confirm("not a digest"))
+        // Not a digest, though each shares the prefix or matches every prefix.
+        assertEquals(0, h.descriptors.confirm(""))
+        assertEquals(0, h.descriptors.confirm(sha.take(16)))
+        assertEquals(0, h.descriptors.confirm(sha.take(16) + "g".repeat(48)))
+        assertEquals(0, h.descriptors.confirm("g".repeat(64)))
         assertEquals(1, h.store.list().size)
         assertEquals(1, h.served.all.value.size)
     }

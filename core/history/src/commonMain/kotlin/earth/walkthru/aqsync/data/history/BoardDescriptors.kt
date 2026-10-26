@@ -158,8 +158,9 @@ class BoardDescriptors(
      * Takes a synced file's footer `template.sha256` as the trusted full digest for its 16 hex prefix.
      * Deletes every served template, on disk and in [ServedTemplates], that shares the prefix but not the
      * digest, so the next [ensure] downloads again and rejects bytes that still differ. A bundled desc is
-     * never deleted. A digest already taken returns at once, so a caller may pass every file's footer.
-     * Returns how many templates were deleted.
+     * never deleted. A value that is not 64 hex digits deletes nothing. A digest already taken returns at
+     * once, so a caller may pass every file's footer. It is taken only after the deletes succeed. Returns
+     * how many templates were deleted.
      */
     suspend fun confirm(sha256: String): Int {
         val full = sha256.lowercase()
@@ -167,15 +168,17 @@ class BoardDescriptors(
         val prefix = full.take(TemplateKey.DESC_PREFIX_HEX)
         if (footerDigests.value[prefix] == full) return 0
         return mutex.withLock {
-            footerDigests.update { it + (prefix to full) }
             val pinned = bundled.mapNotNullTo(HashSet()) { it.key.desc }
             fun contradicted(desc: String) = desc.startsWith(prefix) && desc != full && desc !in pinned
+            // Out of memory first, so a failing disk delete never leaves the template served.
             val held = served.all.value.mapNotNull { it.key.desc }.filter(::contradicted)
+            held.forEach(served::remove)
             val files = withContext(io) {
                 store.list().map { it.name }.filter { it.endsWith(SUFFIX) && contradicted(it.removeSuffix(SUFFIX)) }
                     .onEach { store.delete(it) }
             }
-            held.forEach(served::remove)
+            // Taken only once the disk is clean, so a failed delete is retried by the next confirm.
+            footerDigests.update { it + (prefix to full) }
             (held + files.map { it.removeSuffix(SUFFIX) }).toSet().size
         }
     }

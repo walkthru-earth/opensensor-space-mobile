@@ -38,7 +38,7 @@ the template a board serves over `GET_DESCRIPTOR` (`DeviceSession.downloadDescri
 `StorageRole.Templates` and adds it to `ServedTemplates`, which resolves ahead of the bundled ones. Both
 keep at most 16 templates, oldest out first. `ArchiveIndexRepair` hands each indexed file's footer
 `template.sha256` to `BoardDescriptors.confirm`, which evicts a served template with the same 16 hex
-prefix and another full digest. Bundled templates are never evicted. It is the first module in the `space.opensensor`
+prefix and another full digest. Bundled templates are never evicted. `:core:model` is the first module in the `space.opensensor`
 package (`space.opensensor.model`), the rest move in #192.
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
