@@ -114,7 +114,8 @@ internal fun legendSummary(words: List<String>, title: String?, separator: Strin
  * "n/a". The row follows the layout direction, so it mirrors in right to left. It is one
  * accessibility node that reads every block with its caption. With [onBlock], each block is also a
  * button and a custom action, [selected] gets an outline and is announced as the strip's state,
- * and the strip is at least 48 dp tall to touch while the bar stays 28 dp.
+ * and the strip is at least 48 dp tall to touch while the bar stays 28 dp. [showWords] prints each
+ * block's mood word under its bar, so the mood never rests on colour alone where no legend sits beside it.
  */
 @Composable
 fun MoodStrip(
@@ -123,6 +124,7 @@ fun MoodStrip(
     captions: List<String?> = emptyList(),
     selected: Int? = null,
     onBlock: ((Int) -> Unit)? = null,
+    showWords: Boolean = false,
 ) {
     val na = notAvailableText()
     val words = blocks.map { b ->
@@ -131,7 +133,7 @@ fun MoodStrip(
     }
     val chosen = selected?.takeIf { it in blocks.indices && blocks[it].weight > 0f }
     val selectedSpoken = chosen?.let { stringResource(Res.string.mood_strip_selected, blockLabel(words[it], captions.getOrNull(it))) }
-    MoodStripLayout(blocks, words, captions, selected, selectedSpoken, onBlock, modifier, listSeparator())
+    MoodStripLayout(blocks, words, captions, selected, selectedSpoken, onBlock, modifier, listSeparator(), showWords)
 }
 
 @Composable
@@ -144,6 +146,7 @@ internal fun MoodStripLayout(
     onBlock: ((Int) -> Unit)?,
     modifier: Modifier = Modifier,
     separator: String = ",",
+    showWords: Boolean = false,
 ) {
     val shown = blocks.indices.filter { blocks[it].weight > 0f }
     val summary = moodSummary(shown.map { words[it] }, shown.map { captions.getOrNull(it) }, separator)
@@ -194,6 +197,14 @@ internal fun MoodStripLayout(
                 if (onBlock != null) target = target.heightIn(min = 48.dp).clickable(role = Role.Button) { onBlock(i) }
                 Column(target, verticalArrangement = Arrangement.Center) {
                     Box(bar)
+                    if (showWords) {
+                        FitText(
+                            words[i],
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                     if (captioned) {
                         // A 48 dp block fits "128 areas" on one line, or wraps it between the words.
                         FitText(

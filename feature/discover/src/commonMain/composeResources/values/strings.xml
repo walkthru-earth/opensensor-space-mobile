@@ -143,4 +143,10 @@
     <string name="discover_property_no2">NO2</string>
     <string name="discover_category_air">Air</string>
     <string name="discover_category_weather">Weather</string>
+    <string name="discover_zoom_in">Zoom in</string>
+    <string name="discover_zoom_out">Zoom out</string>
+    <string name="discover_sheet_expand">Show more</string>
+    <string name="discover_sheet_collapse">Show less</string>
+    <string name="discover_clear_filter">Clear filter</string>
+    <string name="discover_near_me_none">Location not found</string>
 </resources>

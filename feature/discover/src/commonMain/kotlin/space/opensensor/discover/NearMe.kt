@@ -10,9 +10,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import org.maplibre.compose.camera.CameraUpdate
+import kotlinx.coroutines.withTimeoutOrNull
 import org.maplibre.compose.location.LocationAccuracy
 import org.maplibre.compose.location.LocationRequest
 import org.maplibre.compose.location.LocationState
@@ -22,6 +26,7 @@ import org.maplibre.compose.map.MapState
 import org.maplibre.spatialk.geojson.Position
 import org.maplibre.spatialk.units.extensions.meters
 import space.opensensor.designsystem.FloatingIconButton
+import space.opensensor.designsystem.LocalReduceMotion
 import space.opensensor.permissions.AccessDialogTexts
 import space.opensensor.permissions.AccessDialogs
 import space.opensensor.permissions.RuntimeAccess
@@ -85,28 +90,49 @@ internal fun nearMeTarget(h3: H3Grid, lat: Double, lng: Double): LatLng? {
     return runCatching { h3.cellToLatLng(cell) }.getOrNull()
 }
 
-/** The map button. After each granted tap, the camera moves to the coarse cell of the next fix. */
+/**
+ * The map button. After each granted tap, the camera moves to the coarse cell of the next fix. A
+ * fix that does not come within [NEAR_ME_WAIT] leaves the map where it is and [none] is announced.
+ */
 @Composable
 internal fun NearMeButton(
     nearMe: NearMe,
     mapState: MapState,
     target: (lat: Double, lng: Double) -> LatLng?,
     label: String,
+    none: String,
     accessTexts: AccessDialogTexts,
     modifier: Modifier = Modifier,
 ) {
     AccessDialogs(nearMe.access, accessTexts)
     val location = nearMe.location
+    val reduce = LocalReduceMotion.current
+    var missed by remember { mutableStateOf(false) }
     LaunchedEffect(nearMe.recenter, location) {
+        missed = false
         if (nearMe.recenter == 0 || location == null) return@LaunchedEffect
-        val fix = snapshotFlow { location.lastLocation }.filterNotNull().first()
+        val fix = withTimeoutOrNull(NEAR_ME_WAIT) { snapshotFlow { location.lastLocation }.filterNotNull().first() }
+        if (fix == null) {
+            missed = true
+            return@LaunchedEffect
+        }
         val centre = target(fix.position.latitude, fix.position.longitude) ?: return@LaunchedEffect
-        catchingNonCancel { mapState.animateCamera(CameraUpdate(center = Position(longitude = centre.lng, latitude = centre.lat), zoom = NEAR_ME_ZOOM)) }
+        mapState.moveCamera(Position(longitude = centre.lng, latitude = centre.lat), NEAR_ME_ZOOM, reduce)
     }
-    FloatingIconButton(onClick = nearMe.onTap, contentDescription = label, modifier = modifier) {
+    FloatingIconButton(
+        onClick = nearMe.onTap,
+        contentDescription = label,
+        modifier = modifier.semantics {
+            if (missed) stateDescription = none
+            liveRegion = LiveRegionMode.Polite
+        },
+    ) {
         Icon(DiscoverIcons.MyLocation, contentDescription = null)
     }
 }
+
+// Long enough for a cold coarse fix indoors. Past it the map stays and the button says so.
+private val NEAR_ME_WAIT = 15.seconds
 
 // About a resolution 7 cell (edge about 1.4 km) across a few hundred pixels.
 private const val NEAR_ME_ZOOM = 10.5

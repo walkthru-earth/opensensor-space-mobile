@@ -84,12 +84,14 @@ import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.maplibre.compose.camera.CameraUpdate
 import org.maplibre.spatialk.geojson.Position
 import space.opensensor.airquality.HealthScale
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.FloatingSurface
+import space.opensensor.designsystem.LocalReduceMotion
+import space.opensensor.designsystem.MinTouchSpacing
+import space.opensensor.designsystem.MinTouchTarget
 import space.opensensor.designsystem.MoodLegend
 import space.opensensor.designsystem.MoodStrip
 import space.opensensor.designsystem.Peacock
@@ -101,6 +103,8 @@ import space.opensensor.designsystem.moodWord
 import space.opensensor.designsystem.notAvailableText
 import space.opensensor.designsystem.peacockExpressionFor
 import space.opensensor.designsystem.spokenList
+import space.opensensor.designsystem.swatchBorderColor
+import space.opensensor.designsystem.touchTarget
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.CellScale
 import space.opensensor.publicfeed.FeedProperty
@@ -116,6 +120,9 @@ import space.opensensor.units.UnitSystem
 
 // Tall enough for the chart, so it stays in sight while the sheet is down and the map is explored.
 private val PEEK_HEIGHT = 200.dp
+
+// A city and its surroundings, after a place search.
+private const val PLACE_ZOOM = 9.0
 
 /**
  * The Discover map, first screen at the Simple level (docs/devices-and-discovery.md, "First screen
@@ -179,21 +186,30 @@ private fun DiscoverContent(
     // Back, the Android predictive back or the iOS edge swipe, first returns an open sheet to peek.
     // Navigation Event runs the newest handler first, so this wins over the shell's NavDisplay.
     // A sheet dragged up or showing the full list also counts as open, even with nothing selected.
+    // The full list opened from an area goes back to that area first.
     val sheetOpen = sheet.bottomSheetState.targetValue == SheetValue.Expanded
     NavigationBackHandler(
         state = rememberNavigationEventState(NavigationEventInfo.None),
         isBackEnabled = state.selected != null || showAll || sheetOpen,
         onBackCompleted = {
-            controller.selectCell(null)
-            showAll = false
-            peek()
+            if (showAll && state.selected != null) {
+                showAll = false
+            } else {
+                controller.selectCell(null)
+                showAll = false
+                peek()
+            }
         },
     )
+    val reduceMotion = LocalReduceMotion.current
 
     BottomSheetScaffold(
         modifier = modifier,
         scaffoldState = sheet,
         sheetPeekHeight = PEEK_HEIGHT,
+        sheetDragHandle = {
+            SheetHandle(open = sheetOpen, strings = strings, onToggle = { if (sheetOpen) peek() else expand() })
+        },
         sheetContent = {
             SheetContent(
                 state = state,
@@ -262,11 +278,7 @@ private fun DiscoverContent(
                     infoButton = infoButton,
                     onAddSensor = { controller.dismissFirstRun(); onAddSensor() },
                     onPlace = { place ->
-                        scope.launch {
-                            catchingNonCancel {
-                                mapState.animateCamera(CameraUpdate(center = Position(longitude = place.lng, latitude = place.lat), zoom = 9.0))
-                            }
-                        }
+                        scope.launch { mapState.moveCamera(Position(longitude = place.lng, latitude = place.lat), PLACE_ZOOM, reduceMotion) }
                     },
                     onProperty = controller::selectProperty,
                     onSource = controller::chooseSource,
@@ -283,22 +295,43 @@ private fun DiscoverContent(
                 )
                 Row(
                     Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = PEEK_HEIGHT + 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.Bottom,
                 ) {
                     val property = state.property
                     val scale = state.scale
-                    if (property != null && scale != null) {
-                        // Simple shows mood words for the WHO scale. Any other property keeps its steps or gradient.
-                        if (simple && scale.who != null) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton, state.daily)
+                    // The legend takes what the map controls leave, so a large font never pushes them off.
+                    Box(Modifier.weight(1f)) {
+                        if (property != null && scale != null) {
+                            // Simple shows mood words for the WHO scale. Any other property keeps its steps or gradient.
+                            if (simple && scale.who != null) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton, state.daily)
+                        }
                     }
-                    Spacer(Modifier.weight(1f))
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NearMeButton(nearMe, mapState, controller::nearMeTarget, strings.nearMe, strings.nearMeAccess, Modifier.padding(end = 8.dp))
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(MinTouchSpacing)) {
+                        ZoomControls(mapState, strings.zoomIn, strings.zoomOut, Modifier.padding(end = 8.dp))
+                        NearMeButton(nearMe, mapState, controller::nearMeTarget, strings.nearMe, strings.nearMeNone, strings.nearMeAccess, Modifier.padding(end = 8.dp))
                         if (networkAllowed) Attribution(strings, attributionOpen, real = !state.isSample, infoButton)
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * The sheet's top edge, a full width 48 dp strip. Dragging still works, a single tap opens the
+ * sheet or returns it to peek. The chevron points where a tap moves it and the spoken name says so.
+ */
+@Composable
+internal fun SheetHandle(open: Boolean, strings: DiscoverStrings, onToggle: () -> Unit) {
+    val label = if (open) strings.sheetCollapse else strings.sheetExpand
+    Box(
+        Modifier.fillMaxWidth().height(MinTouchTarget)
+            .clickable(role = Role.Button, onClick = onToggle)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(if (open) DiscoverIcons.ExpandMore else DiscoverIcons.ExpandLess, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -351,7 +384,7 @@ private fun TopControls(
                 shape = FloatingControl.Shape,
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = FloatingControl.Selected, contentColor = FloatingControl.OnSelected),
             ) {
-                Icon(DiscoverIcons.Add, contentDescription = strings.addSensor)
+                Icon(DiscoverIcons.Sensors, contentDescription = strings.addSensor)
             }
         }
         if (query.isNotBlank()) {
@@ -430,7 +463,7 @@ private fun SourceToggle(
                 enabled -> strings.sampleInfo
                 else -> strings.sampleInfo.copy(body = strings.sampleInfo.body + strings.sourceOff)
             }
-            infoButton(info, Modifier.minimumInteractiveComponentSize().size(40.dp))
+            infoButton(info, Modifier.touchTarget())
         }
     }
 }
@@ -480,7 +513,7 @@ private fun Legend(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val unit = unitLabel(property, units)
     FloatingSurface {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.widthIn(max = LEGEND_MAX).padding(start = 10.dp)) {
             when (scale) {
                 is CellScale.Steps -> {
                     val steps = scale.scale
@@ -497,7 +530,7 @@ private fun Legend(
                             append(strings.whoStepSpoken(strings.stepName(steps, i), upTo, unit)).append(". ")
                         }
                     }
-                    Column(Modifier.width(212.dp).padding(vertical = 8.dp).clearAndSetSemantics { contentDescription = spoken }) {
+                    Column(Modifier.weight(1f).padding(vertical = 8.dp).clearAndSetSemantics { contentDescription = spoken }) {
                         FitText("${property.shownLabel()}  $unit", style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.height(2.dp))
                         StepBar(steps, property, strings)
@@ -510,13 +543,13 @@ private fun Legend(
                         daily -> strings.stepsInfoReal
                         else -> strings.stepsInfo
                     }
-                    infoButton(info, Modifier.minimumInteractiveComponentSize().size(40.dp))
+                    infoButton(info, Modifier.touchTarget())
                 }
                 is CellScale.Relative -> {
                     val low = scale.percentile.low
                     val high = scale.percentile.high
                     // Read as one item, label and unit, low, high and the note. The gradient is decorative.
-                    Column(Modifier.widthIn(min = 140.dp, max = 180.dp).padding(vertical = 8.dp).semantics(mergeDescendants = true) {}) {
+                    Column(Modifier.weight(1f).padding(vertical = 8.dp).semantics(mergeDescendants = true) {}) {
                         FitText("${property.shownLabel()}  $unit", style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.height(4.dp))
                         Box(
@@ -531,20 +564,23 @@ private fun Legend(
                         }
                         Text(strings.noHealthScale, style = MaterialTheme.typography.labelSmall, color = muted)
                     }
-                    infoButton(if (daily) strings.scaleInfoReal else strings.scaleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
+                    infoButton(if (daily) strings.scaleInfoReal else strings.scaleInfo, Modifier.touchTarget())
                 }
             }
         }
     }
 }
 
+// A 212 dp scale, its start inset and the info button. Narrower when the map controls need the room.
+private val LEGEND_MAX = 270.dp
+
 /** The Simple legend. The six moods with their colours, the property as title, no numbers. */
 @Composable
 private fun SimpleLegend(property: FeedProperty, strings: DiscoverStrings, infoButton: @Composable (InfoText, Modifier) -> Unit) {
     FloatingSurface {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
-            MoodLegend(Modifier.width(212.dp).padding(vertical = 8.dp), title = property.shownLabel())
-            infoButton(strings.moodInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.widthIn(max = LEGEND_MAX).padding(start = 10.dp)) {
+            MoodLegend(Modifier.weight(1f).padding(vertical = 8.dp), title = property.shownLabel())
+            infoButton(strings.moodInfo, Modifier.touchTarget())
         }
     }
 }
@@ -555,7 +591,7 @@ private fun StepLabel(scale: StepScale, i: Int, strings: DiscoverStrings, modifi
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(Color(scale.colors[i]))
-                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), RoundedCornerShape(3.dp)),
+                .border(1.dp, swatchBorderColor(MaterialTheme.colorScheme), RoundedCornerShape(3.dp)),
         )
         Spacer(Modifier.width(6.dp))
         Text(strings.stepName(scale, i), style = MaterialTheme.typography.bodyMedium)
@@ -581,7 +617,7 @@ private fun Attribution(strings: DiscoverStrings, open: Boolean, real: Boolean, 
                         .wrapContentSize(),
                 )
             }
-            infoButton(strings.mapInfo, Modifier.minimumInteractiveComponentSize().size(36.dp))
+            infoButton(strings.mapInfo, Modifier.touchTarget())
         }
     }
 }
@@ -618,8 +654,8 @@ private fun SheetContent(
             SheetBody.SIMPLE_CELL -> SimpleCellDetail(state, strings, infoButton, reference, onShowProperty, onRetry)
             SheetBody.CELL -> CellDetail(state.selected!!, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
             SheetBody.LOAD_FAILED -> LoadFailed(strings, onRetryLoad)
-            SheetBody.FIRST_RUN -> FirstRunCard(strings, onAddSensor, onExplore)
-            SheetBody.IN_VIEW -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
+            SheetBody.FIRST_RUN -> FirstRunCard(strings, state.isSample, infoButton, onAddSensor, onExplore)
+            SheetBody.IN_VIEW -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, infoButton, onHighlight, onPickCell)
         }
     }
 }
@@ -651,7 +687,8 @@ private fun LoadFailed(strings: DiscoverStrings, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun FirstRunCard(strings: DiscoverStrings, onAddSensor: () -> Unit, onExplore: () -> Unit) {
+private fun FirstRunCard(strings: DiscoverStrings, sample: Boolean, infoButton: @Composable (InfoText, Modifier) -> Unit, onAddSensor: () -> Unit, onExplore: () -> Unit) {
+    if (sample) SampleBadge(strings, infoButton)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Peacock(size = 80.dp, expression = PeacockExpression.WELCOME)
         Text(strings.firstRunLine, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
@@ -660,6 +697,15 @@ private fun FirstRunCard(strings: DiscoverStrings, onAddSensor: () -> Unit, onEx
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(onClick = onAddSensor) { Text(strings.addSensor) }
         OutlinedButton(onClick = onExplore) { Text(strings.explore) }
+    }
+}
+
+/** "Sample data" in the tertiary tone with its info button, over any sheet that shows the sample. */
+@Composable
+private fun SampleBadge(strings: DiscoverStrings, infoButton: @Composable (InfoText, Modifier) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
+        infoButton(strings.sampleInfo, Modifier.touchTarget())
     }
 }
 
@@ -681,9 +727,12 @@ private fun InView(
     reference: Long,
     highlight: ValueBand?,
     clearSignal: Int,
+    infoButton: @Composable (InfoText, Modifier) -> Unit,
     onHighlight: (ValueBand?) -> Unit,
     onPickCell: (String) -> Unit,
 ) {
+    // Bundled preview data says so before anything else, so it is never taken for local air.
+    if (state.isSample) SampleBadge(strings, infoButton)
     if (state.loading && state.rows.isEmpty()) {
         // Read out when the areas arrive or fail to, while the user waits.
         DiscoverStateMessage(strings.loading, PeacockExpression.WORKING, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
@@ -770,6 +819,7 @@ private fun SimpleSpread(values: List<Double>, health: HealthScale, strings: Dis
         captions = captions,
         selected = selected,
         onBlock = { i -> onHighlight(spreadTap(bands, i, highlight)) },
+        showWords = true,
     )
 }
 
@@ -812,12 +862,7 @@ private fun CellDetail(
     // Peek shows the chart with this area marked, so it stays in sight while the map is explored.
     // The headline, the device count and the other measurements follow.
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        if (state.isSample) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
-                infoButton(strings.sampleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
-            }
-        }
+        if (state.isSample) SampleBadge(strings, infoButton)
         val property = state.property
         val units = LocalDiscoverUnits.current
         val stat = property?.let { row.stats[it.id] }
@@ -902,12 +947,7 @@ private fun SimpleCellDetail(
     onRetry: () -> Unit,
 ) {
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        if (state.isSample) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
-                infoButton(strings.sampleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
-            }
-        }
+        if (state.isSample) SampleBadge(strings, infoButton)
         val property = state.property
         val units = LocalDiscoverUnits.current
         val summary = property?.let { state.selectedSummary(it) }
@@ -997,7 +1037,7 @@ private fun SimpleCellDetail(
 }
 
 @Composable
-private fun AllProperties(state: DiscoverUiState, strings: DiscoverStrings, onPick: (String) -> Unit) {
+private fun AllProperties(state: DiscoverUiState, strings: DiscoverStrings, onPick: (String) -> Unit) = Column(Modifier.verticalScroll(rememberScrollState())) {
     Text(strings.allMeasurements, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
     Spacer(Modifier.height(8.dp))
     // Grouped by the category the dictionary gives each property (Air, Weather, and so on).

@@ -18,6 +18,7 @@ import space.opensensor.discover.resources.discover_area_count
 import space.opensensor.discover.resources.discover_areas_in_view
 import space.opensensor.discover.resources.discover_average_summary
 import space.opensensor.discover.resources.discover_avg
+import space.opensensor.discover.resources.discover_clear_filter
 import space.opensensor.discover.resources.discover_clear_search
 import space.opensensor.discover.resources.discover_data_openaq
 import space.opensensor.discover.resources.discover_data_to
@@ -41,6 +42,7 @@ import space.opensensor.discover.resources.discover_more
 import space.opensensor.discover.resources.discover_near_me
 import space.opensensor.discover.resources.discover_near_me_access_body
 import space.opensensor.discover.resources.discover_near_me_access_title
+import space.opensensor.discover.resources.discover_near_me_none
 import space.opensensor.discover.resources.discover_near_me_settings_body
 import space.opensensor.discover.resources.discover_near_me_settings_title
 import space.opensensor.discover.resources.discover_no_areas
@@ -65,6 +67,8 @@ import space.opensensor.discover.resources.discover_scale_mark
 import space.opensensor.discover.resources.discover_scale_title
 import space.opensensor.discover.resources.discover_search_places
 import space.opensensor.discover.resources.discover_sensors
+import space.opensensor.discover.resources.discover_sheet_collapse
+import space.opensensor.discover.resources.discover_sheet_expand
 import space.opensensor.discover.resources.discover_source_label
 import space.opensensor.discover.resources.discover_source_off
 import space.opensensor.discover.resources.discover_source_real
@@ -94,6 +98,8 @@ import space.opensensor.discover.resources.discover_window_short_day
 import space.opensensor.discover.resources.discover_window_short_hour
 import space.opensensor.discover.resources.discover_window_short_latest_day
 import space.opensensor.discover.resources.discover_window_short_week
+import space.opensensor.discover.resources.discover_zoom_in
+import space.opensensor.discover.resources.discover_zoom_out
 import space.opensensor.permissions.AccessDialogTexts
 import space.opensensor.publicfeed.StepScale
 
@@ -194,6 +200,16 @@ class DiscoverStrings internal constructor(
     val loadFailed: String,
     /** Short month names, January first, for [dayMonth]. */
     val monthsShort: List<String>,
+    /** The map's zoom buttons, spoken only. */
+    val zoomIn: String,
+    val zoomOut: String,
+    /** The sheet handle, spoken only. It says what a tap does next. */
+    val sheetExpand: String,
+    val sheetCollapse: String,
+    /** Lets go of a pinned chart bar. */
+    val clearFilter: String,
+    /** Near me found no fix in time. Announced, the map stays where it is. */
+    val nearMeNone: String,
 ) {
     /** The Real label, as in "OpenAQ, data to 8 Oct". */
     @Composable
@@ -267,6 +283,12 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     realInfo = InfoText(stringResource(Res.string.discover_real_title), listOf(stringResource(Res.string.discover_real_info))),
     loadFailed = stringResource(Res.string.discover_load_failed),
     monthsShort = stringArrayResource(Res.array.discover_months_short),
+    zoomIn = stringResource(Res.string.discover_zoom_in),
+    zoomOut = stringResource(Res.string.discover_zoom_out),
+    sheetExpand = stringResource(Res.string.discover_sheet_expand),
+    sheetCollapse = stringResource(Res.string.discover_sheet_collapse),
+    clearFilter = stringResource(Res.string.discover_clear_filter),
+    nearMeNone = stringResource(Res.string.discover_near_me_none),
     searchPlaces = stringResource(Res.string.discover_search_places),
     addSensor = stringResource(Res.string.discover_add_sensor),
     more = stringResource(Res.string.discover_more),

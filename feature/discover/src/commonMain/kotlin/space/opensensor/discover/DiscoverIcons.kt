@@ -1,30 +1,15 @@
 package space.opensensor.discover
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import space.opensensor.designsystem.InfoButton
+import space.opensensor.designsystem.InfoContent
 
 /**
  * The few Material icons Discover and the iOS tabs need (Apache 2.0), as vectors, so the module
@@ -32,6 +17,9 @@ import androidx.compose.ui.unit.dp
  */
 object DiscoverIcons {
     val Add: ImageVector = icon("Add", "M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z")
+    val Remove: ImageVector = icon("Remove", "M19,13H5v-2h14v2z")
+    val ExpandLess: ImageVector = icon("ExpandLess", "M12,8l-6,6 1.41,1.41L12,10.83l4.59,4.58L18,14z")
+    val ExpandMore: ImageVector = icon("ExpandMore", "M16.59,8.59L12,13.17 7.41,8.59 6,10l6,6 6,-6z")
     val Info: ImageVector = icon(
         "Info",
         "M11,7h2v2h-2zM11,11h2v6h-2zM12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,20c-4.41,0 -8,-3.59 -8,-8s3.59,-8 8,-8 8,3.59 8,8 -3.59,8 -8,8z",
@@ -69,28 +57,10 @@ object DiscoverIcons {
 }
 
 /**
- * The info affordance used when the host passes none (iOS). Android passes its own `InfoButton`
- * so both screens look the same there.
+ * The info affordance used when the host passes none (iOS). It is the shared `InfoButton`, so both
+ * apps speak "More about" the topic and open the same scrolling sheet with a close button.
  */
 @Composable
 fun DefaultInfoButton(info: InfoText, modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
-    var open by rememberSaveable { mutableStateOf(false) }
-    IconButton(onClick = { open = true }, modifier = modifier) {
-        Icon(DiscoverIcons.Info, contentDescription = info.title, tint = tint)
-    }
-    if (open) {
-        ModalBottomSheet(
-            onDismissRequest = { open = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
-                Text(info.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-                info.body.forEach {
-                    Spacer(Modifier.height(10.dp))
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-    }
+    InfoButton(InfoContent(info.title, info.body), modifier, tint)
 }
