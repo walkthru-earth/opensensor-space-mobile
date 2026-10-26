@@ -1,0 +1,39 @@
+{
+  "dict": "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94",
+  "family": "air",
+  "primary": [
+    "pm25_atmospheric_ug_m3",
+    "pm10_atmospheric_ug_m3",
+    "pm1_atmospheric_ug_m3",
+    "imu_temperature_c",
+    "battery_percent"
+  ],
+  "hidden": [
+    "ambient_temperature_c",
+    "relative_humidity_percent"
+  ],
+  "scales": {
+    "pm25_atmospheric_ug_m3": "pm25",
+    "pm10_atmospheric_ug_m3": "pm10"
+  },
+  "display_unit": {
+    "pm1_atmospheric_ug_m3": "µg/m³",
+    "pm25_atmospheric_ug_m3": "µg/m³",
+    "pm10_atmospheric_ug_m3": "µg/m³",
+    "particles_gt03_per_01l": "per 0.1 L",
+    "particles_gt25_per_01l": "per 0.1 L",
+    "imu_temperature_c": "°C",
+    "battery_percent": "%",
+    "vbus_mv": "mV"
+  },
+  "labels": {
+    "pm1_atmospheric_ug_m3": { "en": "PM1" },
+    "pm25_atmospheric_ug_m3": { "en": "PM2.5 raw", "ar": "PM2.5 خام" },
+    "pm10_atmospheric_ug_m3": { "en": "PM10" },
+    "particles_gt03_per_01l": { "en": "Particles > 0.3 µm" },
+    "particles_gt25_per_01l": { "en": "Particles > 2.5 µm" },
+    "imu_temperature_c": { "en": "Board temperature" },
+    "battery_percent": { "en": "Battery" },
+    "vbus_mv": { "en": "USB voltage" }
+  }
+}

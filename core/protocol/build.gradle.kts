@@ -10,6 +10,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.serialization.json)
+            // The bundled board templates and app profiles that LIVE profiles come from (#184).
+            implementation(project(":core:model"))
         }
         jvmTest.dependencies {
             implementation(libs.junit)

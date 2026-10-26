@@ -36,6 +36,10 @@ data class StationDatastream(
     val profileLabel: LocalizedText?,
     val displayStep: Double,
     val scale: Scale?,
+    /** Unit text from the profile, else the template's raw unit, null for a unitless column. */
+    val displayUnit: String? = datastream.unit,
+    /** Health scale id from the profile, such as `pm25`, or null for a neutral column. */
+    val scaleId: String? = null,
 ) {
     val name: String get() = datastream.name
 
@@ -85,15 +89,20 @@ class Station private constructor(
             profileLabel = profile.labels[ds.name],
             displayStep = profile.displayStepOf(ds),
             scale = scaleId?.let { collection?.scales?.get(it) },
+            displayUnit = profile.displayUnit[ds.name] ?: ds.unit,
+            scaleId = profile.scales[ds.name],
         )
     }
 
     private val byName: Map<String, StationDatastream> = datastreams.associateBy { it.name }
 
-    /** The profile's primary columns that this template has, in profile order. */
-    val primary: List<StationDatastream> = profile.primary.mapNotNull { byName[it] }
+    /** The profile's primary columns that this template has and the profile does not hide, in profile order. */
+    val primary: List<StationDatastream> = profile.primary.filter { it !in profile.hidden }.mapNotNull { byName[it] }
 
     fun datastream(name: String): StationDatastream? = byName[name]
+
+    /** What LIVE shows for this station. */
+    val live: LiveColumns = LiveColumns.of(template, profile)
 
     /** The datastream a LIVE [key] carries, or null for a key the template does not map. */
     fun datastreamForLiveKey(key: String): StationDatastream? = template.columnForLiveKey(key)?.let { byName[it] }
@@ -114,18 +123,14 @@ class Station private constructor(
             deviceId: Long? = null,
             h3Cell: String? = null,
             runtimeSampleIntervalS: Double? = null,
-        ): Station {
-            val titles = collection?.columnTitles.orEmpty()
-            val usable = profile?.takeIf { p -> p.dict == template.dict && p.primary.any { template.datastream(it) != null } }
-            return Station(
-                uuid = uuid,
-                deviceId = deviceId,
-                h3Cell = h3Cell,
-                template = template,
-                profile = usable ?: AppProfile.derive(template, titles),
-                collection = collection,
-                runtimeSampleIntervalS = runtimeSampleIntervalS,
-            )
-        }
+        ): Station = Station(
+            uuid = uuid,
+            deviceId = deviceId,
+            h3Cell = h3Cell,
+            template = template,
+            profile = AppProfile.select(template, profile, collection?.columnTitles.orEmpty()),
+            collection = collection,
+            runtimeSampleIntervalS = runtimeSampleIntervalS,
+        )
     }
 }

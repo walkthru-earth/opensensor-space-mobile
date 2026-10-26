@@ -119,7 +119,7 @@ data class TodayUiState(
     val level: DetailLevel = DetailLevel.SIMPLE,
 ) {
     /** What this device can do, from `INFO` and LIVE (shared mapping, no schema strings in the UI). */
-    val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(snapshot.info, snapshot.live)
+    val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(snapshot.info)
 
     /** The particle reading (mood and PM2.5) applies to this device and sample. */
     val showsParticles: Boolean get() = capabilities.showsParticles(snapshot.live)

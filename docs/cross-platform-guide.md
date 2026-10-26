@@ -125,7 +125,8 @@ Air quality is one family among many. Follow "Adding a device family" in
 properties, the metric registry gets a dictionary entry with `commonTest` coverage, and screens
 pick it up through capabilities. Never a schema string check in a screen. Today the registry is
 `Metrics` and `DeviceCapabilities` in `:core:history`. `:core:model` holds the board template, app
-profile and datastream model that replaces them (#183), with no caller yet. A generic `MetricCard`
+profile and datastream model that replaces them (#183), with the bundled templates and profiles
+that LIVE already reads (#184). A generic `MetricCard`
 is planned ([devices-and-discovery.md](devices-and-discovery.md)).
 
 ## Design parity

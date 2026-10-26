@@ -5,7 +5,6 @@ import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.protocol.DeviceConfig
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
-import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.SensorConfig
 import earth.walkthru.aqsync.data.sync.FileOutcome
@@ -22,6 +21,7 @@ import earth.walkthru.opensensor.today.TodayCard.READINGS
 import earth.walkthru.opensensor.today.TodayCard.SMART_SYNC
 import earth.walkthru.opensensor.today.TodayCard.STORAGE
 import earth.walkthru.opensensor.today.TodayCard.TODAY_SO_FAR
+import space.opensensor.model.BundledCatalog
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -30,8 +30,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TodayCardsTest {
-    private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v4", dict = LiveProfiles.WAVESHARE_DICTIONARY)
-    private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = LiveProfiles.CORES3_DICTIONARY)
+    private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = BundledCatalog.templates.first { it.schema.startsWith("waveshare-") }.dict)
+    private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = BundledCatalog.templates.first { it.schema.startsWith("cores3-") }.dict)
     private val particleSample = LiveSample(pms = 4, pm25 = 14.9)
 
     private fun state(info: DeviceInfo?, live: LiveSample?, level: DetailLevel, batch: Int? = null) = TodayUiState(
@@ -162,14 +162,10 @@ class TodayCardsTest {
     }
 
     @Test
-    fun unknownDictionaryTiesTodayTemperatureToTheLiveKey() {
+    fun unknownDictionaryShowsNoLiveReadings() {
         val unknown = waveshare.copy(dict = "0".repeat(64))
-        val ambient = state(unknown, LiveSample(pms = 4, pm25 = 14.9, t = 22.5, imuT = 40.0, rh = 50.0), DetailLevel.SIMPLE)
-        assertEquals(listOf(NOW_AIR, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK), ambient.cards)
-        assertEquals(22.5, ambient.capabilities.liveProfile!!.temperatureOf(ambient.snapshot.live)!!, 0.0)
-        val board = state(unknown, LiveSample(pms = 4, pm25 = 14.9, imuT = 40.0), DetailLevel.SIMPLE)
-        assertEquals(listOf(NOW_AIR, TODAY_SO_FAR, SMART_SYNC, CLOCK), board.cards)
-        assertEquals(40.0, board.capabilities.liveProfile!!.temperatureOf(board.snapshot.live)!!, 0.0)
-        assertFalse(board.capabilities.liveProfile!!.reviewed)
+        val state = state(unknown, LiveSample(pms = 4, pm25 = 14.9, t = 22.5, imuT = 40.0, rh = 50.0), DetailLevel.SIMPLE)
+        assertNull(state.capabilities.liveProfile)
+        assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), state.cards)
     }
 }

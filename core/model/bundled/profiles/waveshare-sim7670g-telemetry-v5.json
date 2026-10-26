@@ -1,0 +1,38 @@
+{
+  "dict": "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb",
+  "family": "air",
+  "primary": [
+    "pm25_atmospheric_ug_m3",
+    "pm10_atmospheric_ug_m3",
+    "pm1_atmospheric_ug_m3",
+    "ambient_temperature_c",
+    "relative_humidity_percent",
+    "battery_percent"
+  ],
+  "scales": {
+    "pm25_atmospheric_ug_m3": "pm25",
+    "pm10_atmospheric_ug_m3": "pm10"
+  },
+  "display_unit": {
+    "pm1_atmospheric_ug_m3": "µg/m³",
+    "pm25_atmospheric_ug_m3": "µg/m³",
+    "pm10_atmospheric_ug_m3": "µg/m³",
+    "pm25_batch_candidate_ug_m3": "µg/m³",
+    "particles_gt03_per_01l": "per 0.1 L",
+    "particles_gt25_per_01l": "per 0.1 L",
+    "ambient_temperature_c": "°C",
+    "relative_humidity_percent": "%",
+    "battery_percent": "%"
+  },
+  "labels": {
+    "pm1_atmospheric_ug_m3": { "en": "PM1" },
+    "pm25_atmospheric_ug_m3": { "en": "PM2.5 raw", "ar": "PM2.5 خام" },
+    "pm10_atmospheric_ug_m3": { "en": "PM10" },
+    "pm25_batch_candidate_ug_m3": { "en": "PM2.5 batch estimate (unvalidated)" },
+    "particles_gt03_per_01l": { "en": "Particles > 0.3 µm" },
+    "particles_gt25_per_01l": { "en": "Particles > 2.5 µm" },
+    "ambient_temperature_c": { "en": "Temperature" },
+    "relative_humidity_percent": { "en": "Humidity" },
+    "battery_percent": { "en": "Battery" }
+  }
+}

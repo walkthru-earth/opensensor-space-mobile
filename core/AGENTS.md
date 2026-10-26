@@ -28,8 +28,11 @@ derived from the template when none is bundled), `StationCollection`, `Scale`, `
 `Station.join`, which joins them. A station keeps every datastream whatever its role, the profile
 picks what shows first. `Aggregate`, `Role` and `Family` are open value classes, so an unknown value
 parses (an unknown aggregate rolls up as `point`). The template sample interval is a default, the
-runtime interval and a file footer `sample_interval_ms` win (`Station.sampleIntervalFor`). LIVE
-values are not modelled here. No caller uses it yet. It is the first module in the `space.opensensor`
+runtime interval and a file footer `sample_interval_ms` win (`Station.sampleIntervalFor`). `LiveColumns`
+maps a template's columns to LIVE keys and picks the temperature and humidity keys, and
+`BundledCatalog.live` reads it for a bundled `dict`. `LiveProfiles` in `protocol/` resolves LIVE
+through it, `DeviceCapabilities` in `history/` carries the result, and the Today screen
+reads it from there. It is the first module in the `space.opensensor`
 package (`space.opensensor.model`), the rest move in #192.
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
@@ -44,7 +47,9 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   a code branch or a schema string check in a screen. Today add metrics through
   `history/.../Metrics.kt` (`MetricSpec`), with column, unit, validity gate and
   an optional scale. A missing column produces no value. `:core:model` holds
-  the data model they move onto (#183), callers switch from #184 onward. Read `docs/devices-and-discovery.md` first. New shared types use generic
+  the data model they move onto (#183) and the bundled board templates and app
+  profiles under `core/model/bundled/` (#184). LIVE profiles and the batch
+  estimate read them. The screens switch in #185 and #186. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading`, or a future `MetricCard`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and
   the privacy rules. The phone uses H3 (`publicfeed`, `H3Grid`) for geometry, viewport cover, descendant

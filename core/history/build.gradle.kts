@@ -11,6 +11,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":core:protocol"))
+            // The bundled board templates, which say whether a board writes the batch estimate (#184).
+            implementation(project(":core:model"))
             api(project(":core:parquet"))
             // History reads the archive through its records (ArchiveRecord) and, later, its ports.
             api(project(":core:archive"))
