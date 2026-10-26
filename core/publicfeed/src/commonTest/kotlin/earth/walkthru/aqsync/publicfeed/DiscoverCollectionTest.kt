@@ -84,26 +84,24 @@ class DiscoverCollectionTest {
     private fun assets(vararg res: Int) = res.joinToString(",") { """"h3_res=$it":{"href":"cells/h3_res=$it/data.parquet"}""" }
 
     @Test
-    fun theMapOpensAtFiveWhenListedAndOtherwiseAtTheNearestListedResolution() {
+    fun aZoomReadsTheNearestListedResolutionAndFiveBreaksTies() {
         val all = DiscoverCollection.parse(collection(assets(3, 5, 7)), root)
-        assertEquals(5, all.defaultRes)
         assertEquals(5, all.resolutionNear(5))
         assertEquals(7, all.resolutionNear(7))
         assertEquals(3, all.resolutionNear(2))
 
         val gap = DiscoverCollection.parse(collection(assets(3, 7)), root)
         // 5 is as near 3 as 7, so the coarser wins the tie and the map is never empty.
-        assertEquals(3, gap.defaultRes)
         assertEquals(3, gap.resolutionNear(5))
         assertEquals(7, gap.resolutionNear(6))
         assertEquals(3, gap.resolutionNear(4))
 
         // A resolution the map cannot draw is never chosen.
         val far = DiscoverCollection.parse(collection(assets(1, 6, 9)), root)
-        assertEquals(6, far.defaultRes)
+        assertEquals(6, far.resolutionNear(5))
         assertEquals(6, far.resolutionNear(2))
-        assertNull(DiscoverCollection.parse(collection(assets(9)), root).defaultRes)
-        assertNull(DiscoverCollection.parse(collection(""), root).defaultRes)
+        assertNull(DiscoverCollection.parse(collection(assets(9)), root).resolutionNear(5))
+        assertNull(DiscoverCollection.parse(collection(""), root).resolutionNear(5))
     }
 
     @Test

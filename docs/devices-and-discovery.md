@@ -567,9 +567,9 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
 - **Discover Collection (#189).** `collection.json` at the root is a STAC Collection read with
   `StationCollection` from `:core:model` (`DiscoverCollection`). H3 only. One asset per
   resolution, keyed `h3_res=<n>`, with a relative href (no `..`, no absolute path) or an http or
-  https URL. The map opens at resolution 5 when it is listed. A zoom whose resolution has no
-  asset reads the nearest listed one, and between two equally near the one nearer 5, so a
-  Collection that lists only some resolutions never shows an empty map. `item_assets.data.table:columns` name `<id>__n`,
+  https URL. The zoom picks the resolution. A zoom whose resolution has no asset reads the
+  nearest listed one, and between two equally near the one nearer 5, so a Collection that lists
+  only some resolutions never shows an empty map. `item_assets.data.table:columns` name `<id>__n`,
   `__mean`, `__min` and `__max` per property. The `__mean` column's `title` names the property
   for an id the app does not know, and its `opensensor:scale` is a key of the Collection's
   `opensensor:scales`, the legend's step scale. A column without one gets the neutral ramp, and so does one whose

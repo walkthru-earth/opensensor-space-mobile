@@ -36,9 +36,6 @@ class DiscoverCollection private constructor(
         .filter { it in ViewportCover.MIN_RES..ViewportCover.MAX_RES }
         .minWithOrNull(compareBy<Int>({ abs(it - res) }, { abs(it - DEFAULT_RES) }, { it }))
 
-    /** The resolution the feed prefers, [DEFAULT_RES] when it is listed, else the nearest listed one. */
-    val defaultRes: Int? get() = resolutionNear(DEFAULT_RES)
-
     /** The column title of [propertyId]'s mean, or null when the Collection gives none. */
     fun title(propertyId: String): String? = stac.columnTitles[mean(propertyId)]
 
@@ -72,7 +69,7 @@ class DiscoverCollection private constructor(
     companion object {
         const val FILE: String = "collection.json"
 
-        /** The resolution a Collection should always list and the tie break of [resolutionNear]. Others are optional. */
+        /** The tie break of [resolutionNear]. A Collection should list it, the others are optional. */
         const val DEFAULT_RES: Int = 5
 
         private const val ASSET_PREFIX = "h3_res="
