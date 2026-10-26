@@ -46,7 +46,9 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   families arrive as data (a measurement dictionary and a family entry), never as
   a code branch or a schema string check in a screen. `:core:model` holds
   the data model (#183) and the bundled board templates and app profiles under
-  `core/model/bundled/` (#184). LIVE (`LiveReading`, #185), the batch estimate and
+  `core/model/bundled/` (#184). `bundled/templates/` is aq-parquet `docs/shared/templates` copied
+  byte for byte (marked `-text`, excluded from the whitespace hooks), and `BundledTemplateBytesTest`
+  pins each file's SHA-256, so never reformat it. LIVE (`LiveReading`, #185), the batch estimate and
   History read them. History builds each `MetricSpec` from a template datastream
   and the profile (`Metrics.of`), and reads each file by the template of its
   footer (`FileTemplates`). A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic

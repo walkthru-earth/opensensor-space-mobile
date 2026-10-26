@@ -1,0 +1,3 @@
+# Bundled board templates, copied verbatim from aq-parquet docs/shared/templates. A template's desc
+# is the SHA-256 of its exact bytes, so git never converts line endings or adds a final newline.
+core/model/bundled/templates/** -text

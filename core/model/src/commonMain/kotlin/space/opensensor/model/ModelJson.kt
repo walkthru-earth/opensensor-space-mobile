@@ -48,6 +48,15 @@ internal object ModelJson {
         )
     }
 
+    /**
+     * The `templates` map of an aq-parquet `docs/shared/templates/index.json`, one entry per `dict`
+     * with its `href` relative to that folder, `desc` and firmware `schema`.
+     */
+    fun parseTemplateIndex(text: String): List<TemplateIndexEntry> = decode<TemplateIndexDto>(text).templates.map { (dict, e) ->
+        require(SHA256_HEX.matches(dict) && SHA256_HEX.matches(e.desc)) { "index.json entry ${e.href} has a malformed digest" }
+        TemplateIndexEntry(dict = dict, desc = e.desc, href = e.href, schema = e.schema)
+    }
+
     fun parseCollection(text: String): StationCollection {
         val dto = decode<CollectionDto>(text)
         require(dto.type == "Collection") { "not a station Collection, type is ${dto.type}" }
@@ -156,6 +165,15 @@ internal object ModelJson {
         else -> throw IllegalArgumentException("a label is a string or a language map")
     }
 }
+
+/** One `templates` entry of a published template `index.json`. */
+internal data class TemplateIndexEntry(val dict: String, val desc: String, val href: String, val schema: String)
+
+@Serializable
+internal class TemplateIndexDto(val templates: Map<String, TemplateIndexEntryDto>)
+
+@Serializable
+internal class TemplateIndexEntryDto(val desc: String, val href: String, val schema: String)
 
 @Serializable
 internal class TemplateDto(

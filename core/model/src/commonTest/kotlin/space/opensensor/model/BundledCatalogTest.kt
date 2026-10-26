@@ -10,10 +10,14 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class BundledCatalogTest {
-    // The current digests, aq-parquet ada9514 (#100). Firmware CoreS3 v6.15 and Waveshare v2.9 (#101) keep them.
+    // The current digests and descs, aq-parquet a09f5ae docs/shared/templates (#86).
     private val cores3Dict = "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94"
     private val waveshareDict = "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb"
+    private val cores3Desc = "1b7d969abb670579cd1f34f0bd7e224f66b120ed178fbb2fcf024e14a46c3f08"
+    private val waveshareDesc = "e6b32af089b5c0b8389999a09b4a81ffe36d15f908a2002765025f78853b7d32"
     private val unknownDict = "a".repeat(64)
+    private val cores3File = "templates/m5stack-cores3/$cores3Dict.json"
+    private val waveshareFile = "templates/waveshare-esp32-s3-sim7670g/$waveshareDict.json"
 
     @Test
     fun bundlesOnlyTheCurrentDigestOfEachBoard() {
@@ -34,11 +38,23 @@ class BundledCatalogTest {
 
     @Test
     fun theBundledCores3TemplateKeepsTheReviewedA017edfColumns() {
-        // The a017edf bytes carry the retired e5060fb7 digest. Its columns did not change with the new one.
+        // The a017edf bytes carry the retired e5060fb7 digest. The firmware bytes keep every fact it
+        // reviewed and only add what it left out, a unit, property, aggregate or code classes. A unit
+        // of 1 now sits in the column, so the firmware drops its unit label. The one changed fact is
+        // the board temperature range, widened to the BMI270 rating of -40 to 85.
         val reviewed = BoardTemplate.parse(CORES3_TEMPLATE)
         val bundled = assertNotNull(BundledCatalog.template(cores3Dict))
         reviewed.datastreams.forEach { column ->
-            assertEquals(column, bundled.datastream(column.name), column.name)
+            val b = assertNotNull(bundled.datastream(column.name), column.name)
+            val filled = column.copy(
+                unit = column.unit ?: b.unit,
+                property = column.property ?: b.property,
+                aggregate = column.aggregate ?: b.aggregate,
+                classes = column.classes.ifEmpty { b.classes },
+                unitLabel = column.unitLabel?.takeIf { it != b.unit },
+                plausibleRange = if (column.name == "imu_temperature_c") PlausibleRange(-40.0, 85.0) else column.plausibleRange,
+            )
+            assertEquals(filled, b, column.name)
         }
         reviewed.liveKeys.forEach { (column, key) -> assertEquals(key, bundled.liveKeys[column], column) }
     }
@@ -47,7 +63,7 @@ class BundledCatalogTest {
     fun lookupWorksWithAndWithoutADesc() {
         val bundled = assertNotNull(BundledCatalog.template(cores3Dict))
         assertSame(bundled, BundledCatalog.template(cores3Dict, desc = DESC_B))
-        val served = BoardTemplate.parse(BundledFiles.files.getValue("templates/cores3-telemetry-v5.json"), desc = DESC_A)
+        val served = BoardTemplate.parse(BundledFiles.files.getValue(cores3File), desc = DESC_A)
         assertSame(served, BundledCatalog.index(served = listOf(served)).resolve(cores3Dict, DESC_A))
         assertSame(bundled, BundledCatalog.index(served = listOf(served)).resolve(cores3Dict))
         assertNull(BundledCatalog.template(unknownDict))
@@ -69,7 +85,7 @@ class BundledCatalogTest {
 
     @Test
     fun anUnknownDigestShowsRawColumnNamesAndRawUnits() {
-        val json = BundledFiles.files.getValue("templates/waveshare-sim7670g-telemetry-v5.json").replace(waveshareDict, unknownDict)
+        val json = BundledFiles.files.getValue(waveshareFile).replace(waveshareDict, unknownDict)
         val served = BoardTemplate.parse(json, desc = DESC_B)
         val station = assertNotNull(BundledCatalog.station("s1", unknownDict, desc = DESC_B, served = listOf(served)))
         assertTrue(station.profile.isDerived)
@@ -106,7 +122,9 @@ class BundledCatalogTest {
 
     @Test
     fun propertyIsOptionalOnEveryColumn() {
-        val station = assertNotNull(BundledCatalog.station("s1", cores3Dict))
+        // Every published column names a property today. A template that drops one still joins.
+        val json = BundledFiles.files.getValue(cores3File).replace("\"opensensor:property\":\"urn:walkthru-earth:property:battery_state_of_charge\",", "")
+        val station = Station.join("s1", BoardTemplate.parse(json), BundledCatalog.profile(cores3Dict))
         val battery = station.datastream("battery_percent")!!
         assertNull(battery.datastream.property)
         assertEquals("Battery", battery.label("en"))
@@ -132,27 +150,33 @@ class BundledCatalogTest {
     }
 
     @Test
-    fun aGeneratorTemplateWithCodeClassesATitleAndKeywordsParses() {
-        // aq-parquet #85 adds classification:classes on code columns, a title and keywords, all in the v0.1.0 schema.
-        val bundled = BundledFiles.files.getValue("templates/waveshare-sim7670g-telemetry-v5.json")
-        val json = bundled
-            .replace(
-                "\"name\": \"battery_health_state\",",
-                "\"name\": \"battery_health_state\", \"classification:classes\": [{\"value\": 0, \"name\": \"unknown\", \"nodata\": true}, {\"value\": 1, \"name\": \"good\", \"title\": \"Good\"}],",
-            )
-            .replace("\"title\": \"Waveshare ESP32-S3 SIM7670G with a Plantower PMS5003T\"", "\"title\": \"Waveshare board\"")
-            .replace("\"low-cost sensor\"", "\"low-cost sensor\", \"LTE\"")
-        assertTrue("classification:classes\": [{\"value\": 0, \"name\": \"unknown\"" in json)
-        val template = BoardTemplate.parse(json)
-        val reference = assertNotNull(BundledCatalog.template(waveshareDict))
-        assertEquals("Waveshare board", template.title)
-        assertEquals(listOf("air quality", "PM2.5", "low-cost sensor", "LTE"), template.keywords)
+    fun theFirmwareTemplateCarriesCodeClassesATitleAndKeywords() {
+        // aq-parquet #85 generates classification:classes on code columns, a title and keywords.
+        val template = assertNotNull(BundledCatalog.template(waveshareDict))
+        assertEquals("Waveshare ESP32-S3-SIM7670G-4G V2.0 with Plantower PMS5003T and Analog Devices MAX17048", template.title)
+        assertTrue("PM2.5" in template.keywords)
         val state = template.datastream("battery_health_state")!!
-        assertEquals(listOf(0L, 1L), state.classes.map { it.value })
         assertTrue(state.classOf(0)!!.nodata)
-        assertEquals(reference.datastreams.map { it.copy(classes = emptyList()) }, template.datastreams.map { it.copy(classes = emptyList()) })
-        assertEquals(reference.datastream("pms_status")!!.classes, template.datastream("pms_status")!!.classes)
-        assertEquals(reference.liveKeys, template.liveKeys)
+        assertEquals("model-mismatch", template.datastream("pms_status")!!.classes.last().name)
+    }
+
+    @Test
+    fun bundledTemplatesCarryTheDescOfTheIndex() {
+        assertEquals(cores3Desc, BundledCatalog.template(cores3Dict)?.key?.desc)
+        assertEquals(waveshareDesc, BundledCatalog.template(waveshareDict)?.key?.desc)
+        assertEquals(listOf("cores3-telemetry-v5", "waveshare-sim7670g-telemetry-v5"), BundledCatalog.templates.map { it.schema })
+    }
+
+    @Test
+    fun theIndexMustListEveryTemplateWithItsDictAndSchema() {
+        val files = BundledFiles.files
+        val stray = files + ("templates/m5stack-cores3/$unknownDict.json" to files.getValue(cores3File))
+        assertFailsWith<IllegalArgumentException> { BundledCatalog.templatesOf(stray) }
+        val missing = files - cores3File
+        assertFailsWith<IllegalArgumentException> { BundledCatalog.templatesOf(missing) }
+        val wrongDict = files + (cores3File to files.getValue(waveshareFile))
+        assertFailsWith<IllegalArgumentException> { BundledCatalog.templatesOf(wrongDict) }
+        assertEquals(BundledCatalog.templates, BundledCatalog.templatesOf(files))
     }
 
     @Test

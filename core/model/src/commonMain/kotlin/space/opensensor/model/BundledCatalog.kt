@@ -2,22 +2,45 @@ package space.opensensor.model
 
 /**
  * The board templates and app profiles the app ships, read from the raw JSON files under
- * `core/model/bundled`. Templates are keyed by their `firmware.dict` digest and copied verbatim from
- * the firmware, so a new digest is a file swap and a fixture refresh with no code change. Only the
- * current digest of each board is bundled. An unknown digest resolves only through a served template,
- * and then renders with a profile [AppProfile.derive]d from it.
+ * `core/model/bundled`. `templates/` is a verbatim copy of aq-parquet `docs/shared/templates`, one
+ * `<board>/<dict>.json` per board and the `index.json` that maps each `dict` to its file and `desc`, so
+ * a new digest is a folder copy and a fixture refresh with no code change. Only the current digest of
+ * each board is bundled. An unknown digest resolves only through a served template, and then renders
+ * with a profile [AppProfile.derive]d from it.
  */
 object BundledCatalog {
     private const val TEMPLATES = "templates/"
+    private const val TEMPLATE_INDEX = "${TEMPLATES}index.json"
     private const val PROFILES = "profiles/"
 
-    /** Every bundled template. Bundled bytes carry no desc, a lookup by dict finds them. */
-    val templates: List<BoardTemplate> = BundledFiles.files.filterKeys { it.startsWith(TEMPLATES) }.values.map { BoardTemplate.parse(it) }
+    /**
+     * Every bundled template, in `index.json` order, each keyed by its `dict` and the `desc` the index
+     * gives it. The desc is the SHA-256 of the bundled bytes, which a host test checks.
+     */
+    val templates: List<BoardTemplate> = templatesOf(BundledFiles.files)
 
     /** Every bundled app profile. */
     val profiles: List<AppProfile> = BundledFiles.files.filterKeys { it.startsWith(PROFILES) }.values.map { AppProfile.parse(it) }
 
     private val bundledIndex = TemplateIndex(templates)
+
+    /**
+     * The templates [files] lists in [TEMPLATE_INDEX]. Each file parses with the index `desc` and must
+     * carry the index `dict` and `schema`, and every template file must be in the index.
+     */
+    internal fun templatesOf(files: Map<String, String>): List<BoardTemplate> {
+        val index = ModelJson.parseTemplateIndex(files.getValue(TEMPLATE_INDEX))
+        val listed = index.map { TEMPLATES + it.href }.toSet()
+        val stray = files.keys.filter { it.startsWith(TEMPLATES) && it != TEMPLATE_INDEX && it !in listed }
+        require(stray.isEmpty()) { "bundled templates missing from index.json: $stray" }
+        return index.map { entry ->
+            val text = requireNotNull(files[TEMPLATES + entry.href]) { "index.json names a missing template ${entry.href}" }
+            BoardTemplate.parse(text, desc = entry.desc).also {
+                require(it.dict == entry.dict) { "${entry.href} carries dict ${it.dict}, index.json says ${entry.dict}" }
+                require(it.schema == entry.schema) { "${entry.href} carries schema ${it.schema}, index.json says ${entry.schema}" }
+            }
+        }
+    }
     private val profilesByDict: Map<String, AppProfile> = byDict(profiles)
 
     /** [profiles] keyed by dict. Two profiles for one dict fail, so neither wins silently. */
