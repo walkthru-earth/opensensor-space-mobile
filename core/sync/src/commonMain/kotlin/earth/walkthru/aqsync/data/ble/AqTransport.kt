@@ -16,7 +16,7 @@ sealed interface ConnectionState {
     data object NegotiatingMtu : ConnectionState
     data object EnablingNotifications : ConnectionState
 
-    /** LAN: `"AQS1"` + token sent, waiting for `HELLO`. */
+    /** LAN: `"OSS1"` + token sent, waiting for `HELLO`. */
     data object Authenticating : ConnectionState
     data class Ready(val mtu: Int) : ConnectionState
     data class Failed(val reason: String, val gattStatus: Int? = null) : ConnectionState
@@ -49,7 +49,7 @@ enum class TransportKind {
 }
 
 /**
- * The five GATT attributes of the AQ Sync service, abstracted so the same protocol/sync code runs
+ * The five GATT attributes of the OpenSensor Sync service, abstracted so the same protocol/sync code runs
  * over a real Bluetooth GATT link (`BleLinkDriver` in `app/`), a LAN TCP socket (`TcpLinkDriver` in
  * `app/`) or an in-process fake device.
  *

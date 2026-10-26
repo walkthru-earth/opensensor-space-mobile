@@ -10,10 +10,23 @@ import kotlin.test.assertNull
 class PortableProtocolTest {
     @Test fun lanEnvelopeAndHandshakeMatchFirmwareBytes() {
         assertEquals("010007", LanProtocol.encode(Request.Status.encode()).toHex())
-        assertEquals("41515331" + "00".repeat(32), LanProtocol.handshake(ByteArray(32)).toHex())
-        assertEquals("_aqsync._tcp", LanProtocol.SERVICE_TYPE)
+        assertEquals("4f535331" + "00".repeat(32), LanProtocol.handshake(ByteArray(32)).toHex())
+        assertEquals("_ossync._tcp", LanProtocol.SERVICE_TYPE)
+        assertEquals("_ossync._tcp.", LanProtocol.SERVICE_TYPE_DOT)
+        assertEquals("OSS1", LanProtocol.HANDSHAKE_MAGIC)
+        assertEquals(47390, LanProtocol.DEFAULT_PORT)
         assertFailsWith<IllegalArgumentException> { LanProtocol.encode(byteArrayOf()) }
         assertFailsWith<IllegalArgumentException> { LanProtocol.handshake(ByteArray(31)) }
+    }
+
+    /** aq-parquet docs/shared/mobile-migration.md, #93 entry. Base `255f595e-XXXX-47ed-8e0d-59994199b680`. */
+    @Test fun gattUuidsMatchFirmwareTable() {
+        assertEquals("255f595e-0001-47ed-8e0d-59994199b680", AqGatt.SERVICE)
+        assertEquals("255f595e-0002-47ed-8e0d-59994199b680", AqGatt.INFO)
+        assertEquals("255f595e-0003-47ed-8e0d-59994199b680", AqGatt.STATUS)
+        assertEquals("255f595e-0004-47ed-8e0d-59994199b680", AqGatt.LIVE)
+        assertEquals("255f595e-0005-47ed-8e0d-59994199b680", AqGatt.CONTROL)
+        assertEquals("255f595e-0006-47ed-8e0d-59994199b680", AqGatt.RESPONSE)
     }
 
     @Test fun requestWireBytes() {

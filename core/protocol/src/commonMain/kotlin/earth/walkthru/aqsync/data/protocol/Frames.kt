@@ -400,7 +400,7 @@ sealed interface Frame {
 
 class FrameDecodeException(message: String) : Exception(message)
 
-/** Size of the LAN bearer token carried by `TOKEN` and the `"AQS1"` handshake. */
+/** Size of the LAN bearer token carried by `TOKEN` and the `"OSS1"` handshake. */
 const val LAN_TOKEN_BYTES: Int = 32
 
 object FrameCodec {

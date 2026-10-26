@@ -5,15 +5,15 @@ package earth.walkthru.aqsync.data.protocol
  * little-endian followed by exactly `len` bytes. Phone → device carries a control request body
  * (≤ 512 bytes); device → phone carries one response or push frame (≤ `payload_max` = 1024).
  *
- * The handshake is the one unframed message: `"AQS1"` + 32-byte token, sent by the phone within
+ * The handshake is the one unframed message: `"OSS1"` + 32-byte token, sent by the phone within
  * 5 s of connecting.
  */
 object LanProtocol {
     /** DNS-SD service type; the instance name is the BLE local name (`OS-xxxx`). */
-    const val SERVICE_TYPE = "_aqsync._tcp"
-    const val SERVICE_TYPE_DOT = "_aqsync._tcp."
+    const val SERVICE_TYPE = "_ossync._tcp"
+    const val SERVICE_TYPE_DOT = "_ossync._tcp."
     const val DEFAULT_PORT = 47390
-    const val HANDSHAKE_MAGIC = "AQS1"
+    const val HANDSHAKE_MAGIC = "OSS1"
     const val HANDSHAKE_TIMEOUT_MS = 5_000L
 
     /** Largest device → phone frame; also what the transport reports as `mtu − 3`. */

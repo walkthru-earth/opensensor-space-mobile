@@ -10,7 +10,7 @@
       docs/store-compliance.md.
 
       INTERNET exists only so that sockets exist at all: the protocol v2 LAN transport opens one
-      plain TCP connection to a device discovered via mDNS `_aqsync._tcp` on the current network
+      plain TCP connection to a device discovered via mDNS `_ossync._tcp` on the current network
       (data/lan/). The code never connects to any address it did not obtain from that discovery.
       No analytics and no account. The planned public Discover feed (anonymous read-only GETs, a
       Settings switch) and per-device opt-in uploads follow the network rule in AGENTS.md and

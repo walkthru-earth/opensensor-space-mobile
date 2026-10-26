@@ -24,11 +24,11 @@ class LanFramingTest {
     }
 
     @Test
-    fun `handshake is AQS1 plus 32 raw token bytes unframed`() {
+    fun `handshake is OSS1 plus 32 raw token bytes unframed`() {
         val token = ByteArray(32) { it.toByte() }
         val hs = LanFraming.handshake(token)
         assertEquals(36, hs.size)
-        assertEquals("AQS1", hs.copyOfRange(0, 4).decodeToString())
+        assertEquals("OSS1", hs.copyOfRange(0, 4).decodeToString())
         assertArrayEquals(token, hs.copyOfRange(4, 36))
         try {
             LanFraming.handshake(ByteArray(16))

@@ -89,7 +89,7 @@ class TransportFactory @Inject constructor(
     /**
      * LAN socket to a device we already know over BLE: [address] stays the Bluetooth address so the
      * session, the archive and the UI treat it as the same device. [host]/[port] come from mDNS
-     * discovery of `_aqsync._tcp` — the only place the app ever gets an IP address from.
+     * discovery of `_ossync._tcp` — the only place the app ever gets an IP address from.
      */
     override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AndroidLink =
         TcpLinkDriver(address = address, displayName = name, host = host, port = port, token = token, ioDispatcher = ioDispatcher)

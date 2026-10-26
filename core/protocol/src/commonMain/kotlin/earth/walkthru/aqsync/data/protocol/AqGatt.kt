@@ -3,11 +3,11 @@ package earth.walkthru.aqsync.data.protocol
 /** Platform-independent GATT identities. Android wraps these in UUID; iOS uses CBUUID. */
 object AqGatt {
     const val PROTOCOL_VERSION = 3
-    const val SERVICE = "c0a5e9f0-0001-4b1a-9c3e-2d7f8a6b4e01"
-    const val INFO = "c0a5e9f0-0002-4b1a-9c3e-2d7f8a6b4e01"
-    const val STATUS = "c0a5e9f0-0003-4b1a-9c3e-2d7f8a6b4e01"
-    const val LIVE = "c0a5e9f0-0004-4b1a-9c3e-2d7f8a6b4e01"
-    const val CONTROL = "c0a5e9f0-0005-4b1a-9c3e-2d7f8a6b4e01"
-    const val RESPONSE = "c0a5e9f0-0006-4b1a-9c3e-2d7f8a6b4e01"
+    const val SERVICE = "255f595e-0001-47ed-8e0d-59994199b680"
+    const val INFO = "255f595e-0002-47ed-8e0d-59994199b680"
+    const val STATUS = "255f595e-0003-47ed-8e0d-59994199b680"
+    const val LIVE = "255f595e-0004-47ed-8e0d-59994199b680"
+    const val CONTROL = "255f595e-0005-47ed-8e0d-59994199b680"
+    const val RESPONSE = "255f595e-0006-47ed-8e0d-59994199b680"
     const val CCCD = "00002902-0000-1000-8000-00805f9b34fb"
 }

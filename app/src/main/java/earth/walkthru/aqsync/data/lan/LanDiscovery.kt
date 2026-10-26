@@ -16,7 +16,7 @@ import java.util.concurrent.Executor
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** One `_aqsync._tcp` instance on the current network, resolved. */
+/** One `_ossync._tcp` instance on the current network, resolved. */
 data class LanDevice(
     /** DNS-SD instance name, the BLE local name such as `OS-6b40`. Display data only. */
     val serviceName: String,
@@ -36,7 +36,7 @@ data class LanDevice(
 }
 
 /**
- * mDNS/DNS-SD browse for `_aqsync._tcp` with [NsdManager]. Emits the full map of currently
+ * mDNS/DNS-SD browse for `_ossync._tcp` with [NsdManager]. Emits the full map of currently
  * visible, resolved devices keyed by instance name whenever it changes.
  *
  * On API 34+ each found service gets a [NsdManager.ServiceInfoCallback] (continuous updates,

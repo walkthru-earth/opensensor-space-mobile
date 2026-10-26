@@ -62,7 +62,7 @@ import kotlin.time.Duration
 /**
  * One LAN connection (`ble-sync-protocol.md`, "LAN transport") as a [AndroidLink].
  *
- * [open] connects, sends `"AQS1"` + token unframed and waits for a framed `HELLO`. A reader on
+ * [open] connects, sends `"OSS1"` + token unframed and waits for a framed `HELLO`. A reader on
  * [ioDispatcher] then hands every frame to the session's sink as it arrives. It never queues, so
  * a slow consumer is the session's budget problem, and the session's [Heartbeat][earth.walkthru.aqsync.link.Heartbeat]
  * is the only liveness rule. [send] is a single writer with a deadline. A write that cannot finish

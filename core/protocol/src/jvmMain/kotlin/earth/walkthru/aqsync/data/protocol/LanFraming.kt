@@ -9,7 +9,7 @@ import java.io.OutputStream
  * little-endian followed by exactly `len` bytes. Phone → device carries a control request body
  * (≤ 512 bytes); device → phone carries one response or push frame (≤ `payload_max` = 1024).
  *
- * The handshake is the one unframed message: `"AQS1"` + 32-byte token, sent by the phone within
+ * The handshake is the one unframed message: `"OSS1"` + 32-byte token, sent by the phone within
  * 5 s of connecting.
  */
 object LanFraming {

@@ -115,7 +115,7 @@ enum class CompanionNotice {
     /** The sensor dropped the Bluetooth connection. */
     SENSOR_DISCONNECTED,
 
-    /** The sensor has no AQ Sync service. */
+    /** The sensor has no OpenSensor Sync service. */
     SERVICE_MISSING,
 
     /** The sensor lacks the live reading characteristics. */

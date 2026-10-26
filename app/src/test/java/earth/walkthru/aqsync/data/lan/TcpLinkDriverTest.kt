@@ -56,7 +56,7 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * The real [TcpLinkDriver] against an in-JVM device that speaks the LAN envelope from
- * `ble-sync-protocol.md`, unframed `"AQS1"` + token, framed `HELLO`, then u16 LE frames with
+ * `ble-sync-protocol.md`, unframed `"OSS1"` + token, framed `HELLO`, then u16 LE frames with
  * `STATUS` and `LIVE` pushes interleaved between response frames.
  */
 class TcpLinkDriverTest {
@@ -92,7 +92,7 @@ class TcpLinkDriverTest {
             val out = BufferedOutputStream(s.getOutputStream())
             val hs = ByteArray(36).also { inp.readFully(it) }
             receivedHandshake = hs
-            val ok = hs.copyOfRange(0, 4).contentEquals("AQS1".toByteArray()) && hs.copyOfRange(4, 36).contentEquals(token)
+            val ok = hs.copyOfRange(0, 4).contentEquals("OSS1".toByteArray()) && hs.copyOfRange(4, 36).contentEquals(token)
             if (!ok) {
                 LanFraming.write(out, FrameCodec.encode(Frame.Error(0, ProtocolError.AUTH_FAILED.code, "")))
                 return

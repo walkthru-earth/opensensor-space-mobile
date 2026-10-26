@@ -25,7 +25,7 @@ data class KnownSensor(
     val hasWifiAccess: Boolean,
 )
 
-/** A sensor found on the local Wi-Fi through `_aqsync._tcp`. [station] comes from its TXT record. */
+/** A sensor found on the local Wi-Fi through `_ossync._tcp`. [station] comes from its TXT record. */
 @Immutable
 data class WifiSensor(val name: String, val station: String?)
 

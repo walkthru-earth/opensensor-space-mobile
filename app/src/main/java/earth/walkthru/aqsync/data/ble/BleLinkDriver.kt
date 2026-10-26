@@ -398,7 +398,7 @@ class BleLinkDriver(
 
     private fun bindCharacteristics(g: BluetoothGatt) {
         val service = g.getService(AqUuids.SERVICE)
-            ?: throw TransportException("AQ Sync service ${AqUuids.SERVICE} not found on this device")
+            ?: throw TransportException("OpenSensor Sync service ${AqUuids.SERVICE} not found on this device")
         info = service.getCharacteristic(AqUuids.INFO) ?: missing("info")
         status = service.getCharacteristic(AqUuids.STATUS) ?: missing("status")
         live = service.getCharacteristic(AqUuids.LIVE) ?: missing("live")
@@ -407,7 +407,7 @@ class BleLinkDriver(
     }
 
     private fun missing(name: String): Nothing =
-        throw TransportException("characteristic `$name` missing from the AQ Sync service")
+        throw TransportException("characteristic `$name` missing from the OpenSensor Sync service")
 
     /** Pairing could not finish. [missing] when the phone holds no bond and may not ask for one. */
     class BondException(message: String, val missing: Boolean = false, cause: Throwable? = null) : TransportException(message, cause = cause)

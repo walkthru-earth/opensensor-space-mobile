@@ -17,7 +17,7 @@ class FrameRedactionTest {
     fun secretFramesAreTokenSetConfigAndTheLanHandshake() {
         assertTrue(FrameRedaction.isSecret(FrameDirection.RX, byteArrayOf(FrameType.TOKEN.toByte()) + token))
         assertTrue(FrameRedaction.isSecret(FrameDirection.TX, byteArrayOf(Opcode.SET_CONFIG.toByte(), 0x7B)))
-        assertTrue(FrameRedaction.isSecret(FrameDirection.TX, "AQS1".encodeToByteArray() + token))
+        assertTrue(FrameRedaction.isSecret(FrameDirection.TX, "OSS1".encodeToByteArray() + token))
         assertFalse(FrameRedaction.isSecret(FrameDirection.TX, byteArrayOf(Opcode.GET_TOKEN.toByte())))
         assertFalse(FrameRedaction.isSecret(FrameDirection.TX, byteArrayOf(FrameType.TOKEN.toByte())))
         assertFalse(FrameRedaction.isSecret(FrameDirection.RX, byteArrayOf(Opcode.SET_CONFIG.toByte())))
@@ -27,10 +27,10 @@ class FrameRedactionTest {
     @Test
     fun handshakeIsRecordedWithoutItsToken() {
         val recorder = FrameRecorder()
-        recorder.tx("AQS1".encodeToByteArray() + token)
+        recorder.tx("OSS1".encodeToByteArray() + token)
         val rec = recorder.records.value.single()
         assertTrue(rec.redacted)
-        assertEquals("41…", rec.previewHex)
+        assertEquals("4f…", rec.previewHex)
         assertEquals(0, rec.length)
     }
 

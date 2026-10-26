@@ -248,7 +248,7 @@ class BackgroundRunHandle internal constructor(val total: Int, private val job: 
 
 /**
  * Runs the shared runner over the Swift adapters. Swift passes these ports.
- * [browse] looks for `_aqsync._tcp` for up to the timeout and answers with service names and their
+ * [browse] looks for `_ossync._tcp` for up to the timeout and answers with service names and their
  * TXT stations. [sync] opens one sensor (over Wi-Fi when the service name is given, otherwise its
  * bonded peripheral), collects the missing files, closes it and answers. [isOwned] is true while the
  * user holds a link to that sensor.
