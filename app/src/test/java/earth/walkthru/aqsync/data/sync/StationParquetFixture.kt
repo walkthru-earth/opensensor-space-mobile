@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.history.OpenSensorFooter
+import earth.walkthru.aqsync.data.history.opensensorFooterJson
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
@@ -11,13 +12,14 @@ import java.io.ByteArrayOutputStream
 internal fun stationParquetFixture(bytes: ByteArray, station: String): ByteArray {
     val source = ParquetFile.wrap(bytes)
     val kv = source.metadata.keyValueMetadata
-    val footer = (OpenSensorFooter.of(kv) ?: OpenSensorFooter()).copy(stationId = station)
+    val own = OpenSensorFooter.of(kv)
+    val footer = opensensorFooterJson(own?.dictionarySha256, own?.templateSha256, own?.sampleIntervalMs, station = station, purpose = own?.purpose ?: "telemetry")
     val output = ByteArrayOutputStream()
     val writer = ParquetWriter(
         output,
         source.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) },
         ParquetCodec.UNCOMPRESSED,
-        kv + (OpenSensorFooter.KEY to footer.encode()),
+        kv + (OpenSensorFooter.KEY to footer),
     )
     writer.begin()
     repeat(source.rowGroupCount) { group -> writer.rowGroup(source.leaves.map { source.readColumn(it, group) }) }

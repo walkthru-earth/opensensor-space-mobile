@@ -3,19 +3,13 @@ package earth.walkthru.aqsync.data.history
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
 
 /**
  * The fields the app reads from a file's `opensensor` footer, the one Parquet key-value entry of the
  * stac-opensensor v0.1.0 footer contract (compact UTF-8 JSON, in the style of GeoParquet `geo`). No
  * other footer key is read. Every field not named here is ignored, and each named one is null when the
- * footer leaves it out.
- *
- * A derived day file carries the same JSON shape under [DAY_KEY] instead, with only the cadence and
- * digests, because it cannot fill a value that validates against `footer.json`.
+ * footer leaves it out. The app never writes this key. A derived day file carries [AppDay] instead.
  */
 data class OpenSensorFooter(
     /** `acquisition.sample_interval_ms`, null when absent or not positive. */
@@ -29,30 +23,10 @@ data class OpenSensorFooter(
     /** `file.purpose`, `telemetry` for station data. */
     val purpose: String? = null,
 ) {
-    /**
-     * This footer as compact JSON with only the fields it knows, in the order of the contract. The app
-     * writes it under [DAY_KEY] only, never under [KEY], since it never fills a whole valid footer.
-     */
-    fun encode(): String = buildJsonObject {
-        put(VERSION, CURRENT_VERSION)
-        if (stationId != null) putJsonObject(STATION) { put(ID, stationId) }
-        dictionarySha256?.let { sha -> putJsonObject(DICTIONARY) { put(SHA256, sha) } }
-        templateSha256?.let { sha -> putJsonObject(TEMPLATE) { put(SHA256, sha) } }
-        sampleIntervalMs?.let { ms -> putJsonObject(ACQUISITION) { put(SAMPLE_INTERVAL_MS, ms) } }
-        purpose?.let { p -> putJsonObject(FILE) { put(PURPOSE, p) } }
-    }.toString()
-
     companion object {
         /** The only footer key of the contract. */
         const val KEY = "opensensor"
 
-        /**
-         * The app-local key of a derived day file. It holds the cadence and digests the app reads back
-         * from its own day files, in the shape of [KEY]. It is not part of the contract, so an indexer
-         * that looks for [KEY] never takes a day file for a broken raw file.
-         */
-        const val DAY_KEY = "opensensor_app_day"
-        const val CURRENT_VERSION = "0.1.0"
         private const val SUPPORTED_MAJOR = "0"
         private const val VERSION = "version"
         private const val DICTIONARY = "dictionary"
@@ -72,9 +46,6 @@ data class OpenSensorFooter(
          * interval that is not an integer all mean no footer, the same as a file written without one.
          */
         fun of(keyValues: Map<String, String>): OpenSensorFooter? = keyValues[KEY]?.let(::parse)
-
-        /** The [DAY_KEY] entry of a derived day file with Parquet [keyValues], under the rules of [of]. */
-        fun ofDay(keyValues: Map<String, String>): OpenSensorFooter? = keyValues[DAY_KEY]?.let(::parse)
 
         /** Parses the JSON [value] of a [KEY] entry, null under the rules of [of]. */
         fun parse(value: String): OpenSensorFooter? = try {

@@ -114,35 +114,6 @@ val waveshareTemplate: space.opensensor.model.BoardTemplate = space.opensensor.m
  */
 val CoreS3Files: FileTemplates = FileTemplates { _, _ -> coreS3Template }
 
-/**
- * A full stac-opensensor v0.1.0 `opensensor` footer value, shaped member for member like the footer
- * firmware writes (aq-parquet #105), naming [dict], [desc], [intervalMs], [station] and [purpose]. A null
- * leaves that member out. The firmware version is a placeholder, so no test pins a release string.
- * Every member the app does not read is there so the reader is shown to ignore it.
- */
-fun opensensorFooterJson(
-    dict: String?,
-    desc: String?,
-    intervalMs: Long?,
-    board: String = "m5stack-cores3",
-    schema: String = "cores3-telemetry-v5",
-    station: String? = null,
-    purpose: String? = "telemetry",
-): String {
-    val id = station?.let { """"id":"$it",""" }.orEmpty()
-    val dictionary = dict?.let {
-        """"dictionary":{"sha256":"$it","version":"$schema","uri":"https://example.invalid/dictionaries/$schema.inc"},"""
-    }.orEmpty()
-    val template = desc?.let { """"template":{"href":"https://example.invalid/templates/$board/$it.json","sha256":"$it"},""" }.orEmpty()
-    val interval = intervalMs?.let { """"sample_interval_ms":$it,""" }.orEmpty()
-    val filePurpose = purpose?.let { ""","purpose":"$it"""" }.orEmpty()
-    return """{"version":"0.1.0","station":{$id"device_id":"0123456789ab","board":"$board","deployment_id":"unknown"},""" +
-        """"firmware":{"version":"test-firmware","schema":"$schema","boot_id":"0123456789abcdef0123456789abcdef"},""" +
-        dictionary + template +
-        """"acquisition":{$interval"time_semantics":"sample instant, UTC","config_id":"default","config":"{}","calibration_id":"unknown"},""" +
-        """"file":{"rotation_interval_s":3600,"row_groups":4,"row_group_rows_max":90,"compression":"LZ4_RAW"$filePurpose}}"""
-}
-
 /** The `opensensor` footer entry of a file written under [template], with its dict, its desc and [intervalMs]. */
 fun opensensorFooter(template: space.opensensor.model.BoardTemplate, intervalMs: Long? = 10_000, desc: String? = template.key.desc): Map<String, String> =
     mapOf(OpenSensorFooter.KEY to opensensorFooterJson(template.dict, desc, intervalMs))
@@ -151,18 +122,18 @@ fun opensensorFooter(template: space.opensensor.model.BoardTemplate, intervalMs:
 fun coreS3Footer(extra: Map<String, String> = emptyMap()): Map<String, String> = opensensorFooter(coreS3Template) + extra
 
 /**
- * [bytes] rewritten with the bundled CoreS3 dict, template digest and a 10 s cadence in the footer. The
- * device fixtures predate them, and a derived day file without a dict gives way to the raw files. The
- * station, boot, schema and purpose of the file's own footer are kept.
+ * [bytes] rewritten with a firmware footer naming the bundled CoreS3 dict, template digest and a 10 s
+ * cadence. The device fixtures predate them, and a derived day file without a dict gives way to the raw
+ * files. The station and purpose of the file's own footer are kept.
  */
 fun withCoreS3Dict(bytes: ByteArray): ByteArray = ParquetFile.wrap(bytes).use { file ->
     val sink = MemorySink()
-    val add = OpenSensorFooter.of(coreS3Footer())!!
-    val merged = file.metadata.footer?.copy(sampleIntervalMs = add.sampleIntervalMs, dictionarySha256 = add.dictionarySha256, templateSha256 = add.templateSha256) ?: add
+    val own = file.metadata.footer
+    val json = opensensorFooterJson(coreS3Template.dict, coreS3Template.key.desc, 10_000, station = own?.stationId, purpose = own?.purpose)
     val w = ParquetWriter(
         sink,
         file.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) },
-        keyValueMetadata = file.metadata.keyValueMetadata + (OpenSensorFooter.KEY to merged.encode()),
+        keyValueMetadata = file.metadata.keyValueMetadata + (OpenSensorFooter.KEY to json),
     )
     w.begin()
     w.rowGroup(file.leaves.map { file.readColumn(it) })

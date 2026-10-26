@@ -123,17 +123,18 @@ A tier bucket fed by files at different intervals keeps the shortest.
 The daily file never writes the `opensensor` key. A derived day has no single honest value for
 `station`, `firmware`, `file` and `acquisition.time_semantics`, which `footer.json` requires, and an
 indexer that finds the key would take the day file for a broken raw file. How a derived file is
-marked waits on stac-opensensor question 29 and spec change 27. Until then the day file writes the
-app-local key `opensensor_app_day` (`OpenSensorFooter.DAY_KEY`), in the same JSON shape with only
-what the app reads back. `version`, the shortest positive interval of its sources as
-`acquisition.sample_interval_ms`, and `dictionary.sha256` and `template.sha256` only when every
-source names the same one (`DailyParquetBuilder.dayFooter`). History reads a day file through
-`FileTemplates.ofDay`, so it gives the same template and expected rows as its sources. A day of mixed
-dictionaries carries no digest, and History reads its rows from the raw files. A day whose sources
-have no footer writes no day key and also reads from the raw files. The daily file's own bookkeeping
-keys (`day`, `derived_by`, `source_count` and the rest) are app-local too. A day file writes no
-station or purpose key, since the station is in its path. Nothing
-reads them back.
+marked waits on stac-opensensor question 29 and spec change 27. Until then the day file writes one
+app-private key, `app_day` (`AppDay`). It is not part of the footer contract and will be revisited
+with question 29 and spec 27. The key does not start with `opensensor`, so a match on that prefix
+never finds a day file. Its value is flat JSON with its own `app_day_version` (1) and only what the
+app reads back. `interval_ms` is the shortest positive interval of its sources, and `dict` and
+`desc` are the dictionary and template digests, each only when every source names the same one
+(`DailyParquetBuilder.appDay`). History reads a day file through `FileTemplates.ofDay`, so it gives
+the same template and expected rows as its sources. A day of mixed dictionaries carries no digest,
+and History reads its rows from the raw files. A day whose sources have no footer writes no
+`app_day` and also reads from the raw files. The daily file's own bookkeeping keys (`day`,
+`derived_by`, `source_count` and the rest) are app-local too. A day file writes no station or
+purpose key, since the station is in its path.
 `FileTemplates.bind` gives a file only the specs its template stores in the same unit and rollup,
 with that template's gate and settle time. A file whose dict no bundled template knows keeps its rows
 and has no metrics.
@@ -152,7 +153,8 @@ without humidity has no `pm25_epa` buckets and every screen falls back to `pm25`
 Both PM2.5 specs carry `property = "pm25"` for the WHO scale and a `basis` (`CORRECTED` or `RAW`)
 for the label. Daily files keep the raw `pm25_cf1_ug_m3` and RH columns, so they need no change.
 Template metrics came with `HistoryDeriver.DERIVE_VERSION` 8 on Android and `TierCodec.VERSION` 4
-on iOS, so installed days rebuild once.
+on iOS, so installed days rebuild once. The `app_day` entry came with `DERIVE_VERSION` 9 and
+builder `derived-v4`, which both platforms check, so cached day files rebuild once more.
 
 ### Sensor warm-up and settling (2026-09-17)
 
@@ -199,9 +201,9 @@ source stored, so a day that mixes older NANOS files and current MICROS files st
 older source without ids takes the id of the same name from a newer source. An id two sources
 disagree on, or one that two names share, is dropped. `source_file_index` and
 the estimate column have no id. **No station
-string column** (deviation from the evaluation) — stays flat numeric so our reader reads it back;
-station is in the path. Metadata: the `opensensor_app_day` key above, `derived_by`
-(`opensensor.space shared derived-v3`), `derived_version`, `source_count`, `coverage_rows`, `complete`
+string column** (deviation from the evaluation). It stays flat numeric so our reader reads it back,
+and the station is in the path. Metadata: the `app_day` key above, `derived_by`
+(`opensensor.space shared derived-v4`), `derived_version` (4), `source_count`, `coverage_rows`, `complete`
 (every known file in and the day ended > 30 min ago), `day`, and the
 `time_estimate` note. Measured 188 B/row vs 512 B/row for device files (5–9× smaller). Validated by
 PyArrow 25 + DuckDB 1.5.5 (`TIMESTAMPTZ`, range pruning, `time_bucket`).

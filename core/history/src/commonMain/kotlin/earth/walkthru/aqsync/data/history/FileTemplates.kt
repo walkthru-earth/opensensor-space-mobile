@@ -32,8 +32,8 @@ fun interface FileTemplates {
     /** The [FileTemplate] of a raw file with Parquet [keyValues], from its `opensensor` footer. */
     fun of(keyValues: Map<String, String>): FileTemplate = of(OpenSensorFooter.of(keyValues))
 
-    /** The [FileTemplate] of a derived day file with Parquet [keyValues], from its app-local [OpenSensorFooter.DAY_KEY]. */
-    fun ofDay(keyValues: Map<String, String>): FileTemplate = of(OpenSensorFooter.ofDay(keyValues))
+    /** The [FileTemplate] of a derived day file with Parquet [keyValues], from its app-private [AppDay] entry. */
+    fun ofDay(keyValues: Map<String, String>): FileTemplate = of(AppDay.of(keyValues)?.asFooter())
 
     /** The [FileTemplate] that [footer] names. */
     fun of(footer: OpenSensorFooter?): FileTemplate {

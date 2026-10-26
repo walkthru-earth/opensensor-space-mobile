@@ -54,8 +54,8 @@ class HistoryDeriverTest {
 
     @Test
     fun `tiers and daily cache of the previous derive version rebuild without a source change`() = runBlocking {
-        // Version 8 reads each file by its template and keeps the footer interval (#186). Installed days must rebuild.
-        assertEquals(8, HistoryDeriver.DERIVE_VERSION)
+        // Version 9 writes the app_day entry in the daily file. Installed days must rebuild.
+        assertEquals(9, HistoryDeriver.DERIVE_VERSION)
         val tmp = java.nio.file.Files.createTempDirectory("aq-derive-upgrade").toFile()
         try {
             val archive = FileArchive(tmp)

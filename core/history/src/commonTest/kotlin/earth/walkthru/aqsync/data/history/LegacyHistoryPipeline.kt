@@ -133,7 +133,6 @@ internal object LegacyDailyParquetBuilder {
             val estimated: LongArray?,
             val decoded: Map<String, ColumnValues>,
             val keyValueMetadata: Map<String, String>,
-            val schemaVersion: String?,
         )
         val opened = ArrayList<Src>()
         var anyEstimated = false
@@ -171,7 +170,7 @@ internal object LegacyDailyParquetBuilder {
                 if (estimated != null && keep.isNotEmpty()) anyEstimated = true
                 // Decode every column of a contributing source once, while it is open.
                 val decoded = if (keep.isEmpty()) emptyMap() else pf.leaves.associate { leaf -> UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(pf.readColumn(leaf), leaf) else pf.readColumn(leaf) }
-                Src(src, keep.toIntArray(), estimated, decoded, md.keyValueMetadata, null)
+                Src(src, keep.toIntArray(), estimated, decoded, md.keyValueMetadata)
             } ?: continue
         }
         if (opened.isEmpty() || opened.all { it.keep.isEmpty() }) return null
@@ -195,13 +194,13 @@ internal object LegacyDailyParquetBuilder {
 
         // 4. Metadata.
         // The footer rule is the production one, these oracles check the rows and bytes around it.
-        val footer = DailyParquetBuilder.dayFooter(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
+        val appDay = DailyParquetBuilder.appDay(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
-            footer?.let { put(OpenSensorFooter.DAY_KEY, it.encode()) }
+            appDay?.let { put(AppDay.KEY, it.encode()) }
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
-            put("derived_version", "3")
+            put("derived_version", DailyParquetBuilder.DERIVED_VERSION)
             put("source_count", opened.size.toString())
             put("coverage_rows", refs.size.toString())
             put("complete", complete.toString())
@@ -280,7 +279,7 @@ internal object LegacyDailyParquetBuilder {
         }
     }
 
-    const val BUILDER = "opensensor.space shared derived-v3"
+    const val BUILDER = "opensensor.space shared derived-v4"
     const val SOURCE_INDEX = "source_file_index"
     const val ESTIMATED_UTC = "event_time_utc_estimated_us"
     const val HOUR_NS = 3_600L * 1_000_000_000L

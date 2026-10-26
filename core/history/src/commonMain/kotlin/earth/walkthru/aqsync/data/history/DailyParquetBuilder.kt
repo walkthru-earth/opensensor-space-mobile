@@ -281,13 +281,13 @@ object DailyParquetBuilder {
         val startsArray = starts.toIntArray()
 
         // 4. Metadata.
-        val footer = dayFooter(opened.map { it.footer })
+        val appDay = appDay(opened.map { it.footer })
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
-            footer?.let { put(OpenSensorFooter.DAY_KEY, it.encode()) }
+            appDay?.let { put(AppDay.KEY, it.encode()) }
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
-            put("derived_version", "3")
+            put("derived_version", DERIVED_VERSION)
             put("source_count", opened.size.toString())
             put("coverage_rows", kept.toString())
             put("complete", complete.toString())
@@ -483,7 +483,10 @@ object DailyParquetBuilder {
         }
     }
 
-    const val BUILDER = "opensensor.space shared derived-v3"
+    const val BUILDER = "opensensor.space shared derived-v4"
+
+    /** The `derived_version` of a day file. A change to the day metadata bumps it, with [BUILDER]. */
+    const val DERIVED_VERSION = "4"
     const val SOURCE_INDEX = "source_file_index"
     const val ESTIMATED_UTC = "event_time_utc_estimated_us"
     const val HOUR_NS = 3_600L * 1_000_000_000L
@@ -493,20 +496,20 @@ object DailyParquetBuilder {
     val SOURCE_ORDER: Comparator<ArchiveRecord> = compareBy({ it.firstUtcNs ?: Long.MAX_VALUE }, { it.name })
 
     /**
-     * The app-local [OpenSensorFooter.DAY_KEY] value of a day file built from sources with [footers],
-     * null when no source says anything. It holds only what the app reads back. The shortest positive
-     * interval, as a tier bucket keeps it, and each digest only when every source names the same one.
-     * A day mixing dictionaries or templates carries none, and its rows go back to the raw files. The
-     * day file never writes the `opensensor` key, because it cannot fill a value that validates
-     * against stac-opensensor `footer.json`.
+     * The app-private [AppDay] entry of a day file built from sources with [footers], null when no
+     * source says anything. It holds only what the app reads back. The shortest positive interval, as a
+     * tier bucket keeps it, and each digest only when every source names the same one. A day mixing
+     * dictionaries or templates carries none, and its rows go back to the raw files. The day file never
+     * writes the `opensensor` key, because it cannot fill a value that validates against
+     * stac-opensensor `footer.json`.
      */
-    internal fun dayFooter(footers: List<OpenSensorFooter?>): OpenSensorFooter? {
+    fun appDay(footers: List<OpenSensorFooter?>): AppDay? {
         fun <T> agreed(pick: (OpenSensorFooter?) -> T?): T? = footers.map(pick).distinct().singleOrNull()
-        val day = OpenSensorFooter(
+        val day = AppDay(
             sampleIntervalMs = footers.mapNotNull { it?.sampleIntervalMs }.minOrNull(),
-            dictionarySha256 = agreed { it?.dictionarySha256 },
-            templateSha256 = agreed { it?.templateSha256 },
+            dict = agreed { it?.dictionarySha256 },
+            desc = agreed { it?.templateSha256 },
         )
-        return day.takeIf { it != OpenSensorFooter() }
+        return day.takeIf { it != AppDay() }
     }
 }

@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 
@@ -22,7 +23,7 @@ class OpenSensorFooterTest {
     fun theSpecExampleParses() {
         // stac-opensensor a56dfb0 footers/cores3-telemetry-v5.json, compacted.
         val example = """{"version":"0.1.0","station":{"id":"station-3f2b9c1e","device_id":"441bf6e26b40","board":"m5stack-cores3","deployment_id":"unknown"},""" +
-            """"firmware":{"version":"test-firmware","schema":"cores3-telemetry-v5","boot_id":"0f3a"},""" +
+            """"firmware":{"version":"6.14.0","schema":"cores3-telemetry-v5","boot_id":"0f3a"},""" +
             """"dictionary":{"sha256":"e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b","version":"cores3-telemetry-v6"},""" +
             """"template":{"href":"https://raw.githubusercontent.com/walkthru-earth/stac-opensensor/main/templates/cores3-telemetry-v5.json","sha256":"fb4230b3eb6e8eac881c719f900c8bd9c7e4bbd6ad247520a27368ec9d9a7218"},""" +
             """"acquisition":{"sample_interval_ms":10000,"time_semantics":"sample instant, UTC","config_id":"default","calibration_id":"unknown"},""" +
@@ -103,21 +104,30 @@ class OpenSensorFooterTest {
     }
 
     @Test
-    fun aDayFileIsReadOnlyFromItsAppKey() {
-        val day = OpenSensorFooter(10_000, dict, desc)
-        assertEquals(day, OpenSensorFooter.ofDay(mapOf(OpenSensorFooter.DAY_KEY to day.encode())))
-        assertNull(OpenSensorFooter.ofDay(mapOf(OpenSensorFooter.KEY to day.encode())))
-        assertNull(OpenSensorFooter.of(mapOf(OpenSensorFooter.DAY_KEY to day.encode())))
-        assertSame(coreS3Template, FileTemplates.BUNDLED.ofDay(mapOf(OpenSensorFooter.DAY_KEY to day.encode())).template)
+    fun aDayFileIsReadOnlyFromItsAppPrivateKey() {
+        val day = AppDay(10_000, dict, desc)
+        assertEquals(day, AppDay.of(mapOf(AppDay.KEY to day.encode())))
+        assertNull(AppDay.of(mapOf(OpenSensorFooter.KEY to day.encode())))
+        assertNull(OpenSensorFooter.of(mapOf(AppDay.KEY to day.encode())))
+        // The day value is not a footer, so even under the footer key it is not read as one.
+        assertNull(OpenSensorFooter.of(mapOf(OpenSensorFooter.KEY to day.encode())))
+        assertFalse(AppDay.KEY.startsWith(OpenSensorFooter.KEY))
+        assertSame(coreS3Template, FileTemplates.BUNDLED.ofDay(mapOf(AppDay.KEY to day.encode())).template)
     }
 
     @Test
-    fun encodeRoundTrips() {
-        val full = OpenSensorFooter(10_000, dict, desc, stationId = "station-a", purpose = "telemetry")
-        for (footer in listOf(full, OpenSensorFooter(10_000, dict, desc), OpenSensorFooter(sampleIntervalMs = 30_000), OpenSensorFooter(dictionarySha256 = dict))) {
-            assertEquals(footer, parse(footer.encode()))
+    fun appDayRoundTripsAndRefusesAnotherVersion() {
+        for (day in listOf(AppDay(10_000, dict, desc), AppDay(sampleIntervalMs = 30_000), AppDay(dict = dict))) {
+            assertEquals(day, AppDay.parse(day.encode()))
         }
-        assertEquals("""{"version":"0.1.0","dictionary":{"sha256":"$dict"},"template":{"sha256":"$desc"},"acquisition":{"sample_interval_ms":10000}}""", OpenSensorFooter(10_000, dict, desc).encode())
+        assertEquals("""{"app_day_version":1,"interval_ms":10000,"dict":"$dict","desc":"$desc"}""", AppDay(10_000, dict, desc).encode())
+        assertNull(AppDay.parse("""{"app_day_version":2,"interval_ms":10000}"""))
+        assertNull(AppDay.parse("""{"app_day_version":"1","interval_ms":10000}"""))
+        assertNull(AppDay.parse("""{"interval_ms":10000}"""))
+        assertNull(AppDay.parse("""{"app_day_version":1,"interval_ms":"10000"}"""))
+        assertNull(AppDay.parse("""{"app_day_version":1,"interval_ms":0}"""))
+        assertNull(AppDay.parse("""{"app_day_version":1,"dict":"ABC"}"""))
+        assertNull(AppDay.parse("not json"))
     }
 
     private fun resolve(dict: String?, desc: String?) = FileTemplates.BUNDLED.of(mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict, desc, 10_000))).template

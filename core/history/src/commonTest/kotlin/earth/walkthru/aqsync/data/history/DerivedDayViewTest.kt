@@ -168,7 +168,7 @@ class DerivedDayViewTest {
                 ParquetWriter.Column(ParquetIndexer.SEQ, ParquetType.INT64),
                 ParquetWriter.Column(Metrics.BOARD_TEMP.column, ParquetType.FLOAT),
             )
-            val writer = ParquetWriter(sink, columns, keyValueMetadata = mapOf(OpenSensorFooter.KEY to OpenSensorFooter(stationId = station).encode()))
+            val writer = ParquetWriter(sink, columns, keyValueMetadata = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = null, intervalMs = null, station = station)))
             writer.begin()
             writer.rowGroup(
                 listOf(

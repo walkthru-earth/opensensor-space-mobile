@@ -4,9 +4,11 @@ package earth.walkthru.aqsync.data.history
 // tests, which both read the :core:parquet device fixtures. Never part of a release build.
 
 /**
- * [bytes] with the old `station_id` and `purpose` keys moved into an `opensensor` entry, and the old
- * `boot_id`, `schema_version` and dropped `reconciliation_anchor_*` keys removed. The app takes the
- * boot from the rows, so nothing else needs to move.
+ * [bytes] with the old unprefixed footer keys replaced by one `opensensor` entry shaped like the footer
+ * firmware writes ([opensensorFooterJson]). The old station, purpose, boot, schema, dict, template digest
+ * and interval move into it. Firmware always writes every member, so a fixture without a dict or a
+ * template digest gets [UNKNOWN_DIGEST], which no template carries, and one without an interval or a
+ * purpose gets the firmware's 10 s cadence and `telemetry`. The dropped `reconciliation_anchor_*` keys go.
  * Only the key-value list of the Thrift FileMetaData changes. The data pages, the row groups and every
  * other footer field stay byte for byte, so a migrated fixture decodes to the same rows. A file that
  * already has an `opensensor` entry, or none of the old keys, comes back unchanged.
@@ -19,19 +21,23 @@ fun migrateLegacyFooter(bytes: ByteArray): ByteArray {
     val list = Compact(footer, 0).keyValueSpan() ?: return bytes
     val keyValues = list.entries
     val old = keyValues.toMap()
-    if (OpenSensorFooter.KEY in old || old.keys.none(::removed)) return bytes
-    val moved = OpenSensorFooter(
-        stationId = old[LegacyFooterKeys.STATION_ID]?.takeIf { it.isNotEmpty() },
-        purpose = old[LegacyFooterKeys.PURPOSE]?.takeIf { it.isNotEmpty() },
+    if (OpenSensorFooter.KEY in old || old.keys.none(LegacyFooterKeys::isLegacy)) return bytes
+    val json = opensensorFooterJson(
+        dict = old[LegacyFooterKeys.DICTIONARY_SHA256] ?: UNKNOWN_DIGEST,
+        desc = old[LegacyFooterKeys.TEMPLATE_SHA256] ?: UNKNOWN_DIGEST,
+        intervalMs = old[LegacyFooterKeys.SAMPLE_INTERVAL_MS]?.toLongOrNull() ?: 10_000,
+        schema = old[LegacyFooterKeys.SCHEMA_VERSION] ?: "unknown",
+        station = old[LegacyFooterKeys.STATION_ID]?.takeIf { it.isNotEmpty() },
+        purpose = old[LegacyFooterKeys.PURPOSE]?.takeIf { it.isNotEmpty() } ?: "telemetry",
+        boot = old[LegacyFooterKeys.BOOT_ID] ?: UNKNOWN_DIGEST.take(32),
     )
-    val kept = keyValues.filter { (k, _) -> !removed(k) } + (OpenSensorFooter.KEY to moved.encode())
+    val kept = keyValues.filter { (k, _) -> !LegacyFooterKeys.isLegacy(k) } + (OpenSensorFooter.KEY to json)
     val newFooter = footer.copyOfRange(0, list.start) + encodeKeyValues(kept) + footer.copyOfRange(list.end, footer.size)
     return bytes.copyOfRange(0, footerStart) + newFooter + newFooter.size.leBytes() + MAGIC
 }
 
-/** The old keys the migration removes. The digest and interval keys stay, unread, as the fixture wrote them. */
-private fun removed(key: String) = LegacyFooterKeys.isLegacy(key) &&
-    key != LegacyFooterKeys.DICTIONARY_SHA256 && key != LegacyFooterKeys.TEMPLATE_SHA256 && key != LegacyFooterKeys.SAMPLE_INTERVAL_MS
+/** The digest a fixture gets for a dict or template its old footer did not name. */
+const val UNKNOWN_DIGEST = "0000000000000000000000000000000000000000000000000000000000000000"
 
 private val MAGIC = "PAR1".encodeToByteArray()
 

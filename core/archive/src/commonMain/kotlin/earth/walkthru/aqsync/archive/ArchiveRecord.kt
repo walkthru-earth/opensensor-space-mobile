@@ -25,7 +25,6 @@ data class ArchiveRecord(
     val indexError: String? = null,
     val rows: Long? = null,
     val rowGroups: Int? = null,
-    val schemaVersion: String? = null,
     val bootId: String? = null,
     /** `telemetry` for station data. Other purposes (benchmark copies) stay out of history. */
     val purpose: String? = null,

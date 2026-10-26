@@ -51,7 +51,6 @@ object PreStreamingDailyParquetBuilder {
         val estimated: LongColumn?,
         val decoded: Map<String, ColumnValues>,
         val keyValueMetadata: Map<String, String>,
-        val schemaVersion: String?,
     )
 
     /**
@@ -165,7 +164,7 @@ object PreStreamingDailyParquetBuilder {
                             UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(values, leaf) else values
                         }
                     }
-                    Src(src, keepCount, estimated, decoded, md.keyValueMetadata, null)
+                    Src(src, keepCount, estimated, decoded, md.keyValueMetadata)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -214,13 +213,13 @@ object PreStreamingDailyParquetBuilder {
 
         // 4. Metadata.
         // The footer rule is the production one, these oracles check the rows and bytes around it.
-        val footer = DailyParquetBuilder.dayFooter(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
+        val appDay = DailyParquetBuilder.appDay(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
-            footer?.let { put(OpenSensorFooter.DAY_KEY, it.encode()) }
+            appDay?.let { put(AppDay.KEY, it.encode()) }
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
-            put("derived_version", "3")
+            put("derived_version", DailyParquetBuilder.DERIVED_VERSION)
             put("source_count", opened.size.toString())
             put("coverage_rows", kept.toString())
             put("complete", complete.toString())
@@ -378,7 +377,7 @@ object PreStreamingDailyParquetBuilder {
         }
     }
 
-    const val BUILDER = "opensensor.space shared derived-v3"
+    const val BUILDER = "opensensor.space shared derived-v4"
     const val SOURCE_INDEX = "source_file_index"
     const val ESTIMATED_UTC = "event_time_utc_estimated_us"
     const val HOUR_NS = 3_600L * 1_000_000_000L

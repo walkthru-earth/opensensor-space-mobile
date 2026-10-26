@@ -8,10 +8,15 @@ dependencies {
     implementation(libs.kotlinx.benchmark.runtime)
 }
 
-// Use the frozen pre-change oracle also exercised by HistoryGoldenTest.
+// Use the frozen pre-change oracle also exercised by HistoryGoldenTest, and the firmware footer fixture.
 kotlin.sourceSets.main {
     kotlin.srcDir("../../core/history/src/commonTest/kotlin")
-    kotlin.include("earth/walkthru/aqsync/data/history/LegacyHistoryPipeline.kt", "earth/walkthru/aqsync/data/history/HistoryBenchmark.kt")
+    kotlin.srcDir("../../core/history/src/legacyFooterFixtures/kotlin")
+    kotlin.include(
+        "earth/walkthru/aqsync/data/history/LegacyHistoryPipeline.kt",
+        "earth/walkthru/aqsync/data/history/HistoryBenchmark.kt",
+        "earth/walkthru/aqsync/data/history/FirmwareFooterFixture.kt",
+    )
 }
 
 benchmark {

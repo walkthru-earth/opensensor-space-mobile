@@ -170,7 +170,6 @@ class LegacyReceiptImport(
                 indexError = text("indexError"),
                 rows = long("rows"),
                 rowGroups = int("rowGroups"),
-                schemaVersion = text("schemaVersion"),
                 bootId = text("bootId"),
                 purpose = text("purpose"),
                 utcRows = long("utcRows"),

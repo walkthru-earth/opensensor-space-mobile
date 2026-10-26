@@ -54,7 +54,7 @@ Boot plus sequence remains row identity; moving a row to another UTC partition d
 create another sample. Partitioning uses UTC, regardless of the phone's display timezone.
 App restart reloads receipts and rebuilds missing or stale derived output. Both platforms use
 `DailyParquetBuilder` to write `derived/v1/<station>/day=YYYY-MM-DD.parquet` and a source manifest.
-New files identify the shared writer as `derived_version=3`. Row UTC columns are microseconds in
+New files identify the shared writer as `derived_version=4`. Row UTC columns are microseconds in
 current device files (`event_time_utc_us`, `clock_anchor_utc_us`) and nanoseconds in older ones
 (`*_utc_ns`). The app reads the unit from the Parquet logical type and keeps its own timeline in
 nanoseconds.

@@ -224,15 +224,15 @@ class CurrentBoardFilesTest {
         }
     }
 
-    private fun footerOf(file: ByteArray): OpenSensorFooter? = OpenSensorFooter.ofDay(ParquetFile.wrap(file).metadata.keyValueMetadata)
+    private fun footerOf(file: ByteArray): AppDay? = AppDay.of(ParquetFile.wrap(file).metadata.keyValueMetadata)
 
     @Test
-    fun aDailyFileWritesTheAppDayKeyAndNoOpensensorFooter() {
+    fun aDailyFileWritesTheAppDayKeyAndNoOpensensorKey() {
         val daily = dailyOf(boardFile(coreS3Template), boardFile(coreS3Template, boot = 2, offsetS = 5))
         val keys = ParquetFile.wrap(daily).metadata.keyValueMetadata
-        assertEquals(OpenSensorFooter(10_000, coreS3Template.dict, coreS3Template.key.desc), footerOf(daily))
+        assertEquals(AppDay(10_000, coreS3Template.dict, coreS3Template.key.desc), footerOf(daily))
         // A day value fails footer.json, so an indexer must never find the contract key on it.
-        assertTrue(OpenSensorFooter.KEY !in keys, keys.keys.toString())
+        assertTrue(keys.keys.none { it.startsWith(OpenSensorFooter.KEY) }, keys.keys.toString())
         assertTrue(keys.keys.none(LegacyFooterKeys::isLegacy), keys.keys.toString())
         // Read back through its day key, the daily file resolves the same template as its sources.
         assertSame(coreS3Template, FileTemplates.BUNDLED.ofDay(keys).template)
@@ -258,14 +258,14 @@ class CurrentBoardFilesTest {
     @Test
     fun aDailyFileOfTwoBoardsCarriesNoDigest() {
         val daily = dailyOf(boardFile(coreS3Template), boardFile(waveshareTemplate, boot = 2, offsetS = 5))
-        assertEquals(OpenSensorFooter(sampleIntervalMs = 10_000), footerOf(daily))
+        assertEquals(AppDay(sampleIntervalMs = 10_000), footerOf(daily))
     }
 
     @Test
     fun aDailyFileOfSourcesWithoutAFooterWritesNone() {
         val daily = dailyOf(boardFile(coreS3Template, footer = emptyMap()))
         val keys = ParquetFile.wrap(daily).metadata.keyValueMetadata
-        assertTrue(OpenSensorFooter.KEY !in keys && OpenSensorFooter.DAY_KEY !in keys, keys.keys.toString())
+        assertTrue(OpenSensorFooter.KEY !in keys && AppDay.KEY !in keys, keys.keys.toString())
     }
 
     @Test

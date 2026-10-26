@@ -83,7 +83,7 @@ class ArchivedFileDaoTest {
         assertEquals(5L, failed.indexedAtEpochMs)
         assertEquals("bad footer", failed.indexError)
         assertTrue(AppDatabase.MIGRATION_10_11 in AppDatabase.MIGRATIONS)
-        assertEquals(13, AppDatabase.MIGRATIONS.maxOf { it.endVersion })
+        assertEquals(14, AppDatabase.MIGRATIONS.maxOf { it.endVersion })
     }
 
     @Test
