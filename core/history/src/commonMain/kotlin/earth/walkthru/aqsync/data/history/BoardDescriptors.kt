@@ -35,6 +35,11 @@ class ServedTemplates(private val limit: Int = BoardDescriptors.MAX_TEMPLATES) {
         _all.update { held -> if (held.any { it.key.desc == template.key.desc }) held else (held + template).takeLast(limit) }
     }
 
+    /** Drops the template whose full desc is [desc], if held. */
+    fun remove(desc: String) {
+        _all.update { held -> held.filterNot { it.key.desc == desc } }
+    }
+
     companion object {
         /** The app's one set, shared by Android and iOS. */
         val shared = ServedTemplates()
@@ -66,6 +71,11 @@ sealed interface DescriptorOutcome {
  * `<sha256>.json` and are re-verified against that name on [load]. At most [MAX_TEMPLATES] are kept,
  * the oldest file is deleted first.
  *
+ * The 16 hex prefix is all a device gives before any file is synced. A synced file's `opensensor` footer
+ * then gives the full trusted `template.sha256`, which [confirm] takes. A served template that shares
+ * its prefix but not its full digest is deleted, and [ensure] rejects bytes that still differ from it.
+ * Bundled templates are never touched, their full desc is pinned by the build.
+ *
  * Every [store] call blocks, so the work runs on [io].
  */
 class BoardDescriptors(
@@ -75,6 +85,9 @@ class BoardDescriptors(
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val mutex = Mutex()
+
+    /** The full `template.sha256` the footers named, by its 16 hex prefix. In memory only. */
+    private val footerDigests = MutableStateFlow<Map<String, String>>(emptyMap())
 
     /** Registers the newest cached templates that still verify, deletes the rest. Returns how many loaded. */
     suspend fun load(): Int = withContext(io) {
@@ -124,6 +137,9 @@ class BoardDescriptors(
         }
         val hex = ParquetVerify.sha256Hex(bytes)
         if (!hex.startsWith(desc)) return@withLock DescriptorOutcome.Rejected("sha256 does not start with desc")
+        footerDigests.value[desc]?.let { trusted ->
+            if (trusted != hex) return@withLock DescriptorOutcome.Rejected("sha256 differs from the file footer")
+        }
         val template = try {
             BoardTemplate.parse(bytes.decodeToString(), desc = hex)
         } catch (e: IllegalArgumentException) {
@@ -136,6 +152,35 @@ class BoardDescriptors(
         }
         served.add(template)
         DescriptorOutcome.Fetched(template)
+    }
+
+    /**
+     * Takes a synced file's footer `template.sha256` as the trusted full digest for its 16 hex prefix.
+     * Deletes every served template, on disk and in [ServedTemplates], that shares the prefix but not the
+     * digest, so the next [ensure] downloads again and rejects bytes that still differ. A bundled desc is
+     * never deleted. A value that is not 64 hex digits deletes nothing. A digest already taken returns at
+     * once, so a caller may pass every file's footer. It is taken only after the deletes succeed. Returns
+     * how many templates were deleted.
+     */
+    suspend fun confirm(sha256: String): Int {
+        val full = sha256.lowercase()
+        if (!SHA256_HEX.matches(full)) return 0
+        val prefix = full.take(TemplateKey.DESC_PREFIX_HEX)
+        if (footerDigests.value[prefix] == full) return 0
+        return mutex.withLock {
+            val pinned = bundled.mapNotNullTo(HashSet()) { it.key.desc }
+            fun contradicted(desc: String) = desc.startsWith(prefix) && desc != full && desc !in pinned
+            // Out of memory first, so a failing disk delete never leaves the template served.
+            val held = served.all.value.mapNotNull { it.key.desc }.filter(::contradicted)
+            held.forEach(served::remove)
+            val files = withContext(io) {
+                store.list().map { it.name }.filter { it.endsWith(SUFFIX) && contradicted(it.removeSuffix(SUFFIX)) }
+                    .onEach { store.delete(it) }
+            }
+            // Taken only once the disk is clean, so a failed delete is retried by the next confirm.
+            footerDigests.update { it + (prefix to full) }
+            (held + files.map { it.removeSuffix(SUFFIX) }).toSet().size
+        }
     }
 
     companion object {

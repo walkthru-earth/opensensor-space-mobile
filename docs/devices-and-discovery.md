@@ -74,7 +74,8 @@ Rules.
    links point at fixed aq commits, the app never fetches or trusts them, only the digests.
    A board whose firmware serves its template over `GET_DESCRIPTOR` works without a bundled one,
    the app fetches and caches it on connect (`BoardDescriptors`). It then renders with a profile
-   derived from that template.
+   derived from that template. A synced file whose footer `template.sha256` differs from the cached
+   template's full digest evicts it, and the next connect fetches it again.
 3. If it uses a new transport, follow "Adding a transport" in the cross-platform guide.
 4. Optional. A family may provide a hero component (the air-quality mood face is one). Without
    one, the generic `MetricCard` is used.

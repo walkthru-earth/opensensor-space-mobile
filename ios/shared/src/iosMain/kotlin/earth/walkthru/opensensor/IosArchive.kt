@@ -123,7 +123,7 @@ internal object IosArchive {
      * index repair, so no backfill or time estimate here runs outside a pass.
      */
     private val history by lazy {
-        HistoryOrchestrator(ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, coordinator = coordinator), index, log = ::println)
+        HistoryOrchestrator(ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, coordinator = coordinator, onTemplateDigest = boardDescriptors::confirm), index, log = ::println)
     }
 
     /**

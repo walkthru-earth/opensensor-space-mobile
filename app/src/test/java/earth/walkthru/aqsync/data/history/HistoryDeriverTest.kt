@@ -253,7 +253,7 @@ class HistoryDeriverTest {
         val quota = derivedQuota(tmp)
         val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota, indexer.passes(files))
 
-        fun put(name: String, resource: String, crc: Long) {
+        suspend fun put(name: String, resource: String, crc: Long) {
             archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
             files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = 1, crc32 = crc, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), archive.fileFor(station, name))
         }
@@ -351,7 +351,7 @@ class HistoryDeriverTest {
             var backfills = 0
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files)) { backfills++ }
 
-            fun put(name: String, resource: String, crc: Long, syncedAt: Long) {
+            suspend fun put(name: String, resource: String, crc: Long, syncedAt: Long) {
                 archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
                 files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = 1, crc32 = crc, sha256 = "s", syncedAtEpochMs = syncedAt, sourceDevice = "fake"), archive.fileFor(station, name))
             }

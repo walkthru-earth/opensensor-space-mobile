@@ -93,8 +93,12 @@ serves. No `desc` means the board serves none, and the phone never asks.
   from offset 0, and a second change fails the download.
 - The bytes are kept only when their SHA-256 starts with `desc`, they parse as an
   `OpenSensorTemplate` and their `firmware.dict` is `info.dict`.
-- An unbundled board is checked on the 16 hex prefix plus type and dict until the #88 footer gives a
-  trusted full SHA-256.
+- Before any file is synced the phone has only the 16 hex prefix. Each synced raw file's `opensensor`
+  footer then gives the trusted full `template.sha256` (`BoardDescriptors.confirm`, called by the
+  index repair). A served template that shares its prefix but not that digest is deleted from the
+  cache and from `ServedTemplates`. The next connect downloads again and rejects bytes that still
+  differ. The digests live in memory only. Bundled templates are never evicted, the build pins
+  their full desc.
 - A bundled or cached template whose full SHA-256 starts with `desc` skips the download.
 - Verified templates are cached as `<sha256>.json` in the `board-templates` cache directory
   (`StorageRole.Templates`) and resolve ahead of the bundled ones (`ServedTemplates`).

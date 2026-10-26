@@ -29,10 +29,12 @@ class HistoryIndexer internal constructor(
     archivedFileDao: ArchivedFileDao,
     coordinator: DeviceCoordinator,
     /** Resolves each file's board template from its footer, for the index and for [HistoryDeriver]. */
-    val templates: FileTemplates,
+    val templates: FileTemplates = FileTemplates.BUNDLED,
+    /** Gets each indexed file's footer `template.sha256`, see [BoardDescriptors.confirm]. */
+    onTemplateDigest: suspend (String) -> Unit = {},
 ) {
-    @Inject constructor(archive: FileArchive, archivedFileDao: ArchivedFileDao, coordinator: DeviceCoordinator) :
-        this(archive, archivedFileDao, coordinator, FileTemplates.BUNDLED)
+    @Inject constructor(archive: FileArchive, archivedFileDao: ArchivedFileDao, coordinator: DeviceCoordinator, boardDescriptors: BoardDescriptors) :
+        this(archive, archivedFileDao, coordinator, FileTemplates.BUNDLED, boardDescriptors::confirm)
 
     val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
 
@@ -50,10 +52,11 @@ class HistoryIndexer internal constructor(
         coordinator = coordinator,
         log = { Log.i(TAG, it) },
         templates = templates,
+        onTemplateDigest = onTemplateDigest,
     )
 
     /** [row] with the index columns filled from [file] (already verified). Never throws. */
-    fun indexed(row: ArchivedFile, file: File, nowEpochMs: Long = System.currentTimeMillis()): ArchivedFile =
+    suspend fun indexed(row: ArchivedFile, file: File, nowEpochMs: Long = System.currentTimeMillis()): ArchivedFile =
         repair.indexed(row.toRecord(), { LocalFileReader(file) }, nowEpochMs).toEntity()
 
     /** Indexes up to [limit] rows that need it. Returns how many rows were updated (0 means nothing is left). */

@@ -51,7 +51,7 @@ class HistoryIndexerTest {
     }
 
     @Test
-    fun `retained earlier station files are archived without being attributed to the reset station`() {
+    fun `retained earlier station files are archived without being attributed to the reset station`() = runBlocking {
         val tmp = java.nio.file.Files.createTempDirectory("opensensor-station-reset").toFile()
         try {
             val archive = FileArchive(tmp)

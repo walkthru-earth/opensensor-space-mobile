@@ -41,11 +41,34 @@ class ArchiveIndexRepair(
     private val coordinator: DeviceCoordinator = DeviceCoordinator(),
     /** Resolves each file's board template for its valid row count. */
     private val templates: FileTemplates = FileTemplates.BUNDLED,
+    /**
+     * Gets the footer `template.sha256` of each file that indexes, [BoardDescriptors.confirm] in the
+     * app. Its failure is logged and never fails the index.
+     */
+    private val onTemplateDigest: suspend (String) -> Unit = {},
 ) {
     private val mutex = Mutex()
 
-    /** [record] with its index columns filled from [reader]. Never throws. */
-    fun indexed(record: ArchiveRecord, reader: () -> ByteReader, nowEpochMs: Long = this.nowEpochMs()): ArchiveRecord = try {
+    /**
+     * [record] with its index columns filled from [reader]. Hands the footer `template.sha256` of a file
+     * that indexes to [onTemplateDigest]. Never throws, except to cancel.
+     */
+    suspend fun indexed(record: ArchiveRecord, reader: () -> ByteReader, nowEpochMs: Long = this.nowEpochMs()): ArchiveRecord {
+        var templateDigest: String? = null
+        val indexed = indexRecord(record, reader, nowEpochMs) { templateDigest = it }
+        templateDigest?.let { digest ->
+            try {
+                onTemplateDigest(digest)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log("template digest check failed: ${e::class.simpleName}")
+            }
+        }
+        return indexed
+    }
+
+    private fun indexRecord(record: ArchiveRecord, reader: () -> ByteReader, nowEpochMs: Long, digest: (String) -> Unit): ArchiveRecord = try {
         val producer = producerStation(record.name)
         if (producer != null && producer != record.station) {
             record.copy(
@@ -54,9 +77,9 @@ class ArchiveIndexRepair(
             )
         } else {
             val index = ParquetFile.open(reader(), record.name).use { file ->
-                val metadataStation = file.metadata.footer?.stationId
-                require(metadataStation == null || metadataStation == record.station) { "file metadata belongs to another station" }
-                ParquetIndexer.index(file, templates)
+                val footer = file.metadata.footer
+                require(footer?.stationId == null || footer.stationId == record.station) { "file metadata belongs to another station" }
+                ParquetIndexer.index(file, templates).also { footer?.templateSha256?.let(digest) }
             }
             record.copy(
                 indexedAtEpochMs = nowEpochMs,

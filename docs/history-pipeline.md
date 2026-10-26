@@ -72,7 +72,9 @@ flowchart LR
 
 Derived from the **file**, never its name: rows, row groups, `file.purpose` from the `opensensor`
 footer JSON, the boot from the first row's `boot_id_hi` and `boot_id_lo`, then the UTC row count + span, monotonic span, sequence span, the valid rows of the headline metric (the template's primary column through its gate and settle time, null when no bundled template knows the file or the column cannot be read),
-`indexedAt`/`indexError`. v6 footers answer spans from statistics without decoding
+`indexedAt`/`indexError`. The repair hands the footer `template.sha256` of each file that indexes to
+`BoardDescriptors.confirm`, which evicts a served template with the same 16 hex prefix and another
+full digest (see `protocol-quickref.md`). v6 footers answer spans from statistics without decoding
 (`fromStatistics`); v1/v2 files decode three columns. Statistics with a negative null count or a
 minimum above the maximum are no answer, the column is decoded instead. `purpose = codec-comparison-duplicate-rows`
 (benchmark copies) is indexed but excluded from every history query (`withUtcBetween` filters on

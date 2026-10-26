@@ -13,6 +13,7 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import earth.walkthru.aqsync.storage.MemoryPressure
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.time.Duration.Companion.minutes
 
 /**
@@ -168,7 +170,7 @@ class HistoryMemoryTest {
     }
 
     @Test
-    fun indexRepairClosesTheReaderOnceWhateverTheOutcome() {
+    fun indexRepairClosesTheReaderOnceWhateverTheOutcome() = runTest {
         val repair = ArchiveIndexRepair(Store(), Index(), nowEpochMs = { 42L }, templates = CoreS3Files)
         val good = CountingReader(board)
         val indexed = repair.indexed(record("data.parquet", board), { good })
@@ -186,5 +188,34 @@ class HistoryMemoryTest {
         val unreadable = repair.indexed(record("data.parquet", board), { truncated })
         assertNotNull(unreadable.indexError)
         assertEquals(1, truncated.closes)
+    }
+
+    @Test
+    fun indexRepairReportsTheFooterTemplateDigestOfEachIndexedFile() = runTest {
+        val digests = ArrayList<String>()
+        val repair = ArchiveIndexRepair(Store(), Index(), nowEpochMs = { 42L }, templates = CoreS3Files, onTemplateDigest = { digests += it })
+        val desc = coreS3Template.key.desc!!
+        assertNull(repair.indexed(record("a.parquet", board), { ByteArrayReader(withCoreS3Dict(board)) }).indexError)
+        assertEquals(listOf(desc), digests)
+
+        // A footer without template.sha256 reports nothing.
+        assertNull(repair.indexed(record("b.parquet", board), { ByteArrayReader(withCoreS3Dict(board, desc = null)) }).indexError)
+        assertEquals(listOf(desc), digests)
+
+        // A file refused for another station reports nothing either.
+        assertNotNull(repair.indexed(record("c.parquet", board, owner = "someone-else"), { ByteArrayReader(withCoreS3Dict(board)) }).indexError)
+        assertEquals(listOf(desc), digests)
+    }
+
+    @Test
+    fun aFailingTemplateCheckNeverFailsTheIndex() = runTest {
+        val repair = ArchiveIndexRepair(Store(), Index(), nowEpochMs = { 42L }, templates = CoreS3Files, onTemplateDigest = { error("cache unreadable") })
+        assertNull(repair.indexed(record("a.parquet", board), { ByteArrayReader(withCoreS3Dict(board)) }).indexError)
+    }
+
+    @Test
+    fun aCancelledTemplateCheckCancelsTheIndex() = runTest {
+        val repair = ArchiveIndexRepair(Store(), Index(), nowEpochMs = { 42L }, templates = CoreS3Files, onTemplateDigest = { throw CancellationException("gone") })
+        assertFailsWith<CancellationException> { repair.indexed(record("a.parquet", board), { ByteArrayReader(withCoreS3Dict(board)) }) }
     }
 }
