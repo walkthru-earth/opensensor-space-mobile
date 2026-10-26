@@ -40,7 +40,7 @@ data class DeviceCapabilities(
      * field) or with status ABSENT does not. A `null` status is no reading now, never a missing sensor,
      * so an overflow sample keeps the particle cards with their values cleared.
      */
-    fun showsParticles(sample: LiveSample?): Boolean {
+    fun showsAirCards(sample: LiveSample?): Boolean {
         val station = station ?: return false
         if (station.profile.family != Family.AIR || !station.showsPm25Live()) return false
         val reading = LiveReading.of(sample, station) ?: return false

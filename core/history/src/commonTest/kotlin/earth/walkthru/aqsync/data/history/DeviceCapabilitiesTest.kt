@@ -16,7 +16,7 @@ class DeviceCapabilitiesTest {
     @Test fun noInfoMeansNothingIsAssumed() {
         assertEquals(DeviceCapabilities.NONE, DeviceCapabilities.from(null))
         assertNull(DeviceCapabilities.NONE.reading(LiveSample.parse("""{"pms":4,"pm25":3}""")))
-        assertFalse(DeviceCapabilities.NONE.showsParticles(LiveSample.parse("""{"pms":4,"pm25":3}""")))
+        assertFalse(DeviceCapabilities.NONE.showsAirCards(LiveSample.parse("""{"pms":4,"pm25":3}""")))
     }
 
     @Test fun waveshareHasEveryCapability() {
@@ -41,7 +41,7 @@ class DeviceCapabilitiesTest {
         assertFalse(caps.sensorIdentity, "identity comes from the template column, never the schema string")
         assertFalse(caps.batchEstimate, "an unknown dictionary must not show the estimate")
         assertFalse(caps.showsBatchEstimate(1))
-        assertFalse(caps.showsParticles(live))
+        assertFalse(caps.showsAirCards(live))
         assertNull(caps.temperature)
     }
 
@@ -59,12 +59,12 @@ class DeviceCapabilitiesTest {
 
     @Test fun particlesNeedAReportedSensorAndANullStatusKeepsThem() {
         val caps = DeviceCapabilities.from(cores3)
-        assertFalse(caps.showsParticles(null))
-        assertFalse(caps.showsParticles(LiveSample()), "an absent pms key means the board has no such field")
-        assertTrue(caps.showsParticles(LiveSample.parse("""{"pms":null,"pm25":null}""")), "a null status is no reading now")
-        assertFalse(caps.showsParticles(LiveSample.parse("""{"pms":0}""")))
-        assertTrue(caps.showsParticles(LiveSample.parse("""{"pms":1}""")))
-        assertTrue(caps.showsParticles(LiveSample.parse("""{"pms":4,"pm25":12.0}""")))
+        assertFalse(caps.showsAirCards(null))
+        assertFalse(caps.showsAirCards(LiveSample()), "an absent pms key means the board has no such field")
+        assertTrue(caps.showsAirCards(LiveSample.parse("""{"pms":null,"pm25":null}""")), "a null status is no reading now")
+        assertFalse(caps.showsAirCards(LiveSample.parse("""{"pms":0}""")))
+        assertTrue(caps.showsAirCards(LiveSample.parse("""{"pms":1}""")))
+        assertTrue(caps.showsAirCards(LiveSample.parse("""{"pms":4,"pm25":12.0}""")))
     }
 
     @Test fun cores3ReadsBoardTemperatureAndHasNoBatchEstimate() {

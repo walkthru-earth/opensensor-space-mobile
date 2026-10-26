@@ -706,9 +706,18 @@ internal fun ParticlesCard(live: LiveReading?, modifier: Modifier = Modifier) {
     }
 }
 
-/** Detailed level: the board's own temperature and the battery. Millivolts and USB voltage are Developer facts. */
+/**
+ * Detailed level: the board's own temperature and the battery. Millivolts and USB voltage are Developer
+ * facts. Before `INFO` ([LiveSupport.PENDING]) the note waits quietly and never says unsupported (#152).
+ */
 @Composable
-internal fun BoardCard(live: LiveReading?, capabilities: DeviceCapabilities, level: DetailLevel, modifier: Modifier = Modifier) {
+internal fun BoardCard(
+    support: LiveSupport,
+    live: LiveReading?,
+    capabilities: DeviceCapabilities,
+    level: DetailLevel,
+    modifier: Modifier = Modifier,
+) {
     val temperature = capabilities.temperature
     BrandCard(modifier = modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -721,6 +730,7 @@ internal fun BoardCard(live: LiveReading?, capabilities: DeviceCapabilities, lev
                 Text(
                     stringResource(
                         when {
+                            support == LiveSupport.PENDING -> Res.string.now_waiting
                             temperature == null -> Res.string.board_temp_unsupported
                             capabilities.ambientTemperature -> Res.string.board_ambient_note
                             else -> Res.string.board_temp

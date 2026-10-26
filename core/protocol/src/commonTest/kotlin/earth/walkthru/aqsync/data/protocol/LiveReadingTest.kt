@@ -42,6 +42,14 @@ class LiveReadingTest {
     }
 
     @Test
+    fun `a value that overflows to infinity reads as no reading`() {
+        val reading = LiveReading(LiveSample.parse("""{"pms":4,"pm25":1e999,"imu_t":-1e999}"""), cores3)
+        assertTrue(reading.carries("pm25_atmospheric_ug_m3"))
+        assertNull(reading.value("pm25_atmospheric_ug_m3"))
+        assertNull(reading.value("imu_temperature_c"))
+    }
+
+    @Test
     fun `a value is read only through the key the template declares`() {
         val sample = LiveSample.parse("""{"t":23.0,"imu_t":40.0,"future_key":9}""")
         assertNull(LiveReading(sample, waveshare).value("imu_temperature_c"))

@@ -73,7 +73,8 @@ build and `verify` only. No phone run against the new firmware yet.
   the bundled board template joined with its app profile (#184). A newer schema keeps its view. Only
   the current digest of each board is bundled, CoreS3 v6.15 (`4f80c26c…`) and Waveshare v2.9
   (`6f567b38…`). An unknown or older digest syncs files but has no LIVE view. A null key is no
-  reading now, an absent key hides the card, and an overflow sample clears every live value. CoreS3
+  reading now and shows a dash, as does a declared key missing from a sample. Cards follow the
+  template declaration, and an overflow sample clears every live value. CoreS3
   board temperature comes from `imu_t`, Waveshare air temperature from `t`. Particle bins show only
   the board's keys. Before `INFO` arrives Today waits quietly and never says unsupported (#152). No
   screen shows `bstate` yet (#90).

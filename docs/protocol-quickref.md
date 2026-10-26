@@ -109,7 +109,9 @@ Feature gates use `info.proto` / `info.fw`, never guesses.
 header fields, and `utc` is nanoseconds. Every other key is a number or null. Floats such as `1.00`
 and `1.0` parse as numbers, and the app keeps its own display rounding. The firmware sends every key
 the template declares in `live_keys`. A null key means no reading now, so the card shows a dash. An
-absent key means the board has no such field, so the card hides. A null never means unsupported. On
+absent key means the board has no such field. The app shows cards by the template declaration, so a
+declared key missing from a sample also shows a dash, and the particle cards need the `pms` key. A
+null never means unsupported. On
 overflow every key is null, and that sample replaces the last one, so every live value clears. A key
 the template does not declare is ignored, so a newer board adding a key breaks nothing.
 `LiveReading` reads a sample through the `Station` of the `info.dict` digest only, so a newer schema

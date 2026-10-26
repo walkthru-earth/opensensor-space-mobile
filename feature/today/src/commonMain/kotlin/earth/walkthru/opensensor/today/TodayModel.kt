@@ -133,7 +133,7 @@ data class TodayUiState(
         }
 
     /** The particle reading (mood and PM2.5) applies to this device and sample. */
-    val showsParticles: Boolean get() = capabilities.showsParticles(snapshot.live)
+    val showsAirCards: Boolean get() = capabilities.showsAirCards(snapshot.live)
 
     /** The board opted in to the unvalidated batch estimate and its dictionary is reviewed. */
     val showsBatchEstimate: Boolean get() = capabilities.showsBatchEstimate(snapshot.config?.config?.sensor?.batchCandidate)
@@ -170,7 +170,7 @@ enum class TodayCard(val key: String) {
  * top of the list.
  */
 fun todayCards(state: TodayUiState): List<TodayCard> = buildList {
-    val particles = state.showsParticles
+    val particles = state.showsAirCards
     add(if (particles) TodayCard.NOW_AIR else TodayCard.NOW_ENVIRONMENT)
     add(TodayCard.TODAY_SO_FAR)
     if (particles && state.capabilities.ambientTemperature) add(TodayCard.ENVIRONMENT)
