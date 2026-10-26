@@ -37,7 +37,7 @@ data class MetricBucket(
     val mean: Float,
     val min: Float,
     val max: Float,
-    /** The bucket's footer `sample_interval_ms`, 0 when unknown. Coverage divides by the rows it allows. */
+    /** The bucket's footer `acquisition.sample_interval_ms`, 0 when unknown. Coverage divides by the rows it allows. */
     val sampleIntervalMs: Long,
 )
 

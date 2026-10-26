@@ -30,9 +30,9 @@ The device retains monotonic microseconds in its unknown-UTC Parquet files, unde
 `station=<id>/unsynced/boot=<id>/`. No Unix-epoch date or phone-local date is invented for them.
 Unanchored batches finalize after six genuine samples (normally about one minute). An
 accepted anchor does not flush the pending batch; the next genuine sample finalizes the
-previous clock epoch when the quality transition or correction requires a new epoch. Footer `reconciliation_anchor_mono_us`,
-`reconciliation_anchor_utc_ns` and `reconciliation_anchor_source` preserve same-boot evidence
-in newly finalized files. The first genuine timed sample begins its normal interval file. First UTC, an RTC-to-external
+previous clock epoch when the quality transition or correction requires a new epoch. A file footer carries no clock anchor.
+Stac-opensensor decision 25 dropped the `reconciliation_anchor_*` keys, so the app takes
+same-boot evidence from its receipts and from timed rows only. The first genuine timed sample begins its normal interval file. First UTC, an RTC-to-external
 quality upgrade, or a correction exceeding two seconds starts a new clock epoch; smaller
 external refreshes preserve the epoch and open file. Normal interval rollover finalizes it,
 while explicit Finalize can still cut a short chunk. The card never merges finalized originals.
@@ -40,7 +40,7 @@ while explicit Finalize can still cut a short chunk. The card never merges final
 ## Reconciliation
 
 1. Persist the clock acknowledgement in an immutable app-private receipt.
-2. Import boot-scoped footer anchors from verified downloaded files.
+2. Use the fully timed rows of verified downloaded files of the same boot as more evidence.
 3. Estimate the UTC span of earlier unknown-UTC files of that same station and boot.
 4. Rebuild affected UTC day partitions and history buckets, splitting rows at UTC midnight.
 5. Retain original paths and bytes; corrected time goes in `event_time_utc_estimated_us`,
@@ -54,10 +54,10 @@ Boot plus sequence remains row identity; moving a row to another UTC partition d
 create another sample. Partitioning uses UTC, regardless of the phone's display timezone.
 App restart reloads receipts and rebuilds missing or stale derived output. Both platforms use
 `DailyParquetBuilder` to write `derived/v1/<station>/day=YYYY-MM-DD.parquet` and a source manifest.
-New files identify the shared writer as `derived_version=3`. Row UTC columns are microseconds in
+New files identify the shared writer as `derived_version=4`. Row UTC columns are microseconds in
 current device files (`event_time_utc_us`, `clock_anchor_utc_us`) and nanoseconds in older ones
 (`*_utc_ns`). The app reads the unit from the Parquet logical type and keeps its own timeline in
-nanoseconds. The footer key `reconciliation_anchor_utc_ns` is still nanoseconds.
+nanoseconds.
 
 ESP32 history rewriting would compete with acquisition, require a decoder, and risk the
 only raw copy. Server-only recovery would delay offline use and depend on a service that

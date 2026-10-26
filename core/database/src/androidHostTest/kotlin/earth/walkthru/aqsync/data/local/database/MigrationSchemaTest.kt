@@ -105,6 +105,24 @@ class MigrationSchemaTest {
     }
 
     @Test
+    fun migration13To14DropsTheSchemaColumnAndKeepsTheRows() {
+        val connection = BundledSQLiteDriver().open("$dir/schema-13.db")
+        try {
+            ExportedSchema(13).create(connection)
+            connection.execSQL(
+                "INSERT INTO archived_file (station, name, bytes, crc32, sha256, syncedAtEpochMs, sourceDevice, schemaVersion, rows) " +
+                    "VALUES ('station-a', 'data.parquet', 10, 1, 'ab', 5, 'device', 'v3', 4)",
+            )
+            AppDatabase.MIGRATION_13_14.migrate(connection)
+            val columns = connection.prepare("PRAGMA table_info(archived_file)").use { s -> buildList { while (s.step()) add(s.getText(1)) } }
+            assertTrue("schemaVersion" !in columns, columns.toString())
+            assertEquals(4L, connection.prepare("SELECT rows FROM archived_file").use { s -> s.step(); s.getLong(0) })
+        } finally {
+            connection.close()
+        }
+    }
+
+    @Test
     fun theDiffCatchesADroppedARenamedAndARetypedColumn() {
         val expected = ExportedSchema(LATEST).tables()
         val table = expected.getValue("known_device")
@@ -134,6 +152,6 @@ class MigrationSchemaTest {
 
     private companion object {
         const val FIRST = 1
-        const val LATEST = 13
+        const val LATEST = 14
     }
 }

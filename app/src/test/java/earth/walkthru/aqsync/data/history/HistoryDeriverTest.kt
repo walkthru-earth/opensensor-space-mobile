@@ -49,13 +49,13 @@ import java.security.MessageDigest
 /** The deriver over in-memory DAOs and a temp archive: staleness by source signature, tiers and daily files together. */
 class HistoryDeriverTest {
 
-    private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
+    private fun bytes(path: String) = migrateLegacyFooter(checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes())
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     @Test
     fun `tiers and daily cache of the previous derive version rebuild without a source change`() = runBlocking {
-        // Version 8 reads each file by its template and keeps the footer interval (#186). Installed days must rebuild.
-        assertEquals(8, HistoryDeriver.DERIVE_VERSION)
+        // Version 9 writes the app_day entry in the daily file. Installed days must rebuild.
+        assertEquals(9, HistoryDeriver.DERIVE_VERSION)
         val tmp = java.nio.file.Files.createTempDirectory("aq-derive-upgrade").toFile()
         try {
             val archive = FileArchive(tmp)
@@ -276,7 +276,9 @@ class HistoryDeriverTest {
         assertEquals(1, daily.rowGroupCount) // 09:42–09:59Z is one UTC hour
         assertEquals(78, daily.leaves.size) // 77 + source_file_index
         assertEquals(ParquetLogicalType.TimeUnit.MICROS, daily.leaf("event_time_utc_us").timestampUtcUnit)
-        assertEquals("telemetry-derived-day", daily.metadata.keyValueMetadata["purpose"])
+        // A day file never carries the contract key an indexer reads.
+        assertTrue(OpenSensorFooter.KEY !in daily.metadata.keyValueMetadata)
+        assertTrue(daily.metadata.keyValueMetadata.keys.none(LegacyFooterKeys::isLegacy))
         assertTrue(daily.metadata.keyValueMetadata["complete"] in setOf("true", "false"))
         assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":105"))
         assertEquals("day=2026-09-17.parquet", days.rows.single().dailyFile?.substringAfter('/'))

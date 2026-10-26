@@ -75,7 +75,7 @@ class HistoryGoldenTest {
         val entries = (corpus.map { it to fixtureBytes("parquet/$it") } + synthetic).mapIndexed { n, (path, bytes) ->
             val file = ParquetFile.wrap(bytes)
             val index = ParquetIndexer.index(file, templates = CoreS3Files)
-            val station = file.metadata.stationId ?: "golden-station"
+            val station = file.metadata.footer?.stationId ?: "golden-station"
             var record = ArchiveRecord(
                 station, "golden/$n/${path.substringAfterLast('/')}", bytes.size.toLong(), n.toLong(), "sha-$n", 1, "fixture",
                 indexedAtEpochMs = 1, rows = index.rows, bootId = index.bootId, utcRows = index.utcRows,

@@ -45,7 +45,7 @@ class ParquetWriterTest {
 
     private fun write(codec: ParquetCodec): ByteArray {
         val out = MemorySink()
-        val w = ParquetWriter(out, columns(), codec, mapOf("station_id" to "test", "purpose" to "writer-test"), "AQ Sync Android writer-test", sortedBy = 0)
+        val w = ParquetWriter(out, columns(), codec, mapOf("writer_test" to "test"), "AQ Sync Android writer-test", sortedBy = 0)
         w.begin()
         groups().forEach { w.rowGroup(it) }
         w.finish()
@@ -65,7 +65,7 @@ class ParquetWriterTest {
             assertEquals(4, md.columnOrders.size)
             assertEquals(ParquetLogicalType.TimeUnit.NANOS, pf.leaf("event_time_utc_ns").timestampUtcUnit)
             assertEquals(null, pf.leaf("sequence").timestampUtcUnit)
-            assertEquals("test", md.stationId)
+            assertEquals("test", md.keyValueMetadata["writer_test"])
             assertEquals(listOf(0), md.rowGroups[0].sortingColumns.map { it.columnIdx })
             md.rowGroups.forEachIndexed { g, rg ->
                 assertEquals(g, rg.ordinal)

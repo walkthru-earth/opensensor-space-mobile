@@ -48,11 +48,13 @@ import kotlinx.coroutines.IO
  *   `metric_bucket` gains `sampleIntervalMs` and its metric ids become column names, so the tier cache
  *   (`metric_bucket` and `derived_day`) is dropped and rebuilt from the archive. Devices and the archive
  *   index stay.
+ * - v14: `archived_file.schemaVersion` is dropped. The app reads only the `opensensor` footer, which
+ *   names no schema column, so nothing wrote or read it.
  */
 @ConstructedBy(AppDatabaseConstructor::class)
 @Database(
     entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, StationEpoch::class, SensorInstallation::class, PrunedFileEntity::class],
-    version = 13,
+    version = 14,
     exportSchema = true,
     autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7, spec = AppDatabase.DropWideTiers::class), AutoMigration(from = 7, to = 8), AutoMigration(from = 11, to = 12)],
 )
@@ -115,7 +117,8 @@ abstract class AppDatabase : RoomDatabase() {
             "CREATE UNIQUE INDEX IF NOT EXISTS index_metric_bucket_station_metricId_resolution_startEpochS ON metric_bucket (station, metricId, resolution, startEpochS)",
             "DELETE FROM derived_day",
         )
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_12_13)
+        val MIGRATION_13_14: Migration = sqlMigration(13, 14, "ALTER TABLE archived_file DROP COLUMN schemaVersion")
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_12_13, MIGRATION_13_14)
 
         /**
          * The settings both phones open the database with: every migration, the bundled SQLite driver

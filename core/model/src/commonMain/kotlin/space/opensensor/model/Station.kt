@@ -70,7 +70,7 @@ class Station private constructor(
     val sampleIntervalS: Double get() = sampleIntervalFor(footerSampleIntervalMs = null)
 
     /**
-     * Seconds between samples in one file. The file footer `sample_interval_ms` wins, then the runtime
+     * Seconds between samples in one file. The file footer `acquisition.sample_interval_ms` wins, then the runtime
      * value, then the station Collection, then the template default. Valid and expected row counts
      * use this. A value of zero or less counts as absent.
      */

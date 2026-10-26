@@ -58,7 +58,7 @@ internal class LegacyAggregator(
         val md = file.metadata
         val utc = UtcColumns.readEventNs(file) ?: return
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
-        val applicable = anchor?.takeIf { it.boot == md.bootId }
+        val applicable = anchor?.takeIf { it.boot == file.rowBootId() }
         val monoAll = col(ParquetIndexer.MONO)
         val mono = if (applicable != null) monoAll else null
         val bootHi = col("boot_id_hi")
@@ -68,7 +68,7 @@ internal class LegacyAggregator(
         val humidity = metrics.mapNotNull { it.humidityColumn }.distinct().associateWith { col(it) }
         val gates = metrics.map { spec -> spec.gate?.let { g -> LegacyGate(g, col(g.column)) } }
         // The footer interval, else the CoreS3 default the tests read every file with.
-        val interval = md.keyValueMetadata["sample_interval_ms"]?.toLongOrNull()?.takeIf { it > 0 }
+        val interval = OpenSensorFooter.of(md.keyValueMetadata)?.sampleIntervalMs
             ?: (BundledCatalog.templates.single { it.id.startsWith("cores3-") }.defaultSampleIntervalS * 1000).toLong()
         for (i in 0 until utc.size) {
             var estimated = false
@@ -133,7 +133,6 @@ internal object LegacyDailyParquetBuilder {
             val estimated: LongArray?,
             val decoded: Map<String, ColumnValues>,
             val keyValueMetadata: Map<String, String>,
-            val schemaVersion: String?,
         )
         val opened = ArrayList<Src>()
         var anyEstimated = false
@@ -145,12 +144,12 @@ internal object LegacyDailyParquetBuilder {
             require(src.station == station) { "source belongs to another station" }
             opened += source.open().use { pf ->
                 val md = pf.metadata
-                require(md.stationId == null || md.stationId == station) { "Parquet source belongs to another station" }
+                require(md.footer?.stationId == null || md.footer?.stationId == station) { "Parquet source belongs to another station" }
                 val utc = UtcColumns.readEventNs(pf) ?: return@use null
                 val bootHi = md.leaf("boot_id_hi")?.let { pf.readColumn(it) }
                 val bootLo = md.leaf("boot_id_lo")?.let { pf.readColumn(it) }
                 val seq = md.leaf(ParquetIndexer.SEQ)?.let { pf.readColumn(it) }
-                val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.bootId } else null
+                val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == pf.rowBootId() } else null
                 val mono = if (anchor != null) md.leaf(ParquetIndexer.MONO)?.let { pf.readColumn(it) } else null
                 val estimated = if (anchor != null && mono != null) LongArray(utc.size) { i -> mono.asLong(i)?.let(anchor::estimateNsOrNull) ?: Long.MIN_VALUE } else null
                 val keep = ArrayList<Int>()
@@ -171,7 +170,7 @@ internal object LegacyDailyParquetBuilder {
                 if (estimated != null && keep.isNotEmpty()) anyEstimated = true
                 // Decode every column of a contributing source once, while it is open.
                 val decoded = if (keep.isEmpty()) emptyMap() else pf.leaves.associate { leaf -> UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(pf.readColumn(leaf), leaf) else pf.readColumn(leaf) }
-                Src(src, keep.toIntArray(), estimated, decoded, md.keyValueMetadata, md.schemaVersion)
+                Src(src, keep.toIntArray(), estimated, decoded, md.keyValueMetadata)
             } ?: continue
         }
         if (opened.isEmpty() || opened.all { it.keep.isEmpty() }) return null
@@ -194,21 +193,17 @@ internal object LegacyDailyParquetBuilder {
         val decoded: List<Map<String, ColumnValues>> = opened.map { it.decoded }
 
         // 4. Metadata.
-        val invariant = LinkedHashMap<String, String>()
-        val first = opened.first().keyValueMetadata
-        for ((k, v) in first) if (k in COPIED_METADATA && opened.all { it.keyValueMetadata[k] == v }) invariant[k] = v
+        // The footer rule is the production one, these oracles check the rows and bytes around it.
+        val appDay = DailyParquetBuilder.appDay(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
-            putAll(invariant)
-            put("station_id", station)
+            appDay?.let { put(AppDay.KEY, it.encode()) }
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
-            put("derived_version", "3")
+            put("derived_version", DailyParquetBuilder.DERIVED_VERSION)
             put("source_count", opened.size.toString())
             put("coverage_rows", refs.size.toString())
             put("complete", complete.toString())
-            put("schema_versions", opened.map { it.schemaVersion ?: "?" }.distinct().joinToString(","))
-            put("purpose", "telemetry-derived-day")
             if (anyEstimated) {
                 put("estimated_rows", refs.count { r -> opened[r.src].estimated != null }.toString())
                 put("time_estimate", "rows with null event_time_utc_us carry $ESTIMATED_UTC = anchor_utc_ns / 1000 + (monotonic_us - anchor_mono_us) from a same-boot UTC anchor; source/transport error unmeasured; drift not corrected (assume ±${TimeEstimate.DRIFT_PPM.toInt()} ppm)")
@@ -284,10 +279,9 @@ internal object LegacyDailyParquetBuilder {
         }
     }
 
-    const val BUILDER = "opensensor.space shared derived-v3"
+    const val BUILDER = "opensensor.space shared derived-v4"
     const val SOURCE_INDEX = "source_file_index"
     const val ESTIMATED_UTC = "event_time_utc_estimated_us"
     const val HOUR_NS = 3_600L * 1_000_000_000L
     const val COMPLETE_GRACE_S = 30 * 60L
-    private val COPIED_METADATA = setOf("board", "dictionary_version", "dictionary_uri", "dictionary_sha256", "device_id", "pms_status", "light_status", "proximity_status", "magnetic_units", "unavailable", "sample_interval_ms", "clock", "time_semantics")
 }

@@ -3,6 +3,8 @@ package earth.walkthru.aqsync.data.history.parquet
 import earth.walkthru.aqsync.data.history.CoreS3Files
 import earth.walkthru.aqsync.data.history.ParquetIndexer
 import earth.walkthru.aqsync.data.history.UtcColumns
+import earth.walkthru.aqsync.data.history.fixtureBytes
+import earth.walkthru.aqsync.data.history.footer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -21,14 +23,13 @@ import java.io.File
  */
 class RealArchiveTest {
 
-    private fun resource(name: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream(name)).readBytes()
+    private fun resource(name: String) = fixtureBytes(name)
 
     @Test
     fun `first v6 board file - two row groups, statistics agree with rows`() {
         val pf = ParquetFile.wrap(resource("parquet/device/v3-board-2rg-105rows.parquet"), "board v6")
         val md = pf.metadata
-        assertEquals("cores3-telemetry-v3", md.schemaVersion)
-        assertEquals("arduino-cores3-parquet-v6", md.keyValueMetadata["firmware"])
+        assertEquals("telemetry", md.footer?.purpose)
         assertEquals(2, pf.rowGroupCount)
         assertEquals(listOf(90L, 15L), md.rowGroups.map { it.numRows })
         assertEquals(105L, pf.numRows)

@@ -64,7 +64,7 @@ class FileArchiveStoreTest {
     fun `entity and record carry every column both ways`() {
         val entity = ArchivedFile(
             id = 9, station = station, name = key.name, bytes = 1, crc32 = 2, sha256 = "s", syncedAtEpochMs = 3, sourceDevice = "d",
-            indexedAtEpochMs = 4, indexError = null, rows = 5, rowGroups = 6, schemaVersion = "v3", bootId = "b", purpose = "telemetry",
+            indexedAtEpochMs = 4, indexError = null, rows = 5, rowGroups = 6, bootId = "b", purpose = "telemetry",
             utcRows = 7, firstUtcNs = 8, lastUtcNs = 9, firstMonoUs = 10, lastMonoUs = 11, firstSeq = 12, lastSeq = 13,
             estFirstUtcNs = 15, estLastUtcNs = 16, estAnchorFile = "a",
         )

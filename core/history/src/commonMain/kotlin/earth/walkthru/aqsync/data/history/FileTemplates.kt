@@ -4,12 +4,13 @@ import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
 
 /**
- * What one file's footer says about how to read it. [template] is the board template of its
- * `dictionary_sha256`, or null when nothing resolves it, and the file then has no metric values.
- * [sampleIntervalMs] is the footer `sample_interval_ms`, else the template default, else 0 for unknown
- * (rules 12 and 23, the footer wins and nothing assumes 10 s).
+ * What one file's `opensensor` footer says about how to read it. [template] is the board template its
+ * `template.sha256` or `dictionary.sha256` names, or null when nothing resolves them, and the file then
+ * has no metric values. [sampleIntervalMs] is the footer `acquisition.sample_interval_ms`, else the
+ * template default, else 0 for unknown (rules 12 and 23, the footer wins and nothing assumes 10 s).
+ * [footer] is null for a file without a footer History can trust.
  */
-data class FileTemplate(val template: BoardTemplate?, val sampleIntervalMs: Long) {
+data class FileTemplate(val template: BoardTemplate?, val sampleIntervalMs: Long, val footer: OpenSensorFooter? = null) {
     /** Each of [metrics] as this file's template defines it, null where the file cannot give it values. */
     fun bind(metrics: List<MetricSpec>): List<MetricSpec?> {
         val t = template ?: return metrics.map { null }
@@ -22,23 +23,35 @@ data class FileTemplate(val template: BoardTemplate?, val sampleIntervalMs: Long
  * and served templates pass their own.
  */
 fun interface FileTemplates {
-    /** The template for footer [dict], or null when none resolves it. [dict] is null for a footer without one. */
-    fun template(dict: String?): BoardTemplate?
+    /**
+     * The template whose exact bytes hash to [desc] (footer `template.sha256`), else the one for [dict]
+     * (footer `dictionary.sha256`), or null when neither resolves. Either is null when the footer has none.
+     */
+    fun template(dict: String?, desc: String?): BoardTemplate?
 
-    /** The [FileTemplate] of a file with footer [keyValues]. */
-    fun of(keyValues: Map<String, String>): FileTemplate {
-        val template = template(keyValues[DICTIONARY_KEY])
-        val footer = keyValues[SAMPLE_INTERVAL_KEY]?.toLongOrNull()?.takeIf { it > 0 }
+    /** The [FileTemplate] of a raw file with Parquet [keyValues], from its `opensensor` footer. */
+    fun of(keyValues: Map<String, String>): FileTemplate = of(OpenSensorFooter.of(keyValues))
+
+    /** The [FileTemplate] of a derived day file with Parquet [keyValues], from its app-private [AppDay] entry. */
+    fun ofDay(keyValues: Map<String, String>): FileTemplate = of(AppDay.of(keyValues)?.asFooter())
+
+    /** The [FileTemplate] that [footer] names. */
+    fun of(footer: OpenSensorFooter?): FileTemplate {
+        val template = template(footer?.dictionarySha256, footer?.templateSha256)
         val fallback = template?.defaultSampleIntervalS?.takeIf { it > 0 && it.isFinite() }?.let { (it * MS_PER_S).toLong() }
-        return FileTemplate(template, footer ?: fallback ?: 0L)
+        return FileTemplate(template, footer?.sampleIntervalMs ?: fallback ?: 0L, footer)
     }
 
     companion object {
-        const val DICTIONARY_KEY = "dictionary_sha256"
-        const val SAMPLE_INTERVAL_KEY = "sample_interval_ms"
         private const val MS_PER_S = 1000.0
 
-        /** The bundled templates by dict. A file of another dictionary keeps its rows and has no metrics. */
-        val BUNDLED: FileTemplates = FileTemplates { dict -> dict?.let { BundledCatalog.template(it) } }
+        /**
+         * The bundled templates, by template digest first and then by dict. A desc match whose dict
+         * differs from the footer's is not used. A file of another dictionary keeps its rows and has no metrics.
+         */
+        val BUNDLED: FileTemplates = FileTemplates { dict, desc ->
+            val byDesc = desc?.let { BundledCatalog.templateByDesc(it) }?.takeIf { dict == null || it.dict == dict }
+            byDesc ?: dict?.let { BundledCatalog.template(it) }
+        }
     }
 }

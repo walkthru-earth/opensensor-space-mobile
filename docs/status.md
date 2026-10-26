@@ -77,7 +77,7 @@ build and `verify` only. No phone run against the new firmware yet.
 
 - Parquet. `event_time_utc_us` and `clock_anchor_utc_us` are read by their `TIMESTAMP` unit, MICROS
   now, NANOS or unannotated on older files (`UtcColumns`). The reader exposes `field_id`.
-- Derived days. `derived-v3` writes UTC instants as MICROS under the current names, keeps device
+- Derived days. `derived-v4` writes UTC instants as MICROS under the current names, keeps device
   field ids and renames the estimate to `event_time_utc_estimated_us`. `DERIVE_VERSION` 6 rebuilds
   every cached day once.
 - LIVE. `LiveSample` is a map by key name (#185), read through the station of the dictionary digest,
@@ -420,7 +420,7 @@ SELinux context; the observations above use app UI and firmware serial evidence.
 
 The working tree now synchronizes device UTC automatically on Android/iOS connection,
 without a manual clock setting. A boot-scoped receipt preserves the acknowledged clock
-mapping before collection. Shared history imports firmware footer anchors and rebuilds
+mapping before collection. Shared history rebuilds
 unknown-UTC readings into derived UTC-day Parquet on both platforms, preserving original
 bytes and null UTC. See [decision, behavior and limits](time-reconciliation.md).
 

@@ -70,8 +70,8 @@ flowchart LR
 
 ## Index (`ParquetIndexer` → `archived_file`, Room v4)
 
-Derived from the **file**, never its name: rows, row groups, `schema_version`, `boot_id`,
-`purpose`, UTC row count + span, monotonic span, sequence span, the valid rows of the headline metric (the template's primary column through its gate and settle time, null when no bundled template knows the file or the column cannot be read),
+Derived from the **file**, never its name: rows, row groups, `file.purpose` from the `opensensor`
+footer JSON, the boot from the first row's `boot_id_hi` and `boot_id_lo`, then the UTC row count + span, monotonic span, sequence span, the valid rows of the headline metric (the template's primary column through its gate and settle time, null when no bundled template knows the file or the column cannot be read),
 `indexedAt`/`indexError`. v6 footers answer spans from statistics without decoding
 (`fromStatistics`); v1/v2 files decode three columns. Statistics with a negative null count or a
 minimum above the maximum are no answer, the column is decoded instead. `purpose = codec-comparison-duplicate-rows`
@@ -100,11 +100,43 @@ first, and `Metrics.defaultOf` opens History on the first of them.
 keeps its unit and aggregate. Tiers, daily files, the History picker and the charts iterate these
 specs and never name a column. A spec whose column a file lacks yields **no values, never zeros**.
 
-**Each file is read by its own template (`FileTemplates`).** The footer's `dictionary_sha256` picks
-the bundled template and `sample_interval_ms` gives the cadence. The footer interval wins. Without it
+**Each file is read by its own template (`FileTemplates`).** A file carries one footer key,
+`opensensor`, whose value is compact JSON (stac-opensensor `PROFILE.md` "Parquet footer", version
+`0.1.0`, in the style of GeoParquet `geo`). `OpenSensorFooter` reads only `template.sha256`,
+`dictionary.sha256`, `acquisition.sample_interval_ms`, `station.id` and `file.purpose` from it and
+ignores every other member. A missing key, JSON that is not an object, an unknown major version, a
+digest that is not 64 lowercase hex, an interval that is not an integer or a station or purpose that
+is not a non-empty string means the file has no footer. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
+unprefixed keys has no footer, so it keeps its rows and has no
+metrics. A rebuilt partial file carries no `opensensor` key either
+(stac-opensensor question 30), so it reads the same way. Such files are wiped after the matched reflash (decision 14). The repair checks a file's
+`station.id` against its archive station, and the daily builder checks each source the same way.
+The boot is not read from `firmware.boot_id`. Every row carries `boot_id_hi` and `boot_id_lo`, and
+`rowBootId` formats the first pair as 32 lowercase hex digits, the same text firmware writes and sends
+in its clock receipts. The schema name is not read at all.
+The template is the bundled one whose exact bytes hash to `template.sha256` (the build precomputes
+that digest for every bundled file), else the bundled one for `dictionary.sha256`. A template digest
+whose dict disagrees with the footer's is not used. The bundled bytes are the firmware's own, so a
+real footer resolves by `template.sha256` alone, with no dictionary member needed. The catalog refuses
+to load when an `index.json` desc is not the build digest of its file. The footer interval wins. Without it
 the template's default interval is used, and without both the interval is 0 and expected rows are 0.
-A tier bucket fed by files at different intervals keeps the shortest. The daily file writes the
-shortest `sample_interval_ms` of its sources too, so a daily file read back gives the same expected rows.
+A tier bucket fed by files at different intervals keeps the shortest.
+
+The daily file never writes the `opensensor` key. A derived day has no single honest value for
+`station`, `firmware`, `file` and `acquisition.time_semantics`, which `footer.json` requires, and an
+indexer that finds the key would take the day file for a broken raw file. How a derived file is
+marked waits on stac-opensensor question 29 and spec change 27. Until then the day file writes one
+app-private key, `app_day` (`AppDay`). It is not part of the footer contract and will be revisited
+with question 29 and spec 27. The key does not start with `opensensor`, so a match on that prefix
+never finds a day file. Its value is flat JSON with its own `app_day_version` (1) and only what the
+app reads back. `interval_ms` is the shortest positive interval of its sources, and `dict` and
+`desc` are the dictionary and template digests, each only when every source names the same one
+(`DailyParquetBuilder.appDay`). History reads a day file through `FileTemplates.ofDay`, so it gives
+the same template and expected rows as its sources. A day of mixed dictionaries carries no digest,
+and History reads its rows from the raw files. A day whose sources have no footer writes no
+`app_day` and also reads from the raw files. The daily file's own bookkeeping keys (`day`,
+`derived_by`, `source_count` and the rest) are app-local too. A day file writes no station or
+purpose key, since the station is in its path.
 `FileTemplates.bind` gives a file only the specs its template stores in the same unit and rollup,
 with that template's gate and settle time. A file whose dict no bundled template knows keeps its rows
 and has no metrics.
@@ -123,7 +155,8 @@ without humidity has no `pm25_epa` buckets and every screen falls back to `pm25`
 Both PM2.5 specs carry `property = "pm25"` for the WHO scale and a `basis` (`CORRECTED` or `RAW`)
 for the label. Daily files keep the raw `pm25_cf1_ug_m3` and RH columns, so they need no change.
 Template metrics came with `HistoryDeriver.DERIVE_VERSION` 8 on Android and `TierCodec.VERSION` 4
-on iOS, so installed days rebuild once.
+on iOS, so installed days rebuild once. The `app_day` entry came with `DERIVE_VERSION` 9 and
+builder `derived-v4`, which both platforms check, so cached day files rebuild once more.
 
 ### Sensor warm-up and settling (2026-09-17)
 
@@ -169,11 +202,11 @@ source stored, so a day that mixes older NANOS files and current MICROS files st
 `event_time_utc_us` column in microseconds (`UtcColumns`). Device columns keep their `field_id`. An
 older source without ids takes the id of the same name from a newer source. An id two sources
 disagree on, or one that two names share, is dropped. `source_file_index` and
-the estimate column have no id. **No `station_id`
-string column** (deviation from the evaluation) — stays flat numeric so our reader reads it back;
-station is in the path and metadata. Metadata: invariant device keys + `derived_by`
-(`opensensor.space shared derived-v3`), `derived_version`, `source_count`, `coverage_rows`, `complete`
-(every known file in and the day ended > 30 min ago), `day`, `purpose = telemetry-derived-day`,
+the estimate column have no id. **No station
+string column** (deviation from the evaluation). It stays flat numeric so our reader reads it back,
+and the station is in the path. Metadata: the `app_day` key above, `derived_by`
+(`opensensor.space shared derived-v4`), `derived_version` (4), `source_count`, `coverage_rows`, `complete`
+(every known file in and the day ended > 30 min ago), `day`, and the
 `time_estimate` note. Measured 188 B/row vs 512 B/row for device files (5–9× smaller). Validated by
 PyArrow 25 + DuckDB 1.5.5 (`TIMESTAMPTZ`, range pruning, `time_bucket`).
 
@@ -223,8 +256,8 @@ line after a sync: `HistoryDeriver: derived 0 of N station-days (nothing changed
 
 A successful automatic clock handshake persists the acknowledged UTC/monotonic pair in
 app-private clock receipts, scoped to the original station and full 128-bit boot ID.
-History uses the earliest receipt or fully-timed file of that boot; it also imports
-`reconciliation_anchor_*` footer evidence when a verified firmware file arrives. It no longer
+History uses the earliest receipt or fully-timed file of that boot. A footer carries no clock
+anchor (decision 25 dropped `reconciliation_anchor_*`), the rows and the receipts do. It no longer
 needs to wait for a fully-timed file to finalize. For that boot's unsynced files,
 `estimated_utc_ns = anchor_utc_ns + (monotonic_us − anchor_mono_us) * 1000` — never across a
 reboot, never overwriting the event time column. The 50 ppm drift assumption is not a measured
@@ -234,7 +267,7 @@ boot `e452563e…` (2026-09-08): reproduces the firmware's own stamp 43 min afte
 decode). A row's estimate is kept in a column with its own validity array, so no Long value stands
 for "no estimate". Tiers carry `estimatedRows`; charts draw estimated stretches **dashed** and say so. Boots
 that never retained a time anchor stay off the timeline. Durable receipts survive app restarts;
-a new receipt or footer anchor rebuilds affected UTC days, including files whose estimated rows
+a new receipt rebuilds affected UTC days, including files whose estimated rows
 cross midnight. See [UTC reconciliation](time-reconciliation.md).
 
 ## Friendly layer (`AirMood`, `NowReading`)

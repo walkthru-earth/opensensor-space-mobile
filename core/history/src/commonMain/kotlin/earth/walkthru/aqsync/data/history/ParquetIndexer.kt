@@ -20,11 +20,10 @@ data class ParquetIndex(
     val rows: Long,
     val rowGroups: Int,
     val columns: Int,
-    /** `schema_version` file metadata: for example `cores3-telemetry-v5` or `waveshare-sim7670g-telemetry-v4`, null on a foreign writer. */
-    val schemaVersion: String?,
     val createdBy: String?,
+    /** The boot of the file's rows, as [rowBootId] reads it. */
     val bootId: String?,
-    /** `purpose` metadata: `telemetry`, or `codec-comparison-duplicate-rows` for benchmark copies that must stay out of History. */
+    /** Footer `file.purpose`: `telemetry`, or `codec-comparison-duplicate-rows` for benchmark copies that must stay out of History. */
     val purpose: String?,
     /** Rows whose event time (`event_time_utc_us`, or `event_time_utc_ns` on older files) is set, and its range in nanoseconds. */
     val utcRows: Long,
@@ -71,7 +70,8 @@ object ParquetIndexer {
         val utc = utcStats ?: utcLeaf?.let { rangeByDecoding(UtcColumns.readNs(file, it)) }
         val mono = monoStats ?: monoLeaf?.let { rangeByDecoding(file.readColumn(it)) }
         val seq = seqStats ?: seqLeaf?.let { rangeByDecoding(file.readColumn(it)) }
-        val headline = templates.of(md.keyValueMetadata).template?.let { t ->
+        val footer = md.footer
+        val headline = templates.of(footer).template?.let { t ->
             Metrics.of(t).firstOrNull { it.primary && it.humidityColumn == null }
         }
         val validRows = headline?.let { metric ->
@@ -88,10 +88,9 @@ object ParquetIndexer {
             rows = md.numRows,
             rowGroups = md.rowGroups.size,
             columns = md.leaves.size,
-            schemaVersion = md.schemaVersion,
             createdBy = md.createdBy,
-            bootId = md.bootId,
-            purpose = md.keyValueMetadata["purpose"],
+            bootId = file.rowBootId(),
+            purpose = footer?.purpose,
             utcRows = utc?.count ?: 0L,
             firstUtcNs = utc?.min,
             lastUtcNs = utc?.max,

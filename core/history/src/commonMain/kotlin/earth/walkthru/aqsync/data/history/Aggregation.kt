@@ -59,7 +59,7 @@ data class Bucket(
  * (resolution, start). Rows without UTC are skipped unless a [TimeEstimate.Anchor] dates them (§4.6).
  * A row already seen under the same [RowKey] is skipped, as in the daily file and the day chart.
  *
- * Each file is read by its own board template ([templates], from its footer `dictionary_sha256`). A
+ * Each file is read by its own board template ([templates], from its `opensensor` footer). A
  * metric takes its gate and settle time from that template, and a file whose template lacks the metric
  * or stores it in another unit gives it no values, so units never mix in one bucket (rule 9). A file
  * no template resolves still counts its rows. Each metric rolls up with its own aggregate.
@@ -139,7 +139,7 @@ class Aggregator(
         val md = file.metadata
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
         val utc = UtcColumns.readEventNs(file)?.let(LongColumn::of) ?: return
-        val applicable = anchor?.takeIf { it.boot == md.bootId }
+        val applicable = anchor?.takeIf { it.boot == file.rowBootId() }
         val columns = columns(::col, md.keyValueMetadata)
         val mono = if (applicable != null) columns.mono else null
         val bootHi = col("boot_id_hi")?.let(LongColumn::of)

@@ -107,7 +107,6 @@
     <string name="fm_rows">rows</string>
     <string name="fm_columns">columns</string>
     <string name="fm_columns_codec">%1$d · codec %2$s</string>
-    <string name="fm_schema">schema</string>
     <string name="fm_writer">writer</string>
     <string name="fm_statistics">statistics</string>
     <string name="fm_statistics_minmax">min and max per column (v6)</string>

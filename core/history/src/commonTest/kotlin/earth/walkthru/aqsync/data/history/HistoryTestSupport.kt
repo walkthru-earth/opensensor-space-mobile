@@ -14,8 +14,15 @@ import kotlin.math.abs
 // The asserts keep JUnit's argument order (message first) so the tests read as they did on the JVM.
 // Tests that import `kotlin.test` asserts by name keep those, an explicit import wins over this file.
 
-/** Bytes of a fixture under `core/parquet/src/test/resources`, for example `parquet/expected.json`. */
-expect fun fixtureBytes(path: String): ByteArray
+/** Bytes of a fixture under `core/parquet/src/test/resources`, as stored. */
+expect fun rawFixtureBytes(path: String): ByteArray
+
+/**
+ * Bytes of a fixture under `core/parquet/src/test/resources`, for example `parquet/expected.json`. A
+ * device `.parquet` fixture predates the `opensensor` footer, so its old unprefixed keys are moved
+ * into one by [migrateLegacyFooter] first. The app reads no unprefixed key (decision 25).
+ */
+fun fixtureBytes(path: String): ByteArray = rawFixtureBytes(path).let { if (path.endsWith(".parquet")) migrateLegacyFooter(it) else it }
 
 /** A [ParquetSink] that collects everything in memory. */
 class MemorySink : ParquetSink {
@@ -105,22 +112,28 @@ val waveshareTemplate: space.opensensor.model.BoardTemplate = space.opensensor.m
  * Reads every file as the bundled CoreS3 template. The device fixtures predate the bundled dict,
  * so the default [FileTemplates.BUNDLED] gives them rows and no metric values.
  */
-val CoreS3Files: FileTemplates = FileTemplates { coreS3Template }
+val CoreS3Files: FileTemplates = FileTemplates { _, _ -> coreS3Template }
 
-/** A footer naming the bundled CoreS3 dict and a 10 s cadence, as a current CoreS3 file carries. */
-fun coreS3Footer(extra: Map<String, String> = emptyMap()): Map<String, String> =
-    mapOf(FileTemplates.DICTIONARY_KEY to coreS3Template.dict, FileTemplates.SAMPLE_INTERVAL_KEY to "10000") + extra
+/** The `opensensor` footer entry of a file written under [template], with its dict, its desc and [intervalMs]. */
+fun opensensorFooter(template: space.opensensor.model.BoardTemplate, intervalMs: Long? = 10_000, desc: String? = template.key.desc): Map<String, String> =
+    mapOf(OpenSensorFooter.KEY to opensensorFooterJson(template.dict, desc, intervalMs))
+
+/** A footer naming the bundled CoreS3 template and a 10 s cadence, as a current CoreS3 file carries. */
+fun coreS3Footer(extra: Map<String, String> = emptyMap()): Map<String, String> = opensensorFooter(coreS3Template) + extra
 
 /**
- * [bytes] rewritten with the bundled CoreS3 dict in the footer. The device fixtures predate it, and a
- * derived day file without a dict gives way to the raw files.
+ * [bytes] rewritten with a firmware footer naming the bundled CoreS3 dict, template digest and a 10 s
+ * cadence. The device fixtures predate them, and a derived day file without a dict gives way to the raw
+ * files. The station and purpose of the file's own footer are kept.
  */
 fun withCoreS3Dict(bytes: ByteArray): ByteArray = ParquetFile.wrap(bytes).use { file ->
     val sink = MemorySink()
+    val own = file.metadata.footer
+    val json = opensensorFooterJson(coreS3Template.dict, coreS3Template.key.desc, 10_000, station = own?.stationId, purpose = own?.purpose)
     val w = ParquetWriter(
         sink,
         file.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) },
-        keyValueMetadata = file.metadata.keyValueMetadata + coreS3Footer(),
+        keyValueMetadata = file.metadata.keyValueMetadata + (OpenSensorFooter.KEY to json),
     )
     w.begin()
     w.rowGroup(file.leaves.map { file.readColumn(it) })

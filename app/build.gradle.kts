@@ -208,6 +208,8 @@ androidComponents {
 android.sourceSets.getByName("test") {
     // The Parquet fixtures (real device files + PyArrow expectations) live once, in :core:parquet.
     resources.srcDir(rootProject.file("core/parquet/src/test/resources"))
+    // The device fixtures predate the `opensensor` footer. This moves their old keys into one.
+    kotlin.srcDir(rootProject.file("core/history/src/legacyFooterFixtures/kotlin"))
 }
 
 dependencies {

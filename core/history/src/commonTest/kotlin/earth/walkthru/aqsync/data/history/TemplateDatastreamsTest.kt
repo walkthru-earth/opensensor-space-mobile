@@ -73,12 +73,16 @@ class TemplateDatastreamsTest {
         liveKeys = emptyMap(),
         dictionaryHref = null,
     )
-    private val soilFiles = FileTemplates { dict -> soil.takeIf { it.dict == dict } }
+    private val soilFiles = FileTemplates { dict, _ -> soil.takeIf { it.dict == dict } }
+
+    /** An `opensensor` footer naming [dict] and [intervalMs], with no template digest. */
+    private fun footer(dict: String, intervalMs: Long? = null): Map<String, String> =
+        mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict, desc = null, intervalMs = intervalMs, board = "soil-probe", schema = "soil-v1"))
     private val metrics = Metrics.of(soil)
     private fun metric(id: String) = metrics.single { it.id == id }
 
     /** Eight rows 30 s apart from 10:00Z of [day], footer cadence 30 s against a 300 s template default. */
-    private fun soilFile(footer: Map<String, String> = mapOf(FileTemplates.DICTIONARY_KEY to soil.dict, FileTemplates.SAMPLE_INTERVAL_KEY to "30000")): ByteArray {
+    private fun soilFile(footer: Map<String, String> = footer(soil.dict, 30_000)): ByteArray {
         val n = 8
         val sink = MemorySink()
         val w = ParquetWriter(
@@ -175,10 +179,10 @@ class TemplateDatastreamsTest {
         assertEquals(120L, b.expectedRows)
         assertEquals(7f / 120f, b.coverage(metric("soil_moisture_percent")), 1e-6f)
         // Without a footer interval the template default holds, and with neither nothing is assumed.
-        assertEquals(300_000L, soilFiles.of(mapOf(FileTemplates.DICTIONARY_KEY to soil.dict)).sampleIntervalMs)
-        assertEquals(300_000L, soilFiles.of(mapOf(FileTemplates.DICTIONARY_KEY to soil.dict, FileTemplates.SAMPLE_INTERVAL_KEY to "0")).sampleIntervalMs)
+        assertEquals(300_000L, soilFiles.of(footer(soil.dict)).sampleIntervalMs)
+        assertEquals(300_000L, soilFiles.of(footer(soil.dict, 0)).sampleIntervalMs)
         assertEquals(0L, soilFiles.of(emptyMap()).sampleIntervalMs)
-        val unknown = hour(soilFiles, soilFile(mapOf(FileTemplates.DICTIONARY_KEY to "cd".repeat(32))))
+        val unknown = hour(soilFiles, soilFile(footer("cd".repeat(32))))
         assertEquals(0L, unknown.expectedRows)
         assertEquals(0f, unknown.coverage(metric("soil_moisture_percent")))
     }
@@ -210,8 +214,8 @@ class TemplateDatastreamsTest {
                 }
             },
         )
-        val files = FileTemplates { dict -> listOf(soil, fahrenheit).firstOrNull { it.dict == dict } }
-        val b = hour(files, soilFile(mapOf(FileTemplates.DICTIONARY_KEY to fahrenheit.dict)))
+        val files = FileTemplates { dict, _ -> listOf(soil, fahrenheit).firstOrNull { it.dict == dict } }
+        val b = hour(files, soilFile(footer(fahrenheit.dict)))
         assertEquals(null, b.agg(metric("soil_temperature_c")))
         // A column rolled up another way is not mixed in either.
         assertEquals(null, b.agg(metric("rain_tips")))
@@ -224,7 +228,7 @@ class TemplateDatastreamsTest {
             key = TemplateKey("12".repeat(32)),
             datastreams = soil.datastreams.map { if (it.name == "soil_moisture_percent") it.copy(validWhen = null, settleSeconds = 0.0) else it },
         )
-        val b = hour(FileTemplates { loose }, soilFile(mapOf(FileTemplates.DICTIONARY_KEY to loose.dict)))
+        val b = hour(FileTemplates { _, _ -> loose }, soilFile(footer(loose.dict)))
         val moisture = b.agg(metric("soil_moisture_percent"))!!
         assertEquals(8, moisture.n)
         assertEquals(0, moisture.settling)

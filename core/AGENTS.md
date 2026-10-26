@@ -28,7 +28,7 @@ derived from the template when none is bundled), `StationCollection`, `Scale`, `
 `Station.join`, which joins them. A station keeps every datastream whatever its role, the profile
 picks what shows first. `Aggregate`, `Role` and `Family` are open value classes, so an unknown value
 parses (an unknown aggregate rolls up as `point`). The template sample interval is a default, the
-runtime interval and a file footer `sample_interval_ms` win (`Station.sampleIntervalFor`). `LiveColumns`
+runtime interval and a file footer `acquisition.sample_interval_ms` win (`Station.sampleIntervalFor`). `LiveColumns`
 maps a template's columns to LIVE keys and picks the temperature and humidity keys, and
 `BundledCatalog.live` reads it for a bundled `dict`. `LiveReading` in `protocol/` reads a LIVE
 sample through a `Station`, `DeviceCapabilities` in `history/` builds that station from `info.desc`
@@ -57,7 +57,9 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   `rsync -a --delete ../aq-parquet/docs/shared/templates/ core/model/bundled/templates/`. LIVE (`LiveReading`, #185), the batch estimate and
   History read them. History builds each `MetricSpec` from a template datastream
   and the profile (`Metrics.of`), and reads each file by the template of its
-  footer (`FileTemplates`). A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic
+  `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by
+  `template.sha256` first and then `dictionary.sha256`. The old unprefixed footer
+  keys are not read. A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading`, or a future `MetricCard`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and
   the privacy rules. The phone uses H3 (`publicfeed`, `H3Grid`) for geometry, viewport cover, descendant

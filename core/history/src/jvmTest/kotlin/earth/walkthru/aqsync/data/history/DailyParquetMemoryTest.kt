@@ -22,7 +22,7 @@ class DailyParquetMemoryTest {
     /** [files] files of [rowsPerFile] rows over [fileSeconds] each, every column of the board file, one UTC day. */
     private fun day(epochDay: Long, rowsPerFile: Int, files: Int = 96, fileSeconds: Long = 900L): List<Pair<ArchiveRecord, ByteArray>> {
         val raw = ParquetFile.wrap(board)
-        val station = raw.metadata.stationId ?: "memory-station"
+        val station = raw.metadata.footer?.stationId ?: "memory-station"
         val base = raw.leaves.map { raw.readColumn(it) }
         return (0 until files).map { f ->
             val values = raw.leaves.mapIndexed { c, leaf ->

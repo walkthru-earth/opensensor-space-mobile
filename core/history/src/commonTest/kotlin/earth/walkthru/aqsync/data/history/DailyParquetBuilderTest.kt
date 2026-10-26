@@ -21,7 +21,7 @@ internal fun dailyFixture(open: (ByteArray) -> ParquetFile = { ParquetFile.wrap(
     val index = ParquetIndexer.index(file, templates = CoreS3Files)
     val anchor = TimeEstimate.Anchor(index.bootId!!, 1_788_912_000_123_456_000L, index.lastMonoUs!!, "clock:receipt")
     val record = ArchiveRecord(
-        file.metadata.stationId ?: "station-a", "raw.parquet", 1, 123, "hash", 1, "device",
+        file.metadata.footer?.stationId ?: "station-a", "raw.parquet", 1, 123, "hash", 1, "device",
         indexedAtEpochMs = 1, rows = index.rows, bootId = index.bootId, utcRows = 0,
         firstMonoUs = index.firstMonoUs, lastMonoUs = index.lastMonoUs,
         estFirstUtcNs = anchor.estimateNs(index.firstMonoUs!!), estLastUtcNs = anchor.utcNs, estAnchorFile = anchor.sourceFile,
@@ -182,7 +182,7 @@ class DailyParquetBuilderTest {
         val bytes = fixtureBytes("parquet/device/v3-board-2rg-180rows.parquet")
         val file = ParquetFile.wrap(bytes)
         val index = ParquetIndexer.index(file, templates = CoreS3Files)
-        val station = file.metadata.stationId ?: "station-a"
+        val station = file.metadata.footer?.stationId ?: "station-a"
         fun record(name: String) = ArchiveRecord(
             station, name, bytes.size.toLong(), 1, "sha-$name", 1, "fixture", indexedAtEpochMs = 1, rows = index.rows,
             bootId = index.bootId, utcRows = index.utcRows, firstUtcNs = index.firstUtcNs, lastUtcNs = index.lastUtcNs,

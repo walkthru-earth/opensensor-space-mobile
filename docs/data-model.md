@@ -62,7 +62,6 @@ erDiagram
     string indexError
     long rows
     int rowGroups
-    string schemaVersion
     string bootId
     string purpose
     long utcRows
@@ -79,7 +78,7 @@ erDiagram
   metric_bucket {
     long id PK "UNIQUE (station,metricId,resolution,startEpochS)"
     string station
-    string metricId "template column name"
+    string metricId "template column name or derived id such as pm25_epa"
     long resolution "900 · 3600 · 86400"
     long startEpochS
     int rows
@@ -149,6 +148,7 @@ that cannot list the archive writes no marker and imports on the next launch.
 | 10 → 11 | explicit | no schema change; rows indexed with no UTC rows and no error are marked never indexed, so the reader indexes them again |
 | 11 → 12 | `AutoMigration` | new table `pruned_file` |
 | 12 → 13 | explicit | drops `archived_file.pmValidRows`, recreates `metric_bucket` empty with `sampleIntervalMs` and clears `derived_day`. Tiers key metrics by template column now, so the deriver rebuilds every day. The archive and its index stay |
+| 13 → 14 | explicit | drops `archived_file.schemaVersion`, which nothing wrote or read |
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores
 the full sticker, vendor/model, batch, source (`barcode` or `manual`), phone UTC assertion time,

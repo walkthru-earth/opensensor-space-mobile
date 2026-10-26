@@ -103,18 +103,15 @@ class HistorySourcesTest {
     }
 
     @Test
-    fun footerAnchorRecoversUnknownFilesAndBothHistoryReadersWithoutTimedRows() = runTest {
+    fun aFooterAnchorIsIgnoredAndAReceiptRecoversBothHistoryReadersWithoutTimedRows() = runTest {
         val boot = "e452563e96c72ca057a48924550779b6"
         val raw = ParquetFile.wrap(fixtureBytes("parquet/device/v1-none-64rows-unsynced.parquet"))
         val source = ParquetIndexer.index(raw, templates = CoreS3Files)
         val utc = 1_788_912_000_123_456_000L
         val parts = ArrayList<ByteArray>()
         val sink = object : ParquetSink { override fun write(bytes: ByteArray) { parts += bytes.copyOf() } }
-        val metadata = raw.metadata.keyValueMetadata + mapOf(
-            "reconciliation_anchor_mono_us" to source.lastMonoUs.toString(),
-            "reconciliation_anchor_utc_ns" to utc.toString(),
-            "reconciliation_anchor_source" to "3",
-        )
+        // Old firmware wrote a clock anchor into the footer. Decision 25 drops those keys, so repair must not read them.
+        val metadata = raw.metadata.keyValueMetadata + LegacyFooterKeys.anchor(monoUs = source.lastMonoUs!!, utcNs = utc, source = 3)
         val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }, keyValueMetadata = metadata)
         writer.begin()
         writer.rowGroup(raw.leaves.map { raw.readColumn(it) })
@@ -134,11 +131,14 @@ class HistorySourcesTest {
         }
         val repair = ArchiveIndexRepair(store, index, clockAnchors = receipts, templates = CoreS3Files)
         repair.backfillAll()
+        assertEquals(null, index.get(record.key)!!.estLastUtcNs)
+        assertTrue(saved.isEmpty())
+        // A sync receipt is the anchor now.
+        saved += ClockAnchor(station, boot, utc, source.lastMonoUs!!, source = "3")
+        assertEquals(1, repair.estimateTimes())
         val estimated = index.get(record.key)!!
         assertEquals(0L, estimated.utcRows)
         assertEquals(utc, estimated.estLastUtcNs)
-        assertEquals(1, saved.size)
-        assertEquals("3", saved.single().source)
         assertEquals(2, StationDays.of(listOf(estimated))[station]!!.size)
         val tiers = ArchiveHistoryTiers(store, index, clockAnchors = receipts, templates = CoreS3Files)
         val reader = HistorySeriesReader(store, index, tiers, clockAnchors = receipts, templates = CoreS3Files)
@@ -146,7 +146,6 @@ class HistorySourcesTest {
         val previousDay = reader.observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, midnight)).first()
         assertTrue(previousDay.estimatedRows > 0)
         assertTrue(tiers.observeDays(station).first().count > 0)
-        // Idempotent repair keeps evidence even when no timed file exists.
         assertEquals(0, ArchiveIndexRepair(store, index, clockAnchors = receipts, templates = CoreS3Files).estimateTimes())
         assertTrue(store.files[record.key]!!.contentEquals(bytes))
     }

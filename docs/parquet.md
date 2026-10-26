@@ -238,7 +238,7 @@ committing library, the device never writes it. The commit uses iceberg-go 0.7.0
 metrics. PyIceberg 0.12 cannot write v3. Files from before CoreS3 v6.12 and Waveshare v2.6 store
 UTC as bare INT64 or `TIMESTAMP(NANOS, UTC)` without field ids. A name mapping cannot change a
 column's type, so these files stay out of the table or are rewritten on a host. Phone derived days
-(`derived-v3`) are a local cache and are not committed either.
+(`derived-v4`) are a local cache and are not committed either.
 
 ## GeoParquet 2.0 (D11, 2026-09-17)
 

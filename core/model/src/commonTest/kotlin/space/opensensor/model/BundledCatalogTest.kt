@@ -197,6 +197,22 @@ class BundledCatalogTest {
     }
 
     @Test
+    fun theIndexDescMustBeTheDigestOfTheTemplateBytes() {
+        val digests = BundledFiles.sha256 + (cores3File to unknownDict)
+        val error = assertFailsWith<IllegalArgumentException> { BundledCatalog.templatesOf(BundledFiles.files, digests) }
+        assertTrue("desc" in error.message.orEmpty(), error.message)
+    }
+
+    @Test
+    fun aRealFirmwareDescResolvesWithoutADict() {
+        // The desc aq-parquet firmware writes in template.sha256 for the CoreS3 v5 template.
+        val desc = "bb0ab0a3eaafb05e45bbbf5216194ab808110df92e6ee277c8ef2af6f2f314b0"
+        val template = assertNotNull(BundledCatalog.templateByDesc(desc))
+        assertEquals(cores3Dict, template.dict)
+        assertEquals(desc, template.key.desc)
+    }
+
+    @Test
     fun twoProfilesForOneDictAreRefused() {
         val profile = assertNotNull(BundledCatalog.profile(cores3Dict))
         assertEquals(mapOf(cores3Dict to profile), BundledCatalog.byDict(listOf(profile)))

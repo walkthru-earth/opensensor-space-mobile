@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 // The shared core model of what a station measures (#183): board templates, app profiles, datastreams,
 // observed properties, scales and the station that joins them. Pure commonMain with kotlinx
 // serialization parsing of the stac-opensensor v0.1.0 board template, the app's own profile JSON and
@@ -12,7 +14,8 @@ plugins {
  * Embeds every `*.json` file under [source] as a Kotlin string, so common code on Android and iOS reads
  * the bundled templates and profiles without a resource API. The output is the internal object
  * `BundledFiles` with one entry per file, keyed by its path under [source] such as
- * `templates/m5stack-cores3/<dict>.json`.
+ * `templates/m5stack-cores3/<dict>.json`, and `sha256` with the SHA-256 hex of each file's exact
+ * bytes, which is the template digest a footer `template.sha256` names.
  */
 @CacheableTask
 abstract class BundleFiles : DefaultTask() {
@@ -32,6 +35,10 @@ abstract class BundleFiles : DefaultTask() {
             val chunks = file.readText().chunked(CHUNK).joinToString(",\n") { "            \"${escape(it)}\"" }
             "        \"${file.relativeTo(root).invariantSeparatorsPath}\" to listOf(\n$chunks,\n        ).joinToString(\"\"),"
         }
+        val digests = files.joinToString("\n") { file ->
+            val hex = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+            "        \"${file.relativeTo(root).invariantSeparatorsPath}\" to \"$hex\","
+        }
         val dir = output.get().asFile.resolve("space/opensensor/model")
         dir.mkdirs()
         dir.resolve("BundledFiles.kt").writeText(
@@ -42,6 +49,10 @@ abstract class BundleFiles : DefaultTask() {
             |internal object BundledFiles {
             |    val files: Map<String, String> = mapOf(
             |$entries
+            |    )
+            |
+            |    val sha256: Map<String, String> = mapOf(
+            |$digests
             |    )
             |}
             |
