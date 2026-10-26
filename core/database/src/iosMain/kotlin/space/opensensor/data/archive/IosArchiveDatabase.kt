@@ -16,10 +16,12 @@ import space.opensensor.archive.PrunedFiles
 import space.opensensor.data.local.database.AppDatabase
 import space.opensensor.data.local.database.checkpointDurably
 import space.opensensor.data.local.database.openAppDatabase
+import space.opensensor.data.sync.ListCursorState
+import space.opensensor.data.sync.ListCursors
 
 /**
- * The iOS [index] and [pruned] marks, the shared Room tables in `<dir>/opensensor.db`. The database opens
- * on first use, and the first call of either port waits for [LegacyReceiptImport] to finish, so no
+ * The iOS [index], [pruned] marks and list [cursors], the shared Room tables in `<dir>/opensensor.db`. The database opens
+ * on first use, and the first call of any port waits for [LegacyReceiptImport] to finish, so no
  * reader sees the index before the older receipts are in. Only the first pass checkpoints the database,
  * before it writes [IMPORT_MARKER]. Once [IMPORT_SETTLED] exists no launch walks the archive or
  * checkpoints. A failed import throws to that caller and runs again on the next call.
@@ -71,6 +73,14 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
         override suspend fun put(file: PrunedFile) = roomPruned().put(file)
         override suspend fun remove(key: ArchiveKey) = roomPruned().remove(key)
         override suspend fun clear(): Int = roomPruned().clear()
+    }
+
+    private val roomCursors by lazy { RoomListCursors(database.listCursorDao()) }
+
+    val cursors: ListCursors = object : ListCursors {
+        override suspend fun get(thing: String): ListCursorState? = ready().let { roomCursors.get(thing) }
+        override suspend fun put(state: ListCursorState) = ready().let { roomCursors.put(state) }
+        override suspend fun remove(thing: String) = ready().let { roomCursors.remove(thing) }
     }
 
     /** Closes the database, for tests. The app keeps it open for the life of the process. */

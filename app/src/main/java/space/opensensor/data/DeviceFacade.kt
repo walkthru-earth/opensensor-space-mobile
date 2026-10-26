@@ -137,12 +137,12 @@ class DeviceFacade internal constructor(
                     }
                 }
             },
-            onListed = { link, files, end ->
+            onListed = { link, listing ->
                 lock.withLock {
-                    val listing = controller.state.value as? CollectionState.Preparing
-                    if (listing?.step == PrepareStep.LIST && request?.intent?.id == listing.intentId) {
-                        request?.lastListedAttempt = listing.attempt
-                        linkOwner.collectionListed(link.session, files, end)
+                    val state = controller.state.value as? CollectionState.Preparing
+                    if (state?.step == PrepareStep.LIST && request?.intent?.id == state.intentId) {
+                        request?.lastListedAttempt = state.attempt
+                        linkOwner.collectionListed(link.session, listing)
                     }
                 }
             },

@@ -693,7 +693,7 @@ class LinkSession(
             FrameType.CLOSED, FrameType.TIME_SET, FrameType.FLUSHED, FrameType.CONFIG, FrameType.WIFI_AP,
             FrameType.WIFI_SCAN_END, FrameType.REBOOTING, FrameType.LOG, FrameType.LOG_END, FrameType.TOKEN,
             FrameType.HELLO, FrameType.STATUS, FrameType.LIVE, FrameType.CONFIG_CHUNK, FrameType.BYE,
-            FrameType.DIAG, FrameType.ABORTED, FrameType.DESCRIPTOR_CHUNK, FrameType.ERROR,
+            FrameType.DIAG, FrameType.ABORTED, FrameType.LIST_SINCE_END, FrameType.DESCRIPTOR_CHUNK, FrameType.ERROR,
         )
     }
 }

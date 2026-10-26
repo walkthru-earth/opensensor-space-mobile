@@ -1,5 +1,6 @@
 package space.opensensor.data.local.database
 
+import androidx.room.AutoMigration
 import androidx.room.ConstructedBy
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -10,18 +11,19 @@ import kotlinx.coroutines.IO
 
 /**
  * The one database of both phones, `opensensor.db`, opened through [configured] with the bundled SQLite
- * driver. Android uses every table. iOS uses `archived_file` and `pruned_file`, the other tables stay
- * empty there, so one schema and one version serve both (#100).
+ * driver. Android uses every table. iOS uses `archived_file`, `pruned_file` and `list_cursor`, the
+ * other tables stay empty there, so one schema and one version serve both (#100).
  *
- * The schema is exported to `core/database/schemas/`. The app ID `space.opensensor.app` always starts
- * with an empty database, so there are no migrations. A later schema change adds its first one.
+ * The schema is exported to `core/database/schemas/`. Version 2 adds `list_cursor` (#95) through an
+ * automatic migration, since a new table needs no hand written step.
  * `metric_bucket` and `derived_day` are caches of the archive that `HistoryDeriver` rebuilds.
  */
 @ConstructedBy(AppDatabaseConstructor::class)
 @Database(
-    entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, ThingEpoch::class, SensorInstallation::class, PrunedFileEntity::class],
-    version = 1,
+    entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, ThingEpoch::class, SensorInstallation::class, PrunedFileEntity::class, ListCursorEntity::class],
+    version = 2,
     exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun knownDeviceDao(): KnownDeviceDao
@@ -31,6 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun thingEpochDao(): ThingEpochDao
     abstract fun sensorInstallationDao(): SensorInstallationDao
     abstract fun prunedFileDao(): PrunedFileDao
+    abstract fun listCursorDao(): ListCursorDao
 
     companion object {
         /** The file name on both phones. */

@@ -423,9 +423,9 @@ class CollectionControllerTest {
             collector,
             keepAlive,
             backgroundScope,
-            onListed = { _, files, listEnd ->
-                listed = files
-                end = listEnd
+            onListed = { _, listing ->
+                listed = listing.files
+                end = listing.end
             },
         )
         val request = intent()

@@ -14,6 +14,7 @@ import space.opensensor.data.sync.ArchiveCollector
 import space.opensensor.data.sync.ArchiveRecordIndexer
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
+import space.opensensor.data.sync.ListCursors
 import space.opensensor.data.sync.SyncEngine
 import space.opensensor.data.toIdentity
 import space.opensensor.storage.StorageBudget
@@ -34,12 +35,16 @@ object SyncEngineModule {
         engine: SyncEngine,
         budget: StorageBudget,
         files: ArchivedFileDao,
+        cursors: ListCursors,
+        clock: WallClock,
     ): ArchiveCollector = ArchiveCollector(
         store,
         index,
         engine,
         budget,
         archivedIdentities = { thing -> files.identitiesForThing(thing).map { it.toIdentity() } },
+        cursors = cursors,
+        clock = clock::nowEpochMs,
     )
 
     /**
