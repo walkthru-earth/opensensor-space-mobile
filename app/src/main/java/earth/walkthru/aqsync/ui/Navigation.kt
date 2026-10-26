@@ -107,7 +107,7 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, develop
 }
 
 /**
- * Browse mDNS for `_aqsync._tcp` while the app is started and the local-network permission is
+ * Browse mDNS for `_ossync._tcp` while the app is started and the local-network permission is
  * already held (API 37+, always on below). It never asks. The Device screen asks from a Wi-Fi action. Stopping on background keeps the radio and the permission
  * honest: discovery is only ever running while the user is looking at the app.
  */

@@ -11,7 +11,7 @@ import earth.walkthru.aqsync.data.protocol.Opcode
  * Secret frames, per `aq-parquet/docs/shared/ble-sync-protocol.md`:
  * - RX `TOKEN` (0x46) carries the 32-byte LAN bearer token.
  * - TX `SET_CONFIG` (0x09) can carry `wifi.psk` and `ble.pin`.
- * - TX bytes that start with the LAN handshake magic `AQS1` carry the token. The handshake is
+ * - TX bytes that start with the LAN handshake magic `OSS1` carry the token. The handshake is
  *   unframed and normally never reaches a recorder; this rule is a second fence.
  *
  * A secret frame keeps only its type byte. `GET_CONFIG`/`CONFIG` report `psk_set` and `pin_set`
@@ -22,7 +22,7 @@ object FrameRedaction {
     const val REDACTED = "<redacted>"
     private const val ELLIPSIS = "…"
     private const val HEX = "0123456789abcdef"
-    private val LAN_HELLO_MAGIC = byteArrayOf(0x41, 0x51, 0x53, 0x31) // "AQS1"
+    private val LAN_HELLO_MAGIC = byteArrayOf(0x4F, 0x53, 0x53, 0x31) // "OSS1"
     private val JSON_STRING_OR_NUMBER_MEMBER = Regex("(\"((?:[^\"\\\\]|\\\\.)*)\"\\s*:\\s*)(\"(?:[^\"\\\\]|\\\\.)*\"|-?[0-9][0-9.eE+-]*)")
     private val SECRET_KEY_PARTS = listOf("psk", "pin", "token", "pass", "secret")
 

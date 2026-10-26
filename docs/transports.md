@@ -9,7 +9,7 @@
 ```mermaid
 flowchart TD
   C[connect address] --> Q{station discovered on mDNS<br/>AND token stored?}
-  Q -- yes --> L[TcpLinkDriver AQS1 handshake]
+  Q -- yes --> L[TcpLinkDriver OSS1 handshake]
   L -- HELLO --> R[Ready · chip Wi-Fi LAN]
   L -- ERROR 14 / BYE 3 / BYE 10 --> X[clear token, mark stale] --> B
   L -- ERROR 7 / timeout / bad HELLO --> B[BleLinkDriver]
@@ -19,7 +19,7 @@ flowchart TD
   T -- yes --> G[GET_TOKEN once → known_device.lanToken]
 ```
 
-On Android, My devices **Scan** searches Bluetooth and `_aqsync._tcp` mDNS from one action.
+On Android, My devices **Scan** searches Bluetooth and `_ossync._tcp` mDNS from one action.
 Existing access permits discovery while the screen is visible; the tap requests any missing
 Bluetooth and Local Network permissions. Each radio can still show results if the other is
 unavailable. LAN-only results without an enrolled Bluetooth identity and saved token are
@@ -40,7 +40,7 @@ The [canonical firmware contract](../../aq-parquet/docs/shared/ble-sync-protocol
 advertising and mDNS names. Boards advertise `OS-xxxx` and publish the mDNS host `os-xxxx.local`,
 where `xxxx` is the last four hex digits of `device_id`. Both phones find boards by the GATT
 service UUID alone (Android `ScanFilter.setServiceUuid`, iOS `scanForPeripherals(withServices:)`)
-and Wi-Fi boards by the `_aqsync._tcp` service type, so the app has no name prefix. The advertised
+and Wi-Fi boards by the `_ossync._tcp` service type, so the app has no name prefix. The advertised
 name and the DNS-SD instance name are display data only. Identity comes from INFO `dev` and
 `station`.
 
@@ -154,8 +154,8 @@ measurements do not establish Android/iPhone throughput after the upgrade.
 
 | | Bluetooth LE (`BleLinkDriver`) | LAN (`TcpLinkDriver`) |
 | --- | --- | --- |
-| Discovery | GATT scan for the service UUID (`BleScanner`), any advertised name, timeboxed by `ScanPlan`: `LOW_LATENCY` until 2 s after the first result or 10 s, then `BALANCED`, stop at 45 s; initial starts and restarts share a process-local five-starts-per-30-s budget with `AdvertFlagScan`. Exhausted discovery returns a scan failure without a radio start. Step down and flag re-registration reserve one slot for discovery. The policy is conservative, Android vendor limits and process restarts can differ. My devices folds adverts in `NearbyAdverts` (seen map at most every 250 ms, Room `touch` at most once per device per 60 s) | mDNS `_aqsync._tcp` via `NsdManager` (`LanDiscovery`), TXT `station`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |
-| Auth | LE Secure Connections bond; passkey/PIN modes require encrypted, authenticated access; explicit lab `none` mode uses encrypted Just Works without MITM authentication | `"AQS1"` + 32-byte token, obtainable **only** over BLE; the socket itself is unencrypted by contract and does not authenticate server identity |
+| Discovery | GATT scan for the service UUID (`BleScanner`), any advertised name, timeboxed by `ScanPlan`: `LOW_LATENCY` until 2 s after the first result or 10 s, then `BALANCED`, stop at 45 s; initial starts and restarts share a process-local five-starts-per-30-s budget with `AdvertFlagScan`. Exhausted discovery returns a scan failure without a radio start. Step down and flag re-registration reserve one slot for discovery. The policy is conservative, Android vendor limits and process restarts can differ. My devices folds adverts in `NearbyAdverts` (seen map at most every 250 ms, Room `touch` at most once per device per 60 s) | mDNS `_ossync._tcp` via `NsdManager` (`LanDiscovery`), TXT `station`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |
+| Auth | LE Secure Connections bond; passkey/PIN modes require encrypted, authenticated access; explicit lab `none` mode uses encrypted Just Works without MITM authentication | `"OSS1"` + 32-byte token, obtainable **only** over BLE; the socket itself is unencrypted by contract and does not authenticate server identity |
 | Framing | one notification per frame; `payload_max = min(MTU − 3, 512)` — Android silently drops notifications above the 512-byte GATT attribute limit; control requests ≤ 512 B | `len` u16 LE + frame; `payload_max` from `HELLO` (1024), `mtu` reports `payload_max + 3` |
 | Pushes | `status` / `live` characteristics. The firmware omits a snapshot notification larger than `MTU − 3` (snapshots are at most 480 B), so below MTU 483 the phone also long reads both every 10 s (`SnapshotPoller` on Android, `BleSnapshotReads` on iOS). Reads start once setup is done and stop with the link. On Android a tick skips while a transfer holds or borrows the link, and otherwise queues behind other GATT ops on `opMutex`. It runs whenever the session is open, also with the app in the background while a link the UI opened stays up. On iOS a tick skips while a run, command, lease, token request or any GATT op holds the link, and runs only while the link is kept for on screen or running work | `STATUS` 0x48 / `LIVE` 0x49 frames, **demultiplexed by type byte in the transport's single reader loop** — they may sit between two `CHUNK`s; `DeviceSession` is byte-for-byte identical for both pipes |
 | Liveness | GATT link state | `STATUS` keep-alive after 120 s idle (`KEEPALIVE_POLL_MS` 15 s); link declared dead after `DEAD_AFTER_MS` 180 s without a byte |
@@ -210,6 +210,38 @@ because Android may encrypt a bonded link right after connect but flaky stacks a
 133 and a bare disconnect never count. No stale bond on a phone has produced them, while healthy
 bonds do at the edge of range.
 
+The reflash for firmware #93 (aq-parquet #102) is a partial erase. The settings namespace `oscfg`
+starts empty, and nothing is copied from the old one. `parquet` keeps the station UUID and the
+codec, so the app sees the same station and keeps its archive. Lost on the board, back to first
+boot defaults.
+
+- Pairing mode and PIN (`<dev pin>`) and the display flag. A headless board makes a new random
+  fixed PIN, read it with the owner serial path (`parquet owner-pin`).
+- Wi-Fi on, SSID and passphrase, and `lan.on` (back to on).
+- The LAN token. The board makes a new one.
+- Sensor identity, `sensor.vendor`, `sensor.model`, `sensor.serial` and `sensor.batch_candidate`.
+  Until it is set again, Waveshare files carry no sensor identity and the batch candidate stays off.
+- Location and the NTP settings.
+
+BLE bonds survive the reflash, but the phone may cache the old GATT table, so pair again cleanly.
+Re-provision in this order on the Device settings page.
+
+1. Forget the board in the phone's Bluetooth settings.
+2. Connect from My devices, then use Paired phones, Clear (`ble.clear_bonds=1`), and pair again
+   with the code on the display or `<dev pin>`.
+3. Bluetooth pairing, the mode and PIN if they should differ from the default, then Restart.
+4. Find networks and Join. Sync over Wi-Fi stays on unless the owner turns it off.
+5. Get Wi-Fi token. If the phone still holds the old token, the first `OSS1` handshake fails with
+   `ERROR` 14 and the stored token is cleared. On Android `LanTokenPolicy` clears it and the next
+   bonded BLE session fetches the new one. On iOS the Keychain token is cleared and the new one
+   comes only when the owner taps Get Wi-Fi token again.
+6. Particle sensor sticker on Waveshare, which sends vendor, model, serial and the batch choice.
+7. Device location, with Use phone location or a chosen cell.
+
+The display flag is detected again at first boot and has no setting. The app has no NTP settings,
+so NTP runs on the firmware defaults (on, DHCP servers, public fallback, one hour interval).
+Custom NTP servers or interval need the host tools.
+
 Station generations preserve the original archive and Hive paths; they do not reparent old data
 ([data model](data-model.md#station-generations-and-device-continuity)). The policies and migration
 are covered by host checks; multi-device radio behavior, erased-NVS Android recovery and fingerprint
@@ -228,7 +260,7 @@ stateDiagram-v2
   Stored --> Stored: LAN HELLO ok
   Stored --> Stale: LAN ERROR 14 or BYE 3 (refused) → lanToken cleared
   Stored --> Stale: LAN BYE 10 (rotated), at the handshake or mid-session → lanToken cleared
-  Stale --> Stored: next BLE session refetches, snackbar LanTokenRenewed
+  Stale --> Stored: Android next BLE session refetches, snackbar LanTokenRenewed. iOS Get Wi-Fi token
   Stored --> Stale: unreadable encrypted value → token + port cleared
   Stored --> Stale: verified BLE station-generation change → token + port cleared
   Stored --> None: Forget device / deliberate Rotate token

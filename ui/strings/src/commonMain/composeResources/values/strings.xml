@@ -57,7 +57,7 @@
     <string name="companion_ble_starting">Bluetooth is getting ready…</string>
     <string name="companion_ble_connect_failed">Could not connect. Check that the sensor is nearby and available for pairing.</string>
     <string name="companion_ble_sensor_gone">The sensor disconnected. Find it again to reconnect.</string>
-    <string name="companion_ble_service_missing">The AQ Sync service could not be opened.</string>
+    <string name="companion_ble_service_missing">The OpenSensor Sync service could not be opened.</string>
     <string name="companion_ble_characteristics_missing">This sensor is missing the required live-reading characteristics.</string>
     <string name="companion_ble_notify_failed">Notifications could not be enabled. Check the pairing PIN and try again.</string>
     <string name="companion_ble_read_failed">The sensor could not be read. Check the pairing PIN and try again.</string>

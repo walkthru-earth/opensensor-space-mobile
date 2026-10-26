@@ -51,7 +51,7 @@ internal interface ScanRadio {
 }
 
 /**
- * `BluetoothLeScanner` filtered on the AQ Sync service UUID, exposed as a flow of results. The scan
+ * `BluetoothLeScanner` filtered on the OpenSensor Sync service UUID, exposed as a flow of results. The scan
  * follows a [ScanPlan] and the flow completes when the plan stops it. Cancelling stops it sooner.
  *
  * BLUETOOTH_SCAN is declared `neverForLocation`, so no location permission is involved.

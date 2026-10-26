@@ -257,7 +257,7 @@ History charts, background sync, error messages and back stack restore after pro
 | Permission | Why | Runtime? |
 | --- | --- | --- |
 | `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT` | the BLE pipe | yes |
-| `INTERNET` | LAN sockets to hosts from mDNS `_aqsync._tcp` discovery, and the anonymous read-only Discover basemap GETs (Protomaps PMTiles on source.coop, glyphs and sprites from protomaps.github.io), which "Show public sensors" turns off. No other endpoint | – |
+| `INTERNET` | LAN sockets to hosts from mDNS `_ossync._tcp` discovery, and the anonymous read-only Discover basemap GETs (Protomaps PMTiles on source.coop, glyphs and sprites from protomaps.github.io), which "Show public sensors" turns off. No other endpoint | – |
 | `ACCESS_NETWORK_STATE` | merged from the maplibre-compose library manifest (not in our source manifest), a normal permission | – |
 | `ACCESS_LOCAL_NETWORK` | mDNS + LAN on API 37+; denial leaves BLE working | yes, API 37+ only |
 | `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` | `SyncForegroundService` and the worker's `setForeground` | – |

@@ -20,7 +20,7 @@ sequenceDiagram
 
 ## GATT (`AqUuids`)
 
-| Attribute | UUID (`c0a5e9f0-XXXX-4b1a-9c3e-2d7f8a6b4e01`) | Role |
+| Attribute | UUID (`255f595e-XXXX-47ed-8e0d-59994199b680`) | Role |
 | --- | --- | --- |
 | SERVICE | `0001` | the only scan filter. The board name (`OS-xxxx` today) is display data, never matched |
 | INFO | `0002` | read once: `proto`, `fw`, `station`, `max_read`, … |
@@ -69,9 +69,9 @@ anything else is a `ProtocolViolationException`.
 
 | Constant | Value |
 | --- | --- |
-| mDNS service | `_aqsync._tcp` (TXT: `station`, `dev`, `fw`, `proto`) |
+| mDNS service | `_ossync._tcp` (TXT: `station`, `dev`, `fw`, `proto`) |
 | `DEFAULT_PORT` | 47390 |
-| Handshake | unframed `"AQS1"` + 32-byte token, phone → device within `HANDSHAKE_TIMEOUT_MS` 5 s; answer is framed `HELLO(payload_max, proto)` or `ERROR` 14 / 7 |
+| Handshake | unframed `"OSS1"` + 32-byte token, phone → device within `HANDSHAKE_TIMEOUT_MS` 5 s; answer is framed `HELLO(payload_max, proto)` or `ERROR` 14 / 7 |
 | Frame | `len` u16 LE + frame; `PAYLOAD_MAX` 1024 device→phone, `REQUEST_MAX` 512 phone→device |
 | Idle | `DEVICE_IDLE_LIMIT_MS` 300 s; phone sends `STATUS` after `KEEPALIVE_AFTER_IDLE_MS` 120 s |
 

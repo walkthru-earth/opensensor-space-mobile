@@ -64,7 +64,7 @@ interface BackgroundSyncGateway<D : BackgroundSyncDevice, T : BackgroundLanTarge
     fun isDeviceOwned(address: String): Boolean = interactiveSessionAddress() == address
 
     /**
-     * Browse `_aqsync._tcp` for up to [timeoutMs] (return early once every station in [stations]
+     * Browse `_ossync._tcp` for up to [timeoutMs] (return early once every station in [stations]
      * is resolved). Empty when the LAN permission is missing or discovery fails. Keyed by station.
      */
     suspend fun browseLan(stations: Set<String>, timeoutMs: Long): Map<String, T>

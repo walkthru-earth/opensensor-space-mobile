@@ -19,7 +19,7 @@ The app does three things.
    only for the people who want it.
 
 **Private by design.** The archive lives on the phone and works without internet. LAN
-connects only to devices found through `_aqsync._tcp` mDNS, with a token obtained over bonded
+connects only to devices found through `_ossync._tcp` mDNS, with a token obtained over bonded
 BLE. The only other network use is anonymous, read-only downloads of the public map feed and
 basemap, which a Settings switch turns off. Sharing a device's own data is off by default and
 is turned on per device, in that device's settings, with confirmation. No accounts, no

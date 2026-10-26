@@ -717,7 +717,7 @@ records the evidence and its limits. A fresh pairing/PIN flow, notification
 cadence, STATUS updates, stale timeout and foreground/background behavior still
 need qualification. At that first-stage commit, the iOS app was a foreground live reader only:
 Bonjour discovery is implemented with an explicit **Find Wi-Fi sensors** action,
-`NSLocalNetworkUsageDescription` and the `_aqsync._tcp` entry in `NSBonjourServices`.
+`NSLocalNetworkUsageDescription` and the `_ossync._tcp` entry in `NSBonjourServices`.
 The browse stays active while iOS asks for permission; denial and unavailable Wi-Fi
 are not confused with Bluetooth failure. The shared LAN envelope/handshake now
 also compile for iOS. A discovered sensor name is confirmed by the phone
@@ -847,7 +847,7 @@ these are real-board host measurements, not phone or sustained-radio qualificati
 
 ## 2026-10-09 — combined device discovery and iPhone LAN Smart Sync follow-up
 
-The combined Bluetooth and `_aqsync._tcp` My devices list and shared Today/Device
+The combined Bluetooth and `_ossync._tcp` My devices list and shared Today/Device
 navigation were built with `./gradlew --no-daemon verify`, Xcode Debug, and installed
 on the paired iPhone 16 Pro. The owner saw **Wi-Fi LAN** and live Today data, but
 reported that Smart Sync immediately disconnected the sensor. A captured iPhone

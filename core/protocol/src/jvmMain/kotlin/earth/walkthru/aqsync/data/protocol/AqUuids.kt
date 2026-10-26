@@ -6,13 +6,13 @@ import java.util.UUID
  * GATT attribute identities from docs/ble-sync-protocol.md (protocol v2; the GATT layout is
  * unchanged from v1).
  *
- * Base UUID `c0a5e9f0-XXXX-4b1a-9c3e-2d7f8a6b4e01`; the 16-bit field selects the attribute.
+ * Base UUID `255f595e-XXXX-47ed-8e0d-59994199b680`; the 16-bit field selects the attribute.
  */
 object AqUuids {
     /** Highest protocol version this app implements. v1 devices are a strict subset. */
     const val PROTOCOL_VERSION = AqGatt.PROTOCOL_VERSION
 
-    /** Service "AQ Sync". Advertised as the complete 128-bit service UUID. */
+    /** Service "OpenSensor Sync". Advertised as the complete 128-bit service UUID. */
     val SERVICE: UUID = UUID.fromString(AqGatt.SERVICE)
 
     /** JSON, ≤ 400 bytes, static for a boot. Read (may need a long read). */

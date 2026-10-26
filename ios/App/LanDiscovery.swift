@@ -646,7 +646,7 @@ final class LanDiscovery {
     }
 }
 
-/// Auto-sync over Wi-Fi (#23). Only sensors with saved Wi-Fi access, found by `_aqsync._tcp` and
+/// Auto-sync over Wi-Fi (#23). Only sensors with saved Wi-Fi access, found by `_ossync._tcp` and
 /// matching the saved station, are opened. Requests are the sync engine's LIST, OPEN, READ and CLOSE.
 extension LanDiscovery {
     /// Looks for sensors for up to [timeout] seconds, then answers with service names and their TXT

@@ -29,7 +29,7 @@ fun SyncWire.statusRequest(): NSData = statusFrame().toNSData()
 /** LAN length envelope around one request body. */
 fun SyncWire.envelope(body: NSData): NSData = envelopeFrame(body.toByteArray()).toNSData()
 
-/** Builds the AQS1 handshake. Kotlin copies of the token are zeroed before returning, and no String copy exists. */
+/** Builds the OSS1 handshake. Kotlin copies of the token are zeroed before returning, and no String copy exists. */
 fun SyncWire.handshake(token: NSData): NSData {
     val secret = token.toByteArray()
     try {

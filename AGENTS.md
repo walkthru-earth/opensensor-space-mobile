@@ -28,7 +28,7 @@ concern you are changing in `docs/README.md`.
   the wire contract. Mobile requires `proto >= 3`. Preserve frame layouts,
   opcodes, UUIDs, JSON keys and Hive archive paths across both repositories.
 - The phone archive is local and works without internet. BLE is always available;
-  LAN connects only to devices found through `_aqsync._tcp` mDNS, using a token
+  LAN connects only to devices found through `_ossync._tcp` mDNS, using a token
   obtained over bonded BLE. The only other network use is anonymous, read-only
   GETs of the public discover feed and basemap, which a Settings switch turns off
   (`docs/devices-and-discovery.md`). Uploading a device's data is off by default

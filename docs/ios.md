@@ -31,7 +31,7 @@ identifier even when it is not advertising.
 
 ## Wi-Fi
 
-`LanDiscovery` browses `_aqsync._tcp` in `local.` with `NWBrowser`. Scan on My devices starts a
+`LanDiscovery` browses `_ossync._tcp` in `local.` with `NWBrowser`. Scan on My devices starts a
 bounded browse with the Bluetooth search, and the real browse is what shows the Local Network
 prompt. A denial is reported only for `kDNSServiceErr_PolicyDenied`
 ([TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy)),
@@ -39,7 +39,7 @@ and the browse keeps going so allowing access resumes it.
 
 A phone first connects over bonded Bluetooth and taps Save Wi-Fi access. `GET_TOKEN` goes over the
 encrypted BLE characteristics, and the token is saved in the Keychain with
-`AfterFirstUnlockThisDeviceOnly`. It never enters Kotlin, the UI or a log. The `AQS1` HELLO must
+`AfterFirstUnlockThisDeviceOnly`. It never enters Kotlin, the UI or a log. The `OSS1` HELLO must
 match the enrolled station and full hardware ID, so discovery alone cannot enroll a replacement.
 A LAN `AUTH_FAILED` drops the saved token. Each `LanSession` is an actor on its own serial queue,
 keeps one receive of up to 64 KiB outstanding, splits `len` u16 frames and forbids cellular

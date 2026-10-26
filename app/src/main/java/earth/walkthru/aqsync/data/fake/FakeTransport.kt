@@ -473,7 +473,7 @@ class FakeTransport(
                 wifiIp = "192.168.1.42"
                 wifiRssi = -58
                 logLine("WIFI CONNECTED ip=$wifiIp rssi=$wifiRssi")
-                if (lanOn) logLine("LAN LISTEN port=$LAN_PORT mdns=_aqsync._tcp host=os-6b40")
+                if (lanOn) logLine("LAN LISTEN port=$LAN_PORT mdns=_ossync._tcp host=os-6b40")
             } else {
                 wifiState = "failed"
                 logLine("WIFI FAILED ssid=$ssid (fake: only 'home', 'walkthru-field', 'CoffeeShop Guest' exist)")
