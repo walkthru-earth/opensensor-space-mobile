@@ -49,29 +49,50 @@ class OpenSensorFooterTest {
     @Test
     fun mobilityIsFixedOrMoving() {
         assertEquals(OpenSensorFooter.Mobility.MOVING, parse(opensensorFooterJson(dict, desc, 10_000, mobility = "moving"))?.mobility)
-        assertEquals(null, parse("""{"version":"0.1.0","thing":{"mobility":"drifting"}}"""))
-        assertEquals(null, parse("""{"version":"0.1.0","thing":{"mobility":1}}"""))
+        assertEquals(null, parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"drifting"}}"""))
+        assertEquals(null, parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":1}}"""))
+    }
+
+    @Test
+    fun aFooterWithoutAThingIsNotTrusted() {
+        assertNull(parse("""{"version":"0.1.0","dictionary":{"sha256":"$dict"}}"""))
+        assertNull(parse("""{"version":"0.1.0","thing":{"mobility":"fixed"}}"""))
+        assertNull(parse("""{"version":"0.1.0","thing":{"id":"thing-a"}}"""))
+        // An old footer that names a station and no thing, the shape firmware wrote before the Thing rename.
+        val station = stationFooterJson(dict, desc)
+        assertNull(parse(station))
+        assertNull(OpenSensorFooter.of(mapOf(OpenSensorFooter.KEY to station)))
+        assertNull(FileTemplates.BUNDLED.of(mapOf(OpenSensorFooter.KEY to station)).template)
     }
 
     @Test
     fun aGeoKeyBesideOpensensorIsIgnored() {
         val geo = """{"version":"2.0.0","primary_column":"geometry","columns":{"geometry":{"encoding":"WKB","geometry_types":["Point"],"bbox":[31.2,30.0,31.3,30.1]}}}"""
-        assertEquals(OpenSensorFooter(dictionarySha256 = dict), OpenSensorFooter.of(mapOf("geo" to geo, OpenSensorFooter.KEY to """{"version":"0.1.0","dictionary":{"sha256":"$dict"}}""")))
+        assertEquals(OpenSensorFooter(dictionarySha256 = dict, thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), OpenSensorFooter.of(mapOf("geo" to geo, OpenSensorFooter.KEY to """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"}}""")))
+    }
+
+    @Test
+    fun aGeoKeyAloneIsNoFooter() {
+        val geo = """{"version":"2.0.0","primary_column":"geometry","columns":{"geometry":{"encoding":"WKB","geometry_types":["Point"],"bbox":[31.2,30.0,31.3,30.1]}}}"""
+        assertNull(OpenSensorFooter.of(mapOf("geo" to geo)))
+        // Even a geo value shaped like a footer is not read, only the opensensor key is.
+        assertNull(OpenSensorFooter.of(mapOf("geo" to opensensorFooterJson(dict, desc, 10_000))))
+        assertNull(FileTemplates.BUNDLED.of(mapOf("geo" to opensensorFooterJson(dict, desc, 10_000))).template)
     }
 
     @Test
     fun aMinorVersionAndUnknownFieldsAreRead() {
-        assertEquals(OpenSensorFooter(dictionarySha256 = dict), parse("""{"version":"0.2.7","dictionary":{"sha256":"$dict"},"extra":[1,2]}"""))
+        assertEquals(OpenSensorFooter(dictionarySha256 = dict, thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), parse("""{"version":"0.2.7","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"},"extra":[1,2]}"""))
     }
 
     @Test
     fun leftOutFieldsAreNull() {
         // Firmware members the app does not read are ignored, whatever their value.
-        assertEquals(OpenSensorFooter(), parse("""{"version":"0.1.0","firmware":{"boot_id":null,"schema":["v5"]}}"""))
-        assertEquals(OpenSensorFooter(), parse("""{"version":"0.1.0"}"""))
-        assertEquals(OpenSensorFooter(), parse("""{"version":"0.1.0","acquisition":{"time_semantics":"x"},"dictionary":{"version":"v"}}"""))
+        assertEquals(OpenSensorFooter(thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"firmware":{"boot_id":null,"schema":["v5"]}}"""))
+        assertEquals(OpenSensorFooter(thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"}}"""))
+        assertEquals(OpenSensorFooter(thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"acquisition":{"time_semantics":"x"},"dictionary":{"version":"v"}}"""))
         // A non-positive interval is unknown, so the template default applies.
-        assertEquals(OpenSensorFooter(), parse("""{"version":"0.1.0","acquisition":{"sample_interval_ms":0}}"""))
+        assertEquals(OpenSensorFooter(thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"acquisition":{"sample_interval_ms":0}}"""))
     }
 
     @Test
@@ -82,23 +103,23 @@ class OpenSensorFooterTest {
             "{",
             "[]",
             "\"0.1.0\"",
-            """{"dictionary":{"sha256":"$dict"}}""",
-            """{"version":0.1,"dictionary":{"sha256":"$dict"}}""",
-            """{"version":"1.0.0","dictionary":{"sha256":"$dict"}}""",
-            """{"version":"10.1.0","dictionary":{"sha256":"$dict"}}""",
-            """{"version":"0.1.0","dictionary":{"sha256":"${dict.uppercase()}"}}""",
-            """{"version":"0.1.0","dictionary":{"sha256":"${dict.drop(1)}"}}""",
-            """{"version":"0.1.0","dictionary":{"sha256":"1220$dict"}}""",
-            """{"version":"0.1.0","template":{"sha256":"${"g".repeat(64)}"}}""",
-            """{"version":"0.1.0","template":{"sha256":null}}""",
-            """{"version":"0.1.0","dictionary":"$dict"}""",
-            """{"version":"0.1.0","acquisition":{"sample_interval_ms":"10000"}}""",
-            """{"version":"0.1.0","acquisition":{"sample_interval_ms":10000.5}}""",
-            """{"version":"0.1.0","acquisition":10000}""",
-            """{"version":"0.1.0","thing":{"id":7}}""",
-            """{"version":"0.1.0","thing":{"id":""}}""",
+            """{"thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"}}""",
+            """{"version":0.1,"thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"}}""",
+            """{"version":"1.0.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"}}""",
+            """{"version":"10.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"}}""",
+            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"${dict.uppercase()}"}}""",
+            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"${dict.drop(1)}"}}""",
+            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"1220$dict"}}""",
+            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"template":{"sha256":"${"g".repeat(64)}"}}""",
+            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"template":{"sha256":null}}""",
+            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":"$dict"}""",
+            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"acquisition":{"sample_interval_ms":"10000"}}""",
+            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"acquisition":{"sample_interval_ms":10000.5}}""",
+            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"acquisition":10000}""",
+            """{"version":"0.1.0","thing":{"id":7,"mobility":"fixed"}}""",
+            """{"version":"0.1.0","thing":{"id":"","mobility":"fixed"}}""",
             """{"version":"0.1.0","thing":"thing-a"}""",
-            """{"version":"0.1.0","file":{"purpose":true}}""",
+            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"file":{"purpose":true}}""",
         )
         for (json in bad) assertNull(parse(json), json)
     }

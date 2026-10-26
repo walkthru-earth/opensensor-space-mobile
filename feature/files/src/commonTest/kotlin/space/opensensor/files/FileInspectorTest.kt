@@ -213,4 +213,43 @@ class FileInspectorTest {
         runCurrent()
         assertIs<FileMetricsState.Loaded>(controller.state.value)
     }
+
+    @Test
+    fun aGeometryCellShowsThePointNotItsBytes() {
+        val cells = listOf(wkbPoint(31.2357123, 30.0444196), wkbPoint(Double.NaN, Double.NaN))
+        val offsets = IntArray(cells.size + 1)
+        cells.forEachIndexed { i, c -> offsets[i + 1] = offsets[i] + c.size }
+        val data = ByteArray(offsets.last())
+        cells.forEachIndexed { i, c -> c.copyInto(data, offsets[i]) }
+        val parts = ArrayList<ByteArray>()
+        val sink = object : ParquetSink {
+            override fun write(bytes: ByteArray) {
+                parts += bytes.copyOf()
+            }
+        }
+        val writer = ParquetWriter(sink, listOf(ParquetWriter.Column("geometry", ParquetType.BYTE_ARRAY, geometry = ParquetWriter.GeometryAnnotation())))
+        writer.begin()
+        writer.rowGroup(listOf(ColumnValues.Binary(offsets, data, null)))
+        writer.finish()
+        val file = ByteArray(parts.sumOf { it.size })
+        var at = 0
+        for (p in parts) { p.copyInto(file, at); at += p.size }
+
+        val page = FileInspector.page(ParquetFile.wrap(file), from = 0, size = 2)
+        assertEquals(listOf("lon 31.23571 lat 30.04442", "Point empty"), page.rows.map { it.single() })
+        // Bytes that are not WKB show their size.
+        assertEquals("3 B", FileInspector.formatGeometry(ColumnValues.Binary(intArrayOf(0, 3), byteArrayOf(9, 9, 9), null), 0))
+    }
+
+    /** A little endian ISO WKB point. */
+    private fun wkbPoint(x: Double, y: Double): ByteArray {
+        val out = ByteArray(21)
+        out[0] = 1
+        out[1] = 1
+        for ((at, v) in listOf(5 to x, 13 to y)) {
+            val bits = v.toRawBits()
+            for (k in 0 until 8) out[at + k] = (bits ushr (8 * k)).toByte()
+        }
+        return out
+    }
 }

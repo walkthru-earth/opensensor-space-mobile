@@ -74,7 +74,7 @@ const val HUMID_HOUR_S = 1_789_639_200L
  * PM2.5 9, 170, 30, 31, 50 and RH 50, 80, null, 120, 50. The last row has a stale sensor. So the
  * corrected PM2.5 has two rows (10 at 50 percent, 250 at 80 percent) and the raw PM2.5 has four.
  */
-fun humidPm25Parquet(): ByteArray {
+fun humidPm25Parquet(thing: String = "thing-a"): ByteArray {
     val out = MemorySink()
     val w = ParquetWriter(
         out,
@@ -86,7 +86,7 @@ fun humidPm25Parquet(): ByteArray {
             ParquetWriter.Column("relative_humidity_percent", ParquetType.FLOAT),
         ),
         ParquetCodec.UNCOMPRESSED,
-        keyValueMetadata = coreS3Footer(),
+        keyValueMetadata = coreS3Footer(thing = thing),
     )
     w.begin()
     w.rowGroup(
@@ -115,11 +115,11 @@ val waveshareTemplate: space.opensensor.model.BoardTemplate = space.opensensor.m
 val CoreS3Files: FileTemplates = FileTemplates { _, _ -> coreS3Template }
 
 /** The `opensensor` footer entry of a file written under [template], with its dict, its desc and [intervalMs]. */
-fun opensensorFooter(template: space.opensensor.model.BoardTemplate, intervalMs: Long? = 10_000, desc: String? = template.key.desc): Map<String, String> =
-    mapOf(OpenSensorFooter.KEY to opensensorFooterJson(template.dict, desc, intervalMs))
+fun opensensorFooter(template: space.opensensor.model.BoardTemplate, intervalMs: Long? = 10_000, desc: String? = template.key.desc, thing: String = "thing-a"): Map<String, String> =
+    mapOf(OpenSensorFooter.KEY to opensensorFooterJson(template.dict, desc, intervalMs, thing = thing))
 
 /** A footer naming the bundled CoreS3 template and a 10 s cadence, as a current CoreS3 file carries. */
-fun coreS3Footer(extra: Map<String, String> = emptyMap()): Map<String, String> = opensensorFooter(coreS3Template) + extra
+fun coreS3Footer(extra: Map<String, String> = emptyMap(), thing: String = "thing-a"): Map<String, String> = opensensorFooter(coreS3Template, thing = thing) + extra
 
 /**
  * [bytes] rewritten with a firmware footer naming the bundled CoreS3 dict, template digest [desc] and a
@@ -129,7 +129,7 @@ fun coreS3Footer(extra: Map<String, String> = emptyMap()): Map<String, String> =
 fun withCoreS3Dict(bytes: ByteArray, desc: String? = coreS3Template.key.desc): ByteArray = ParquetFile.wrap(bytes).use { file ->
     val sink = MemorySink()
     val own = file.metadata.footer
-    val json = opensensorFooterJson(coreS3Template.dict, desc, 10_000, thing = own?.thingId, purpose = own?.purpose)
+    val json = opensensorFooterJson(coreS3Template.dict, desc, 10_000, thing = own?.thingId ?: "thing-a", purpose = own?.purpose)
     val w = ParquetWriter(
         sink,
         file.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) },

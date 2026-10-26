@@ -27,7 +27,7 @@ fun migrateLegacyFooter(bytes: ByteArray): ByteArray {
         desc = old[LegacyFooterKeys.TEMPLATE_SHA256] ?: UNKNOWN_DIGEST,
         intervalMs = old[LegacyFooterKeys.SAMPLE_INTERVAL_MS]?.toLongOrNull() ?: 10_000,
         schema = old[LegacyFooterKeys.SCHEMA_VERSION] ?: "unknown",
-        thing = old[LegacyFooterKeys.THING_ID]?.takeIf { it.isNotEmpty() },
+        thing = old[LegacyFooterKeys.THING_ID]?.takeIf { it.isNotEmpty() } ?: "thing-a",
         purpose = old[LegacyFooterKeys.PURPOSE]?.takeIf { it.isNotEmpty() } ?: "telemetry",
         boot = old[LegacyFooterKeys.BOOT_ID] ?: UNKNOWN_DIGEST.take(32),
     )

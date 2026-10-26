@@ -181,7 +181,7 @@ object DailyParquetBuilder {
                 source.open().use { pf ->
                     val md = pf.metadata
                     val footer = md.footer
-                    require(footer?.thingId == null || footer.thingId == thing) { "Parquet source belongs to another thing" }
+                    require(footer == null || footer.thingId == thing) { "Parquet source belongs to another thing" }
                     rowsRead += pf.numRows
                     val cache = HashMap<String, ColumnValues?>()
                     fun col(name: String): ColumnValues? = cache.getOrPut(name) { md.leaf(name)?.let { pf.readColumn(it) } }

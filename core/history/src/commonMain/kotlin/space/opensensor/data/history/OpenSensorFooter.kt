@@ -9,8 +9,10 @@ import kotlinx.serialization.json.longOrNull
  * The fields the app reads from a file's `opensensor` footer, the one Parquet key-value entry of the
  * stac-opensensor v0.1.0 footer contract (compact UTF-8 JSON, in the style of GeoParquet `geo`). The
  * standard GeoParquet `geo` key may sit beside it and is not read here. No other footer key is read.
- * Every field not named here is ignored, and each named one is null when the footer leaves it out.
- * The app never writes this key. A derived day file carries [AppDay] instead.
+ * Every field not named here is ignored. A footer without `thing.id` and `thing.mobility` is not
+ * trusted, so a parsed footer always has [thingId] and [mobility]. Each other named field is null when
+ * the footer leaves it out. The app never writes this key. A derived day file carries [AppDay] instead,
+ * and [AppDay.asFooter] is the one footer without a thing.
  */
 data class OpenSensorFooter(
     /** `acquisition.sample_interval_ms`, null when absent or not positive. */
@@ -19,9 +21,9 @@ data class OpenSensorFooter(
     val dictionarySha256: String? = null,
     /** `template.sha256`, the SHA-256 of the exact board template bytes. */
     val templateSha256: String? = null,
-    /** `thing.id`, the thing that wrote the file. */
+    /** `thing.id`, the thing that wrote the file. Always set on a parsed footer. */
     val thingId: String? = null,
-    /** `thing.mobility`, required by the spec. Null only when the footer leaves it out. */
+    /** `thing.mobility`. Always set on a parsed footer. */
     val mobility: Mobility? = null,
     /** `file.purpose`, `telemetry` for thing data. */
     val purpose: String? = null,
@@ -46,8 +48,9 @@ data class OpenSensorFooter(
 
         /**
          * The footer of a file with Parquet [keyValues], or null when it has none History can trust. A
-         * missing [KEY], JSON that is not an object, an unknown major version, a malformed digest, a
-         * mobility other than `fixed` or `moving` or an interval that is not an integer all mean no footer, the same as a file written without one.
+         * missing [KEY], JSON that is not an object, an unknown major version, a missing `thing.id` or
+         * `thing.mobility`, a malformed digest, a mobility other than `fixed` or `moving` or an interval
+         * that is not an integer all mean no footer, the same as a file written without one.
          */
         fun of(keyValues: Map<String, String>): OpenSensorFooter? = keyValues[KEY]?.let(::parse)
 
@@ -63,8 +66,8 @@ data class OpenSensorFooter(
                 }?.takeIf { it > 0 },
                 dictionarySha256 = root.member(DICTIONARY, SHA256)?.let(::sha256),
                 templateSha256 = root.member(TEMPLATE, SHA256)?.let(::sha256),
-                thingId = root.member(THING, ID)?.let(::text),
-                mobility = root.member(THING, MOBILITY)?.let(::text)?.let { Mobility.of(it) ?: throw Malformed() },
+                thingId = text(root.member(THING, ID) ?: throw Malformed()),
+                mobility = Mobility.of(text(root.member(THING, MOBILITY) ?: throw Malformed())) ?: throw Malformed(),
                 purpose = root.member(FILE, PURPOSE)?.let(::text),
             )
         } catch (_: Malformed) {

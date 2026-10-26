@@ -11,6 +11,7 @@ import space.opensensor.model.BoardTemplate
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -46,7 +47,8 @@ class CurrentBoardFilesTest {
     /**
      * A current format telemetry file of [template], one row every 10 s from [startS] (shifted by
      * [offsetS]), every [stepRows] row, footer interval [intervalMs] and boot [boot]. [footer] is the
-     * whole key-value metadata.
+     * whole key-value metadata. With [locationUnset] the file also has `h3_cell_id`, `location_source`
+     * and a native GEOMETRY `geometry`, null in every row, as a board with no location writes them.
      */
     private fun boardFile(
         template: BoardTemplate,
@@ -54,7 +56,8 @@ class CurrentBoardFilesTest {
         boot: Long = 1,
         offsetS: Long = 0,
         stepRows: Int = 1,
-        footer: Map<String, String> = opensensorFooter(template, intervalMs),
+        footer: Map<String, String> = opensensorFooter(template, intervalMs, thing = thing),
+        locationUnset: Boolean = false,
     ): ByteArray {
         val idx = (0 until rows step stepRows).toList()
         val n = idx.size
@@ -76,7 +79,15 @@ class CurrentBoardFilesTest {
                 ParquetWriter.Column("ambient_temperature_c", ParquetType.FLOAT),
                 ParquetWriter.Column("relative_humidity_percent", ParquetType.FLOAT),
                 ParquetWriter.Column("battery_percent", ParquetType.INT32),
-            ),
+            ) + if (locationUnset) {
+                listOf(
+                    ParquetWriter.Column("h3_cell_id", ParquetType.INT64),
+                    ParquetWriter.Column("location_source", ParquetType.INT32),
+                    ParquetWriter.Column("geometry", ParquetType.BYTE_ARRAY, geometry = ParquetWriter.GeometryAnnotation()),
+                )
+            } else {
+                emptyList()
+            },
             ParquetCodec.UNCOMPRESSED,
             keyValueMetadata = footer,
         )
@@ -97,7 +108,16 @@ class CurrentBoardFilesTest {
                 ColumnValues.Float32(FloatArray(n) { ambient(idx[it]) }, null),
                 ColumnValues.Float32(FloatArray(n) { humidity(idx[it]) }, null),
                 ColumnValues.Int32(IntArray(n) { battery(idx[it]) }, null),
-            ),
+            ) + if (locationUnset) {
+                val none = BooleanArray(n)
+                listOf(
+                    ColumnValues.Int64(LongArray(n), none),
+                    ColumnValues.Int32(IntArray(n), none),
+                    ColumnValues.Binary(IntArray(n + 1), ByteArray(0), none),
+                )
+            } else {
+                emptyList()
+            },
         )
         w.finish()
         return sink.toByteArray()
@@ -224,6 +244,29 @@ class CurrentBoardFilesTest {
         }
     }
 
+    @Test
+    fun aBoardWithNoLocationReadsIndexesAndCompacts() {
+        // aq main 689bb61 with location unset writes h3_cell_id, location_source and geometry null in every row.
+        val raw = boardFile(coreS3Template, locationUnset = true)
+        val file = ParquetFile.wrap(raw)
+        assertTrue(file.leaf("geometry").isGeospatial)
+        for (name in listOf("h3_cell_id", "location_source", "geometry")) {
+            val col = file.readColumn(file.leaf(name))
+            assertEquals(name, rows, col.nullCount)
+        }
+        val index = ParquetIndexer.index(file, templates = FileTemplates.BUNDLED)
+        assertEquals(rows.toLong(), index.rows)
+        assertBucketsMatchTheRows(buckets(raw), 10_000)
+        val daily = ParquetFile.wrap(dailyOf(raw))
+        assertEquals(rows.toLong(), daily.numRows)
+        val h3 = daily.readColumn(daily.leaf("h3_cell_id"))
+        assertEquals(rows, h3.nullCount)
+        assertNull(daily.metadata.leaf("geometry"))
+        val pm = daily.readColumn(daily.leaf(Metrics.PM25.column))
+        assertEquals(0, pm.nullCount)
+        assertEquals((0 until rows).map { pm25(it).toLong() }, (0 until rows).map { pm.asLong(it) })
+    }
+
     private fun footerOf(file: ByteArray): AppDay? = AppDay.of(ParquetFile.wrap(file).metadata.keyValueMetadata)
 
     @Test
@@ -270,14 +313,14 @@ class CurrentBoardFilesTest {
 
     @Test
     fun aFileIsReadByItsTemplateDigestWithoutADict() {
-        val footer = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = waveshareTemplate.key.desc, intervalMs = 10_000))
+        val footer = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = waveshareTemplate.key.desc, intervalMs = 10_000, thing = thing))
         assertBucketsMatchTheRows(buckets(boardFile(waveshareTemplate, footer = footer)), 10_000)
     }
 
     @Test
     fun aFileWithAnUnknownTemplateDigestIsReadByItsDict() {
         // A template the app does not bundle, such as a newer firmware desc, falls back to the dict.
-        assertBucketsMatchTheRows(buckets(boardFile(coreS3Template, footer = opensensorFooter(coreS3Template, desc = "ab".repeat(32)))), 10_000)
+        assertBucketsMatchTheRows(buckets(boardFile(coreS3Template, footer = opensensorFooter(coreS3Template, desc = "ab".repeat(32), thing = thing))), 10_000)
     }
 
     @Test
