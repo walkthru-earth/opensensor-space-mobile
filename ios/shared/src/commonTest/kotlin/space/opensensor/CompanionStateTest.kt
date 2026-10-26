@@ -27,7 +27,7 @@ class CompanionStateTest {
 
     private fun lanConnected(state: CompanionState, name: String, thing: String = "thing-$name") {
         state.lanSessionChanged(name, true, false, "connected", 0, 0, 0)
-        state.lanInfoReceived(name, "{\"proto\":3,\"station\":\"$thing\",\"dev\":\"112233445566\",\"dict\":\"$dict\"}")
+        state.lanInfoReceived(name, "{\"proto\":3,\"thing\":\"$thing\",\"dev\":\"112233445566\",\"dict\":\"$dict\"}")
     }
 
     @Test fun pausedCollectionRetainsProgressWithoutShowingAStaleTransferRate() {
@@ -284,7 +284,7 @@ class CompanionStateTest {
 
     private fun linked(id: String = "p1"): CompanionState = CompanionState().also {
         it.connectionStarted(id)
-        assertTrue(it.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}"))
+        assertTrue(it.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\",\"thing\":\"st\"}"))
     }
 
     @Test fun aDroppedLinkUnderARunKeepsItsProgressUntilTheSensorAnswersAgain() {
@@ -298,7 +298,7 @@ class CompanionStateTest {
         assertEquals(1, state.syncProgress?.filesDone)
         state.connectionStarted("p1")
         assertEquals("p1", state.reconnectingId, "dialling the same sensor again is still a reconnect")
-        assertTrue(state.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}"))
+        assertTrue(state.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\",\"thing\":\"st\"}"))
         assertNull(state.reconnectingId)
         state.bluetoothSyncFinished(SyncResult(SyncEnd.COMPLETE, 3, 3, 0))
         assertFalse(state.syncBusy)

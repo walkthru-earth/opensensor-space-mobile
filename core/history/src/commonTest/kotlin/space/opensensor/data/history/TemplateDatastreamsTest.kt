@@ -239,7 +239,7 @@ class TemplateDatastreamsTest {
         val bytes = soilFile()
         val store = Store()
         val index = Index()
-        val r = ArchiveRecord(thing, "station=$thing/soil.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        val r = ArchiveRecord(thing, "thing=$thing/soil.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
         ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = soilFiles).backfillAll()

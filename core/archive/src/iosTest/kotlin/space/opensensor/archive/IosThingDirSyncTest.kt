@@ -20,7 +20,7 @@ class IosThingDirSyncTest {
     private val finals = "$base/SensorArchive"
     private val thing = "thing-a"
     private val thingDir = "$finals/$thing"
-    private val key = ArchiveKey(thing, "station=$thing/year=2026/month=10/day=11/data_0930.parquet")
+    private val key = ArchiveKey(thing, "thing=$thing/year=2026/month=10/day=11/data_0930.parquet")
     private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
     private val recording = RecordingAtomicFiles(IosAtomicFiles("$base/${AtomicFiles.TEMP_DIR}")) {
         IosFiles.kind(it) == IosFiles.Kind.DIRECTORY

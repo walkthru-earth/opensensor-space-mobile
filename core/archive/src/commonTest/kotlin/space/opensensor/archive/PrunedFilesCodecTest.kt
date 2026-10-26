@@ -6,7 +6,7 @@ import kotlin.test.assertNull
 
 class PrunedFilesCodecTest {
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
-    private val name = "station=$thing/year=2024/month=10/day=1/file-1.parquet"
+    private val name = "thing=$thing/year=2024/month=10/day=1/file-1.parquet"
 
     @Test
     fun everyRecordReadsInFileOrder() {

@@ -1,4 +1,4 @@
-# Sync engine — pull, verify, archive
+# Sync engine, pull, verify, archive
 
 **Scope:** the file transfer: planner → engine → archive; integrity; lost windows; stale-frame drain; resume; the state-changing requests.
 **Code:** `core/sync` commonMain `link/`, `collection/`, `data/ble/DeviceSession.kt`,
@@ -180,7 +180,7 @@ filesDir/archive-partial/<thing>/<name>.partial.meta    "<size> <crc32>" from OP
 ```
 
 Root for names without a thing (`benchmarks/…`, `legacy-parquet/…`) is still
-`archive/<thing uuid from info>/<name>`, so dated files sit at `…/<uuid>/station=<uuid>/year=…` —
+`archive/<thing uuid from info>/<name>`, so dated files sit at `…/<uuid>/thing=<uuid>/year=…`,
 redundant on purpose: two devices can never collide. Partials resume by absolute offset after a
 re-`OPEN` confirms `size`/`crc32` are unchanged.
 
@@ -395,11 +395,11 @@ period.
 
 **A refresh never blanks the listing** (`ManifestState`, `data/ManifestState.kt`). `Loading` and
 `Error` carry the last `Loaded` in `last`; `plan` derives from `last`, and the Files screen keeps
-the list with "refreshing…" or "Refresh failed: … — showing the last listing." above it. Only a
+the list with "refreshing…" or "Refresh failed: …, showing the last listing." above it. Only a
 new session (`resetDerivedState` → `Idle`) drops it. There is no blind retry of `LIST` on the same
 session: a lost link is a reconnect (which re-lists), a timeout means the device is not answering
 and a second request would only queue behind the stale reply. Longer timeouts are not the answer
-either — "link lost" fires on the transport's state change, not on `FRAME_TIMEOUT_MS`.
+either, "link lost" fires on the transport's state change, not on `FRAME_TIMEOUT_MS`.
 
 **Explicit whole-device sync takes a fresh listing (2026-10-10).** Android Sync all and Smart
 Sync reserve the same operation gate before launching, issue `LIST`, and plan directly from the
@@ -478,7 +478,7 @@ request routing and terminal matching belong to `LinkSession` and `TerminalRules
 | `ERROR.op` for unparseable requests | "Mine" when it equals the request opcode; anything else is a protocol violation. |
 | One outstanding GATT operation | `Mutex` around every GATT call; Android's `BluetoothGatt` silently fails on concurrent ops. |
 | Downloads and rotation | Session and sync state are process-scoped in the repository, so rotation mid-sync does not abort. |
-| After every sync | `historyDeriver.deriveStale()` in the repository's `finally` (and in `SyncWorker` when files arrived) — no separate `DeriveWorker`. |
+| After every sync | `historyDeriver.deriveStale()` in the repository's `finally` (and in `SyncWorker` when files arrived), no separate `DeriveWorker`. |
 
 ## Uses → affects
 

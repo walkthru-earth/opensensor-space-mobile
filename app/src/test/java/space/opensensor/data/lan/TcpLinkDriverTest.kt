@@ -62,7 +62,7 @@ import kotlin.time.Duration.Companion.seconds
 class TcpLinkDriverTest {
     private val token = ByteArray(32) { (it * 11 + 3).toByte() }
     private val thing = "00000000-0000-4000-8000-000000000001"
-    private val info = """{"proto":3,"fw":"cores3-parquet-v5","station":"$thing","dev":"000000000001","max_read":16384}"""
+    private val info = """{"proto":3,"fw":"cores3-parquet-v5","thing":"$thing","dev":"000000000001","max_read":16384}"""
 
     /** A one-client fake device. [onRequest] answers each request body with frames to send. */
     private class FakeLanDevice(

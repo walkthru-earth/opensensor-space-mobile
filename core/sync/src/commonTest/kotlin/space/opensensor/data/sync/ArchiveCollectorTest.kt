@@ -147,7 +147,7 @@ class ArchiveCollectorTest {
         val fake = FakeArchiveDevice(backgroundScope)
         val listed = fake.files[0]
         val kept = PrunedFile(fake.thing, listed.name, listed.bytes.size.toLong(), 0, 1)
-        val gone = PrunedFile(fake.thing, "station=${fake.thing}/year=2020/month=01/day=01/gone.parquet", 10, 0, 1)
+        val gone = PrunedFile(fake.thing, "thing=${fake.thing}/year=2020/month=01/day=01/gone.parquet", 10, 0, 1)
         val marks = MutableStateFlow(listOf(kept, gone))
         val pruned = object : PrunedFiles {
             override fun observeAll(): Flow<List<PrunedFile>> = marks
@@ -283,7 +283,7 @@ class ArchiveCollectorTest {
     fun anUnsafeNameAndARefusedFileFailAlone() = runTest {
         val fake = FakeArchiveDevice(backgroundScope)
         fake.files += FakeArchiveDevice.FakeFile("../escape.parquet", FakeArchiveDevice.fakeParquet(4, 64))
-        val gone = "station=${fake.thing}/year=2026/month=09/day=16/data_0000_b41d_1-2-2.parquet"
+        val gone = "thing=${fake.thing}/year=2026/month=09/day=16/data_0000_b41d_1-2-2.parquet"
         val listed = fake.files.toList()
         fake.files += FakeArchiveDevice.FakeFile(gone, FakeArchiveDevice.fakeParquet(5, 64))
         fake.beforeOpen = { name -> if (name == gone) fake.files.removeAll { it.name == gone } }

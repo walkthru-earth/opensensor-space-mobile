@@ -30,7 +30,7 @@ class IosMissingFileTest {
     }
 
     private fun record(day: Int): ArchiveRecord {
-        val name = "station=$thing/year=2026/month=09/day=$day/data_0930_a_2-106-2.parquet"
+        val name = "thing=$thing/year=2026/month=09/day=$day/data_0930_a_2-106-2.parquet"
         val path = "$finals/$thing/$name"
         IosFiles.mkdirs(path.substringBeforeLast('/'))
         IosFiles.writeAtomically(path, "PAR1 $day".encodeToByteArray())

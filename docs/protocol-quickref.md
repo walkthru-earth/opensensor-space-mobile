@@ -1,4 +1,4 @@
-# Protocol quick reference — the mirror, not the contract
+# Protocol quick reference, the mirror, not the contract
 
 **Scope:** constants as implemented in `:core:protocol`, for lookup. The **owner** is
 `../aq-parquet/docs/shared/ble-sync-protocol.md`; do not change a layout, opcode, UUID, JSON key
@@ -14,8 +14,8 @@ sequenceDiagram
   participant D as Device
   P->>D: request (opcode + args) ≤ 512 B
   D-->>P: response frame(s) … terminal frame
-  D-->>P: STATUS / LIVE pushes (any time — on LAN even between CHUNKs)
-  Note over P,D: ERROR(op, code) may replace any response — op echoes the request opcode
+  D-->>P: STATUS / LIVE pushes (any time, on LAN even between CHUNKs)
+  Note over P,D: ERROR(op, code) may replace any response, op echoes the request opcode
 ```
 
 ## GATT (`DeviceUuids`)
@@ -23,7 +23,7 @@ sequenceDiagram
 | Attribute | UUID (`255f595e-XXXX-47ed-8e0d-59994199b680`) | Role |
 | --- | --- | --- |
 | SERVICE | `0001` | the only scan filter. The board name (`OS-xxxx` today) is display data, never matched |
-| INFO | `0002` | read once: `proto`, `fw`, `station`, `max_read`, … |
+| INFO | `0002` | read once: `proto`, `fw`, `thing`, `max_read`, … |
 | STATUS | `0003` | read + notify: status JSON (≤ 480 B) |
 | LIVE | `0004` | read + notify: live JSON (10-s sample, ≤ 480 B) |
 | CONTROL | `0005` | write: request |
@@ -58,7 +58,7 @@ sequenceDiagram
 | 1 malformed request · 2 invalid name · 3 not a finalized Parquet · 4 open failed · 5 bad handle · 6 range outside file · 8 storage unavailable · 9 invalid epoch (2020–2100) · 10 nothing to flush · 11 unknown opcode | | outcome for that request (`FileOutcome.DeviceError` for files), never a broken pipe |
 | 7 | busy | LAN connect: fall back to BLE |
 | 12 | invalid config | names the key; nothing changed on the device |
-| 13 | not allowed on this link | `GET_TOKEN` over LAN — force BLE |
+| 13 | not allowed on this link | `GET_TOKEN` over LAN, force BLE |
 | 14 | authentication failed | LAN handshake: stored token is dead → clear + refetch over BLE (`LanTokenPolicy`) |
 | 15 | Wi-Fi unavailable | `WIFI_SCAN_END.status` → typed "Wi-Fi unavailable" |
 | 17 | no descriptor | `GET_DESCRIPTOR`: the board serves no template, keep the bundled one (`NoDescriptorException`) |
@@ -70,7 +70,7 @@ anything else is a `ProtocolViolationException`.
 
 | Constant | Value |
 | --- | --- |
-| mDNS service | `_ossync._tcp` (TXT: `station`, `dev`, `fw`, `proto`) |
+| mDNS service | `_ossync._tcp` (TXT: `thing`, `dev`, `fw`, `proto`) |
 | `DEFAULT_PORT` | 47390 |
 | Handshake | unframed `"OSS1"` + 32-byte token, phone → device within `HANDSHAKE_TIMEOUT_MS` 5 s; answer is framed `HELLO(payload_max, proto)` or `ERROR` 14 / 7 |
 | Frame | `len` u16 LE + frame; `PAYLOAD_MAX` 1024 device→phone, `REQUEST_MAX` 512 phone→device |

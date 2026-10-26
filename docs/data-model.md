@@ -1,4 +1,4 @@
-# Data model — Room, DataStore, files on disk, backup
+# Data model, Room, DataStore, files on disk, backup
 
 **Scope:** what the phone stores, where, and how it moves between phones. Not how it is computed (see history-pipeline) or fetched (see sync-engine).
 **Code:** `core/database` commonMain `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `ThingEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`opensensor.db`); `core/database/schemas/space.opensensor.data.local.database.AppDatabase/1…12.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
@@ -186,7 +186,7 @@ Unrelated crypto, programming and database failures also propagate.
 
 ### Write semantics that bit us
 
-- **`@Upsert` on an entity with an auto id and a unique index updates nothing** (it runs `UPDATE … WHERE id = ?` with id 0). `archived_file` and `derived_day` use `@Insert(onConflict = REPLACE)` — the id carries no meaning. `known_device` (address is the PK) may use `@Upsert`.
+- **`@Upsert` on an entity with an auto id and a unique index updates nothing** (it runs `UPDATE … WHERE id = ?` with id 0). `archived_file` and `derived_day` use `@Insert(onConflict = REPLACE)`, the id carries no meaning. `known_device` (address is the PK) may use `@Upsert`.
 - **`openSession` never writes a `KnownDevice` snapshot.** `connect()` already inserts a placeholder row with `insertIfAbsent` before the link opens. After `info`, `openSession` calls `insertIfAbsent` again with default settings, which adds a row only if it is still missing and returns -1 otherwise. An existing row gets `recordConnection`, which writes identity and timestamps only, so Auto-sync, the companion association and the LAN credential keep their latest value. Identity checks run before that write, and a thing change clears the old token and port first with `setLanToken`. Clearing an unusable credential, or a token the LAN refused or rotated, uses `clearLanTokenIfStored`, one conditional update on the ciphertext that failed.
 - **`ArchiveIndex.update` is one Room transaction** (`ArchivedFileDao.update`, `@Transaction`), so index repair and a sync never lose each other's columns. `RoomArchiveIndexTest` (`:core:database` commonTest, Android host and iOS simulator) runs 64 concurrent updates on one key.
 - `derived_day.dailyFile == null` means the daily Parquet failed → its signature is treated as stale next pass.
@@ -211,7 +211,7 @@ An older `clock_sync_mode` key may remain in the file. Nothing reads it.
 ## Files under `filesDir`
 
 ```
-archive/<thing>/<hive path>.parquet              verified device files — byte-exact SD mirror   (sync-engine)
+archive/<thing>/<hive path>.parquet              verified device files, byte-exact SD mirror   (sync-engine)
 archive-partial/<thing>/<name>.partial(.meta)    in-progress downloads                           (sync-engine)
 ```
 
@@ -317,7 +317,7 @@ A user-initiated device-to-device transfer still carries the database and archiv
 Keystore keys do not transfer, the encrypted token may be unreadable on the destination and must be
 fetched again over Bluetooth. The LAN protocol remains plaintext TCP: at-rest encryption and backup
 exclusion do not encrypt traffic on the local network. `fullBackupContent`/`backup_rules.xml` was
-removed — Android 12+ (our minSdk) reads only `dataExtractionRules`.
+removed, Android 12+ (our minSdk) reads only `dataExtractionRules`.
 
 ## Uses → affects
 
@@ -326,7 +326,7 @@ removed — Android 12+ (our minSdk) reads only `dataExtractionRules`.
 | any entity | a new explicit or auto migration, `core/database/schemas/<n+1>.json`, `exportSchema` check in CI |
 | `archived_file` index columns | `ArchivedFile.info()` → `IndexedFileInfo` (pure), `HistoryIndexer`, `withUtcBetween` (filters `purpose`) |
 | `metric_bucket` meaning | bump `HistoryDeriver.DERIVE_VERSION` (part of every day's signature) |
-| `derived_day.sourceSignature` inputs | which days rebuild after a sync — keep `name:crc32` + anchor |
+| `derived_day.sourceSignature` inputs | which days rebuild after a sync, keep `name:crc32` + anchor |
 | `known_device` columns | `insertIfAbsent` defaults and `recordConnection` in `openSession`; `KnownDevice.toString` redaction |
 | `thing_epoch` / continuity policy | History's generation picker, reset provenance, credential renewal; never archive path rewriting |
 | `FileArchive.root` | `data_extraction_rules.xml` device-transfer include, Export zips, `HistoryIndexer` |

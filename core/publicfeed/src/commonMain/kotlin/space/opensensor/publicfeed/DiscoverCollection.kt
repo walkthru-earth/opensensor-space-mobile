@@ -69,8 +69,11 @@ class DiscoverCollection private constructor(
     companion object {
         const val FILE: String = "collection.json"
 
-        /** The tie break of [resolutionNear]. A Collection should list it, the others are optional. */
-        const val DEFAULT_RES: Int = 5
+        /**
+         * The default H3 resolution of every Thing, fixed or moving. It is the tie break of [resolutionNear],
+         * so between two drawable resolutions equally near the zoom the finer one wins.
+         */
+        const val DEFAULT_RES: Int = 8
 
         private const val ASSET_PREFIX = "h3_res="
 

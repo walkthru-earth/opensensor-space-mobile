@@ -147,7 +147,7 @@ class ArchivedFileDaoTest {
     @Test
     fun `index writes and other things do not rebuild the projected plan`(): Unit = runBlocking {
         val thing = "a"
-        val name = "station=$thing/year=2026/month=10/day=11/data_0900.parquet"
+        val name = "thing=$thing/year=2026/month=10/day=11/data_0900.parquet"
         val original = file(thing, name, bytes = 100)
         dao.upsert(original)
         val projections = Channel<List<ArchivedFileIdentity>>(Channel.UNLIMITED)

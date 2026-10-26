@@ -37,7 +37,7 @@ concern you are changing in `docs/README.md`.
   Device settings "Use phone location". Near me only moves the map. Device setup
   converts the fix to the selected H3 cell before UI state or wire use, then sends
   only that cell on explicit Save. Never persist, log or send the original fix.
-  Default device resolution is 5; increasing precision requires a fresh fix.
+  Default device resolution is 8; increasing precision requires a fresh fix.
   Public data carries H3 cells, never coordinates. See `docs/device-location.md`.
 - A downloaded file becomes synced only after size, CRC-32 and `PAR1` head/tail
   checks pass. Missing measurements stay null. Never ask firmware to delete,

@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 class JsonModelsTest {
     private val info = """{"proto":1,"fw":"arduino-cores3-parquet-v4","schema":"cores3-telemetry-v2","cols":77,""" +
         """"dict":"20f850852413abb1165f3f7ca95b4831a0e90a34ae7c7fcb41c44b108d3513c3",""" +
-        """"station":"53315f5f-cb85-4d8d-b623-d56266084189","dev":"441bf6e26b40",""" +
+        """"thing":"53315f5f-cb85-4d8d-b623-d56266084189","dev":"441bf6e26b40",""" +
         """"boot":"b41d37a48c04031e9397e28ce48c2f43","max_read":16384}"""
     private val status = """{"up_s":262,"int_s":900,"buf":25,"fin":0,"drop":0,"err":0,"miss":0,"fail":0,""" +
         """"codec":"UNCOMPRESSED","utc":0,"gen":0,"sd":1,"sd_kib":30704848,"sd_used_kib":36576,"heap":198192,"part":0}"""

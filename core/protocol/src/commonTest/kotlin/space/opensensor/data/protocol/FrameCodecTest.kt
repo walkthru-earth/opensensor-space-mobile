@@ -48,7 +48,7 @@ class FrameCodecTest {
 
     @Test
     fun `FILE frame decodes name and size`() {
-        val name = "station=53315f5f/unsynced/boot=b41d/data_unsynced_b41d_0-26-0.parquet"
+        val name = "thing=53315f5f/unsynced/boot=b41d/data_unsynced_b41d_0-26-0.parquet"
         val raw = ("10" + "39490000" + name.encodeToByteArray().toHex()).hexToBytes() // 0x4939 = 18745
         val frame = FrameCodec.decode(raw) as Frame.File
         assertEquals(18745L, frame.bytes)
@@ -119,7 +119,7 @@ class FrameCodecTest {
     @Test
     fun `every frame survives an encode decode round trip`() {
         val frames = listOf(
-            Frame.File(41_986, "station=a/unsynced/boot=b/data.parquet"),
+            Frame.File(41_986, "thing=a/unsynced/boot=b/data.parquet"),
             Frame.ListEnd(766, 0, 30_704_848, 36_576),
             Frame.Opened(7, 28_537, 0x3a5f3ba1L, "benchmarks/boot=e4/u.parquet"),
             Frame.Chunk(7, 16_384, ByteArray(505) { it.toByte() }),

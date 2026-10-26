@@ -4,7 +4,7 @@ package space.opensensor.data.protocol
  * The archive file-name rule from the firmware's `docs/shared/ble-sync-protocol.md` (Rules, "Names"),
  * mirroring `safe_parquet_name()` in `firmware/common/src/sync_codec.h`.
  *
- * A name is a relative Hive path such as `station=…/year=…/month=…/day=…/data_….parquet`. It is valid
+ * A name is a relative Hive path such as `thing=…/year=…/month=…/day=…/data_….parquet`. It is valid
  * when it uses only `[0-9a-z._=/-]`, contains no `..` and no `//`, does not start with `/`, ends in
  * `.parquet` with at least one character before it, and is at most [MAX_BYTES] bytes long. The
  * charset is ASCII, so the byte length equals the character count for every accepted name.

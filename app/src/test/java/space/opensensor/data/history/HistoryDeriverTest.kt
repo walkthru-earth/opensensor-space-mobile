@@ -65,7 +65,7 @@ class HistoryDeriverTest {
             val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
-            val name = "station=$thing/day=2026-09-17/raw.parquet"
+            val name = "thing=$thing/day=2026-09-17/raw.parquet"
             val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
@@ -119,7 +119,7 @@ class HistoryDeriverTest {
             val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val passes = indexer.passes(files)
             val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, DerivedStore(tmp), indexer, derivedQuota(tmp), passes)
-            val name = "station=$thing/day=2026-09-17/raw.parquet"
+            val name = "thing=$thing/day=2026-09-17/raw.parquet"
             val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
@@ -158,7 +158,7 @@ class HistoryDeriverTest {
             val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, store, indexer, derivedQuota(tmp), indexer.passes(files))
-            val name = "station=$thing/day=2026-09-17/raw.parquet"
+            val name = "thing=$thing/day=2026-09-17/raw.parquet"
             val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
@@ -219,7 +219,7 @@ class HistoryDeriverTest {
                 val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
                 val store = DerivedStore(tmp, atomic)
                 val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
-                val name = "station=$thing/day=2026-09-17/raw.parquet"
+                val name = "thing=$thing/day=2026-09-17/raw.parquet"
                 val raw = archive.fileFor(thing, name).apply {
                     parentFile!!.mkdirs()
                     writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
@@ -257,8 +257,8 @@ class HistoryDeriverTest {
             archive.fileFor(thing, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
             files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = 1, crc32 = crc, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), archive.fileFor(thing, name))
         }
-        put("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet", "device/v3-board-2rg-105rows.parquet", 1)
-        put("station=$thing/unsynced/boot=x/data_unsynced_x_0-89-0.parquet", "device/v2-none-90rows-unsynced.parquet", 2)
+        put("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet", "device/v3-board-2rg-105rows.parquet", 1)
+        put("thing=$thing/unsynced/boot=x/data_unsynced_x_0-89-0.parquet", "device/v2-none-90rows-unsynced.parquet", 2)
 
         val first = deriver.deriveStale()
         assertEquals(1, first.daysChecked)
@@ -303,7 +303,7 @@ class HistoryDeriverTest {
         assertEquals(0, deriver.deriveStale().daysRebuilt)
 
         // A second file for the same day (here: the same bytes under another name and CRC) changes the signature.
-        put("station=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3)
+        put("thing=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3)
         val third = deriver.deriveStale()
         assertEquals(1, third.daysRebuilt)
         assertEquals(210L, third.rowsAggregated) // rows read
@@ -314,7 +314,7 @@ class HistoryDeriverTest {
         assertTrue(store.manifestFile(thing, 20713).readText().contains("\"rows_used\":0"))
 
         // A second real v6 file (the full 10:00–10:29Z window, 180 rows) joins the day: 285 rows, two UTC hours → two row groups.
-        put("station=$thing/year=2026/month=09/day=17/data_1000_495ccef9f3eb8c5917070c921c9baec8_107-286-3.parquet", "device/v3-board-2rg-180rows.parquet", 4)
+        put("thing=$thing/year=2026/month=09/day=17/data_1000_495ccef9f3eb8c5917070c921c9baec8_107-286-3.parquet", "device/v3-board-2rg-180rows.parquet", 4)
         val fifth = deriver.deriveStale()
         assertEquals(1, fifth.daysRebuilt)
         val twoWindows = space.opensensor.data.history.parquet.ParquetFile.open(store.dayFile(thing, 20713))
@@ -355,13 +355,13 @@ class HistoryDeriverTest {
                 archive.fileFor(thing, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
                 files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = 1, crc32 = crc, sha256 = "s", syncedAtEpochMs = syncedAt, sourceDevice = "fake"), archive.fileFor(thing, name))
             }
-            put("station=$thing/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet", "device/v2-lz4-4rows-dated.parquet", 1, syncedAt = 1)
-            put("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet", "device/v3-board-2rg-105rows.parquet", 2, syncedAt = 1)
+            put("thing=$thing/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet", "device/v2-lz4-4rows-dated.parquet", 1, syncedAt = 1)
+            put("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet", "device/v3-board-2rg-105rows.parquet", 2, syncedAt = 1)
             assertEquals(2, deriver.deriveStale().daysRebuilt)
 
             // The 09-08 tiers go stale without a sync (an older derive version), then a sync adds a 09-17 file.
             days.upsert(days.rows.single { it.epochDay == 20704L }.copy(sourceSignature = "old"))
-            put("station=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3, syncedAt = 100)
+            put("thing=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3, syncedAt = 100)
 
             val afterSync = deriver.deriveAfterSync(sinceEpochMs = 100)
             assertEquals(1, afterSync.daysRebuilt)
@@ -394,7 +394,7 @@ class HistoryDeriverTest {
             val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val passes = indexer.passes(files)
             val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), InMemoryDays(), DerivedStore(tmp), indexer, derivedQuota(tmp), passes)
-            val name = "station=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
+            val name = "thing=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
             val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))
@@ -432,7 +432,7 @@ class HistoryDeriverTest {
             val store = DerivedStore(tmp)
             val quota = derivedQuota(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota, indexer.passes(files))
-            val name = "station=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
+            val name = "thing=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
             val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))
@@ -489,7 +489,7 @@ class HistoryDeriverTest {
             val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
-            val name = "station=$thing/unsynced/boot=00000000000000000000000000000000/raw.parquet"
+            val name = "thing=$thing/unsynced/boot=00000000000000000000000000000000/raw.parquet"
             val raw = archive.fileFor(thing, name).apply {
                 parentFile!!.mkdirs()
                 writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))

@@ -49,7 +49,7 @@ enum class SyncTrigger {
  * is idempotent.
  *
  * SSID and BSSID are location-gated, so the app cannot tell "home" from a café; the run is cheap
- * anyway — [AutoSyncRunner] browses mDNS for ≤ 10 s and stops when no thing answers — and it is
+ * anyway. [AutoSyncRunner] browses mDNS for ≤ 10 s and stops when no thing answers, and it is
  * throttled to one start per [WIFI_THROTTLE_MS], and skipped entirely when no Auto-sync device has
  * a LAN token (a Wi-Fi join says nothing about Bluetooth range).
  */

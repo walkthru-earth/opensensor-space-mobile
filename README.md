@@ -25,7 +25,7 @@ basemap, which a Settings switch turns off. Sharing a device's own data is off b
 is turned on per device, in that device's settings, with confirmation. No accounts, no
 analytics. Approximate foreground location is asked only on the Near me or Use phone
 location tap. Device settings can save a privacy-limited H3 area to your sensor,
-starting at resolution 5, with an optional declared country. Exact phone fixes
+starting at resolution 8, with an optional declared country. Exact phone fixes
 are never saved or sent. See [device location](docs/device-location.md). Public
 data carries H3 cells, never coordinates.
 

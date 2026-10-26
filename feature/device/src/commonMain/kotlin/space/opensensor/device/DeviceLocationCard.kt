@@ -108,7 +108,7 @@ internal fun DeviceLocationCard(state: DeviceConfigUiState, onAction: (DeviceCon
                     }
                 }
                 Text(stringResource(Res.string.location_precision_info))
-                if (draft.resolution > 7) Text(stringResource(Res.string.location_fine_warning))
+                if (draft.resolution > DeviceLocationDraft.DEFAULT_RESOLUTION) Text(stringResource(Res.string.location_fine_warning))
                 OutlinedTextField(
                     value = draft.country,
                     onValueChange = { if (it.length <= 2) onAction(DeviceConfigAction.LocationCountry(it)) },

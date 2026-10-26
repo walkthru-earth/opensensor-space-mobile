@@ -10,7 +10,7 @@ import java.net.InetAddress
 class ReconnectRouteTest {
     private val thing = "a9de274b-9c37-4b24-a354-1bc198e54381"
     private val known = KnownDevice("AA:BB:CC:DD:EE:FF", "OS-1234", thing, "aabbccddeeff", null, 0, null, lanToken = "encrypted")
-    private val target = LanDevice("OS-1234", InetAddress.getByName("192.0.2.2"), 47390, mapOf("station" to thing), 0)
+    private val target = LanDevice("OS-1234", InetAddress.getByName("192.0.2.2"), 47390, mapOf("thing" to thing), 0)
 
     @Test
     fun `LAN only reconnect requires enrolled token and resolved matching thing`() {

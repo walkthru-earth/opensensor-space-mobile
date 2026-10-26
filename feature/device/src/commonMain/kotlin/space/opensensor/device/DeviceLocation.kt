@@ -8,7 +8,7 @@ import space.opensensor.publicfeed.H3Index
 /** No phone coordinates enter UI state. The candidate is already a cell. */
 data class DeviceLocationDraft(
     val cell: String = "",
-    val resolution: Int = 5,
+    val resolution: Int = DEFAULT_RESOLUTION,
     val country: String = "",
     val needsFix: Boolean = false,
 ) {
@@ -27,9 +27,12 @@ data class DeviceLocationDraft(
         if (requestedResolution != resolution) this else copy(cell = value, needsFix = false)
 
     companion object {
+        /** The default H3 resolution of every Thing, fixed or moving. Finer cells show a warning. */
+        const val DEFAULT_RESOLUTION = 8
+
         fun from(config: LocationConfig) = DeviceLocationDraft(
             cell = config.cell.orEmpty(),
-            resolution = config.resolution?.takeIf { it in 0..15 } ?: 5,
+            resolution = config.resolution?.takeIf { it in 0..15 } ?: DEFAULT_RESOLUTION,
             country = config.country.orEmpty(),
         )
     }

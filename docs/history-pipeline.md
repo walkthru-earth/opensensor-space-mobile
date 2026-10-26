@@ -1,4 +1,4 @@
-# History pipeline — index → tiers → derived day → charts
+# History pipeline, index → tiers → derived day → charts
 
 **Scope:** everything between a verified file in the archive and a coloured column on screen: the file index, the metric registry, aggregation tiers, the derived daily Parquet, time estimation for unsynced boots, the friendly layer, chart binning.
 **Code (pure, `:core:history` `commonMain`, JVM and iOS since W8):** `Metrics.kt`, `FileTemplates.kt`, `Rollup.kt`, `Aggregation.kt` (`Resolution`, `Aggregator`, `Bucket`), `TimeEstimate.kt`, `Columns.kt`, `AirMood.kt` (+ `NowReading`), `HistoryModel.kt` (`HistoryRange`, `HistorySeries`, `HistoryColumn`), `HistoryWindow.kt`, `FileSummary.kt`, `ParquetIndexer.kt`.
@@ -102,17 +102,18 @@ first, and `Metrics.defaultOf` opens History on the first of them.
 keeps its unit and aggregate. Tiers, daily files, the History picker and the charts iterate these
 specs and never name a column. A spec whose column a file lacks yields **no values, never zeros**.
 
-**Each file is read by its own template (`FileTemplates`).** A file carries one footer key,
+**Each file is read by its own template (`FileTemplates`).** A file carries one footer key of ours,
 `opensensor`, whose value is compact JSON (stac-opensensor `PROFILE.md` "Parquet footer", version
 `0.1.0`, in the style of GeoParquet `geo`). `OpenSensorFooter` reads only `template.sha256`,
-`dictionary.sha256`, `acquisition.sample_interval_ms`, `station.id` and `file.purpose` from it and
-ignores every other member. A missing key, JSON that is not an object, an unknown major version, a
-digest that is not 64 lowercase hex, an interval that is not an integer or a thing or purpose that
-is not a non-empty string means the file has no footer. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
+`dictionary.sha256`, `acquisition.sample_interval_ms`, `thing.id`, `thing.mobility` and `file.purpose`
+from it and ignores every other member. The standard GeoParquet 2.0 `geo` key may sit beside it and is
+ignored. A missing key, JSON that is not an object, an unknown major version, a
+digest that is not 64 lowercase hex, an interval that is not an integer, a mobility other than `fixed`
+or `moving`, or a Thing id or purpose that is not a non-empty string means the file has no footer. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
 unprefixed keys has no footer, so it keeps its rows and has no
 metrics. A rebuilt partial file carries no `opensensor` key either
 (stac-opensensor question 30), so it reads the same way. Such files are wiped after the matched reflash (decision 14). The repair checks a file's
-`station.id` against its archive thing, and the daily builder checks each source the same way.
+`thing.id` against its archive Thing, and the daily builder checks each source the same way.
 The boot is not read from `firmware.boot_id`. Every row carries `boot_id_hi` and `boot_id_lo`, and
 `rowBootId` formats the first pair as 32 lowercase hex digits, the same text firmware writes and sends
 in its clock receipts. The schema name is not read at all.
@@ -124,8 +125,9 @@ to load when an `index.json` desc is not the build digest of its file. The foote
 the template's default interval is used, and without both the interval is 0 and expected rows are 0.
 A tier bucket fed by files at different intervals keeps the shortest.
 
-The daily file never writes the `opensensor` key. A derived day has no single honest value for
-`station`, `firmware`, `file` and `acquisition.time_semantics`, which `footer.json` requires, and an
+The daily file never writes the `opensensor` key. It leaves out GEOMETRY and GEOGRAPHY columns,
+writes no `geo` key and keeps `h3_cell_id`. A derived day has no single honest value for
+`thing`, `firmware`, `file` and `acquisition.time_semantics`, which `footer.json` requires, and an
 indexer that finds the key would take the day file for a broken raw file. How a derived file is
 marked waits on stac-opensensor question 29 and spec change 27. Until then the day file writes one
 app-private key, `app_day` (`AppDay`). It is not part of the footer contract and will be revisited
@@ -162,12 +164,12 @@ builder `derived-v4`, which both platforms check, so cached day files rebuild on
 
 ### Sensor warm-up and settling (2026-09-17)
 
-Firmware nulls PM for uptime < 30 s (`pms_status = 1`) — the datasheet minimum and stricter than
+Firmware nulls PM for uptime < 30 s (`pms_status = 1`), the datasheet minimum and stricter than
 Sensor.Community (wake 15 s before a 5 s window every 145 s, discard first cycle) and AirGradient
-(continuous, moving averages, "Warming Up" on display only, EPA-2021 humidity compensation — needs
+(continuous, moving averages, "Warming Up" on display only, EPA-2021 humidity compensation, needs
 RH this board lacks). OpenAQ has no warm-up logic. **Measured on our archive** (DuckDB, 766 files,
 14 boots ≥ 10 min): after the gate, minute 0 deviates from minutes 5–10 by 2.5 µg/m³ mean-absolute,
-minute 3 by 1.7, minute 7 by 0.6 — inside one band. Decision: **discard nothing more**; particle
+minute 3 by 1.7, minute 7 by 0.6, inside one band. Decision: **discard nothing more**; particle
 metrics carry `settleSeconds = 180` (`PMS_SETTLE_S`) and `MetricAgg.settling` counts those rows per
 bucket for a future "n settling" hint. No humidity correction, no "AQI".
 
@@ -182,7 +184,7 @@ thing-day, replaced atomically per day. **Duplicate rows** across files are skip
 shared key, `RowKey` in `:core:history`: `(boot_id_hi, boot_id_lo, sequence)`, or
 `(boot_id_hi, boot_id_lo, timeline ns)` when the sequence is absent or null, a missing boot half
 counting as 0. The tiers, the day chart and the daily file all use it, so their row counts agree.
-Means over a span are weighted by valid rows — never averages of averages.
+Means over a span are weighted by valid rows, never averages of averages.
 
 ## Derived daily Parquet (`DailyParquetBuilder`)
 
@@ -261,7 +263,7 @@ app-private clock receipts, scoped to the original thing and full 128-bit boot I
 History uses the earliest receipt or fully-timed file of that boot. A footer carries no clock
 anchor (decision 25 dropped `reconciliation_anchor_*`), the rows and the receipts do. It no longer
 needs to wait for a fully-timed file to finalize. For that boot's unsynced files,
-`estimated_utc_ns = anchor_utc_ns + (monotonic_us − anchor_mono_us) * 1000` — never across a
+`estimated_utc_ns = anchor_utc_ns + (monotonic_us − anchor_mono_us) * 1000`, never across a
 reboot, never overwriting the event time column. The 50 ppm drift assumption is not a measured
 accuracy bound and excludes phone clock error and transport latency. Verified on
 boot `e452563e…` (2026-09-08): reproduces the firmware's own stamp 43 min after the anchor
@@ -279,7 +281,7 @@ Six moods, one per step of the WHO 2021 Air Quality Guidelines PM2.5 scale (`:co
 as WHO states them ("at or below 15 meets the guideline"): `FRESH` "Fresh air" (guideline) · `FAIR`
 (IT-4) · `HAZY` "Getting hazy" (IT-3) · `POOR` (IT-2) · `SMOKY` (IT-1) · `THICK` "Thick smoke" (above
 IT-1). The edges are never repeated in `:core:history` or the app. Each has a
-title, one line of advice and a comparison — colour is never the only carrier. `NowReading.of(reading)`
+title, one line of advice and a comparison, colour is never the only carrier. `NowReading.of(reading)`
 puts the sensor state first (`pms_status ≠ 4` → words, never a number). "Right now" is a 10-second
 snapshot; "Today so far" is the **local** day folded from the hourly tier with its coverage.
 **No "AQI" anywhere** (a named index needs validated averaging rules). Live and archived mood

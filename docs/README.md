@@ -76,7 +76,7 @@ beside your own devices. `cross-platform-guide` holds the rules that keep both p
   iOS app and Apple adapters live under `ios/App/`, with Kotlin presentation code in
   `ios/shared/`. All Kotlin packages are under `space.opensensor`.
 - **"Uses → affects"** sections say what a file consumes and what breaks or changes downstream if
-  you edit it — search there before editing.
+  you edit it, search there before editing.
 - Dates are the day a decision was made or a fact was measured; "unverified" means not in
   `bench-verified.md`.
 - Host/JVM tests, iOS simulator builds, Android phone runs, and iPhone runs are separate

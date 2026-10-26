@@ -9,6 +9,13 @@ import kotlin.test.assertTrue
 
 class DeviceLocationTest {
     @Test
+    fun everyThingDefaultsToResolution8() {
+        assertEquals(8, DeviceLocationDraft().resolution)
+        assertEquals(8, DeviceLocationDraft.from(LocationConfig()).resolution)
+        assertEquals(6, DeviceLocationDraft.from(LocationConfig(resolution = 6)).resolution)
+    }
+
+    @Test
     fun precisionChangesNeverRecoverDiscardedCoordinates() {
         val fine = DeviceLocationDraft(cell = "8928308280fffff", resolution = 9)
         val coarse = fine.atResolution(5)

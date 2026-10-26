@@ -131,7 +131,7 @@ class FrameCodecV2Test {
 
     @Test
     fun `HELLO STATUS LIVE decode`() {
-        val info = """{"proto":3,"fw":"cores3-parquet-v5","station":"53315f5f-cb85-4d8d-b623-d56266084189","max_read":16384}"""
+        val info = """{"proto":3,"fw":"cores3-parquet-v5","thing":"53315f5f-cb85-4d8d-b623-d56266084189","max_read":16384}"""
         val hello = FrameCodec.decode(("47" + "03" + "0004" + info.encodeToByteArray().toHex()).hexToBytes()) as Frame.Hello
         assertEquals(3, hello.proto)
         assertEquals(1024, hello.payloadMax)

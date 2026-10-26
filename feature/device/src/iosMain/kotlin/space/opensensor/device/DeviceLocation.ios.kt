@@ -45,7 +45,7 @@ private class CellLocation(private val onPermissionResult: () -> Unit) {
     val manager = CLLocationManager()
     private var awaitingPermission = false
     private val pending = PendingFix(FIX_TIMEOUT_MS, start = { manager.requestLocation() }, stop = { manager.stopUpdatingLocation() })
-    private var resolution = 5
+    private var resolution = DeviceLocationDraft.DEFAULT_RESOLUTION
     private val delegate = object : NSObject(), CLLocationManagerDelegateProtocol {
         override fun locationManagerDidChangeAuthorization(manager: CLLocationManager) {
             if (!awaitingPermission || manager.authorizationStatus == kCLAuthorizationStatusNotDetermined) return

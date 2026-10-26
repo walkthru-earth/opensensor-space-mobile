@@ -9,8 +9,8 @@ import kotlin.test.assertTrue
 
 class ArchiveLayoutTest {
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
-    private val dated = "station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
-    private val unsynced = "station=$thing/unsynced/boot=x/data_unsynced_x_0-89-0.parquet"
+    private val dated = "thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
+    private val unsynced = "thing=$thing/unsynced/boot=x/data_unsynced_x_0-89-0.parquet"
     private val bench = "benchmarks/codec/lz4.parquet"
 
     @Test

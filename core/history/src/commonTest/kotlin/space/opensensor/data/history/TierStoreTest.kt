@@ -153,7 +153,7 @@ class TierStoreTest {
         val thing = ParquetFile.wrap(bytes).metadata.footer?.thingId ?: "tier-thing"
         val store = Store()
         val index = Index()
-        val r = ArchiveRecord(thing, "station=$thing/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        val r = ArchiveRecord(thing, "thing=$thing/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
         ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()

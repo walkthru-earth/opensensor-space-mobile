@@ -27,7 +27,7 @@ invalidate the mapping while the same boot continues. A reboot starts a new mono
 and boot identity. A valid RTC can seed it; otherwise UTC remains null until a new anchor.
 
 The device retains monotonic microseconds in its unknown-UTC Parquet files, under
-`station=<id>/unsynced/boot=<id>/`. No Unix-epoch date or phone-local date is invented for them.
+`thing=<id>/unsynced/boot=<id>/`. No Unix-epoch date or phone-local date is invented for them.
 Unanchored batches finalize after six genuine samples (normally about one minute). An
 accepted anchor does not flush the pending batch; the next genuine sample finalizes the
 previous clock epoch when the quality transition or correction requires a new epoch. A file footer carries no clock anchor.
