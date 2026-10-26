@@ -29,7 +29,7 @@ A small closed set of field types, not full JSON Schema. No mature Compose or KM
 ```kotlin
 sealed interface FieldType {
     data class Text(val maxBytes: Int, val pattern: String? = null, val singleLine: Boolean = true) : FieldType
-    data class IntRange(val min: Int, val max: Int) : FieldType
+    data class IntBetween(val min: Int, val max: Int) : FieldType
     data class Choice(val values: List<String>) : FieldType
     data object Toggle : FieldType      // "0" | "1"
     data object Action : FieldType      // ble.clear_bonds, lan.rotate_token
@@ -45,13 +45,21 @@ data class ConfigField(
     val secret: Boolean = false,        // masked, secure window, BLE only, redacted toString
     val confirm: Gate = Gate.NONE,
     val confirmWhen: String? = null,    // e.g. "none" for ble.pair
+)
+
+// :feature:device, next to DeviceConfigController
+data class ConfigFieldUi(
+    val key: String,
+    val dialog: DeviceConfigDialog?,    // required when the field's Gate is not NONE
     val level: DetailLevel = DetailLevel.SIMPLE,
     val labelRes: String,               // app string id, never free text from the device
 )
 ```
 
+- Placement. `ConfigField` holds only wire facts and lives in `:core:protocol`, which depends only on `:core:model`. `ConfigFieldUi` holds the dialog, detail level and label, and lives in `:feature:device` with `DeviceConfigDialog`, so no core module reaches into a feature or settings module.
+
 - Confirmations come from data. `ble.pair=none` is `CONFIRM` when the value is `none`. Clearing bonds and rotating the token are `CONFIRM_DISRUPT`. Reboot stays its own action. `DeviceConfigController.confirm()` stays the single place that sends a confirmed write.
-- `ConfigField` gains `val dialog: DeviceConfigDialog?`, and a gated field without one fails the table test. The table maps keys onto today's closed types, so no second list appears.
+- A gated `ConfigField` without a `ConfigFieldUi.dialog` fails the table test in `:feature:device`. The table maps keys onto today's closed types, so no second list appears.
 
 | Key | Gate | `DeviceConfigDialog` | `DeviceConfigChange` |
 | --- | --- | --- | --- |
@@ -59,10 +67,11 @@ data class ConfigField(
 | `ble.clear_bonds` | `CONFIRM_DISRUPT` | `ForgetBonds` | `BONDS_CLEARED` |
 | `lan.rotate_token` | `CONFIRM_DISRUPT` | `RotateToken` | none, the token is refetched |
 | reboot, an action and not a field | `CONFIRM_DISRUPT` | `Reboot` | none |
-- Secrets are marked in the schema. A secret field is never logged, drafted, sent over LAN or used as a default. `SECRET_KEYS` is built from the schema. The redaction tests stay.
+
+- Secrets are marked in the schema. A secret field is never logged, drafted, sent over LAN or used as a default. `SECRET_KEYS` comes from the app allowlist plus the schema, as the next rule says. The redaction tests stay.
 - Labels stay in the app. An unknown string id falls back to Developer only display.
 - App floor rules win over any schema. The app owns an allowlist of every key it knows, each with its secret flag and gate. A schema can make a known key stricter, never looser. An unknown key fails closed. It is not editable, never sent, and shows read only at Developer level until an app release classifies it. `SECRET_KEYS` is the union of the allowlist's secret keys and any key a schema marks secret, and a test checks the schema against the allowlist.
-- Step 1 mirrors today's builder keys in a `ConfigField` table in `:core:protocol`, with no firmware change. Step 2 proposes an optional `config` block on the firmware #117 module and board manifests, copied into the template, so firmware owns limits and gates and the app stops duplicating them. The typed builders stay as tested shortcuts.
+- Step 1 mirrors today's builder keys in a `ConfigField` table in `:core:protocol` and a `ConfigFieldUi` table in `:feature:device`, with no firmware change. Step 2 proposes an optional `config` block on the firmware #117 module and board manifests, copied into the template, so firmware owns limits and gates and the app stops duplicating them. The typed builders stay as tested shortcuts.
 
 ## 4. Phone and health flows
 

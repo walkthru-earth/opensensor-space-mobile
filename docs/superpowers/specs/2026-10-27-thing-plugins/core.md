@@ -12,7 +12,7 @@ Ready for plugins.
 
 Tied to boards or air quality.
 - The family registry and capabilities named in `docs/devices-and-discovery.md` do not exist as types.
-- `Metrics.kt` (`core/history/.../data/history/Metrics.kt`) holds air only scales (pm25, pm10, line 113), fixed EPA correction columns, and named PM constants through `requireNotNull` (line 222). The catalog fails to build if a bundled template drops one of those columns.
+- `Metrics.kt` (`core/history/.../data/history/Metrics.kt`) holds air only scales (pm25, pm10, lines 115-116), fixed EPA correction columns, and named PM constants through `requireNotNull` (line 222). The catalog fails to build if a bundled template drops one of those columns.
 - `DeviceCapabilities.showsAirCards` checks `Family.AIR` and the `pm25` scale. `configurable` is `proto >= 2`.
 - `LiveReading.PMS_STATUS` sits in `:core:protocol`. `TodayCards.kt` lists CF1 columns by name. `TodaySoFarFlow.kt` asks for PM2.5 directly. `LiveColumns` picks temperature and humidity by unit.
 - `KnownDevice` is keyed by Bluetooth address. `TransportKind` is a closed enum (`BLE`, `LAN`, `FAKE`). `CollectionLink` wraps a wire `DeviceSession`, so `CollectionController` and `SyncEngine` only speak the firmware protocol.
@@ -31,7 +31,7 @@ interface ThingKind {
     val id: KindId
     val contractVersion: Int
     fun recognize(evidence: Evidence): Recognition?   // advert, INFO dict, mDNS, feed id
-    fun capabilities(thing: ThingRef): Set<Capability>
+    fun capabilities(thing: ThingId): Set<Capability>   // ThingId, section 6
     val templates: TemplateSource                     // bundled, served or app generated
     val source: DataSource
     val config: ConfigSchema                          // see setup-wizard.md
@@ -43,7 +43,7 @@ interface ThingKind {
 sealed interface DataSource {
     sealed interface Recording : DataSource { val publish: PublishPolicy }
     class PullSync(val links: LinkProvider, override val publish: PublishPolicy) : Recording       // today's CollectionController
-    class LocalSampling(val sampler: SamplerPort, override val publish: PublishPolicy) : Recording // phone session, ParquetWriter to ArchiveStore
+    class LocalSampling(val samplers: Map<String, SamplerPort>, override val publish: PublishPolicy) : Recording // phone session, ParquetWriter to ArchiveStore
     class RemoteFeed(val feed: PublicFeed) : DataSource           // feed only Things, self uploading devices, already public
     class PrivateRead(val reader: PrivateSourcePort) : DataSource // health, never an archive file, never published
 }

@@ -17,6 +17,8 @@ Part of [Thing plugins](README.md). Proposal, 2026-10-27. Paths are under `app/s
 Each plugin registers itself into the common contract through Hilt multibindings. Kinds and samplers are separate bindings, so the types line up.
 
 ```kotlin
+@MapKey annotation class SamplerKey(val value: String)
+
 @Module @InstallIn(SingletonComponent::class)
 abstract class BarometerSourceModule {
     @Binds @IntoMap @SamplerKey("phone.barometer")

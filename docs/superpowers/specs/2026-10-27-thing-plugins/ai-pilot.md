@@ -71,8 +71,8 @@ Device-changing tools and the confirmation each one reaches. Every one first sho
 | `propose_pair_none` | `savePairing(NONE)`, `DeviceConfigDialog.PairingNone`, `confirm()` | `canEdit` |
 | `propose_wifi(on)` | `setWifiOn(on)`. Turning Wi-Fi on or off only, never a join | the card is the confirmation, as today's switch tap is |
 | `propose_lan(on)` | `setLanOn(on)` | the card is the confirmation |
-| `propose_location(cell)` | opens the location form filled with the cell. The user taps Save, `saveLocation()` | the form's own Save |
-| `propose_flush` | `TodayController.requestFlush()` | the card is the confirmation |
+| `propose_location()` | opens the empty location form. The cell comes only from the user's own Use phone location tap, then Save, `saveLocation()` | the form's own fix and Save. The model never supplies a device cell |
+| `propose_flush` | `TodayController.requestFlush()` opens `TodayDialog.Flush`, then `TodayController.confirm()` | its existing dialog |
 | `propose_forget` | `DevicesController` opens `ForgetDialog`, then `ConfirmForget` | its existing dialog and test |
 
 Never tools. `join_wifi` (carries a PSK), token fetch, raw debug commands, anything that takes or returns coordinates.
@@ -85,8 +85,9 @@ Never tools. `join_wifi` (carries a PSK), token fetch, raw debug commands, anyth
 sealed interface ToolResult {
     data class Ok(val data: JsonObject) : ToolResult
     data class Pending(val proposalId: String, val summary: String) : ToolResult  // nothing has happened yet
-    data class Rejected(val code: RejectCode) : ToolResult                       // UNKNOWN_TOOL, BAD_ARGS, NOT_ALLOWED, BUSY
+    data class Rejected(val code: RejectCode) : ToolResult
 }
+enum class RejectCode { UNKNOWN_TOOL, BAD_ARGS, NOT_ALLOWED, BUSY }
 sealed interface ProposalOutcome {
     data object Done : ProposalOutcome
     data object Declined : ProposalOutcome
