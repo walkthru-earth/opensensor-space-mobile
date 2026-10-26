@@ -120,6 +120,34 @@ class BoardDescriptorsTest {
     }
 
     @Test
+    fun freshTemplatesStayBoundedOnDiskAndInMemory() = runTest {
+        val h = harness()
+        val max = BoardDescriptors.MAX_TEMPLATES
+        val shas = (0 until max + 4).map { n ->
+            val served = template(dict).replace("served-board-v1", "served-board-$n").encodeToByteArray()
+            val hex = ParquetVerify.sha256Hex(served)
+            assertIs<DescriptorOutcome.Fetched>(h.descriptors.ensure(info.copy(desc = hex.take(16))) { served })
+            hex
+        }
+        val newest = shas.takeLast(max).toSet()
+        assertEquals(newest, h.store.list().map { it.name.removeSuffix(".json") }.toSet())
+        assertEquals(newest, h.served.all.value.map { it.key.desc }.toSet())
+    }
+
+    @Test
+    fun loadKeepsOnlyTheNewestTemplates() = runTest {
+        val h = harness()
+        val max = BoardDescriptors.MAX_TEMPLATES
+        val shas = (0 until max + 2).map { n ->
+            val served = template(dict).replace("served-board-v1", "served-board-$n").encodeToByteArray()
+            ParquetVerify.sha256Hex(served).also { h.store.write("$it.json", served) }
+        }
+        assertEquals(max, h.descriptors.load())
+        assertEquals(shas.takeLast(max).toSet(), h.store.list().map { it.name.removeSuffix(".json") }.toSet())
+        assertEquals(max, h.served.all.value.size)
+    }
+
+    @Test
     fun absentOrMalformedDescNeverDownloads() = runTest {
         val h = harness()
         assertEquals(DescriptorOutcome.Unsupported, h.descriptors.ensure(info.copy(desc = null)) { h.downloads++; bytes })

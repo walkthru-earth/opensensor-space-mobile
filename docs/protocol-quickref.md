@@ -96,6 +96,8 @@ serves. No `desc` means the board serves none, and the phone never asks.
 - A bundled or cached template whose full SHA-256 starts with `desc` skips the download.
 - Verified templates are cached as `<sha256>.json` in the `board-templates` cache directory
   (`StorageRole.Templates`) and resolve ahead of the bundled ones (`ServedTemplates`).
+- At most 16 templates are kept on disk and in memory (`BoardDescriptors.MAX_TEMPLATES`). The
+  oldest goes first.
 - The request goes out only on an open link, which on BLE includes the bond. Android asks after
   connect setup, iOS on a command lease of the new link.
 

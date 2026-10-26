@@ -23,15 +23,16 @@ import space.opensensor.model.TemplateKey
 
 /**
  * Board templates the firmware served over `GET_DESCRIPTOR` (#191), verified and keyed by their full
- * SHA-256. [DeviceCapabilities] hands them to the catalog resolver ahead of the bundled ones.
+ * SHA-256. [DeviceCapabilities] hands them to the catalog resolver ahead of the bundled ones. Holds at
+ * most [limit], the oldest goes first, so a board that keeps serving fresh templates cannot grow it.
  */
-class ServedTemplates {
+class ServedTemplates(private val limit: Int = BoardDescriptors.MAX_TEMPLATES) {
     private val _all = MutableStateFlow<List<BoardTemplate>>(emptyList())
     val all: StateFlow<List<BoardTemplate>> = _all.asStateFlow()
 
     fun add(template: BoardTemplate) {
         requireNotNull(template.key.desc) { "a served template carries its desc" }
-        _all.update { held -> if (held.any { it.key.desc == template.key.desc }) held else held + template }
+        _all.update { held -> if (held.any { it.key.desc == template.key.desc }) held else (held + template).takeLast(limit) }
     }
 
     companion object {
@@ -62,7 +63,8 @@ sealed interface DescriptorOutcome {
  * Fetches, verifies and caches the board template a device serves (#191). The bytes are kept only
  * when their SHA-256 starts with the device's 16 hex `desc`, they parse as an `OpenSensorTemplate`
  * and their `firmware.dict` is the device's `dict`. Verified templates live in [store] as
- * `<sha256>.json` and are re-verified against that name on [load].
+ * `<sha256>.json` and are re-verified against that name on [load]. At most [MAX_TEMPLATES] are kept,
+ * the oldest file is deleted first.
  *
  * Every [store] call blocks, so the work runs on [io].
  */
@@ -74,11 +76,15 @@ class BoardDescriptors(
 ) {
     private val mutex = Mutex()
 
-    /** Registers every cached template that still verifies, deletes the rest. Returns how many loaded. */
+    /** Registers the newest cached templates that still verify, deletes the rest. Returns how many loaded. */
     suspend fun load(): Int = withContext(io) {
         mutex.withLock {
             var loaded = 0
-            for (block in store.list()) {
+            for (block in store.list().sortedByDescending { it.modifiedEpochMs }) {
+                if (loaded == MAX_TEMPLATES) {
+                    store.delete(block.name)
+                    continue
+                }
                 val hex = block.name.removeSuffix(SUFFIX)
                 val bytes = store.read(block.name) ?: continue
                 val template = if (block.name.endsWith(SUFFIX) && SHA256_HEX.matches(hex) && ParquetVerify.sha256Hex(bytes) == hex) {
@@ -124,14 +130,20 @@ class BoardDescriptors(
             return@withLock DescriptorOutcome.Rejected(e.message ?: "not a board template")
         }
         if (template.dict != dict) return@withLock DescriptorOutcome.Rejected("template dict differs from the device dict")
-        withContext(io) { store.write(hex + SUFFIX, bytes) }
+        withContext(io) {
+            store.list().sortedBy { it.modifiedEpochMs }.dropLast(MAX_TEMPLATES - 1).forEach { store.delete(it.name) }
+            store.write(hex + SUFFIX, bytes)
+        }
         served.add(template)
         DescriptorOutcome.Fetched(template)
     }
 
-    private companion object {
-        const val SUFFIX = ".json"
-        val SHA256_HEX = Regex("^[0-9a-f]{64}$")
-        val DESC_PREFIX = Regex("^[0-9a-f]{${TemplateKey.DESC_PREFIX_HEX}}$")
+    companion object {
+        /** Most templates kept on disk and in [ServedTemplates]. A real fleet has a handful of boards. */
+        const val MAX_TEMPLATES = 16
+
+        private const val SUFFIX = ".json"
+        private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
+        private val DESC_PREFIX = Regex("^[0-9a-f]{${TemplateKey.DESC_PREFIX_HEX}}$")
     }
 }

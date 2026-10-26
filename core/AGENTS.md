@@ -35,7 +35,8 @@ sample through a `Station`, `DeviceCapabilities` in `history/` builds that stati
 and `info.dict`, and the Today screen reads it from there. `BoardDescriptors` in `history/` fetches
 the template a board serves over `GET_DESCRIPTOR` (`DeviceSession.downloadDescriptor`,
 `DescriptorDownload` in `sync/`), verifies it against `desc` and `dict`, caches it by SHA-256 in
-`StorageRole.Templates` and adds it to `ServedTemplates`, which resolves ahead of the bundled ones. It is the first module in the `space.opensensor`
+`StorageRole.Templates` and adds it to `ServedTemplates`, which resolves ahead of the bundled ones. Both
+keep at most 16 templates, oldest out first. It is the first module in the `space.opensensor`
 package (`space.opensensor.model`), the rest move in #192.
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
