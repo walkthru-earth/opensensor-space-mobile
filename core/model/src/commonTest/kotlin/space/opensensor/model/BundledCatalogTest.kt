@@ -109,4 +109,22 @@ class BundledCatalogTest {
         assertEquals("Battery", battery.label("en"))
         assertEquals("%", battery.displayUnit)
     }
+
+    @Test
+    fun anAirTemperatureWinsOverABoardTemperatureThatComesFirst() {
+        // CoreS3 lists imu_temperature_c (auxiliaryInformation) before ambient_temperature_c.
+        val template = assertNotNull(BundledCatalog.template(CORES3_DICT))
+        val live = LiveColumns.of(template, AppProfile.derive(template))
+        assertEquals("t", live.temperature?.liveKey)
+    }
+
+    @Test
+    fun aHiddenColumnIsDroppedFromPrimaryEvenWhenTheProfileListsIt() {
+        val template = assertNotNull(BundledCatalog.template(CORES3_DICT))
+        val profile = AppProfile.parse(
+            """{"dict": "$CORES3_DICT", "family": "air", "primary": ["pm25_atmospheric_ug_m3", "ambient_temperature_c"], "hidden": ["ambient_temperature_c"]}""",
+        )
+        val station = Station.join("s1", template, profile)
+        assertEquals(listOf("pm25_atmospheric_ug_m3"), station.primary.map { it.name })
+    }
 }
