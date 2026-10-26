@@ -62,15 +62,19 @@ class DeviceConfigEffectsTest {
         waitForIdle()
     }
 
-    /** Sends [notice] and moves the test clock until [text] shows. A short snackbar stays for 4 s. */
+    /**
+     * Sends [notice] and waits until [text] shows. The snackbar text comes from Compose resources,
+     * and their first load runs in real time, off the test clock. On a slow CI runner that took
+     * longer than a fixed number of clock steps, so this waits on the wall clock instead, up to
+     * [SHOW_TIMEOUT_MS]. A short snackbar stays for 4 s of test clock, long enough to find it.
+     */
     private fun ComposeUiTest.show(notice: DeviceConfigNotice, text: String) {
+        // The notice is not replayed, so a send before the controller collects would be lost.
+        waitUntil("the controller collects notices", SHOW_TIMEOUT_MS) { source.notices.subscriptionCount.value > 0 }
         source.notices.tryEmit(notice)
-        repeat(10) {
-            if (onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()) return
-            mainClock.advanceTimeBy(100)
-            waitForIdle()
+        waitUntil("a snackbar reads \"$text\"", SHOW_TIMEOUT_MS) {
+            onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
         }
-        error("no snackbar with that line")
     }
 
     @Test
@@ -90,5 +94,10 @@ class DeviceConfigEffectsTest {
         show(DeviceConfigNotice.Busy, "Wait for the current sensor task to finish.")
         assertTrue(onAllNodesWithText("Reconnect over Bluetooth").fetchSemanticsNodes().isEmpty())
         assertEquals(0, reconnects)
+    }
+
+    private companion object {
+        /** Wall clock time for one wait. Locally the first snackbar shows within a few frames. */
+        const val SHOW_TIMEOUT_MS = 10_000L
     }
 }
