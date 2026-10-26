@@ -232,7 +232,9 @@ Re-provision in this order on the Device settings page.
 3. Bluetooth pairing, the mode and PIN if they should differ from the default, then Restart.
 4. Find networks and Join. Sync over Wi-Fi stays on unless the owner turns it off.
 5. Get Wi-Fi token. If the phone still holds the old token, the first `OSS1` handshake fails with
-   `ERROR` 14, `LanTokenPolicy` clears it and the next bonded BLE session fetches the new one.
+   `ERROR` 14 and the stored token is cleared. On Android `LanTokenPolicy` clears it and the next
+   bonded BLE session fetches the new one. On iOS the Keychain token is cleared and the new one
+   comes only when the owner taps Get Wi-Fi token again.
 6. Particle sensor sticker on Waveshare, which sends vendor, model, serial and the batch choice.
 7. Device location, with Use phone location or a chosen cell.
 
@@ -258,7 +260,7 @@ stateDiagram-v2
   Stored --> Stored: LAN HELLO ok
   Stored --> Stale: LAN ERROR 14 or BYE 3 (refused) → lanToken cleared
   Stored --> Stale: LAN BYE 10 (rotated), at the handshake or mid-session → lanToken cleared
-  Stale --> Stored: next BLE session refetches, snackbar LanTokenRenewed
+  Stale --> Stored: Android next BLE session refetches, snackbar LanTokenRenewed. iOS Get Wi-Fi token
   Stored --> Stale: unreadable encrypted value → token + port cleared
   Stored --> Stale: verified BLE station-generation change → token + port cleared
   Stored --> None: Forget device / deliberate Rotate token
