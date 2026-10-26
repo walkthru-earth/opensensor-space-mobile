@@ -25,8 +25,8 @@ final class LanDiscovery {
     /// outlives a lost socket while the controller retries.
     private var runTokens: [String: UUID] = [:]
     private var runHandles: [String: SyncHandle] = [:]
-    /// The sensor of each run and who started it, by service name. Stop and Disconnect find the run
-    /// here while the socket is gone and Bonjour may have lost the service.
+    /// The sensor of each run, by service name. Disconnect and Forget find the run here while the
+    /// socket is gone and Bonjour may have lost the service.
     private var owned: [String: OwnedRun] = [:]
     /// Runs whose socket closed while the controller reconnects.
     private var paused = Set<String>()
@@ -39,7 +39,10 @@ final class LanDiscovery {
     private var stepsHeld: Bool { isBackground && !collectOffScreen }
     /// Sessions whose last sensor page closed while a run, a command or a lease held them. They
     /// close once that work ends. Connecting again keeps them.
-    private var closeWhenIdle = IdleClose<String>()
+    private lazy var idle = IdleSessions(
+        held: { [unowned self] in self.held($0) },
+        link: { [unowned self] name in self.links[name].map { ObjectIdentifier($0) } },
+        close: { [unowned self] in self.disconnect(name: $0) })
     private var progressCounts = RunCounts<String>()
     private struct Device {
         let endpoint: NWEndpoint
@@ -112,14 +115,7 @@ final class LanDiscovery {
         links[name] = link
         // Debug, Device settings and Files lease the link with no task here. The last lease ending
         // settles a close that waited for the last page.
-        link.onLeaseChange { @Sendable [weak self] leased in
-            // Kotlin calls this on the main thread.
-            MainActor.assumeIsolated {
-                guard let self, !leased.boolValue, let current = self.links[name], ObjectIdentifier(current) == id
-                else { return }
-                self.closeIfUnheld(name)
-            }
-        }
+        idle.adopt(link, name: name)
         link.whenClosed { @Sendable [weak self, weak session] in
             session?.linkFailed()
             Task { @MainActor [weak self] in
@@ -200,7 +196,7 @@ final class LanDiscovery {
 
     @discardableResult
     func connect(name: String, onFailure: (() -> Void)? = nil) -> Bool {
-        closeWhenIdle.forget(name)
+        idle.forget(name)
         if sessions[name] != nil {
             if state.isLanConnected(name: name) { return true }
             if tasks[name] != nil {
@@ -335,14 +331,15 @@ final class LanDiscovery {
         let token = UUID()
         runTokens[name] = token
         var run = OwnedRun()
-        run.started(device: device, kind: backgroundRuns[name] != nil ? .autoSync : collectSteps[name] != nil ? .collectAll : .user)
+        run.started(device: device)
         owned[name] = run
+        let origin: RunOrigin = backgroundRuns[name] != nil ? .autoSync : collectSteps[name] != nil ? .collectAll : .user
         // A new run counts from zero. Notices before its first progress keep these, not the last run's.
         progressCounts.runStarted(name)
         state.lanSyncStarted(name: name)
         report(name, connected: true, busy: true, notice: .lanListing)
         let handle = runs.collect(
-            device: device, onlyName: onlyName, prefer: .lan, background: backgroundRuns[name] != nil,
+            device: device, onlyName: onlyName, prefer: .lan, origin: origin,
             progress: { [weak self] update in
                 MainActor.assumeIsolated { self?.runProgressed(name, token: token, update) }
             },
@@ -393,19 +390,15 @@ final class LanDiscovery {
             state.lanSyncFinished(name: name, connected: false, result: result)
         }
         advanceCollect(name)
-        closeIfUnheld(name)
+        idle.settle(name)
     }
 
     /// Closes this hardware id's sessions once the last sensor page is gone. Work on a session
     /// delays its close until it ends. A Collect all step closes what it opened by itself.
     func closeIdle(device: String) {
         for name in Array(sessions.keys) where sessionDevices[name] == device.lowercased() {
-            if closeWhenIdle.pageClosed(name, held: held(name)) { disconnect(name: name) }
+            idle.pageClosed(name)
         }
-    }
-
-    private func closeIfUnheld(_ name: String) {
-        if closeWhenIdle.settled(name, held: held(name)) { disconnect(name: name) }
     }
 
     /// A run, a command, a Collect all or Auto-sync step, a dial or a lease is on this session.
@@ -416,7 +409,7 @@ final class LanDiscovery {
 
     /// Closes the socket without a notice. The caller reports the result.
     private func dropSession(_ name: String) {
-        closeWhenIdle.forget(name)
+        idle.forget(name)
         freshness.removeValue(forKey: name)?.invalidate()
         links[name] = nil
         sessions.removeValue(forKey: name)?.close()
@@ -521,16 +514,8 @@ final class LanDiscovery {
         close(name: name, notice: .lanDisconnected)
     }
 
-    /// Stops only a user-started transfer, in every phase, also while it reconnects with no socket.
-    /// Its result closes the session.
-    func cancelInteractiveSync(device: String) {
-        for name in Array(runTokens.keys) where owned[name]?.stops(device: device) == true {
-            runHandles[name]?.cancel()
-        }
-    }
-
     private func close(name: String, notice: CompanionNotice) {
-        closeWhenIdle.forget(name)
+        idle.forget(name)
         state.lanSyncStopped(name: name)
         attempts[name] = UUID()
         connectFailures[name] = nil
@@ -562,7 +547,7 @@ final class LanDiscovery {
         }
         resolveDial(name, links[name]?.isOpen == true)
         advanceCollect(name)
-        closeIfUnheld(name)
+        idle.settle(name)
         // A run iOS interrupted may have waited for this connect to end.
         runs?.retryInterrupted()
     }
@@ -808,5 +793,12 @@ extension LanDiscovery {
             backgroundBytes[name] = nil
             close(name: name, notice: .lanDisconnected)
         }
+    }
+}
+
+extension IosLink: LeaseWatched {
+    func watchLeases(_ listener: @escaping @Sendable (Bool) -> Void) {
+        // Kotlin calls this on the main thread.
+        onLeaseChange { @Sendable leased in listener(leased.boolValue) }
     }
 }

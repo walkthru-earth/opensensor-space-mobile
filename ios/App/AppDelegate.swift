@@ -300,9 +300,9 @@ final class AppServices {
 
     func cancelSync(id: String) {
         guard let device = devices.deviceFor(peripheral: id) else { return }
-        // Each transport finds its run by the sensor, also while it reconnects with no connection.
-        lan.cancelInteractiveSync(device: device)
-        bluetooth.cancelInteractiveSync(device: device)
+        // The shared controller finds the user's run by the sensor in every phase, also while it
+        // reconnects with no connection. Collect all and Auto-sync keep their own cancel.
+        runs.stopUserRun(device: device)
     }
 
     /// The open connection's shared link to this sensor, Wi-Fi first. Debug, Device settings and

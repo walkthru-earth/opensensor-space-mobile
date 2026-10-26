@@ -240,7 +240,7 @@ class SensorCollectionsTest {
         }
     }
 
-    private fun SensorCollections.collect(seen: Seen) = collect(device, null, LinkPreference.ANY, false, seen::progress, seen::finished)
+    private fun SensorCollections.collect(seen: Seen) = collect(device, null, LinkPreference.ANY, RunOrigin.USER, seen::progress, seen::finished)
 
     /** What waits to resume, read without starting it. */
     private fun SensorCollections.waiting(): List<InterruptedRun> {
@@ -266,7 +266,7 @@ class SensorCollectionsTest {
             tries.incrementAndFetch()
             if (!ready || runs.isActive(run.device)) return ResumeOutcome.WAITING
             starts.incrementAndFetch()
-            runs.collect(run.device, run.onlyName, run.prefer, false, seen::progress, seen::finished)
+            runs.collect(run.device, run.onlyName, run.prefer, RunOrigin.USER, seen::progress, seen::finished)
             return ResumeOutcome.STARTED
         }
     }
@@ -294,7 +294,7 @@ class SensorCollectionsTest {
     private suspend fun interruptedRun(runs: SensorCollections, board: Board, held: CompletableDeferred<Unit>): Seen {
         board.connect()
         val first = Seen()
-        runs.collect(device, null, LinkPreference.LAN, false, first::progress, first::finished)
+        runs.collect(device, null, LinkPreference.LAN, RunOrigin.USER, first::progress, first::finished)
         withTimeout(10_000) { held.await() }
         assertTrue(runs.interrupt(device))
         return first
@@ -400,24 +400,37 @@ class SensorCollectionsTest {
         val board = Board()
         val answer = CompletableDeferred<(DialResult) -> Unit>()
         val dials = AtomicInt(0)
+        // Each look for an open link after the cancel, so the test knows where the retry is.
+        val watching = AtomicInt(0)
+        val looks = Channel<Unit>(Channel.UNLIMITED)
+        // Swift's dial call returns only after the cancel, so the cancel always lands after Swift was asked.
+        val cancelSent = CompletableDeferred<Unit>()
         val provider = IosLinkProvider(
-            { board.current },
-            5.seconds,
+            { board.current.also { if (watching.load() == 1) looks.trySend(Unit) } },
+            1.minutes,
             Dispatchers.Default,
-            { _, _, done -> dials.incrementAndFetch().also { answer.complete(done) } },
+            { _, _, done ->
+                dials.incrementAndFetch()
+                answer.complete(done)
+                runBlocking { cancelSent.await() }
+            },
             poll = 10.milliseconds,
         )
         val cancelled = launch(Dispatchers.Default) { provider.connect(device, LinkPreference.ANY) }
-        val done = withTimeout(5_000) { answer.await() }
+        val done = withTimeout(30_000) { answer.await() }
         cancelled.cancel()
-        withTimeout(1_000) { cancelled.join() }
+        cancelSent.complete(Unit)
+        withTimeout(30_000) { cancelled.join() }
         assertTrue(cancelled.isCancelled)
 
+        watching.store(1)
         val retry = async(Dispatchers.Default) { provider.connect(device, LinkPreference.ANY) }
-        repeat(10) { yield() }
+        // The first look finds no link. The second comes only after the retry chose to wait for the
+        // dial in flight instead of dialling again, so the dial is answered while it waits.
+        withTimeout(30_000) { repeat(2) { looks.receive() } }
         board.connect()
         done(DialResult.OPENED)
-        val lent = withTimeout(5_000) { retry.await() }
+        val lent = withTimeout(30_000) { retry.await() }
         assertEquals(1, dials.load(), "the retry waits for the dial Swift is still making")
         assertEquals(station, lent.station)
         lent.release()
@@ -468,9 +481,12 @@ class SensorCollectionsTest {
         val seen = Seen()
         runs.collect(seen)
         val done = withTimeout(10_000) { held.await() }
-        assertTrue(runs.isActive(device))
+        assertTrue(runs.isActive(device.uppercase()), "the run is active in any letter case")
 
-        runs.stop(device)
+        runs.stop("ffffffffffff")
+        assertTrue(runs.isActive(device), "a stop of another sensor leaves this run alone")
+        // Swift names the sensor in the case its record has, which may differ from the run's (#105).
+        runs.stop(device.uppercase())
         val result = withTimeout(5_000) { seen.done.await() }
         assertEquals(SyncEnd.STOPPED, result.end)
         assertFalse(runs.isActive(device))
@@ -484,6 +500,44 @@ class SensorCollectionsTest {
         assertEquals(0, board.lists.load(), "a stopped run never transfers")
         assertFalse(late.leased)
         assertEquals(1, seen.finishes.load())
+    }
+
+    @Test
+    fun theStopButtonEndsOnlyAUserRunAndInAnyLetterCase() = runBlocking {
+        val board = Board()
+        val userHeld = CompletableDeferred<(DialResult) -> Unit>()
+        board.held = userHeld
+        val runs = collections(board)
+
+        // A user run dials with no link open, like a reconnect before INFO.
+        val user = Seen()
+        runs.collect(user)
+        val userDial = withTimeout(10_000) { userHeld.await() }
+        runs.stopUserRun("ffffffffffff")
+        assertTrue(runs.isActive(device), "Stop for another sensor leaves this run alone")
+        runs.stopUserRun(device.uppercase())
+        val stopped = withTimeout(5_000) { user.done.await() }
+        assertEquals(SyncEnd.STOPPED, stopped.end)
+        assertEquals(SyncEndReason.STOPPED, stopped.endReason)
+        assertFalse(runs.isActive(device))
+        userDial(DialResult.REFUSED)
+
+        // A Collect all step of the same sensor, waiting on its own dial. Stop leaves it to its own
+        // cancel, so it goes on once the dial opens and copies every file.
+        val stepHeld = CompletableDeferred<(DialResult) -> Unit>()
+        board.held = stepHeld
+        val step = Seen()
+        runs.collect(device, null, LinkPreference.ANY, RunOrigin.COLLECT_ALL, step::progress, step::finished)
+        val stepDial = withTimeout(10_000) { stepHeld.await() }
+        runs.stopUserRun(device)
+        board.held = null
+        board.connect()
+        stepDial(DialResult.OPENED)
+        val result = withTimeout(10_000) { step.done.await() }
+        assertEquals(SyncEnd.COMPLETE, result.end, "Stop never ends a Collect all step")
+        assertEquals(2, result.saved)
+        assertEquals(1, user.finishes.load())
+        assertEquals(1, step.finishes.load())
     }
 
     @Test
@@ -579,7 +633,7 @@ class SensorCollectionsTest {
         board.connect()
         val runs = collections(board)
         val first = Seen()
-        runs.collect(device, null, LinkPreference.LAN, false, first::progress, first::finished)
+        runs.collect(device, null, LinkPreference.LAN, RunOrigin.USER, first::progress, first::finished)
         withTimeout(10_000) { held.await() }
 
         assertTrue(runs.interrupt(device))
@@ -713,6 +767,24 @@ class SensorCollectionsTest {
     }
 
     @Test
+    fun aCollectAllStepIsInterruptedLikeAUserRun() = runBlocking {
+        val reads = Channel<Unit>(Channel.UNLIMITED)
+        // The second file never answers, so the step waits there when iOS ends the app's time.
+        val board = Board { _, name -> (name == second).also { if (it) reads.trySend(Unit) } }
+        board.connect()
+        val runs = collections(board)
+        val step = Seen()
+        runs.collect(device, null, LinkPreference.ANY, RunOrigin.COLLECT_ALL, step::progress, step::finished)
+        withTimeout(10_000) { reads.receive() }
+
+        assertTrue(runs.interrupt(device), "a Collect all step is interrupted, only Auto-sync is not")
+        val result = withTimeout(10_000) { step.done.await() }
+        assertEquals(SyncEndReason.INTERRUPTED, result.endReason)
+        assertEquals(1, result.saved, "the file saved before the interruption stays")
+        assertEquals(listOf(device), runs.waiting().map { it.device })
+    }
+
+    @Test
     fun anUnattendedRunIsNeverRememberedAndANewRunReplacesAnInterruptedOne() = runBlocking {
         val reads = Channel<Unit>(Channel.UNLIMITED)
         // Every READ of the second file goes unanswered, so each run waits there until it ends.
@@ -721,20 +793,20 @@ class SensorCollectionsTest {
         val runs = collections(board)
 
         val unattended = Seen()
-        val handle = runs.collect(device, null, LinkPreference.ANY, true, unattended::progress, unattended::finished)
+        val handle = runs.collect(device, null, LinkPreference.ANY, RunOrigin.AUTO_SYNC, unattended::progress, unattended::finished)
         withTimeout(10_000) { reads.receive() }
         assertFalse(runs.interrupt(device), "a BGTask run ends through its own expiry")
         handle.cancel()
         assertEquals(SyncEnd.STOPPED, withTimeout(10_000) { unattended.done.await() }.end)
 
         val user = Seen()
-        runs.collect(device, null, LinkPreference.ANY, false, user::progress, user::finished)
+        runs.collect(device, null, LinkPreference.ANY, RunOrigin.USER, user::progress, user::finished)
         withTimeout(10_000) { reads.receive() }
         assertTrue(runs.interrupt(device))
         withTimeout(10_000) { user.done.await() }
 
         val again = Seen()
-        val next = runs.collect(device, null, LinkPreference.ANY, false, again::progress, again::finished)
+        val next = runs.collect(device, null, LinkPreference.ANY, RunOrigin.USER, again::progress, again::finished)
         withTimeout(10_000) { reads.receive() }
         next.cancel()
         withTimeout(10_000) { again.done.await() }
@@ -766,7 +838,7 @@ class SensorCollectionsTest {
         val refusing = IosKeepAlive({ _, _, unattended -> asked += unattended; false }, {}, Dispatchers.Default)
         val runs = collections(board, refusing)
         val seen = Seen()
-        runs.collect(device, null, LinkPreference.ANY, true, seen::progress, seen::finished)
+        runs.collect(device, null, LinkPreference.ANY, RunOrigin.AUTO_SYNC, seen::progress, seen::finished)
         val result = withTimeout(10_000) { seen.done.await() }
         assertEquals(SyncEnd.STOPPED, result.end)
         assertEquals(SyncEndReason.INTERRUPTED, result.endReason)
@@ -792,7 +864,7 @@ class SensorCollectionsTest {
         val keepAlive = IosKeepAlive({ _, _, unattended -> note("protect $unattended"); true }, { note("unprotect") }, serial)
         val runs = collections(board, keepAlive, serial)
         val done = CompletableDeferred<SyncResult>()
-        runs.collect(device, null, LinkPreference.ANY, false, {}) {
+        runs.collect(device, null, LinkPreference.ANY, RunOrigin.USER, {}) {
             assertFalse(board.current!!.leased, "the link is back before the result")
             note("finished")
             done.complete(it)
