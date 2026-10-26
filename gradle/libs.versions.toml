@@ -33,11 +33,11 @@ kotlinxDatetime = "0.8.0"
 androidxDocumentfile = "1.1.0"
 androidxDatastore = "1.2.1"
 androidxWork = "2.12.0"
-zstdJni = "1.5.7-23"
+zstdJni = "1.5.7-24"
 googleCodeScanner = "16.1.0"
 # Discover map (docs/devices-and-discovery.md). maplibre-compose 0.20.0 pins Kotlin 2.4.20, CMP 1.12.1 and maplibre-native-ffi 0.202610.0.
 maplibreCompose = "0.20.0"
-h3 = "4.5.0"
+h3 = "4.5.1"
 # HTTP range reads on Android and the JVM (:core:net, issue #62). Latest stable 5.x on Maven Central.
 okhttp = "5.5.0"
 # Flow assertions in :app host tests (#63). Latest stable on Maven Central (maven-metadata.xml, 2025-06-11).
