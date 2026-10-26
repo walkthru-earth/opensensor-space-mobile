@@ -278,7 +278,7 @@ class HistoryDeriverTest {
         assertEquals(ParquetLogicalType.TimeUnit.MICROS, daily.leaf("event_time_utc_us").timestampUtcUnit)
         // A day file never carries the contract key an indexer reads.
         assertTrue(OpenSensorFooter.KEY !in daily.metadata.keyValueMetadata)
-        assertEquals("telemetry-derived-day", daily.metadata.keyValueMetadata["purpose"])
+        assertTrue(daily.metadata.keyValueMetadata.keys.none(LegacyFooterKeys::isLegacy))
         assertTrue(daily.metadata.keyValueMetadata["complete"] in setOf("true", "false"))
         assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":105"))
         assertEquals("day=2026-09-17.parquet", days.rows.single().dailyFile?.substringAfter('/'))

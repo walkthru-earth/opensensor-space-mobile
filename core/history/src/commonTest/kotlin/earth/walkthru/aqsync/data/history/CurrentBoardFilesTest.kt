@@ -233,7 +233,7 @@ class CurrentBoardFilesTest {
         assertEquals(OpenSensorFooter(10_000, coreS3Template.dict, coreS3Template.key.desc), footerOf(daily))
         // A day value fails footer.json, so an indexer must never find the contract key on it.
         assertTrue(OpenSensorFooter.KEY !in keys, keys.keys.toString())
-        assertTrue("dictionary_sha256" !in keys && "sample_interval_ms" !in keys, keys.keys.toString())
+        assertTrue(keys.keys.none(LegacyFooterKeys::isLegacy), keys.keys.toString())
         // Read back through its day key, the daily file resolves the same template as its sources.
         assertSame(coreS3Template, FileTemplates.BUNDLED.ofDay(keys).template)
     }
@@ -246,7 +246,7 @@ class CurrentBoardFilesTest {
         // The boot comes from the rows, as firmware formats it, never from firmware.boot_id.
         assertEquals("0000000000000000" + "0000000000000007", own.bootId)
         // The old unprefixed keys alone are not read.
-        val old = mapOf("station_id" to "other", "purpose" to "telemetry", "boot_id" to "0f3a", "schema_version" to "cores3-telemetry-v3")
+        val old = LegacyFooterKeys.footer(station = "other", purpose = "telemetry", boot = "0f3a", schema = "cores3-telemetry-v3")
         val legacy = ParquetIndexer.index(ParquetFile.wrap(boardFile(coreS3Template, footer = old)), templates = FileTemplates.BUNDLED)
         assertEquals(null, legacy.purpose)
         dailyOf(boardFile(coreS3Template, footer = old))
@@ -282,7 +282,7 @@ class CurrentBoardFilesTest {
 
     @Test
     fun aFileWithOnlyTheOldFooterKeysHasNoFooter() {
-        val old = mapOf("dictionary_sha256" to coreS3Template.dict, "sample_interval_ms" to "10000")
+        val old = LegacyFooterKeys.footer(dict = coreS3Template.dict, intervalMs = 10_000)
         val got = buckets(boardFile(coreS3Template, footer = old))
         assertTrue(got.isNotEmpty())
         assertTrue(got.all { it.metrics.isEmpty() && it.sampleIntervalMs == 0L }, got.toString())

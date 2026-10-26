@@ -247,7 +247,7 @@ class GeoParquetFileTest {
                 ParquetWriter.Column("geometry", ParquetType.BYTE_ARRAY, geometry = ParquetWriter.GeometryAnnotation()),
             ),
             codec = ParquetCodec.LZ4_RAW,
-            keyValueMetadata = mapOf("purpose" to "round-trip"),
+            keyValueMetadata = mapOf("writer_test" to "round-trip"),
         )
         w.begin()
         // Two row groups: rows 0..6 and 7..13, so the file-level bbox is a union.

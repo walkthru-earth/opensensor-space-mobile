@@ -15,7 +15,7 @@ class ParquetIndexerTest {
     private fun bytes(path: String) = fixtureBytes("parquet/$path")
 
     /** The `boot_id` key the fixture was written with, before the test migration drops it. */
-    private fun oldBootKey(path: String) = ParquetFile.wrap(rawFixtureBytes("parquet/$path")).metadata.keyValueMetadata.getValue("boot_id")
+    private fun oldBootKey(path: String) = ParquetFile.wrap(rawFixtureBytes("parquet/$path")).metadata.keyValueMetadata.getValue(LegacyFooterKeys.BOOT_ID)
 
     private fun expected(label: String) = Json.parseToJsonElement(
         fixtureBytes("parquet/expected.json").decodeToString()

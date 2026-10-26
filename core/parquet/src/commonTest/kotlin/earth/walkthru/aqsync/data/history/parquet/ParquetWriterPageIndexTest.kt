@@ -48,9 +48,9 @@ class ParquetWriterPageIndexTest {
     private fun write(codec: ParquetCodec, pageIndex: Boolean?): ByteArray {
         val out = MemorySink()
         val w = if (pageIndex == null) {
-            ParquetWriter(out, columns(), codec, mapOf("purpose" to "page-index-test"), "AQ Sync page-index-test", sortedBy = 0)
+            ParquetWriter(out, columns(), codec, mapOf("writer_test" to "page-index-test"), "AQ Sync page-index-test", sortedBy = 0)
         } else {
-            ParquetWriter(out, columns(), codec, mapOf("purpose" to "page-index-test"), "AQ Sync page-index-test", sortedBy = 0, pageIndex = pageIndex)
+            ParquetWriter(out, columns(), codec, mapOf("writer_test" to "page-index-test"), "AQ Sync page-index-test", sortedBy = 0, pageIndex = pageIndex)
         }
         w.begin()
         groups().forEach { w.rowGroup(it) }

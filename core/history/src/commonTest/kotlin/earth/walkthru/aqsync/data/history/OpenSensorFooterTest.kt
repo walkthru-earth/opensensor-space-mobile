@@ -22,7 +22,7 @@ class OpenSensorFooterTest {
     fun theSpecExampleParses() {
         // stac-opensensor a56dfb0 footers/cores3-telemetry-v5.json, compacted.
         val example = """{"version":"0.1.0","station":{"id":"station-3f2b9c1e","device_id":"441bf6e26b40","board":"m5stack-cores3","deployment_id":"unknown"},""" +
-            """"firmware":{"version":"6.14.0","schema":"cores3-telemetry-v5","boot_id":"0f3a"},""" +
+            """"firmware":{"version":"test-firmware","schema":"cores3-telemetry-v5","boot_id":"0f3a"},""" +
             """"dictionary":{"sha256":"e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b","version":"cores3-telemetry-v6"},""" +
             """"template":{"href":"https://raw.githubusercontent.com/walkthru-earth/stac-opensensor/main/templates/cores3-telemetry-v5.json","sha256":"fb4230b3eb6e8eac881c719f900c8bd9c7e4bbd6ad247520a27368ec9d9a7218"},""" +
             """"acquisition":{"sample_interval_ms":10000,"time_semantics":"sample instant, UTC","config_id":"default","calibration_id":"unknown"},""" +
@@ -86,14 +86,14 @@ class OpenSensorFooterTest {
     @Test
     fun aFileWithoutTheKeyOrWithOnlyTheOldKeysHasNoFooter() {
         assertNull(OpenSensorFooter.of(emptyMap()))
-        val old = mapOf(
-            "dictionary_sha256" to dict,
-            "sample_interval_ms" to "10000",
-            "template_sha256" to desc,
-            "station_id" to "station-a",
-            "boot_id" to "0f3a",
-            "schema_version" to "cores3-telemetry-v3",
-            "purpose" to "telemetry",
+        val old = LegacyFooterKeys.footer(
+            dict = dict,
+            desc = desc,
+            intervalMs = 10_000,
+            station = "station-a",
+            boot = "0f3a",
+            schema = "cores3-telemetry-v3",
+            purpose = "telemetry",
         )
         assertNull(OpenSensorFooter.of(old))
         val file = FileTemplates.BUNDLED.of(old)

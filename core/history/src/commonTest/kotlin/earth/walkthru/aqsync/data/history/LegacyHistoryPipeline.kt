@@ -199,14 +199,12 @@ internal object LegacyDailyParquetBuilder {
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
             footer?.let { put(OpenSensorFooter.DAY_KEY, it.encode()) }
-            put("station_id", station)
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
             put("derived_version", "3")
             put("source_count", opened.size.toString())
             put("coverage_rows", refs.size.toString())
             put("complete", complete.toString())
-            put("purpose", "telemetry-derived-day")
             if (anyEstimated) {
                 put("estimated_rows", refs.count { r -> opened[r.src].estimated != null }.toString())
                 put("time_estimate", "rows with null event_time_utc_us carry $ESTIMATED_UTC = anchor_utc_ns / 1000 + (monotonic_us - anchor_mono_us) from a same-boot UTC anchor; source/transport error unmeasured; drift not corrected (assume ±${TimeEstimate.DRIFT_PPM.toInt()} ppm)")

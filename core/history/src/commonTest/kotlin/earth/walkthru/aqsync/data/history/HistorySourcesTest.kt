@@ -111,11 +111,7 @@ class HistorySourcesTest {
         val parts = ArrayList<ByteArray>()
         val sink = object : ParquetSink { override fun write(bytes: ByteArray) { parts += bytes.copyOf() } }
         // Old firmware wrote a clock anchor into the footer. Decision 25 drops those keys, so repair must not read them.
-        val metadata = raw.metadata.keyValueMetadata + mapOf(
-            "reconciliation_anchor_mono_us" to source.lastMonoUs.toString(),
-            "reconciliation_anchor_utc_ns" to utc.toString(),
-            "reconciliation_anchor_source" to "3",
-        )
+        val metadata = raw.metadata.keyValueMetadata + LegacyFooterKeys.anchor(monoUs = source.lastMonoUs!!, utcNs = utc, source = 3)
         val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }, keyValueMetadata = metadata)
         writer.begin()
         writer.rowGroup(raw.leaves.map { raw.readColumn(it) })

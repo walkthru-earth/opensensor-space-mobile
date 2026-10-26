@@ -88,7 +88,7 @@ class ParquetFileTest {
                 // And the reverse: we never invent min/max PyArrow did not see.
                 rg.columns.forEach { c -> if (c.statistics?.hasMinMax == true) assertTrue("$label rg$g '${c.name}' unexpected min/max", stats.containsKey(c.name)) }
             }
-            // Key/value metadata (station, boot, schema version, …) — byte-exact.
+            // Key/value metadata, byte-exact.
             val kv = f["metadata"]!!.jsonObject
             assertEquals("$label metadata keys", kv.keys, md.keyValueMetadata.keys)
             kv.forEach { (k, v) -> assertEquals("$label metadata[$k]", v.jsonPrimitive.content, md.keyValueMetadata[k]) }
@@ -179,9 +179,6 @@ class ParquetFileTest {
     fun `real device file with unsynced rows has null UTC and a monotonic clock`() {
         val f = fixtures().first { it["label"]!!.jsonPrimitive.content == "v2-none-90rows-unsynced" }
         val pf = openFixture(f)
-        // The parquet decoder reads the raw key-value list of this pre-JSON fixture as written.
-        assertEquals("cores3-telemetry-v2", pf.metadata.keyValueMetadata["schema_version"])
-        assertEquals("53315f5f-cb85-4d8d-b623-d56266084189", pf.metadata.keyValueMetadata["station_id"])
         val utc = pf.readColumn("event_time_utc_ns")
         assertEquals(90, utc.nullCount)
         val mono = pf.readColumn("monotonic_us") as ColumnValues.Int64

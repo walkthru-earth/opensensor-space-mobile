@@ -107,8 +107,7 @@ specs and never name a column. A spec whose column a file lacks yields **no valu
 ignores every other member. A missing key, JSON that is not an object, an unknown major version, a
 digest that is not 64 lowercase hex, an interval that is not an integer or a station or purpose that
 is not a non-empty string means the file has no footer. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
-keys (`station_id`, `boot_id`, `schema_version`, `purpose`, `dictionary_sha256`,
-`sample_interval_ms`, `reconciliation_anchor_*`) has no footer, so it keeps its rows and has no
+unprefixed keys has no footer, so it keeps its rows and has no
 metrics. Such files are wiped after the matched reflash (decision 14). The repair checks a file's
 `station.id` against its archive station, and the daily builder checks each source the same way.
 The boot is not read from `firmware.boot_id`. Every row carries `boot_id_hi` and `boot_id_lo`, and
@@ -132,7 +131,8 @@ source names the same one (`DailyParquetBuilder.dayFooter`). History reads a day
 `FileTemplates.ofDay`, so it gives the same template and expected rows as its sources. A day of mixed
 dictionaries carries no digest, and History reads its rows from the raw files. A day whose sources
 have no footer writes no day key and also reads from the raw files. The daily file's own bookkeeping
-keys (`station_id`, `day`, `derived_by`, `source_count` and the rest) are app-local too. Nothing
+keys (`day`, `derived_by`, `source_count` and the rest) are app-local too. A day file writes no
+station or purpose key, since the station is in its path. Nothing
 reads them back.
 `FileTemplates.bind` gives a file only the specs its template stores in the same unit and rollup,
 with that template's gate and settle time. A file whose dict no bundled template knows keeps its rows
@@ -198,11 +198,11 @@ source stored, so a day that mixes older NANOS files and current MICROS files st
 `event_time_utc_us` column in microseconds (`UtcColumns`). Device columns keep their `field_id`. An
 older source without ids takes the id of the same name from a newer source. An id two sources
 disagree on, or one that two names share, is dropped. `source_file_index` and
-the estimate column have no id. **No `station_id`
+the estimate column have no id. **No station
 string column** (deviation from the evaluation) — stays flat numeric so our reader reads it back;
-station is in the path and metadata. Metadata: the `opensensor_app_day` key above, `station_id`, `derived_by`
+station is in the path. Metadata: the `opensensor_app_day` key above, `derived_by`
 (`opensensor.space shared derived-v3`), `derived_version`, `source_count`, `coverage_rows`, `complete`
-(every known file in and the day ended > 30 min ago), `day`, `purpose = telemetry-derived-day`,
+(every known file in and the day ended > 30 min ago), `day`, and the
 `time_estimate` note. Measured 188 B/row vs 512 B/row for device files (5–9× smaller). Validated by
 PyArrow 25 + DuckDB 1.5.5 (`TIMESTAMPTZ`, range pruning, `time_bucket`).
 

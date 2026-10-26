@@ -218,14 +218,12 @@ object PreStreamingDailyParquetBuilder {
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
             footer?.let { put(OpenSensorFooter.DAY_KEY, it.encode()) }
-            put("station_id", station)
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
             put("derived_version", "3")
             put("source_count", opened.size.toString())
             put("coverage_rows", kept.toString())
             put("complete", complete.toString())
-            put("purpose", "telemetry-derived-day")
             if (anyEstimated) {
                 put("estimated_rows", opened.filter { it.estimated != null }.sumOf { it.keepCount }.toString())
                 put("time_estimate", "rows with null ${UtcColumns.EVENT_US} carry $ESTIMATED_UTC = anchor_utc_ns / 1000 + (monotonic_us - anchor_mono_us) from a same-boot UTC anchor; source/transport error unmeasured; drift not corrected (assume ±${TimeEstimate.DRIFT_PPM.toInt()} ppm)")

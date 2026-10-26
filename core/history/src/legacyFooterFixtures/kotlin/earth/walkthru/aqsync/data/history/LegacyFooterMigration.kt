@@ -19,18 +19,20 @@ fun migrateLegacyFooter(bytes: ByteArray): ByteArray {
     val list = Compact(footer, 0).keyValueSpan() ?: return bytes
     val keyValues = list.entries
     val old = keyValues.toMap()
-    if (OpenSensorFooter.KEY in old || (LEGACY.none { it in old } && old.keys.none { it.startsWith(ANCHOR) })) return bytes
+    if (OpenSensorFooter.KEY in old || old.keys.none(::removed)) return bytes
     val moved = OpenSensorFooter(
-        stationId = old["station_id"]?.takeIf { it.isNotEmpty() },
-        purpose = old["purpose"]?.takeIf { it.isNotEmpty() },
+        stationId = old[LegacyFooterKeys.STATION_ID]?.takeIf { it.isNotEmpty() },
+        purpose = old[LegacyFooterKeys.PURPOSE]?.takeIf { it.isNotEmpty() },
     )
-    val kept = keyValues.filter { (k, _) -> k !in LEGACY && !k.startsWith(ANCHOR) } + (OpenSensorFooter.KEY to moved.encode())
+    val kept = keyValues.filter { (k, _) -> !removed(k) } + (OpenSensorFooter.KEY to moved.encode())
     val newFooter = footer.copyOfRange(0, list.start) + encodeKeyValues(kept) + footer.copyOfRange(list.end, footer.size)
     return bytes.copyOfRange(0, footerStart) + newFooter + newFooter.size.leBytes() + MAGIC
 }
 
-private val LEGACY = setOf("station_id", "boot_id", "schema_version", "purpose")
-private const val ANCHOR = "reconciliation_anchor_"
+/** The old keys the migration removes. The digest and interval keys stay, unread, as the fixture wrote them. */
+private fun removed(key: String) = LegacyFooterKeys.isLegacy(key) &&
+    key != LegacyFooterKeys.DICTIONARY_SHA256 && key != LegacyFooterKeys.TEMPLATE_SHA256 && key != LegacyFooterKeys.SAMPLE_INTERVAL_MS
+
 private val MAGIC = "PAR1".encodeToByteArray()
 
 private fun ByteArray.endsWithMagic() = (0 until 4).all { this[size - 4 + it] == MAGIC[it] }
