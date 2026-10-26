@@ -64,6 +64,7 @@ object TerminalRules {
             Opcode.GET_TOKEN -> terminalIf(frame is Frame.Token)
             Opcode.GET_DIAG -> terminalIf(frame is Frame.Diag)
             Opcode.ABORT -> terminalIf(frame is Frame.Aborted)
+            Opcode.GET_DESCRIPTOR -> terminalIf(frame is Frame.DescriptorChunk)
             else -> Routing.FOREIGN
         }
     }

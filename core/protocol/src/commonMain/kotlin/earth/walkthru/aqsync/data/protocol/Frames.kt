@@ -3,7 +3,8 @@ package earth.walkthru.aqsync.data.protocol
 /**
  * Binary `control` requests and `response` frames from docs/ble-sync-protocol.md (protocol v3).
  * Protocol 3 widens `LIST_END.count` to u32 and adds `GET_DIAG`, `ABORT`, `BYE`, `DIAG` and
- * `ABORTED`. A proto 2 `LIST_END` is rejected.
+ * `ABORTED`. A proto 2 `LIST_END` is rejected. `GET_DESCRIPTOR` and `DESCRIPTOR_CHUNK` serve the
+ * board template.
  *
  * Every multi-byte integer is little-endian. Text is UTF-8 with no terminator; its length is
  * implied by the frame length. The first byte of a request is the opcode; the first byte of a
@@ -30,6 +31,9 @@ object Opcode {
     const val GET_DIAG: Int = 0x0E
     const val ABORT: Int = 0x0F
 
+    /** One slice of the board template. */
+    const val GET_DESCRIPTOR: Int = 0x11
+
     fun name(op: Int): String = when (op) {
         LIST -> "LIST"
         OPEN -> "OPEN"
@@ -46,6 +50,7 @@ object Opcode {
         GET_TOKEN -> "GET_TOKEN"
         GET_DIAG -> "GET_DIAG"
         ABORT -> "ABORT"
+        GET_DESCRIPTOR -> "GET_DESCRIPTOR"
         else -> "0x${op.toString(16).padStart(2, '0')}"
     }
 }
@@ -87,6 +92,9 @@ object FrameType {
     const val BYE: Int = 0x4B
     const val DIAG: Int = 0x4C
     const val ABORTED: Int = 0x4D
+
+    /** Only ever a reply to `GET_DESCRIPTOR`. */
+    const val DESCRIPTOR_CHUNK: Int = 0x4F
     const val ERROR: Int = 0x7F
 
     fun name(type: Int): String = when (type) {
@@ -112,6 +120,7 @@ object FrameType {
         BYE -> "BYE"
         DIAG -> "DIAG"
         ABORTED -> "ABORTED"
+        DESCRIPTOR_CHUNK -> "DESCRIPTOR_CHUNK"
         ERROR -> "ERROR"
         else -> "0x${type.toString(16).padStart(2, '0')}"
     }
@@ -134,7 +143,8 @@ enum class ProtocolError(val code: Int, val label: String) {
     NOT_ALLOWED_ON_LINK(13, "not allowed on this link"),
     AUTH_FAILED(14, "authentication failed"),
     WIFI_UNAVAILABLE(15, "Wi-Fi unavailable"),
-    ABORTED(16, "aborted");
+    ABORTED(16, "aborted"),
+    NO_DESCRIPTOR(17, "no descriptor");
 
     companion object {
         fun fromCode(code: Int): ProtocolError? = entries.firstOrNull { it.code == code }
@@ -262,6 +272,18 @@ sealed interface Request {
         override val opcode: Int = Opcode.ABORT
         override fun encode(): ByteArray = byteArrayOf(opcode.toByte())
     }
+
+    /** `offset` u32, `length` u16 of at least 1. Answered by one `DESCRIPTOR_CHUNK`. */
+    data class GetDescriptor(val offset: Long, val length: Int) : Request {
+        init {
+            require(offset in 0..0xFFFF_FFFFL) { "offset must fit u32" }
+            require(length in 1..0xFFFF) { "length must be 1 to 65535" }
+        }
+
+        override val opcode: Int = Opcode.GET_DESCRIPTOR
+        override fun encode(): ByteArray = WireBuffer.allocate(7)
+            .put(opcode.toByte()).putInt(offset.toInt()).putShort(length.toShort()).array()
+    }
 }
 
 /** `WIFI_AP.auth` values. */
@@ -388,6 +410,11 @@ sealed interface Frame {
     /** `op` u8, the opcode `ABORT` stopped, 0 when nothing was running. */
     data class Aborted(val op: Int) : Frame
 
+    /** `total` u32 template bytes, `offset` u32 echoing the request, then a slice of the template. */
+    class DescriptorChunk(val total: Long, val offset: Long, val bytes: ByteArray) : Frame {
+        override fun toString(): String = "DescriptorChunk(total=$total, offset=$offset, len=${bytes.size})"
+    }
+
     /** `op` u8, `code` u8, `detail` utf8. */
     data class Error(val op: Int, val code: Int, val detail: String) : Frame {
         val error: ProtocolError? get() = ProtocolError.fromCode(code)
@@ -495,6 +522,11 @@ object FrameCodec {
                     if (raw.size != 2) throw FrameDecodeException("invalid ABORTED length ${raw.size}")
                     Frame.Aborted(op = buf.u8())
                 }
+                FrameType.DESCRIPTOR_CHUNK -> Frame.DescriptorChunk(
+                    total = buf.u32(),
+                    offset = buf.u32(),
+                    bytes = ByteArray(buf.remaining()).also { buf.get(it) },
+                )
                 FrameType.ERROR -> Frame.Error(op = buf.u8(), code = buf.u8(), detail = buf.restUtf8())
                 else -> throw FrameDecodeException("unknown frame type 0x${type.toString(16).padStart(2, '0')}")
             }
@@ -579,6 +611,8 @@ object FrameCodec {
                 frame.events.forEach { out.put(it.encode()) }
                 out.array()
             }
+            is Frame.DescriptorChunk -> le(9 + frame.bytes.size).put(FrameType.DESCRIPTOR_CHUNK.toByte())
+                .putInt(frame.total.toInt()).putInt(frame.offset.toInt()).put(frame.bytes).array()
             is Frame.Aborted -> le(2).put(FrameType.ABORTED.toByte()).put(frame.op.toByte()).array()
         }
     }

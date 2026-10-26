@@ -62,6 +62,7 @@ object FrameRedaction {
         is Frame.Bye -> "BYE ${frame.disconnectReason.wireName} gen=${frame.generation} err=${frame.err} queued=${frame.queued} up=${frame.uptimeSeconds}s"
         is Frame.Diag -> "DIAG boot=${frame.bootSeq} events=${frame.events.size} counts=${frame.counts.joinToString(",")}"
         is Frame.Aborted -> "ABORTED op=${Opcode.name(frame.op)}"
+        is Frame.DescriptorChunk -> "DESCRIPTOR_CHUNK offset=${frame.offset} total=${frame.total} len=${frame.bytes.size}"
         else -> frame.toString()
     }
 

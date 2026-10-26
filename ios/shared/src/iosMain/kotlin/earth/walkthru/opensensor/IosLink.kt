@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.FrameRecorder
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.history.DescriptorOutcome
 import earth.walkthru.aqsync.data.protocol.AqGatt
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.link.AuthKind
@@ -129,6 +130,26 @@ class IosLink internal constructor(
     /** Bind the full boot identity once before sharing the link. A second binding fails. */
     fun identify(station: String, boot: String?, maxRead: Int) {
         check(identity.compareAndSet(null, Identity(station, boot, maxRead))) { "link identity is already bound" }
+    }
+
+    /**
+     * Fetches the board template the sensor serves (#191) when no bundled or cached one matches its
+     * [desc]. It runs on a command lease, so only once the link is open, which on Bluetooth includes
+     * the bond. A sensor without a desc serves none and nothing is sent. Logs only the outcome.
+     */
+    fun fetchBoardTemplate(dict: String?, desc: String?) {
+        if (dict == null || desc == null) return
+        val info = DeviceInfo(proto = AqGatt.PROTOCOL_VERSION, dict = dict, desc = desc, station = station)
+        scope.launch {
+            try {
+                val outcome = leased(LeaseKind.COMMAND) { IosArchive.boardDescriptors.ensure(info, it) }
+                if (outcome !is DescriptorOutcome.Known) println("board template ${outcome::class.simpleName}")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("GET_DESCRIPTOR failed: ${e::class.simpleName}")
+            }
+        }
     }
 
     /** Whether the automatic clock check already ran on this connection. Read and set under a lease. */

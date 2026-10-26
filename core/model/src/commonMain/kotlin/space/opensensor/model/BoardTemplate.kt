@@ -5,16 +5,25 @@ package space.opensensor.model
  * present. [desc] is the SHA-256 of the exact template bytes, null when the caller has none. A unit or
  * range fix changes [desc] but not [dict]. See [TemplateIndex].
  */
-data class TemplateKey(val dict: String, val desc: String? = null)
+data class TemplateKey(val dict: String, val desc: String? = null) {
+    /** True when [desc] is [prefix] or starts with it. A device names its template by the first [DESC_PREFIX_HEX] hex. */
+    fun matchesDesc(prefix: String): Boolean =
+        prefix.length >= DESC_PREFIX_HEX && desc?.startsWith(prefix.lowercase()) == true
+
+    companion object {
+        /** Hex characters of the desc that `info` and `HELLO` carry. */
+        const val DESC_PREFIX_HEX = 16
+    }
+}
 
 /**
  * Finds the template a device or file names. A [TemplateKey.desc] match among [bundled] and [served]
- * wins, then the bundled template for the same [TemplateKey.dict], whether or not it carries a desc. A
- * served template with another desc is never used as a stand-in, since its units or ranges may differ.
+ * wins, then the bundled template for the same [TemplateKey.dict], whether or not it carries a desc. The
+ * desc asked for may be the full 64 hex or the 16 hex prefix a device reports. A served template with
+ * another desc is never used as a stand-in, since its units or ranges may differ.
  */
 class TemplateIndex(bundled: Iterable<BoardTemplate>, served: Iterable<BoardTemplate> = emptyList()) {
-    private val byDesc: Map<String, BoardTemplate> =
-        (bundled + served).mapNotNull { t -> t.key.desc?.let { it to t } }.toMap()
+    private val withDesc: List<BoardTemplate> = (served + bundled).filter { it.key.desc != null }
     private val bundledByDict: Map<String, BoardTemplate> = bundled.associateBy { it.dict }
 
     init {
@@ -23,7 +32,10 @@ class TemplateIndex(bundled: Iterable<BoardTemplate>, served: Iterable<BoardTemp
 
     /** The template for [dict] and [desc], or null when none is known. */
     fun resolve(dict: String, desc: String? = null): BoardTemplate? =
-        desc?.let { byDesc[it] }?.takeIf { it.dict == dict } ?: bundledByDict[dict]
+        desc?.let(::byDesc)?.takeIf { it.dict == dict } ?: bundledByDict[dict]
+
+    /** The template whose desc is [desc] or starts with it, null when none is known. */
+    fun byDesc(desc: String): BoardTemplate? = withDesc.firstOrNull { it.key.matchesDesc(desc) }
 }
 
 /**

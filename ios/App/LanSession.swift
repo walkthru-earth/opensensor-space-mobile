@@ -46,6 +46,8 @@ extension IosLink: @retroactive @unchecked Sendable {
     static func make(port: any IosLinkPort, overWifi: Bool, identity: SyncIdentity) -> IosLink {
         let link = IosLink(port: port, overWifi: overWifi, address: identity.device)
         link.identify(station: identity.station, boot: identity.boot, maxRead: identity.maxRead)
+        // Waits for the link to open, then asks for the board template only when no known one matches.
+        link.fetchBoardTemplate(dict: identity.dict, desc: identity.desc)
         return link
     }
 }

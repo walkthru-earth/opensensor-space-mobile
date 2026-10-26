@@ -15,6 +15,7 @@ import earth.walkthru.aqsync.data.sync.ClockSyncAction
 import earth.walkthru.aqsync.data.sync.SmartSyncPolicy
 import earth.walkthru.aqsync.link.LinkLog
 import earth.walkthru.aqsync.link.LinkSession
+import earth.walkthru.aqsync.link.LinkState
 import earth.walkthru.aqsync.link.LinkTimeoutException
 import earth.walkthru.aqsync.link.RequestSpec
 import earth.walkthru.aqsync.link.TransportLinkDriver
@@ -45,6 +46,7 @@ open class DeviceErrorException(val frame: Frame.Error) : Exception(frame.descri
             ProtocolError.AUTH_FAILED.code -> AuthFailedException(frame)
             ProtocolError.WIFI_UNAVAILABLE.code -> WifiUnavailableException(frame)
             ProtocolError.BUSY.code -> DeviceBusyException(frame)
+            ProtocolError.NO_DESCRIPTOR.code -> NoDescriptorException(frame)
             else -> DeviceErrorException(frame)
         }
     }
@@ -56,6 +58,9 @@ open class DeviceErrorException(val frame: Frame.Error) : Exception(frame.descri
  * offers the Bluetooth reconnect instead (#155).
  */
 class SecretNeedsBluetoothException(val kind: TransportKind) : IllegalStateException("a secret config patch is sent over Bluetooth only, this link is ${kind.name}")
+
+/** `ERROR` 17: the firmware carries no board template to serve. */
+class NoDescriptorException(frame: Frame.Error) : DeviceErrorException(frame)
 
 /** `ERROR` 12: one key was rejected and nothing changed; [key] names it. */
 class InvalidConfigException(frame: Frame.Error) : DeviceErrorException(frame) {
@@ -391,6 +396,20 @@ class DeviceSession(val link: LinkSession, val transport: AqTransport, val frame
      * ([NotAllowedOnLinkException]). The token is a bearer secret — store it, never log it.
      */
     suspend fun getToken(): Frame.Token = single(Request.GetToken, "GET_TOKEN")
+
+    /** One `GET_DESCRIPTOR` slice of the board template (#191). */
+    suspend fun descriptorChunk(offset: Long, length: Int): Frame.DescriptorChunk =
+        single(Request.GetDescriptor(offset, length), "GET_DESCRIPTOR")
+
+    /**
+     * The whole board template the firmware serves, reassembled by [DescriptorDownload]. Throws
+     * without sending anything unless the link is open, which on BLE includes the bond. Throws
+     * [NoDescriptorException] when the firmware has none. The caller verifies the bytes.
+     */
+    suspend fun downloadDescriptor(): ByteArray {
+        val ready = link.state.value as? LinkState.Ready ?: throw IllegalStateException("GET_DESCRIPTOR needs an open link")
+        return DescriptorDownload.fetch(DescriptorDownload.chunkLength(ready.info.payloadMax), ::descriptorChunk)
+    }
 
     /**
      * Advanced → Debug "raw command": write arbitrary bytes and return the reply frames the link

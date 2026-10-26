@@ -182,7 +182,10 @@ nobody can answer. MTU < 247 is refused.
 
 The wire INFO has no cryptographic fingerprint. `dev` is the full 12-hex Wi-Fi hardware MAC,
 `station` is a random UUID persisted in NVS, `boot` is a fresh random identifier per boot,
-`fw` is a text label and `dict` hashes the telemetry dictionary, not the firmware binary.
+`fw` is a text label and `dict` hashes the telemetry dictionary, not the firmware binary. `desc`
+is the first 16 hex of the SHA-256 of the board template the firmware serves over
+`GET_DESCRIPTOR`. Both links fetch it after open, BLE only once bonded, see
+`docs/protocol-quickref.md`.
 Advertising names, the 16-bit advertising boot suffix and mDNS TXT are public hints, not
 authorization to replace trust. LAN HELLO identity checks detect inconsistencies, but the current
 plaintext bearer-token handshake authenticates the phone rather than the server.

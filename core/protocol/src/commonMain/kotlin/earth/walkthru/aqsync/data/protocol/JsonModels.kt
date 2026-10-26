@@ -31,6 +31,11 @@ data class DeviceInfo(
     val cols: Int? = null,
     /** SHA-256 of telemetry_fields.inc, 64 hex. */
     val dict: String? = null,
+    /**
+     * First 16 hex of the SHA-256 of the board template that `GET_DESCRIPTOR` serves. Absent means
+     * the firmware cannot serve one.
+     */
+    val desc: String? = null,
     /** Station UUID, same as in every Parquet row and Hive path. */
     val station: String? = null,
     /** 12 hex device_id. */

@@ -39,7 +39,7 @@ class SyncWire {
         // Android ReadWindow.kt:21 uses 4096 when max_read is absent. Never above the advertised value.
         val maxRead = info.maxRead ?: DEFAULT_MAX_READ
         require(maxRead > 0)
-        SyncIdentity(station, device.lowercase(), maxRead.coerceIn(1, MAX_READ_CAP), info.boot)
+        SyncIdentity(station, device.lowercase(), maxRead.coerceIn(1, MAX_READ_CAP), info.boot, info.dict, info.desc)
     }.getOrNull()
 
     companion object {
@@ -150,5 +150,15 @@ enum class HandshakeRefusal {
     INVALID,
 }
 
-/** Validated fields used by native storage and connection continuity. */
-class SyncIdentity(val station: String, val device: String, val maxRead: Int, val boot: String? = null)
+/**
+ * Validated fields used by native storage and connection continuity. [dict] and [desc] name the
+ * board's column dictionary and the template it serves (#191), both unvalidated here.
+ */
+class SyncIdentity(
+    val station: String,
+    val device: String,
+    val maxRead: Int,
+    val boot: String? = null,
+    val dict: String? = null,
+    val desc: String? = null,
+)

@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Request
+import earth.walkthru.aqsync.data.protocol.toHex
 import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkEvent
@@ -539,6 +540,43 @@ class DeviceSessionTest {
         val e = assertFailsWith<LinkClosedException> { session.link.open() }
 
         assertIs<DisconnectCause.FramingViolation>(e.disconnectCause)
+    }
+
+    // ------------------------------------------------------------------ GET_DESCRIPTOR
+
+    /** Answers `GET_DESCRIPTOR` from [template] the way the firmware clamps it. */
+    private fun ScriptedLinkDriver.serveDescriptor(template: ByteArray, payloadMax: Int, body: ByteArray) {
+        val offset = (body[1].toLong() and 0xFF) or ((body[2].toLong() and 0xFF) shl 8) or
+            ((body[3].toLong() and 0xFF) shl 16) or ((body[4].toLong() and 0xFF) shl 24)
+        val length = (body[5].toInt() and 0xFF) or ((body[6].toInt() and 0xFF) shl 8)
+        val n = minOf(length.toLong(), template.size - offset, (payloadMax - 9).toLong()).toInt()
+        emit(Frame.DescriptorChunk(template.size.toLong(), offset, template.copyOfRange(offset.toInt(), offset.toInt() + n)))
+    }
+
+    @Test
+    fun descriptorDownloadsInChunksSizedByPayloadMax() = runTest {
+        val template = ByteArray(600) { it.toByte() }
+        val p = peer()
+        p.reply = { op, body -> if (op == Opcode.GET_DESCRIPTOR) serveDescriptor(template, 244, body) }
+        assertContentEquals(template, p.view().downloadDescriptor())
+        // The scripted link reports payload_max 244, so each request asks for 235 bytes.
+        assertEquals(listOf("11000000" + "00eb00", "11eb000000eb00", "11d6010000eb00"), p.bodies.map { it.toHex() })
+    }
+
+    @Test
+    fun descriptorErrorSeventeenIsNoDescriptor() = runTest {
+        val p = peer()
+        p.reply = { op, _ -> if (op == Opcode.GET_DESCRIPTOR) emit(Frame.Error(Opcode.GET_DESCRIPTOR, ProtocolError.NO_DESCRIPTOR.code, "")) }
+        assertFailsWith<NoDescriptorException> { p.view().downloadDescriptor() }
+    }
+
+    @Test
+    fun descriptorIsNeverRequestedBeforeTheLinkIsOpen() = runTest {
+        val p = Peer(backgroundScope, testScheduler.timeSource)
+        val e = assertFailsWith<IllegalStateException> { p.view().downloadDescriptor() }
+        assertEquals("GET_DESCRIPTOR needs an open link", e.message)
+        assertTrue(p.bodies.isEmpty())
+        assertTrue(p.driver.sent.isEmpty())
     }
 
     /** The parts of [AqTransport] a [DeviceSession] still reads: pushes, the status read, and writes for [DeviceSession.over]. */

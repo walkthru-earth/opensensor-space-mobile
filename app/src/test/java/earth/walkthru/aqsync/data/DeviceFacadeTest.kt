@@ -28,9 +28,11 @@ import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.fake.FakeTransport
+import earth.walkthru.aqsync.data.history.BoardDescriptors
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.history.HistoryRefresher
+import earth.walkthru.aqsync.data.history.ServedTemplates
 import earth.walkthru.aqsync.data.lan.LanConnectException
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.lan.LanFailure
@@ -60,6 +62,7 @@ import earth.walkthru.aqsync.link.LinkInfo
 import earth.walkthru.aqsync.link.LinkState
 import earth.walkthru.aqsync.link.UnavailableKind
 import earth.walkthru.aqsync.link.retryable
+import earth.walkthru.aqsync.net.MemoryBlockStore
 import earth.walkthru.aqsync.storage.FakeStorageBudget
 import earth.walkthru.aqsync.storage.StorageException
 import kotlinx.coroutines.CompletableDeferred
@@ -1420,6 +1423,7 @@ class DeviceFacadeTest {
                 io = dispatcher,
                 clock = { clockEpochOffset + test.testScheduler.currentTime },
                 pruned = PrunedFiles.None,
+                boardDescriptors = BoardDescriptors(MemoryBlockStore(), ServedTemplates(), io = dispatcher),
             )
             val delegateStore = FileArchiveStore(fileArchive, dispatcher)
             val store = object : ArchiveStore by delegateStore {
