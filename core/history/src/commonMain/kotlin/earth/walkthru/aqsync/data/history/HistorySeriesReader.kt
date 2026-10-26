@@ -52,7 +52,7 @@ fun interface DerivedDayFiles {
  *
  * Each file is read by the board template of its footer ([templates]), so a metric takes that
  * template's gate, a file that stores it in another unit gives no values, and the cadence is the
- * footer `sample_interval_ms`. Summaries roll up with the metric's aggregate.
+ * footer `acquisition.sample_interval_ms`. Summaries roll up with the metric's aggregate.
  */
 class HistorySeriesReader(
     private val store: ArchiveStore,
@@ -328,8 +328,8 @@ class HistorySeriesReader(
             val staged = ParquetReader.open(source, footerCache = footers).use { reader ->
                 val keyValues = reader.metadata.keyValueMetadata
                 // A day file mixing dictionaries carries no digest, and its rows go back to the raw files.
-                if (keyValues[FileTemplates.DICTIONARY_KEY] == null) return@use null
                 val file = templates.of(keyValues)
+                if (file.footer?.dictionarySha256 == null) return@use null
                 val spec = file.template?.let(metric::inTemplate)
                 val names = reader.leaves.mapTo(HashSet()) { it.name }
                 val utcLeaf = reader.leaves.firstOrNull { it.name == UtcColumns.EVENT_US } ?: reader.leaves.firstOrNull { it.name == UtcColumns.EVENT_NS } ?: return@use null

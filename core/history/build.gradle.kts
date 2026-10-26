@@ -26,13 +26,12 @@ kotlin {
             api(libs.kotlinx.datetime)
             // Query switching in ArchiveQueries is a Flow operator.
             api(libs.kotlinx.coroutines.core)
+            // The `opensensor` footer value is JSON.
+            implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.test)
-        }
-        iosMain.dependencies {
-            implementation(libs.kotlinx.serialization.json)
         }
         jvmTest.dependencies {
             implementation(libs.junit)

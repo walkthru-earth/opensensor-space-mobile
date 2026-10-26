@@ -105,11 +105,29 @@ val waveshareTemplate: space.opensensor.model.BoardTemplate = space.opensensor.m
  * Reads every file as the bundled CoreS3 template. The device fixtures predate the bundled dict,
  * so the default [FileTemplates.BUNDLED] gives them rows and no metric values.
  */
-val CoreS3Files: FileTemplates = FileTemplates { coreS3Template }
+val CoreS3Files: FileTemplates = FileTemplates { _, _ -> coreS3Template }
 
-/** A footer naming the bundled CoreS3 dict and a 10 s cadence, as a current CoreS3 file carries. */
-fun coreS3Footer(extra: Map<String, String> = emptyMap()): Map<String, String> =
-    mapOf(FileTemplates.DICTIONARY_KEY to coreS3Template.dict, FileTemplates.SAMPLE_INTERVAL_KEY to "10000") + extra
+/**
+ * A full stac-opensensor v0.1.0 `opensensor` footer value, shaped like `footers/cores3-telemetry-v5.json`,
+ * naming [dict], [desc] and [intervalMs]. A null leaves that field out. Every other field is there so
+ * the reader is shown to ignore it.
+ */
+fun opensensorFooterJson(dict: String?, desc: String?, intervalMs: Long?, board: String = "m5stack-cores3", schema: String = "cores3-telemetry-v5"): String {
+    val dictionary = dict?.let { """"dictionary":{"sha256":"$it","version":"$schema"},""" }.orEmpty()
+    val template = desc?.let { """"template":{"href":"https://example.invalid/templates/$schema.json","sha256":"$it"},""" }.orEmpty()
+    val interval = intervalMs?.let { """"sample_interval_ms":$it,""" }.orEmpty()
+    return """{"version":"0.1.0","station":{"id":"station-test","device_id":"441bf6e26b40","board":"$board","deployment_id":"unknown"},""" +
+        """"firmware":{"version":"6.14.0","schema":"$schema","boot_id":"0f3a"},$dictionary$template""" +
+        """"acquisition":{$interval"time_semantics":"sample instant, UTC","config_id":"default","calibration_id":"unknown"},""" +
+        """"file":{"rotation_interval_s":3600,"row_groups":4,"row_group_rows_max":90,"compression":"zstd","purpose":"telemetry"}}"""
+}
+
+/** The `opensensor` footer entry of a file written under [template], with its dict, its desc and [intervalMs]. */
+fun opensensorFooter(template: space.opensensor.model.BoardTemplate, intervalMs: Long? = 10_000, desc: String? = template.key.desc): Map<String, String> =
+    mapOf(OpenSensorFooter.KEY to opensensorFooterJson(template.dict, desc, intervalMs))
+
+/** A footer naming the bundled CoreS3 template and a 10 s cadence, as a current CoreS3 file carries. */
+fun coreS3Footer(extra: Map<String, String> = emptyMap()): Map<String, String> = opensensorFooter(coreS3Template) + extra
 
 /**
  * [bytes] rewritten with the bundled CoreS3 dict in the footer. The device fixtures predate it, and a

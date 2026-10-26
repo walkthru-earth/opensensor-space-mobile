@@ -79,7 +79,7 @@ erDiagram
   metric_bucket {
     long id PK "UNIQUE (station,metricId,resolution,startEpochS)"
     string station
-    string metricId "template column name"
+    string metricId "template column name or derived id such as pm25_epa"
     long resolution "900 · 3600 · 86400"
     long startEpochS
     int rows

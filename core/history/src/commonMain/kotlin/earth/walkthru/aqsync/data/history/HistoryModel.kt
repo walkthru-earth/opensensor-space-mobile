@@ -36,7 +36,7 @@ data class HistorySeries(
     val estimatedRows: Long = 0,
     /** Verified files of the window that could not be read (a damaged page), skipped so the rest still chart. */
     val unreadableSources: Int = 0,
-    /** The shortest footer `sample_interval_ms` behind the series, 0 when no file said. */
+    /** The shortest footer `acquisition.sample_interval_ms` behind the series, 0 when no file said. */
     val sampleIntervalMs: Long = 0,
 ) {
     val hasEstimated: Boolean get() = estimatedRows > 0

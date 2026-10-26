@@ -247,7 +247,11 @@ class DerivedDayViewTest {
         override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
     }
 
-    /** The 180 row board file with its UTC spread over 36 hours from 06:00 of [day], rows before [nullBefore] without UTC. */
+    /**
+     * The 180 row board file with its UTC spread over 36 hours from 06:00 of [day], rows before
+     * [nullBefore] without UTC. It gains the CoreS3 `opensensor` footer, or its day file would carry
+     * no digest and give way to the raw files.
+     */
     private fun respread(nullBefore: Int = 0): ByteArray {
         val raw = ParquetFile.wrap(fixtureBytes("parquet/device/v3-board-2rg-180rows.parquet"))
         val values = raw.leaves.map { leaf ->
@@ -260,7 +264,7 @@ class DerivedDayViewTest {
             }
         }
         val sink = MemorySink()
-        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }, keyValueMetadata = raw.metadata.keyValueMetadata)
+        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }, keyValueMetadata = raw.metadata.keyValueMetadata + coreS3Footer())
         writer.begin()
         writer.rowGroup(values)
         writer.finish()

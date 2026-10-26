@@ -13,8 +13,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * #186 acceptance on current format board files. Each file carries the firmware footer keys
- * `dictionary_sha256` and `sample_interval_ms` (aq-parquet `aq_logger_footer.h`) and real column names,
+ * #186 acceptance on current format board files. Each file carries the one `opensensor` footer entry
+ * of stac-opensensor v0.1.0 (dictionary and template digests and the sample interval) and real column names,
  * and is read through [FileTemplates.BUNDLED], so the bundled CoreS3 and Waveshare templates decide
  * which rows are valid (`valid_when`), which are settling (`settle_s`) and how each column rolls up.
  * An independent loop over the same rows is the oracle for every 15 minute, hourly and daily bucket.
@@ -43,9 +43,17 @@ class CurrentBoardFilesTest {
 
     /**
      * A current format telemetry file of [template], one row every 10 s from [startS] (shifted by
-     * [offsetS]), every [stepRows] row, footer interval [intervalMs] and boot [boot].
+     * [offsetS]), every [stepRows] row, footer interval [intervalMs] and boot [boot]. [footer] is the
+     * whole key-value metadata after `schema_version`.
      */
-    private fun boardFile(template: BoardTemplate, intervalMs: Long = 10_000, boot: Long = 1, offsetS: Long = 0, stepRows: Int = 1): ByteArray {
+    private fun boardFile(
+        template: BoardTemplate,
+        intervalMs: Long = 10_000,
+        boot: Long = 1,
+        offsetS: Long = 0,
+        stepRows: Int = 1,
+        footer: Map<String, String> = opensensorFooter(template, intervalMs),
+    ): ByteArray {
         val idx = (0 until rows step stepRows).toList()
         val n = idx.size
         val sink = MemorySink()
@@ -68,13 +76,7 @@ class CurrentBoardFilesTest {
                 ParquetWriter.Column("battery_percent", ParquetType.INT32),
             ),
             ParquetCodec.UNCOMPRESSED,
-            keyValueMetadata = mapOf(
-                "schema_version" to "5",
-                FileTemplates.DICTIONARY_KEY to template.dict,
-                FileTemplates.SAMPLE_INTERVAL_KEY to intervalMs.toString(),
-                "row_group_rows_max" to "90",
-                "purpose" to "telemetry",
-            ),
+            keyValueMetadata = mapOf("schema_version" to "5") + footer,
         )
         w.begin()
         w.rowGroup(
@@ -210,13 +212,57 @@ class CurrentBoardFilesTest {
     fun aDailyFileOfTwoIntervalsWritesTheShortest() {
         val fast = boardFile(coreS3Template, intervalMs = 10_000, boot = 1)
         val slow = boardFile(coreS3Template, intervalMs = 60_000, boot = 2, offsetS = 5, stepRows = 6)
-        fun interval(daily: ByteArray) = ParquetFile.wrap(daily).metadata.keyValueMetadata[FileTemplates.SAMPLE_INTERVAL_KEY]
-        assertEquals("60000", interval(dailyOf(slow)))
+        fun interval(daily: ByteArray) = footerOf(daily)?.sampleIntervalMs
+        assertEquals(60_000L, interval(dailyOf(slow)))
         for (order in listOf(arrayOf(fast, slow), arrayOf(slow, fast))) {
             val daily = dailyOf(*order)
-            assertEquals("10000", interval(daily))
+            assertEquals(10_000L, interval(daily))
             // Read back, the daily file gives the same interval as the tiers of its sources.
             assertTrue(buckets(daily).all { it.sampleIntervalMs == 10_000L })
         }
+    }
+
+    private fun footerOf(file: ByteArray): OpenSensorFooter? = OpenSensorFooter.of(ParquetFile.wrap(file).metadata.keyValueMetadata)
+
+    @Test
+    fun aDailyFileWritesOnlyTheOpensensorFooterOfItsSources() {
+        val daily = dailyOf(boardFile(coreS3Template), boardFile(coreS3Template, boot = 2, offsetS = 5))
+        val keys = ParquetFile.wrap(daily).metadata.keyValueMetadata
+        assertEquals(OpenSensorFooter(10_000, coreS3Template.dict, coreS3Template.key.desc), footerOf(daily))
+        assertTrue("dictionary_sha256" !in keys && "sample_interval_ms" !in keys, keys.keys.toString())
+        // Read back, the daily file resolves the same template as its sources.
+        assertEquals(buckets(boardFile(coreS3Template), boardFile(coreS3Template, boot = 2, offsetS = 5)), buckets(daily))
+    }
+
+    @Test
+    fun aDailyFileOfTwoBoardsCarriesNoDigest() {
+        val daily = dailyOf(boardFile(coreS3Template), boardFile(waveshareTemplate, boot = 2, offsetS = 5))
+        assertEquals(OpenSensorFooter(sampleIntervalMs = 10_000), footerOf(daily))
+    }
+
+    @Test
+    fun aDailyFileOfSourcesWithoutAFooterWritesNone() {
+        val daily = dailyOf(boardFile(coreS3Template, footer = emptyMap()))
+        assertEquals(null, ParquetFile.wrap(daily).metadata.keyValueMetadata[OpenSensorFooter.KEY])
+    }
+
+    @Test
+    fun aFileIsReadByItsTemplateDigestWithoutADict() {
+        val footer = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = waveshareTemplate.key.desc, intervalMs = 10_000))
+        assertBucketsMatchTheRows(buckets(boardFile(waveshareTemplate, footer = footer)), 10_000)
+    }
+
+    @Test
+    fun aFileWithAnUnknownTemplateDigestIsReadByItsDict() {
+        // Real firmware hashes its own template bytes, which differ from the bundled hand bytes until question 22.
+        assertBucketsMatchTheRows(buckets(boardFile(coreS3Template, footer = opensensorFooter(coreS3Template, desc = "ab".repeat(32)))), 10_000)
+    }
+
+    @Test
+    fun aFileWithOnlyTheOldFooterKeysHasNoFooter() {
+        val old = mapOf("dictionary_sha256" to coreS3Template.dict, "sample_interval_ms" to "10000")
+        val got = buckets(boardFile(coreS3Template, footer = old))
+        assertTrue(got.isNotEmpty())
+        assertTrue(got.all { it.metrics.isEmpty() && it.sampleIntervalMs == 0L }, got.toString())
     }
 }

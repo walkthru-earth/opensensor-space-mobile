@@ -100,11 +100,30 @@ first, and `Metrics.defaultOf` opens History on the first of them.
 keeps its unit and aggregate. Tiers, daily files, the History picker and the charts iterate these
 specs and never name a column. A spec whose column a file lacks yields **no values, never zeros**.
 
-**Each file is read by its own template (`FileTemplates`).** The footer's `dictionary_sha256` picks
-the bundled template and `sample_interval_ms` gives the cadence. The footer interval wins. Without it
+**Each file is read by its own template (`FileTemplates`).** A file carries one footer key,
+`opensensor`, whose value is compact JSON (stac-opensensor `PROFILE.md` "Parquet footer", version
+`0.1.0`, in the style of GeoParquet `geo`). `OpenSensorFooter` reads only `template.sha256`,
+`dictionary.sha256` and `acquisition.sample_interval_ms` from it and ignores every other field. A
+missing key, JSON that is not an object, an unknown major version, a digest that is not 64 lowercase
+hex or an interval that is not an integer means the file has no footer. The old unprefixed keys
+`dictionary_sha256` and `sample_interval_ms` are not read, so a file with only those has no footer.
+The template is the bundled one whose exact bytes hash to `template.sha256` (the build precomputes
+that digest for every bundled file), else the bundled one for `dictionary.sha256`. A template digest
+whose dict disagrees with the footer's is not used. The bundled templates are hand bytes until the
+firmware publishes its own, so today the dict usually decides. The footer interval wins. Without it
 the template's default interval is used, and without both the interval is 0 and expected rows are 0.
-A tier bucket fed by files at different intervals keeps the shortest. The daily file writes the
-shortest `sample_interval_ms` of its sources too, so a daily file read back gives the same expected rows.
+A tier bucket fed by files at different intervals keeps the shortest.
+
+The daily file writes the same `opensensor` key with only what the app knows for the whole day.
+`version`, the shortest positive interval of its sources as `acquisition.sample_interval_ms`, and
+`dictionary.sha256` and `template.sha256` only when every source names the same one
+(`DailyParquetBuilder.dayFooter`). It leaves out `station`, `firmware`, `file` and
+`acquisition.time_semantics`, which the schema requires, because a derived day has no single honest
+value for them. So a daily footer is not a valid stac-opensensor footer, it is read back by this app
+only. A day file read back gives the same template and expected rows as its sources. A day of mixed
+dictionaries carries no digest, and History reads its rows from the raw files. A day whose sources
+have no footer writes no `opensensor` key. The daily file's own bookkeeping keys (`station_id`, `day`,
+`derived_by`, `source_count` and the rest) stay as they were.
 `FileTemplates.bind` gives a file only the specs its template stores in the same unit and rollup,
 with that template's gate and settle time. A file whose dict no bundled template knows keeps its rows
 and has no metrics.

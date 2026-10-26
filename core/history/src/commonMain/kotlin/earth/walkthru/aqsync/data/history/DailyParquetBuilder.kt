@@ -280,15 +280,10 @@ object DailyParquetBuilder {
         val startsArray = starts.toIntArray()
 
         // 4. Metadata.
-        val invariant = LinkedHashMap<String, String>()
-        val firstMeta = opened.first().keyValueMetadata
-        for ((k, v) in firstMeta) if (k in COPIED_METADATA && opened.all { it.keyValueMetadata[k] == v }) invariant[k] = v
-        // Sources at different intervals give the shortest, as a tier bucket keeps it. Agreeing sources keep the copied key in place.
-        opened.mapNotNull { it.keyValueMetadata[FileTemplates.SAMPLE_INTERVAL_KEY]?.toLongOrNull()?.takeIf { ms -> ms > 0 } }.minOrNull()
-            ?.let { invariant[FileTemplates.SAMPLE_INTERVAL_KEY] = it.toString() }
+        val footer = dayFooter(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
-            putAll(invariant)
+            footer?.let { put(OpenSensorFooter.KEY, it.encode()) }
             put("station_id", station)
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
@@ -498,5 +493,20 @@ object DailyParquetBuilder {
 
     /** The daily builder's established duplicate preference, real UTC first, then source name. */
     val SOURCE_ORDER: Comparator<ArchiveRecord> = compareBy({ it.firstUtcNs ?: Long.MAX_VALUE }, { it.name })
-    private val COPIED_METADATA = setOf("board", "dictionary_version", "dictionary_uri", "dictionary_sha256", "device_id", "pms_status", "light_status", "proximity_status", "magnetic_units", "unavailable", "sample_interval_ms", "clock", "time_semantics")
+
+    /**
+     * The `opensensor` footer of a day file built from sources with [footers], null when no source
+     * says anything. It holds only what the app knows for the whole day. The shortest positive
+     * interval, as a tier bucket keeps it, and each digest only when every source names the same one.
+     * A day mixing dictionaries or templates carries none, and its rows go back to the raw files.
+     */
+    internal fun dayFooter(footers: List<OpenSensorFooter?>): OpenSensorFooter? {
+        fun <T> agreed(pick: (OpenSensorFooter?) -> T?): T? = footers.map(pick).distinct().singleOrNull()
+        val day = OpenSensorFooter(
+            sampleIntervalMs = footers.mapNotNull { it?.sampleIntervalMs }.minOrNull(),
+            dictionarySha256 = agreed { it?.dictionarySha256 },
+            templateSha256 = agreed { it?.templateSha256 },
+        )
+        return day.takeIf { it != OpenSensorFooter() }
+    }
 }

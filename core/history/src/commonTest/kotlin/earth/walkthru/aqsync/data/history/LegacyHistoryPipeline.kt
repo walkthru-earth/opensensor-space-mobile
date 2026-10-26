@@ -68,7 +68,7 @@ internal class LegacyAggregator(
         val humidity = metrics.mapNotNull { it.humidityColumn }.distinct().associateWith { col(it) }
         val gates = metrics.map { spec -> spec.gate?.let { g -> LegacyGate(g, col(g.column)) } }
         // The footer interval, else the CoreS3 default the tests read every file with.
-        val interval = md.keyValueMetadata["sample_interval_ms"]?.toLongOrNull()?.takeIf { it > 0 }
+        val interval = OpenSensorFooter.of(md.keyValueMetadata)?.sampleIntervalMs
             ?: (BundledCatalog.templates.single { it.id.startsWith("cores3-") }.defaultSampleIntervalS * 1000).toLong()
         for (i in 0 until utc.size) {
             var estimated = false
@@ -194,12 +194,11 @@ internal object LegacyDailyParquetBuilder {
         val decoded: List<Map<String, ColumnValues>> = opened.map { it.decoded }
 
         // 4. Metadata.
-        val invariant = LinkedHashMap<String, String>()
-        val first = opened.first().keyValueMetadata
-        for ((k, v) in first) if (k in COPIED_METADATA && opened.all { it.keyValueMetadata[k] == v }) invariant[k] = v
+        // The footer rule is the production one, these oracles check the rows and bytes around it.
+        val footer = DailyParquetBuilder.dayFooter(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
-            putAll(invariant)
+            footer?.let { put(OpenSensorFooter.KEY, it.encode()) }
             put("station_id", station)
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
@@ -289,5 +288,4 @@ internal object LegacyDailyParquetBuilder {
     const val ESTIMATED_UTC = "event_time_utc_estimated_us"
     const val HOUR_NS = 3_600L * 1_000_000_000L
     const val COMPLETE_GRACE_S = 30 * 60L
-    private val COPIED_METADATA = setOf("board", "dictionary_version", "dictionary_uri", "dictionary_sha256", "device_id", "pms_status", "light_status", "proximity_status", "magnetic_units", "unavailable", "sample_interval_ms", "clock", "time_semantics")
 }

@@ -213,12 +213,11 @@ object PreStreamingDailyParquetBuilder {
         val startsArray = starts.toIntArray()
 
         // 4. Metadata.
-        val invariant = LinkedHashMap<String, String>()
-        val firstMeta = opened.first().keyValueMetadata
-        for ((k, v) in firstMeta) if (k in COPIED_METADATA && opened.all { it.keyValueMetadata[k] == v }) invariant[k] = v
+        // The footer rule is the production one, these oracles check the rows and bytes around it.
+        val footer = DailyParquetBuilder.dayFooter(opened.map { OpenSensorFooter.of(it.keyValueMetadata) })
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
-            putAll(invariant)
+            footer?.let { put(OpenSensorFooter.KEY, it.encode()) }
             put("station_id", station)
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
@@ -390,5 +389,4 @@ object PreStreamingDailyParquetBuilder {
 
     /** The daily builder's established duplicate preference, real UTC first, then source name. */
     val SOURCE_ORDER: Comparator<ArchiveRecord> = compareBy({ it.firstUtcNs ?: Long.MAX_VALUE }, { it.name })
-    private val COPIED_METADATA = setOf("board", "dictionary_version", "dictionary_uri", "dictionary_sha256", "device_id", "pms_status", "light_status", "proximity_status", "magnetic_units", "unavailable", "sample_interval_ms", "clock", "time_semantics")
 }

@@ -54,6 +54,9 @@ object BundledCatalog {
     /** The bundled template for [dict], whether or not the caller has a [desc]. */
     fun template(dict: String, desc: String? = null): BoardTemplate? = bundledIndex.resolve(dict, desc)
 
+    /** The bundled template whose exact bytes hash to [desc], or null when none does. */
+    fun templateByDesc(desc: String): BoardTemplate? = templates.firstOrNull { it.key.desc == desc }
+
     /** The bundled profile for [dict], or null when none is bundled. */
     fun profile(dict: String): AppProfile? = profilesByDict[dict]
 
