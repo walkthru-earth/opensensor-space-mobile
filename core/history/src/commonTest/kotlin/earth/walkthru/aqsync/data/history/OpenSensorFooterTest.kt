@@ -104,6 +104,14 @@ class OpenSensorFooterTest {
     }
 
     @Test
+    fun aRealFirmwareTemplateDigestResolvesWithoutADict() {
+        // The template.sha256 aq-parquet firmware writes for the CoreS3 v5 template, with no dictionary member.
+        val real = "bb0ab0a3eaafb05e45bbbf5216194ab808110df92e6ee277c8ef2af6f2f314b0"
+        assertSame(coreS3Template, FileTemplates.BUNDLED.template(null, real))
+        assertSame(coreS3Template, resolve(null, real))
+    }
+
+    @Test
     fun aDayFileIsReadOnlyFromItsAppPrivateKey() {
         val day = AppDay(10_000, dict, desc)
         assertEquals(day, AppDay.of(mapOf(AppDay.KEY to day.encode())))
@@ -137,7 +145,7 @@ class OpenSensorFooterTest {
         val waveshareDesc = waveshareTemplate.key.desc!!
         assertSame(coreS3Template, resolve(dict = null, desc = desc))
         assertSame(coreS3Template, resolve(dict, desc))
-        // An unknown template digest, as real firmware writes until the bundled bytes match, falls back to the dict.
+        // An unknown template digest, such as a newer firmware desc, falls back to the dict.
         assertSame(coreS3Template, resolve(dict, "ab".repeat(32)))
         // A template digest whose dict disagrees with the footer is not trusted, the dict decides.
         assertSame(coreS3Template, resolve(dict, waveshareDesc))

@@ -276,7 +276,7 @@ class CurrentBoardFilesTest {
 
     @Test
     fun aFileWithAnUnknownTemplateDigestIsReadByItsDict() {
-        // Real firmware hashes its own template bytes, which differ from the bundled hand bytes until question 22.
+        // A template the app does not bundle, such as a newer firmware desc, falls back to the dict.
         assertBucketsMatchTheRows(buckets(boardFile(coreS3Template, footer = opensensorFooter(coreS3Template, desc = "ab".repeat(32)))), 10_000)
     }
 

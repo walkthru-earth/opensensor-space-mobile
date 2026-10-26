@@ -7,6 +7,7 @@ import java.io.File
 import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -65,5 +66,21 @@ class BundledTemplateBytesTest {
     @Test
     fun everyBundledTemplateCarriesTheDescOfItsBytes() {
         assertEquals(expected.values.toSet(), BundledCatalog.templates.map { it.key.desc }.toSet())
+    }
+
+    @Test
+    fun theBuildDigestOfEveryFileIsTheHashOfItsBytesOnDisk() {
+        val onDisk = root.walkTopDown().filter { it.isFile && it.extension == "json" }
+            .associate { it.relativeTo(root).invariantSeparatorsPath to sha256(it.readBytes()) }
+        assertEquals(onDisk, BundledFiles.sha256)
+    }
+
+    @Test
+    fun eachTemplateResolvesByItsDescAloneAndWithItsDict() {
+        for (desc in expected.values) {
+            val template = BundledCatalog.templates.single { it.key.desc == desc }
+            assertSame(template, BundledCatalog.templateByDesc(desc))
+            assertSame(template, BundledCatalog.template(template.dict, desc))
+        }
     }
 }

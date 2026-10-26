@@ -108,15 +108,17 @@ ignores every other member. A missing key, JSON that is not an object, an unknow
 digest that is not 64 lowercase hex, an interval that is not an integer or a station or purpose that
 is not a non-empty string means the file has no footer. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
 unprefixed keys has no footer, so it keeps its rows and has no
-metrics. Such files are wiped after the matched reflash (decision 14). The repair checks a file's
+metrics. A rebuilt partial file carries no `opensensor` key either
+(stac-opensensor question 30), so it reads the same way. Such files are wiped after the matched reflash (decision 14). The repair checks a file's
 `station.id` against its archive station, and the daily builder checks each source the same way.
 The boot is not read from `firmware.boot_id`. Every row carries `boot_id_hi` and `boot_id_lo`, and
 `rowBootId` formats the first pair as 32 lowercase hex digits, the same text firmware writes and sends
 in its clock receipts. The schema name is not read at all.
 The template is the bundled one whose exact bytes hash to `template.sha256` (the build precomputes
 that digest for every bundled file), else the bundled one for `dictionary.sha256`. A template digest
-whose dict disagrees with the footer's is not used. The bundled templates are hand bytes until the
-firmware publishes its own, so today the dict usually decides. The footer interval wins. Without it
+whose dict disagrees with the footer's is not used. The bundled bytes are the firmware's own, so a
+real footer resolves by `template.sha256` alone, with no dictionary member needed. The catalog refuses
+to load when an `index.json` desc is not the build digest of its file. The footer interval wins. Without it
 the template's default interval is used, and without both the interval is 0 and expected rows are 0.
 A tier bucket fed by files at different intervals keeps the shortest.
 

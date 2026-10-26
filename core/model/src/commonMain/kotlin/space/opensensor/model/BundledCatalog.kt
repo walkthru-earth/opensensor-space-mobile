@@ -15,7 +15,8 @@ object BundledCatalog {
 
     /**
      * Every bundled template, in `index.json` order, each keyed by its `dict` and the `desc` the index
-     * gives it. The desc is the SHA-256 of the bundled bytes, which a host test checks.
+     * gives it. [templatesOf] requires that desc to equal the SHA-256 of the bundled bytes, which the
+     * build computes, so the check runs on Android and iOS alike.
      */
     val templates: List<BoardTemplate> = templatesOf(BundledFiles.files)
 
@@ -26,9 +27,10 @@ object BundledCatalog {
 
     /**
      * The templates [files] lists in [TEMPLATE_INDEX]. Each file parses with the index `desc` and must
-     * carry the index `dict` and `schema`, and every template file must be in the index.
+     * carry the index `dict` and `schema`, its bytes must hash to that `desc` in [sha256], and every
+     * template file must be in the index.
      */
-    internal fun templatesOf(files: Map<String, String>): List<BoardTemplate> {
+    internal fun templatesOf(files: Map<String, String>, sha256: Map<String, String> = BundledFiles.sha256): List<BoardTemplate> {
         val index = ModelJson.parseTemplateIndex(files.getValue(TEMPLATE_INDEX))
         val listed = index.map { TEMPLATES + it.href }.toSet()
         val stray = files.keys.filter { it.startsWith(TEMPLATES) && it != TEMPLATE_INDEX && it !in listed }
@@ -38,6 +40,8 @@ object BundledCatalog {
             BoardTemplate.parse(text, desc = entry.desc).also {
                 require(it.dict == entry.dict) { "${entry.href} carries dict ${it.dict}, index.json says ${entry.dict}" }
                 require(it.schema == entry.schema) { "${entry.href} carries schema ${it.schema}, index.json says ${entry.schema}" }
+                val digest = sha256[TEMPLATES + entry.href]
+                require(digest == entry.desc) { "${entry.href} bytes hash to desc $digest, index.json says ${entry.desc}" }
             }
         }
     }
