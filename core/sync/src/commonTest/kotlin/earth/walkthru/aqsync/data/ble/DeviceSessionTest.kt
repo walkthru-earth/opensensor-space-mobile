@@ -573,7 +573,8 @@ class DeviceSessionTest {
     @Test
     fun descriptorIsNeverRequestedBeforeTheLinkIsOpen() = runTest {
         val p = Peer(backgroundScope, testScheduler.timeSource)
-        assertFailsWith<IllegalStateException> { p.view().downloadDescriptor() }
+        val e = assertFailsWith<IllegalStateException> { p.view().downloadDescriptor() }
+        assertEquals("GET_DESCRIPTOR needs an open link", e.message)
         assertTrue(p.bodies.isEmpty())
         assertTrue(p.driver.sent.isEmpty())
     }

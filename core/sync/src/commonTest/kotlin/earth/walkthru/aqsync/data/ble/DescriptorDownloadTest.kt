@@ -99,14 +99,17 @@ class DescriptorDownloadTest {
 
     @Test
     fun `a second total change fails the download`() = runTest {
+        val other = ByteArray(900) { 3 }
         val board = Board(template, max = 503)
-        var changes = 0
         assertFailsWith<DescriptorDownloadException> {
             DescriptorDownload.fetch(503) { o, l ->
-                if (o == 503L) board.bytes = ByteArray(1000 + ++changes)
+                // A second restart would ask a fifth time, which fails with IllegalStateException.
+                check(board.asked.size < 4) { "asked past the second total change" }
+                if (o == 503L) board.bytes = if (board.bytes === template) other else template
                 board.chunk(o, l)
             }
         }
+        assertEquals(listOf(0L, 503L, 0L, 503L), board.asked.map { it.first })
     }
 
     @Test

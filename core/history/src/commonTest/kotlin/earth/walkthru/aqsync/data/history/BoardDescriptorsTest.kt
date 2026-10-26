@@ -90,7 +90,8 @@ class BoardDescriptorsTest {
     @Test
     fun loadDropsFilesThatNoLongerVerify() = runTest {
         val h = harness()
-        h.store.write("$sha.json", "{}".encodeToByteArray())
+        // A valid template under a name its bytes do not hash to, so only the re-hash rejects it.
+        h.store.write("${"0".repeat(64)}.json", bytes)
         h.store.write("notes.txt", bytes)
         assertEquals(0, h.descriptors.load())
         assertTrue(h.store.list().isEmpty())
