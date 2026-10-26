@@ -71,7 +71,7 @@ build and `verify` only. No phone run against the new firmware yet.
   every cached day once.
 - LIVE. Profiles resolve by dictionary digest through the bundled board templates and app profiles
   (#184), and a newer schema keeps its profile. Only the current digest of each board is bundled,
-  CoreS3 v6.14 (`4f80c26c…`) and Waveshare v2.8 (`6f567b38…`). An unknown or older digest syncs files
+  CoreS3 v6.15 (`4f80c26c…`) and Waveshare v2.9 (`6f567b38…`). An unknown or older digest syncs files
   but has no LIVE profile. CoreS3 board temperature comes from `imu_t`, Waveshare air temperature
   from `t`. Particle bins show only the board's keys. `LiveSample` parses `bstate`, and no screen
   shows it yet (#90).

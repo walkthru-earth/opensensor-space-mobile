@@ -23,7 +23,7 @@ import space.opensensor.model.BundledCatalog
 internal object PreviewFakes {
     val info = DeviceInfo(
         proto = 3,
-        fw = "idf-waveshare-parquet-v2.8",
+        fw = "idf-waveshare-parquet-v2.9",
         schema = "waveshare-sim7670g-telemetry-v5",
         cols = 62,
         dict = BundledCatalog.templates.first { it.schema.startsWith("waveshare-") }.dict,

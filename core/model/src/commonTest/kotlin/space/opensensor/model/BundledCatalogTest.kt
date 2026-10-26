@@ -10,7 +10,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class BundledCatalogTest {
-    // The current digests, aq-parquet ada9514 (#100). CoreS3 v6.14 and Waveshare v2.8.
+    // The current digests, aq-parquet ada9514 (#100). Firmware CoreS3 v6.15 and Waveshare v2.9 (#101) keep them.
     private val cores3Dict = "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94"
     private val waveshareDict = "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb"
     private val unknownDict = "a".repeat(64)

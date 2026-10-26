@@ -17,8 +17,8 @@ class LiveKeyFixturesTest {
     private data class FixtureBuild(val board: String, val digest: String, val firmware: String, val keys: Set<String>)
 
     private val current = listOf(
-        FixtureBuild("cores3", "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94", "idf-cores3-parquet-v6.14", setOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "n5", "n10", "imu_t", "als", "vbus", "bat", "pct", "chg", "t", "rh")),
-        FixtureBuild("waveshare", "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb", "idf-waveshare-parquet-v2.8", setOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
+        FixtureBuild("cores3", "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94", "idf-cores3-parquet-v6.15", setOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "n5", "n10", "imu_t", "als", "vbus", "bat", "pct", "chg", "t", "rh")),
+        FixtureBuild("waveshare", "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb", "idf-waveshare-parquet-v2.9", setOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
     )
 
     /** Released digests the app no longer bundles. Boards on them get no LIVE profile until reflashed. */

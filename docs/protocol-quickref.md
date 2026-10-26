@@ -110,9 +110,9 @@ a missing key is null, and the firmware sends every declared key with null for n
 `LiveProfiles.resolve` reads the `info.dict` digest only, so a newer schema string over the same
 dictionary keeps its profile. It looks the digest up in the bundled board templates under
 `core/model/bundled/templates/` and joins the matching app profile under `core/model/bundled/profiles/`
-(`BundledCatalog.live`). Only the current digest of each board is bundled. CoreS3 v6.14 (`4f80c26c…`)
+(`BundledCatalog.live`). Only the current digest of each board is bundled. CoreS3 v6.15 (`4f80c26c…`)
 sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
-because they are always null on CoreS3. Waveshare v2.8 (`6f567b38…`) sends `t`, ambient air
+because they are always null on CoreS3. Waveshare v2.9 (`6f567b38…`) sends `t`, ambient air
 temperature, `rh` and `bstate`, the battery health code. A new firmware digest is a template and
 profile file swap plus a fixture refresh, with no code change. Any other digest, older ones included,
 has no LIVE profile. The station join (`BundledCatalog.station`) still shows such a board from a
