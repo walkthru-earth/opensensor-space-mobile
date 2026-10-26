@@ -33,7 +33,10 @@ internal object PreviewFakes {
         maxRead = 16384,
     )
     private val now = System.currentTimeMillis()
-    val live = LiveSample(seq = 1234, pms = 4, pm1 = 6.0, pm25 = 9.4, pm10 = 12.0, t = 24.6, rh = 41.0, n03 = 1800, n05 = 520, n1 = 90, n25 = 6, pct = 82, bat = 4012)
+    val live = LiveSample.parse(
+        """{"seq":1234,"pms":4,"pm1":6.0,"pm25":9.4,"pm10":12.0,"c25":10.1,"t":24.6,"rh":41.0,""" +
+            """"n03":1800,"n05":520,"n1":90,"n25":6,"pct":82,"bat":4012}""",
+    )
     val status = DeviceStatus(upSeconds = 86_400, intervalSeconds = 600, buf = 34, fin = 12)
 
     fun today(level: DetailLevel) = TodayUiState(

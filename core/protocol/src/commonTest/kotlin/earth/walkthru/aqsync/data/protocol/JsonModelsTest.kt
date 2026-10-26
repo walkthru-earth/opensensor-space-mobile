@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.protocol
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -55,41 +56,63 @@ class JsonModelsTest {
     }
 
     @Test
-    fun `live parses a valid PMS snapshot`() {
+    fun `live parses every key by name with seq mono and utc as header fields`() {
         val parsed = LiveSample.parse(live)
-        assertTrue(parsed.pmValid)
-        assertEquals(22.0, parsed.pm25!!, 0.0)
-        assertEquals(2127L, parsed.n03)
-        assertEquals(42.3, parsed.t!!, 0.0)
-        assertFalse(parsed.hasUtc)
-    }
-
-    @Test
-    fun `absent keys are null never zero`() {
-        // Sensor warming up: no PM keys at all, no UTC.
-        val parsed = LiveSample.parse("""{"seq":1,"mono":10000000,"pms":1,"bat":4100}""")
-        assertFalse(parsed.pmValid)
-        assertNull(parsed.pm25)
-        assertNull(parsed.n03)
+        assertEquals(23L, parsed.seq)
+        assertEquals(252976111L, parsed.mono)
         assertNull(parsed.utc)
-        assertEquals(4100, parsed.bat)
+        assertEquals(22.0, parsed["pm25"]!!, 0.0)
+        assertEquals(2127.0, parsed["n03"]!!, 0.0)
+        assertEquals(42.3, parsed["t"]!!, 0.0)
+        assertFalse(parsed.has("seq"), "header fields are not values")
+        assertFalse(parsed.overflow)
     }
 
     @Test
-    fun `unknown keys from newer firmware are ignored`() {
-        val parsed = LiveSample.parse("""{"seq":1,"mono":1,"pms":4,"pm25":3,"pm1":1,"pm10":4,"future_key":true}""")
-        assertEquals(3.0, parsed.pm25!!, 0.0)
+    fun `a null key carries no reading now and an absent key is not carried`() {
+        val parsed = LiveSample.parse("""{"seq":1,"mono":10000000,"utc":null,"pms":1,"pm25":null,"bat":4100}""")
+        assertTrue(parsed.has("pm25"))
+        assertNull(parsed["pm25"])
+        assertFalse(parsed.has("n03"))
+        assertNull(parsed["n03"])
+        assertNull(parsed.utc)
+        assertEquals(4100.0, parsed["bat"]!!, 0.0)
+        assertFalse(parsed.overflow)
     }
 
     @Test
-    fun `live floats with trailing zeros and null keys parse as numbers`() {
-        // aq-parquet #100 prints each float with its field decimals, #97 sends null for no reading.
-        val parsed = LiveSample.parse("""{"seq":1,"mono":1,"pms":4,"pm25":5.00,"t":22.50,"rh":41.0,"imu_t":40.1,"pct":87,"n03":null}""")
-        assertEquals(5.0, parsed.pm25!!, 0.0)
-        assertEquals(22.5, parsed.t!!, 0.0)
-        assertEquals(41.0, parsed.rh!!, 0.0)
-        assertEquals(40.1, parsed.imuT!!, 0.0)
-        assertEquals(87, parsed.pct)
-        assertNull(parsed.n03)
+    fun `an extra key from newer firmware does not break parsing`() {
+        val parsed = LiveSample.parse("""{"seq":1,"mono":1,"pms":4,"pm25":3,"future_key":true,"nested":{"x":1},"name":"x","list":[1]}""")
+        assertEquals(3.0, parsed["pm25"]!!, 0.0)
+        assertEquals(4.0, parsed["pms"]!!, 0.0)
+    }
+
+    @Test
+    fun `live floats with trailing zeros parse as numbers`() {
+        // aq-parquet #100 prints each float with its field decimals.
+        val parsed = LiveSample.parse("""{"seq":1,"mono":1,"utc":1760000000000000000,"pms":4,"pm25":5.00,"t":22.50,"rh":41.0,"imu_t":40.1,"pct":87}""")
+        assertEquals(5.0, parsed["pm25"]!!, 0.0)
+        assertEquals(22.5, parsed["t"]!!, 0.0)
+        assertEquals(41.0, parsed["rh"]!!, 0.0)
+        assertEquals(40.1, parsed["imu_t"]!!, 0.0)
+        assertEquals(87.0, parsed["pct"]!!, 0.0)
+        assertEquals(1760000000000000000L, parsed.utc)
+        assertEquals(1L, LiveSample.parse("""{"seq":1.0}""").seq)
+    }
+
+    @Test
+    fun `an overflow sample has every key null`() {
+        val parsed = LiveSample.parse("""{"seq":null,"mono":null,"utc":null,"pms":null,"pm25":null,"t":null}""")
+        assertTrue(parsed.overflow)
+        assertNull(parsed.seq)
+        assertNull(parsed["pm25"])
+        assertTrue(parsed.has("pm25"))
+        assertFalse(LiveSample.parse("{}").overflow)
+    }
+
+    @Test
+    fun `live that is not a JSON object is refused`() {
+        assertFailsWith<IllegalArgumentException> { LiveSample.parse("[1,2]") }
+        assertFailsWith<IllegalArgumentException> { LiveSample.parse("null") }
     }
 }

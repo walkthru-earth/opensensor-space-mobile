@@ -26,5 +26,9 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(project(":core:model"))
         }
+        // The Environment card test renders it headless on the iOS simulator (verifyIos).
+        iosTest.dependencies {
+            implementation(libs.compose.ui.test)
+        }
     }
 }

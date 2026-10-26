@@ -1,9 +1,10 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.data.history.LiveFixtures.cores3
+import earth.walkthru.aqsync.data.history.LiveFixtures.waveshare
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.LiveSample
-import earth.walkthru.aqsync.data.protocol.TemperatureSource
-import space.opensensor.model.BundledCatalog
+import space.opensensor.model.Family
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -12,19 +13,18 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DeviceCapabilitiesTest {
-    private val waveshareDict = BundledCatalog.templates.first { it.schema.startsWith("waveshare-") }.dict
-    private val cores3Dict = BundledCatalog.templates.first { it.schema.startsWith("cores3-") }.dict
-    private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = waveshareDict)
-    private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = cores3Dict)
-
     @Test fun noInfoMeansNothingIsAssumed() {
         assertEquals(DeviceCapabilities.NONE, DeviceCapabilities.from(null))
-        assertFalse(DeviceCapabilities.NONE.showsParticles(LiveSample(pms = 4, pm25 = 3.0)))
+        assertNull(DeviceCapabilities.NONE.reading(LiveSample.parse("""{"pms":4,"pm25":3}""")))
+        assertFalse(DeviceCapabilities.NONE.showsAirCards(LiveSample.parse("""{"pms":4,"pm25":3}""")))
     }
 
     @Test fun waveshareHasEveryCapability() {
         val caps = DeviceCapabilities.from(waveshare)
-        assertEquals(TemperatureSource.AMBIENT, caps.liveProfile?.temperature)
+        assertEquals(Family.AIR, caps.station?.profile?.family)
+        assertEquals("ambient_temperature_c", caps.temperature?.name)
+        assertTrue(caps.ambientTemperature)
+        assertEquals("relative_humidity_percent", caps.humidity?.name)
         assertTrue(caps.configurable)
         assertTrue(caps.sensorIdentity)
         assertTrue(caps.batchEstimate)
@@ -33,36 +33,45 @@ class DeviceCapabilitiesTest {
         assertFalse(caps.showsBatchEstimate(null))
     }
 
-    @Test fun unknownDictionaryKeepsSchemaFamilyButHasNoLiveProfile() {
-        val live = LiveSample(pms = 4, pm25 = 7.0, t = 22.0, rh = 50.0, bstate = 2)
+    @Test fun unknownDictionaryHasNoStationAndNothingIsGuessed() {
+        val live = LiveSample.parse("""{"pms":4,"pm25":7.0,"t":22.0,"rh":50.0,"bstate":2}""")
         val caps = DeviceCapabilities.from(waveshare.copy(dict = "0".repeat(64)))
-        assertNull(caps.liveProfile)
-        assertTrue(caps.sensorIdentity)
+        assertNull(caps.station)
+        assertNull(caps.reading(live))
+        assertFalse(caps.sensorIdentity, "identity comes from the template column, never the schema string")
         assertFalse(caps.batchEstimate, "an unknown dictionary must not show the estimate")
         assertFalse(caps.showsBatchEstimate(1))
-        assertFalse(caps.showsParticles(live))
+        assertFalse(caps.showsAirCards(live))
+        assertNull(caps.temperature)
+    }
+
+    @Test fun infoWithoutADictionaryHasNoStation() {
+        assertNull(DeviceCapabilities.from(DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5")).station)
     }
 
     @Test fun protocolV1IsNotConfigurable() {
         val caps = DeviceCapabilities.from(cores3)
-        assertNotNull(caps.liveProfile)
+        assertNotNull(caps.station)
         assertFalse(caps.configurable)
         assertFalse(caps.sensorIdentity)
         assertFalse(DeviceCapabilities.from(DeviceInfo(schema = "x")).configurable, "absent proto reads as v1")
     }
 
-    @Test fun particlesNeedAReportedSensor() {
+    @Test fun particlesNeedAReportedSensorAndANullStatusKeepsThem() {
         val caps = DeviceCapabilities.from(cores3)
-        assertFalse(caps.showsParticles(null))
-        assertFalse(caps.showsParticles(LiveSample()))
-        assertFalse(caps.showsParticles(LiveSample(pms = 0)))
-        assertTrue(caps.showsParticles(LiveSample(pms = 1)))
-        assertTrue(caps.showsParticles(LiveSample(pms = 4, pm25 = 12.0)))
+        assertFalse(caps.showsAirCards(null))
+        assertFalse(caps.showsAirCards(LiveSample()), "an absent pms key means the board has no such field")
+        assertTrue(caps.showsAirCards(LiveSample.parse("""{"pms":null,"pm25":null}""")), "a null status is no reading now")
+        assertFalse(caps.showsAirCards(LiveSample.parse("""{"pms":0}""")))
+        assertTrue(caps.showsAirCards(LiveSample.parse("""{"pms":1}""")))
+        assertTrue(caps.showsAirCards(LiveSample.parse("""{"pms":4,"pm25":12.0}""")))
     }
 
     @Test fun cores3ReadsBoardTemperatureAndHasNoBatchEstimate() {
         val caps = DeviceCapabilities.from(cores3)
-        assertEquals(TemperatureSource.BOARD, caps.liveProfile?.temperature)
+        assertEquals("imu_temperature_c", caps.temperature?.name)
+        assertFalse(caps.ambientTemperature)
+        assertNull(caps.humidity)
         assertFalse(caps.batchEstimate)
         assertFalse(caps.showsBatchEstimate(1))
     }
@@ -70,7 +79,7 @@ class DeviceCapabilitiesTest {
     @Test fun aRetiredWaveshareDictionaryHasNoBatchEstimate() {
         val v4 = "0a024b85c632f621c0e1223f1ecafe3a9c4524a1ec3c0d03d910d191aaee2f82"
         val caps = DeviceCapabilities.from(DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v4", dict = v4))
-        assertNull(caps.liveProfile)
+        assertNull(caps.station)
         assertFalse(caps.batchEstimate)
     }
 }

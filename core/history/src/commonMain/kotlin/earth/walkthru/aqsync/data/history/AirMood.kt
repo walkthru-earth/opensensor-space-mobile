@@ -5,7 +5,7 @@ import earth.walkthru.aqsync.airquality.HealthScale
 import earth.walkthru.aqsync.airquality.Pm25Basis
 import earth.walkthru.aqsync.airquality.WhoGuidelines
 import earth.walkthru.aqsync.airquality.WhoStep
-import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.aqsync.data.protocol.LiveReading
 import earth.walkthru.aqsync.data.protocol.PmsStatus
 
 /**
@@ -64,13 +64,17 @@ sealed interface NowReading {
     data class Reading(val pm25: Double, val mood: AirMood, val basis: Pm25Basis = Pm25Basis.RAW, val raw: Double? = pm25) : NowReading
 
     companion object {
-        fun of(live: LiveSample?): NowReading {
+        /**
+         * The Now card for [live], read by column through the station template. No reading, an
+         * overflow sample (every value null) or an unknown dictionary is [Waiting].
+         */
+        fun of(live: LiveReading?): NowReading {
             if (live == null) return Waiting
             val status = live.pmsStatus ?: return Waiting
             if (status != PmsStatus.VALID) return SensorNotReady(status, hint(status))
-            val raw = live.pm25?.takeIf { it.isFinite() }
+            val raw = live.value(Metrics.PM25.column)
             // The correction reads the CF=1 PM2.5 and the sensor's RH, the inputs it was fitted on.
-            val corrected = EpaPm25Correction.correct(live.c25, live.rh)
+            val corrected = EpaPm25Correction.correct(live.value(Metrics.PM25_CORRECTED.column), live.value(Metrics.HUMIDITY.column))
             val pm = corrected ?: raw ?: return Waiting
             val mood = AirMood.ofOrNull(pm) ?: return Waiting
             return Reading(pm, mood, if (corrected != null) Pm25Basis.CORRECTED else Pm25Basis.RAW, raw)

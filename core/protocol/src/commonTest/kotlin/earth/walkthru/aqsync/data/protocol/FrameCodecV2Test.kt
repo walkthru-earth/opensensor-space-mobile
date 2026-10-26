@@ -140,7 +140,7 @@ class FrameCodecV2Test {
         val status = FrameCodec.decode(("48" + """{"up_s":5,"utc":1}""".encodeToByteArray().toHex()).hexToBytes()) as Frame.StatusPush
         assertEquals(5L, DeviceStatus.parse(status.json).upSeconds)
         val live = FrameCodec.decode(("49" + """{"seq":9,"pms":4,"pm25":7}""".encodeToByteArray().toHex()).hexToBytes()) as Frame.LivePush
-        assertEquals(7.0, LiveSample.parse(live.json).pm25)
+        assertEquals(7.0, LiveSample.parse(live.json)["pm25"])
     }
 
     @Test

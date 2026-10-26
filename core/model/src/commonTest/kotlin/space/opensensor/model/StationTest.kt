@@ -63,6 +63,21 @@ class StationTest {
     }
 
     @Test
+    fun aTemplateWithoutACelsiusColumnStillResolvesAStation() {
+        val kelvin = BoardTemplate.parse(
+            template(
+                """{"name": "air_temperature_k", "type": "float", "unit": "K", "roles": ["physicalMeasurement"]},
+                   {"name": "pm25_atmospheric_ug_m3", "type": "float", "unit": "ug/m3", "roles": ["physicalMeasurement"]}""",
+                liveKeys = """{"air_temperature_k": "tk", "pm25_atmospheric_ug_m3": "pm25"}""",
+            ),
+        )
+        val station = Station.join("3f2b9c1e", kelvin)
+        assertEquals(setOf("tk", "pm25"), station.live.keys)
+        assertNull(station.live.temperature, "only a Cel column is the temperature card")
+        assertEquals("K", station.datastream("air_temperature_k")!!.datastream.unit)
+    }
+
+    @Test
     fun derivedProfileWhenNoneIsBundled() {
         val station = Station.join("3f2b9c1e", cores3)
         assertTrue(station.profile.isDerived)

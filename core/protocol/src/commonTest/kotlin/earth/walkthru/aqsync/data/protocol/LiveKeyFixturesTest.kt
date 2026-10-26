@@ -21,7 +21,7 @@ class LiveKeyFixturesTest {
         FixtureBuild("waveshare", "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb", "idf-waveshare-parquet-v2.9", setOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
     )
 
-    /** Released digests the app no longer bundles. Boards on them get no LIVE profile until reflashed. */
+    /** Released digests the app no longer bundles. Boards on them get no LIVE view until reflashed. */
     private val retired = listOf(
         "20f850852413abb1165f3f7ca95b4831a0e90a34ae7c7fcb41c44b108d3513c3", // cores3-telemetry-v2 and v3
         "f35d73981ca65d9de587a4ec7988ccea19e71dce988c69eb4bb99713f2352bb3", // CoreS3 v6.11, cores3-telemetry-v4
@@ -48,21 +48,19 @@ class LiveKeyFixturesTest {
     }
 
     @Test
-    fun `every current digest resolves to the reviewed profile of its board`() {
+    fun `every current digest shows the fixture LIVE keys of its board`() {
         current.forEach { build ->
-            val profile = assertNotNull(LiveProfiles.resolve(DeviceInfo(dict = build.digest)), "${build.firmware} has no LIVE profile")
+            val station = assertNotNull(BundledCatalog.station("station", build.digest), "${build.firmware} has no LIVE station")
             val expected = if (build.board == "cores3") build.keys - cores3AlwaysNull else build.keys
-            assertEquals(expected, profile.keys, build.firmware)
-            val reviewed = if (build.board == "cores3") LiveProfiles.CORES3 else LiveProfiles.WAVESHARE
-            assertEquals(reviewed, profile, build.firmware)
+            assertEquals(expected, station.live.keys, build.firmware)
         }
     }
 
     @Test
-    fun `a retired digest has no template and no LIVE profile`() {
+    fun `a retired digest has no template and no LIVE station`() {
         retired.forEach { digest ->
             assertNull(BundledCatalog.template(digest), digest)
-            assertNull(LiveProfiles.resolve(DeviceInfo(dict = digest)), digest)
+            assertNull(BundledCatalog.station("station", digest), digest)
         }
     }
 }

@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.airquality.Pm25Basis
@@ -34,17 +35,16 @@ import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
-import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
-import earth.walkthru.aqsync.data.protocol.LiveProfile
+import earth.walkthru.aqsync.data.protocol.LiveReading
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PlantowerBatchCandidate
 import earth.walkthru.aqsync.data.protocol.PmsStatus
-import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.opensensor.designsystem.AppIcons
@@ -184,30 +184,42 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import space.opensensor.model.StationDatastream
 import kotlin.time.Instant
 
 /** The display units for Today's readings, provided by [TodayScreen] from its `units` parameter. */
 internal val LocalTodayUnits = staticCompositionLocalOf { UnitFormatter.Metric }
 
-/** The size bins (label, LIVE key) to show. An unknown board shows every bin the protocol defines. */
-internal fun particleBins(profile: LiveProfile?): List<Pair<String, String>> =
-    PARTICLE_BINS.filter { (_, key) -> profile == null || key in profile.keys }
+/** The size bins (label, column) LIVE shows for [reading]'s station. None without a station. */
+internal fun particleBins(reading: LiveReading?): List<Pair<String, String>> =
+    PARTICLE_BINS.filter { (_, column) -> reading?.declares(column) == true }
 
-private val PARTICLE_BINS = listOf(">0.3" to "n03", ">0.5" to "n05", ">1" to "n1", ">2.5" to "n25", ">5" to "n5", ">10" to "n10")
+/** The CF=1 PM1, PM2.5 and PM10 columns, a Developer line on the readings card. */
+private val CF1_COLUMNS = listOf("pm1_cf1_ug_m3", Metrics.PM25_CORRECTED.column, "pm10_cf1_ug_m3")
 
-private fun LiveSample.count(key: String): Long? = when (key) {
-    "n03" -> n03
-    "n05" -> n05
-    "n1" -> n1
-    "n25" -> n25
-    "n5" -> n5
-    "n10" -> n10
-    else -> null
+private const val BATTERY_MV = "battery_mv"
+private const val CHARGING_STATUS = "charging_status"
+
+private val PARTICLE_BINS = listOf(
+    ">0.3" to "particles_gt03_per_01l",
+    ">0.5" to "particles_gt05_per_01l",
+    ">1" to "particles_gt10_per_01l",
+    ">2.5" to "particles_gt25_per_01l",
+    ">5" to "particles_gt50_per_01l",
+    ">10" to "particles_gt100_per_01l",
+)
+
+/** The column's label from the app profile in the app's language. */
+@Composable
+internal fun StationDatastream.localLabel(): String = label(Locale.current.language)
+
+/** A temperature in the reader's units, the unit from the column. */
+@Composable
+private fun TemperatureValue(datastream: StationDatastream, reading: LiveReading?, modifier: Modifier = Modifier) {
+    val units = LocalTodayUnits.current
+    val unit = datastream.displayUnit.orEmpty()
+    BigValue(datastream.localLabel(), fmt(units.value(reading?.value(datastream.name), unit)), units.unit(unit), modifier)
 }
-
-/** The registry metric that a reviewed profile's LIVE temperature measures. */
-fun temperatureMetric(source: TemperatureSource?): MetricSpec =
-    if (source == TemperatureSource.AMBIENT) Metrics.AMBIENT_TEMP else Metrics.BOARD_TEMP
 
 /**
  * True while a reading received at [receivedAtEpochMs] is younger than [STALE_AFTER_MS]. Flips once
@@ -264,7 +276,7 @@ internal fun FreshnessLabel(receivedAtEpochMs: Long?, color: Color = MaterialThe
  */
 @Composable
 internal fun MetricHeroCard(
-    live: LiveSample?,
+    live: LiveReading?,
     receivedAtEpochMs: Long?,
     level: DetailLevel,
     modifier: Modifier = Modifier,
@@ -347,7 +359,7 @@ internal fun MetricHeroCard(
                 Text(stringResource(heroLineRes(reading.mood, level)), style = MaterialTheme.typography.bodyLarge)
             }
             if (level.developer) {
-                live?.seq?.let {
+                live?.sample?.seq?.let {
                     Text(stringResource(Res.string.now_sample_number, it), style = MaterialTheme.typography.labelSmall, color = quiet, modifier = Modifier.padding(top = 6.dp))
                 }
             }
@@ -356,27 +368,42 @@ internal fun MetricHeroCard(
 }
 
 /**
- * Temperature (and humidity where the reviewed profile has it). The hero on a device without a
- * particle sensor, and a second card under the air on an ambient-sensing board. An unknown profile
- * says that live values are not supported yet, never guesses.
+ * Temperature (and humidity where the profile shows it). The hero on a device without a particle
+ * sensor, and a second card under the air on an ambient-sensing board. While `INFO` is pending it
+ * waits quietly. Only a dictionary the app does not bundle says that live values are not supported,
+ * never a missing or null value.
  */
 @Composable
-internal fun EnvironmentCard(profile: LiveProfile?, live: LiveSample?, receivedAtEpochMs: Long?, hero: Boolean, modifier: Modifier = Modifier) {
+internal fun EnvironmentCard(
+    support: LiveSupport,
+    capabilities: DeviceCapabilities,
+    live: LiveReading?,
+    receivedAtEpochMs: Long?,
+    hero: Boolean,
+    modifier: Modifier = Modifier,
+) {
     BrandCard(modifier = modifier, tone = if (hero) CardTone.SOFT else CardTone.PLAIN) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Eyebrow(stringResource(Res.string.env_title), modifier = Modifier.weight(1f), heading = true)
             FreshnessLabel(receivedAtEpochMs)
         }
         Spacer(Modifier.height(12.dp))
-        if (profile == null) {
-            Text(stringResource(Res.string.env_unsupported), style = MaterialTheme.typography.bodyMedium)
-            return@BrandCard
+        when (support) {
+            LiveSupport.PENDING -> {
+                Text(stringResource(Res.string.now_waiting), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                return@BrandCard
+            }
+            LiveSupport.UNSUPPORTED -> {
+                Text(stringResource(Res.string.env_unsupported), style = MaterialTheme.typography.bodyMedium)
+                return@BrandCard
+            }
+            LiveSupport.READY -> Unit
         }
+        val temperature = capabilities.temperature
+        val humidity = capabilities.humidity
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            val temp = temperatureMetric(profile.temperature)
-            val units = LocalTodayUnits.current
-            BigValue(temp.label, fmt(units.value(profile.temperatureOf(live), temp.unit)), units.unit(temp.unit), Modifier.weight(1f))
-            if (profile.humidity) BigValue(Metrics.HUMIDITY.label, fmt(live?.rh), Metrics.HUMIDITY.unit, Modifier.weight(1f))
+            temperature?.let { TemperatureValue(it, live, Modifier.weight(1f)) }
+            humidity?.let { BigValue(it.localLabel(), fmt(live?.value(it.name)), it.displayUnit.orEmpty(), Modifier.weight(1f)) }
         }
         if (live == null) {
             Spacer(Modifier.height(8.dp))
@@ -596,10 +623,15 @@ internal fun isoInstant(utcNs: Long): String =
  * unvalidated batch estimate. Only a fresh valid count received after that acknowledgement is used.
  */
 @Composable
-internal fun BatchEstimateCard(live: LiveSample?, receivedAtEpochMs: Long?, config: ConfigSnapshot?, modifier: Modifier = Modifier) {
+internal fun BatchEstimateCard(live: LiveReading?, receivedAtEpochMs: Long?, config: ConfigSnapshot?, modifier: Modifier = Modifier) {
     val fresh = rememberIsFresh(receivedAtEpochMs) && receivedAtEpochMs != null && receivedAtEpochMs >= (config?.atEpochMs ?: Long.MAX_VALUE)
     val estimate = if (fresh) {
-        PlantowerBatchCandidate.estimate(config?.config?.sensor?.serial, config?.config?.sensor?.batchCandidate, live?.pms, live?.n03)
+        PlantowerBatchCandidate.estimate(
+            config?.config?.sensor?.serial,
+            config?.config?.sensor?.batchCandidate,
+            live?.pmsStatus?.code,
+            live?.value(Metrics.PARTICLES_GT03.column)?.toLong(),
+        )
     } else {
         null
     }
@@ -618,7 +650,7 @@ internal fun BatchEstimateCard(live: LiveSample?, receivedAtEpochMs: Long?, conf
  * values, which are a sensor-internal correction and easy to misread.
  */
 @Composable
-internal fun ReadingsCard(live: LiveSample?, receivedAtEpochMs: Long?, level: DetailLevel, modifier: Modifier = Modifier) {
+internal fun ReadingsCard(live: LiveReading?, receivedAtEpochMs: Long?, level: DetailLevel, modifier: Modifier = Modifier) {
     val showPm = live?.pmValid == true
     BrandCard(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -627,8 +659,8 @@ internal fun ReadingsCard(live: LiveSample?, receivedAtEpochMs: Long?, level: De
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            BigValue(Metrics.PM10.label, if (showPm) fmt(live.pm10) else NO_VALUE, Metrics.PM10.unit, Modifier.weight(1f))
-            BigValue(Metrics.PM1.label, if (showPm) fmt(live.pm1) else NO_VALUE, Metrics.PM1.unit, Modifier.weight(1f))
+            BigValue(Metrics.PM10.label, if (showPm) fmt(live.value(Metrics.PM10.column)) else NO_VALUE, Metrics.PM10.unit, Modifier.weight(1f))
+            BigValue(Metrics.PM1.label, if (showPm) fmt(live.value(Metrics.PM1.column)) else NO_VALUE, Metrics.PM1.unit, Modifier.weight(1f))
         }
         if (!showPm) {
             val status = live?.pmsStatus
@@ -642,10 +674,11 @@ internal fun ReadingsCard(live: LiveSample?, receivedAtEpochMs: Long?, level: De
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (level.developer && showPm && (live.c25 != null || live.c1 != null || live.c10 != null)) {
+        val cf1 = CF1_COLUMNS.map { live?.value(it) }
+        if (level.developer && showPm && cf1.any { it != null }) {
             Spacer(Modifier.height(10.dp))
             Text(
-                stringResource(Res.string.readings_cf1, fmt(live.c1), fmt(live.c25), fmt(live.c10)),
+                stringResource(Res.string.readings_cf1, fmt(cf1[0]), fmt(cf1[1]), fmt(cf1[2])),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -655,8 +688,8 @@ internal fun ReadingsCard(live: LiveSample?, receivedAtEpochMs: Long?, level: De
 
 /** Detailed level: particle counts per 0.1 L by size bin, only the bins the board's field table has. */
 @Composable
-internal fun ParticlesCard(live: LiveSample?, profile: LiveProfile?, modifier: Modifier = Modifier) {
-    val counts = particleBins(profile).map { (label, key) -> label to live?.count(key) }
+internal fun ParticlesCard(live: LiveReading?, modifier: Modifier = Modifier) {
+    val counts = particleBins(live).map { (label, column) -> label to live?.value(column)?.toLong() }
     BrandCard(modifier = modifier) {
         // Not uppercased. "µ".uppercase() is the Greek capital mu, which once rendered as "(MM)".
         Eyebrow(stringResource(Res.string.particles_title), uppercase = false, heading = true)
@@ -673,21 +706,34 @@ internal fun ParticlesCard(live: LiveSample?, profile: LiveProfile?, modifier: M
     }
 }
 
-/** Detailed level: the board's own temperature and the battery. Millivolts and USB voltage are Developer facts. */
+/**
+ * Detailed level: the board's own temperature and the battery. Millivolts and USB voltage are Developer
+ * facts. Before `INFO` ([LiveSupport.PENDING]) the note waits quietly and never says unsupported (#152).
+ */
 @Composable
-internal fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLevel, modifier: Modifier = Modifier) {
+internal fun BoardCard(
+    support: LiveSupport,
+    live: LiveReading?,
+    capabilities: DeviceCapabilities,
+    level: DetailLevel,
+    modifier: Modifier = Modifier,
+) {
+    val temperature = capabilities.temperature
     BrandCard(modifier = modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Column(Modifier.weight(1f)) {
-                val temp = temperatureMetric(profile?.temperature)
-                val units = LocalTodayUnits.current
-                BigValue(temp.label, if (profile != null) fmt(units.value(profile.temperatureOf(live), temp.unit)) else NO_VALUE, units.unit(temp.unit))
+                if (temperature != null) {
+                    TemperatureValue(temperature, live)
+                } else {
+                    BigValue(Metrics.BOARD_TEMP.label, NO_VALUE, LocalTodayUnits.current.unit(Metrics.BOARD_TEMP.unit))
+                }
                 Text(
                     stringResource(
-                        when (profile?.temperature) {
-                            TemperatureSource.BOARD -> Res.string.board_temp
-                            TemperatureSource.AMBIENT -> Res.string.board_ambient_note
-                            null -> Res.string.board_temp_unsupported
+                        when {
+                            support == LiveSupport.PENDING -> Res.string.now_waiting
+                            temperature == null -> Res.string.board_temp_unsupported
+                            capabilities.ambientTemperature -> Res.string.board_ambient_note
+                            else -> Res.string.board_temp
                         },
                     ),
                     style = MaterialTheme.typography.labelSmall,
@@ -696,22 +742,22 @@ internal fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLe
             }
             // Battery label, percent and charging state read as one element.
             Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                val charging = live?.code(CHARGING_STATUS) == 1
                 Eyebrow(Metrics.BATTERY.label, uppercase = false)
                 Row(verticalAlignment = Alignment.Bottom) {
                     Icon(
-                        if (live?.chg == 1) AppIcons.BatteryChargingFull else AppIcons.BatteryStd,
+                        if (charging) AppIcons.BatteryChargingFull else AppIcons.BatteryStd,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
-                    Text(live?.pct?.let { "$it" } ?: NO_VALUE, style = MaterialTheme.typography.displaySmall)
+                    Text(live?.value(Metrics.BATTERY.column)?.toLong()?.let { "$it" } ?: NO_VALUE, style = MaterialTheme.typography.displaySmall)
                     Spacer(Modifier.width(4.dp))
                     Text(Metrics.BATTERY.unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 7.dp))
                 }
-                val charging = live?.chg == 1
                 val chargingText = stringResource(Res.string.board_charging)
-                val millivolts = live?.bat?.let { stringResource(Res.string.board_millivolts, it) }
-                val usb = live?.vbus?.takeIf { it > 0 }?.let { stringResource(Res.string.board_usb_millivolts, it) }
+                val millivolts = live?.value(BATTERY_MV)?.toInt()?.let { stringResource(Res.string.board_millivolts, it) }
+                val usb = live?.value(Metrics.VBUS.column)?.toInt()?.takeIf { it > 0 }?.let { stringResource(Res.string.board_usb_millivolts, it) }
                 val detail = buildList {
                     if (charging) add(chargingText)
                     if (level.developer) {

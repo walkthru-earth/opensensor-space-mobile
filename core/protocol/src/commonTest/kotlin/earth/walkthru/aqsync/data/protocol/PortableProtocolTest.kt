@@ -91,8 +91,7 @@ class PortableProtocolTest {
     }
 
     @Test fun missingReadingsAndUnknownProfileStayUnavailable() {
-        assertNull(LiveSample.parse("{}").pm25)
-        assertNull(LiveProfiles.resolve(DeviceInfo(schema = "cores3-telemetry-v5", dict = "unreviewed")))
+        assertNull(LiveSample.parse("{}")["pm25"])
         assertEquals("001234", BleConfig(pin = 1234).pinText)
     }
 }

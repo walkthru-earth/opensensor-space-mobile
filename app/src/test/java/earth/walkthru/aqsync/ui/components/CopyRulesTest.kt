@@ -1,12 +1,15 @@
 package earth.walkthru.aqsync.ui.components
 
+import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.history.NowReading
+import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PmsStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
+import space.opensensor.model.BundledCatalog
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -74,7 +77,9 @@ class CopyRulesTest {
             }
         }
         // Today (`:feature:today`) owns the warming hint on both apps.
-        val warming = NowReading.of(LiveSample(pms = PmsStatus.WARMING.code)) as NowReading.SensorNotReady
+        val waveshare = DeviceInfo(dict = BundledCatalog.templates.first { it.schema.startsWith("waveshare-") }.dict)
+        val sample = LiveSample.parse("""{"pms":${PmsStatus.WARMING.code}}""")
+        val warming = NowReading.of(DeviceCapabilities.from(waveshare).reading(sample)) as NowReading.SensorNotReady
         assertEquals(sharedStrings().getValue("today").getValue("pms_warming_hint"), warming.hint)
     }
 }

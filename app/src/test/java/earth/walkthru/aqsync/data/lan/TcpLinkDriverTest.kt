@@ -174,7 +174,7 @@ class TcpLinkDriverTest {
             assertEquals(listOf("a.parquet", "b.parquet"), files.map { f -> f.name })
             assertEquals(2L, end.count)
             val live: LiveSample = liveSeen.await()
-            assertEquals(9.0, live.pm25)
+            assertEquals(9.0, live["pm25"])
             assertEquals(42L, withTimeout(5_000) { session.readStatus() }.upSeconds)
 
             val chunks = ArrayList<Frame.Chunk>()

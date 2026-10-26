@@ -79,7 +79,7 @@ class CompanionTodaySourceTest {
         assertNull(snapshot.liveAtEpochMs)
         state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
         settle(this)
-        assertEquals(12.0, source.snapshot.value.live?.pm25)
+        assertEquals(12.0, source.snapshot.value.live?.get("pm25"))
         assertEquals(1_000L, source.snapshot.value.liveAtEpochMs)
         state.connectionClosed("gone")
         settle(this)
@@ -100,7 +100,7 @@ class CompanionTodaySourceTest {
         assertEquals(ConnectionState.Ready(0), source.snapshot.value.connection)
         assertEquals(TransportKind.LAN, source.snapshot.value.transport)
         assertEquals("st", source.snapshot.value.info?.station)
-        assertEquals(12.0, source.snapshot.value.live?.pm25)
+        assertEquals(12.0, source.snapshot.value.live?.get("pm25"))
         source.sync()
         assertEquals(listOf("sync"), calls.list)
 

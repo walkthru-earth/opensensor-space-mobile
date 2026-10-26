@@ -2,7 +2,6 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.history.NowReading
-import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.opensensor.permissions.AccessStatus
 import earth.walkthru.opensensor.permissions.PermissionFlow
 import earth.walkthru.opensensor.strings.UiText
@@ -23,6 +22,14 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CompanionStateTest {
+    /** The bundled Waveshare dictionary, so LIVE has a station to read through. */
+    private val dict = "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb"
+
+    private fun lanConnected(state: CompanionState, name: String, station: String = "station-$name") {
+        state.lanSessionChanged(name, true, false, "connected", 0, 0, 0)
+        state.lanInfoReceived(name, "{\"proto\":3,\"station\":\"$station\",\"dev\":\"112233445566\",\"dict\":\"$dict\"}")
+    }
+
     @Test fun pausedCollectionRetainsProgressWithoutShowingAStaleTransferRate() {
         val state = CompanionState()
         state.lanSessionChanged("a", true, true, "syncing", 2, 4, 16384, 2048.0)
@@ -107,6 +114,8 @@ class CompanionStateTest {
 
     @Test fun independentLanSessionsAndLiveReadingsNeverOverwriteEachOther() {
         val state = CompanionState()
+        lanConnected(state, "a")
+        lanConnected(state, "b")
         state.lanSessionChanged("a", true, true, "syncing", 1, 4, 100)
         state.lanSessionChanged("b", true, false, "ready", 0, 0, 0)
         state.lanReadingReceived("a", "{\"pms\":4,\"pm25\":12.0}")
@@ -123,12 +132,12 @@ class CompanionStateTest {
 
     private fun connected(): CompanionState = CompanionState().also {
         it.connectionStarted("device")
-        assertTrue(it.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\"}"))
+        assertTrue(it.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\",\"dict\":\"$dict\"}"))
     }
 
     @Test fun disconnectedLanSensorCannotKeepOrRestoreAnOldReading() {
         val state = CompanionState()
-        state.lanSessionChanged("a", true, false, "connected", 0, 0, 0)
+        lanConnected(state, "a")
         state.lanReadingReceived("a", "{\"pms\":4,\"pm25\":12.0}")
         assertIs<NowReading.Reading>(state.lanReadings["a"])
         state.lanSessionChanged("a", false, false, "disconnected", 0, 0, 0)
@@ -141,14 +150,13 @@ class CompanionStateTest {
 
     @Test fun lanTodaySnapshotBelongsOnlyToConnectedStationAndClearsOnClose() {
         val state = CompanionState()
-        state.lanSessionChanged("kitchen", true, false, "connected", 0, 0, 0)
-        state.lanInfoReceived("kitchen", "{\"proto\":3,\"station\":\"station-a\",\"dev\":\"112233445566\"}")
+        lanConnected(state, "kitchen", station = "station-a")
         state.lanStatusReceived("kitchen", "{\"utc\":1,\"clk\":1}")
         state.lanReadingReceived("kitchen", "{\"pms\":4,\"pm25\":12.0}")
         assertEquals("kitchen", state.connectedLanForStation("station-a"))
         assertNull(state.connectedLanForStation("station-b"))
         assertEquals("112233445566", state.lanInfo["kitchen"]?.dev)
-        assertEquals(12.0, state.lanLive["kitchen"]?.pm25)
+        assertEquals(12.0, state.lanLive["kitchen"]?.get("pm25"))
         state.lanSessionChanged("kitchen", false, false, "disconnected", 0, 0, 0)
         assertNull(state.connectedLanForStation("station-a"))
         assertFalse("kitchen" in state.lanInfo)
@@ -168,6 +176,24 @@ class CompanionStateTest {
         assertEquals(UiText.of(Res.string.now_waiting), state.message)
     }
 
+    @Test fun anOverflowSampleClearsTheLiveValues() {
+        val state = connected()
+        state.receiveLive("{\"seq\":1,\"pms\":4,\"pm25\":12.0}")
+        assertIs<NowReading.Reading>(state.reading)
+        state.receiveLive("{\"seq\":null,\"mono\":null,\"utc\":null,\"pms\":null,\"pm25\":null}")
+        assertTrue(state.live?.overflow == true)
+        assertNull(state.live?.get("pm25"))
+        assertEquals(NowReading.Waiting, state.reading)
+    }
+
+    @Test fun infoWithAnUnknownDictionaryHasNoLiveReading() {
+        val state = CompanionState()
+        state.connectionStarted("device")
+        assertTrue(state.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\",\"dict\":\"${"0".repeat(64)}\"}"))
+        state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
+        assertEquals(NowReading.Waiting, state.reading)
+    }
+
     @Test fun messagesAreCatalogueKeysAndAdapterWordsPassThrough() {
         val state = connected()
         assertEquals(UiText.of(Res.string.companion_live), state.message)
@@ -182,7 +208,9 @@ class CompanionStateTest {
 
     @Test fun warmingCopyMatchesAndroid() {
         // Same words as the shared Today pms_warming_hint.
-        val warming = NowReading.of(LiveSample.parse("{\"pms\":1}"))
+        val state = connected()
+        state.receiveLive("{\"pms\":1}")
+        val warming = state.reading
         assertEquals("The sensor is warming up. It takes about a minute after power on.", (warming as NowReading.SensorNotReady).hint)
     }
 
