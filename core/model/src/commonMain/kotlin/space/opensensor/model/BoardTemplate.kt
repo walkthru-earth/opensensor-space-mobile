@@ -53,7 +53,7 @@ data class BoardTemplate(
     val datastreams: List<Datastream>,
     /** Column name to LIVE key, `firmware.live_keys`. */
     val liveKeys: Map<String, String>,
-    /** Href of the firmware dictionary `describedby` link. */
+    /** Href of the firmware dictionary `describedby` link. Shown only, never fetched or trusted. The dict digest is the key. */
     val dictionaryHref: String?,
 ) {
     init {

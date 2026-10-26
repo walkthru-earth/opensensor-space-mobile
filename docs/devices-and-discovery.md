@@ -69,7 +69,9 @@ Rules.
    repo root, and, if the derived default is not enough, add an
    `AppProfile` for that `dict` under `core/model/bundled/profiles/`. `BundledCatalog` reads the
    templates through `index.json`, which gives each its `desc`. `BundledTemplateBytesTest` checks each
-   file's SHA-256 against its `index.json` desc and `BundledCatalogTest` checks the profiles.
+   file's SHA-256 against its `index.json` desc and pins the full SHA-256 of every copied json file,
+   so update its `pinned` map with the copy. `BundledCatalogTest` checks the profiles. The template
+   links point at fixed aq commits, the app never fetches or trusts them, only the digests.
 3. If it uses a new transport, follow "Adding a transport" in the cross-platform guide.
 4. Optional. A family may provide a hero component (the air-quality mood face is one). Without
    one, the generic `MetricCard` is used.

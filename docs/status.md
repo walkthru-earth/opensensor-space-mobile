@@ -82,7 +82,7 @@ build and `verify` only. No phone run against the new firmware yet.
   every cached day once.
 - LIVE. `LiveSample` is a map by key name (#185), read through the station of the dictionary digest,
   the bundled board template joined with its app profile (#184). A newer schema keeps its view. Only
-  the current digest of each board is bundled, CoreS3 v6.16 (`4f80c26c…`) and Waveshare v2.10
+  the current digest of each board is bundled, CoreS3 (`4f80c26c…`) and Waveshare
   (`6f567b38…`). An unknown or older digest syncs files but has no LIVE view. A null key is no
   reading now and shows a dash, as does a declared key missing from a sample. Cards follow the
   template declaration, and an overflow sample clears every live value. CoreS3

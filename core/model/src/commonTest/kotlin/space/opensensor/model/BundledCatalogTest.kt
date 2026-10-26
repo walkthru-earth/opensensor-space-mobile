@@ -10,6 +10,8 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class BundledCatalogTest {
+    private val indexFile = "templates/index.json"
+
     // The current digests, aq-parquet docs/shared/templates (#86). A desc move keeps them.
     private val cores3Dict = "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94"
     private val waveshareDict = "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb"
@@ -173,9 +175,25 @@ class BundledCatalogTest {
         assertFailsWith<IllegalArgumentException> { BundledCatalog.templatesOf(stray) }
         val missing = files - cores3File
         assertFailsWith<IllegalArgumentException> { BundledCatalog.templatesOf(missing) }
-        val wrongDict = files + (cores3File to files.getValue(waveshareFile))
-        assertFailsWith<IllegalArgumentException> { BundledCatalog.templatesOf(wrongDict) }
         assertEquals(BundledCatalog.templates, BundledCatalog.templatesOf(files))
+    }
+
+    @Test
+    fun theIndexDictMustMatchTheTemplateDict() {
+        val index = BundledFiles.files.getValue(indexFile)
+        val moved = index.replace("\"$cores3Dict\": {", "\"$unknownDict\": {")
+        assertTrue(moved != index)
+        val error = assertFailsWith<IllegalArgumentException> { BundledCatalog.templatesOf(BundledFiles.files + (indexFile to moved)) }
+        assertTrue("dict" in error.message.orEmpty(), error.message)
+    }
+
+    @Test
+    fun theIndexSchemaMustMatchTheTemplateSchema() {
+        val index = BundledFiles.files.getValue(indexFile)
+        val renamed = index.replace("\"schema\": \"cores3-telemetry-v5\"", "\"schema\": \"cores3-telemetry-v99\"")
+        assertTrue(renamed != index)
+        val error = assertFailsWith<IllegalArgumentException> { BundledCatalog.templatesOf(BundledFiles.files + (indexFile to renamed)) }
+        assertTrue("schema" in error.message.orEmpty(), error.message)
     }
 
     @Test
