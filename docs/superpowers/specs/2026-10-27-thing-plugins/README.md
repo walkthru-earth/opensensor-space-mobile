@@ -26,7 +26,7 @@ Inputs.
 ## 1. Verdict
 
 1. The data layer is ready. Vocabulary is open, templates resolve served before bundled, a board without a profile gets a derived one, `ParquetWriter` and `FileItems` are common code. What is tied to boards is transport, identity and screens.
-2. The boundary every plugin meets is the archive file. Every kind that records data writes verified Parquet files under `archive/thing=<uuid>/` with an `opensensor` footer and a resolvable template. Archive, history, charts, `FileItems` and Room then stay as they are.
+2. The boundary every plugin meets is the archive file. Every kind that records data writes verified Parquet files under `archive/thing=<uuid>/` with an `opensensor` footer and a resolvable template. Archive, history, charts, `FileItems` and the existing Room tables then stay as they are. Room gains one table, `thing_source`, in step 4, and existing consumers keep working.
 3. Remote Things (boards) keep today's link path unchanged. Local Things (the phone) get a separate sampling path. Forcing phone sensors through `LinkProvider` or `IosLinkPort` would be wrong, since there is no wire protocol and no remote archive.
 4. Registration is a plain list built at each app entry point. Kotlin/Native has no `ServiceLoader` and top level properties initialise lazily, so self registration would silently give an empty registry on iOS.
 5. Health data is read on the phone and never becomes a published Thing file. The type system enforces it with a `PublishGate`.

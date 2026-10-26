@@ -37,20 +37,20 @@ interface ThingKind {
     val config: ConfigSchema                          // see setup-wizard.md
     val setup: List<SetupStep>
     val permissions: Set<PermissionNeed>              // merged into the :ui:permissions trigger table
-    val publish: PublishPolicy
 }
 
+// Only recording sources carry a publish policy, so a PrivateRead kind cannot be publishable.
 sealed interface DataSource {
-    class PullSync(val links: LinkProvider) : DataSource          // today's CollectionController
-    class LocalSampling(val sampler: SamplerPort) : DataSource    // phone session, ParquetWriter to ArchiveStore
-    class RemoteFeed(val feed: PublicFeed) : DataSource           // feed only Things, self uploading devices
-    class PrivateRead(val reader: PrivateSourcePort) : DataSource // health, never an archive file
+    sealed interface Recording : DataSource { val publish: PublishPolicy }
+    class PullSync(val links: LinkProvider, override val publish: PublishPolicy) : Recording       // today's CollectionController
+    class LocalSampling(val sampler: SamplerPort, override val publish: PublishPolicy) : Recording // phone session, ParquetWriter to ArchiveStore
+    class RemoteFeed(val feed: PublicFeed) : DataSource           // feed only Things, self uploading devices, already public
+    class PrivateRead(val reader: PrivateSourcePort) : DataSource // health, never an archive file, never published
 }
 
 sealed interface PublishPolicy {
     data object Never : PublishPolicy
     data class OptInCcBy(val maxRes: Int, val trimSessionEnds: Boolean) : PublishPolicy
-    data object PublishedByDevice : PublishPolicy
 }
 
 class ThingKinds(private val kinds: List<ThingKind>) {
@@ -71,7 +71,7 @@ interface SamplerPort {
 }
 ```
 
-The `SampleSink` is thread safe and never blocks. It hands rows to one session writer in common code, which writes `data_HHMM_` files through `ParquetWriter`, verifies them like a downloaded file, and adds them to the archive. Session start, stop, trimming and the per install id live once in common code.
+The `SampleSink` is thread safe and never blocks. It hands rows to one session writer in common code, which writes `data_<HHMM>_<boot>_<seq>` files through `ParquetWriter` with the session id in the boot segment, verifies them like a downloaded file, and adds them to the archive. Session start, stop, trimming and the per install id live once in common code.
 
 ## 3. Registration
 
@@ -107,11 +107,15 @@ Code.
 
 ## 7. Health enforced by type
 
-`FileItems` gets one caller, `PublishGate`, which issues a ticket only when the kind's `publish` is not `Never`. `PrivateRead` data uses a private storage class and never touches `archive/`.
+`FileItems` gets one caller, `PublishGate`, which issues a ticket only when the source is `DataSource.Recording` and its `publish` is `OptInCcBy`. Every other source gets no ticket, whatever else it declares. `PrivateRead` data uses a private storage class and never touches `archive/`. A contract test asserts that no `PrivateRead` or `RemoteFeed` kind can obtain a ticket.
 
 ## 8. Tests
 
-- `:core:thing:testkit` with an abstract `ThingKindContract` each kind runs in `commonTest`, so it is gated on JVM and the iOS simulator. It checks that written files pass `ParquetVerify` and `OpenSensorFooter.parse`, that `FileTemplates` resolves them, that `Metrics.of` returns at least one metric, that `FileItems` gives the expected item, that `Never` yields no publish ticket, and that no fix or secret reaches a log.
+- `:core:thing:testkit` runs in `commonTest`, so it is gated on JVM and the iOS simulator. Tests split by source.
+  - Every kind. Unique `KindId`, recognition from recorded evidence, capability ids come from the template, `PublishGate` gives a ticket only to `Recording` with `OptInCcBy`, and no fix or secret reaches a log.
+  - `Recording` kinds only. Written files pass `ParquetVerify` and `OpenSensorFooter.parse`, `FileTemplates` resolves them, `Metrics.of` returns at least one metric, and `FileItems` gives the expected item.
+  - `RemoteFeed` kinds. Feed rows map to the template's properties, nothing is written to `archive/`.
+  - `PrivateRead` kinds. Nothing is written to `archive/` and no ticket is issued.
 - Fixtures are recorded `LinkDriver` scripts (as `FakeTransport` does) and recorded sampler traces. DuckDB and PyArrow stay the oracles.
 - Fixtures pick templates by pinned `dict`, never by schema prefix.
 
@@ -131,5 +135,5 @@ All use `opensensor.kmp.library`, so the gates pick them up with no list edit.
 ## 10. Risks
 
 - Contracts unsettled for phones (stac-opensensor#2 sections A to C).
-- Over abstraction. `CollectionController` stays the board kind's internals, never a universal pipe.
+- Over-abstraction. `CollectionController` stays the board kind's internals, never a universal pipe.
 - Swift API growth. Export only `ThingKinds.recognize` and the sampler ports.

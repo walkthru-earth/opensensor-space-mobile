@@ -26,6 +26,6 @@ Part of [Thing plugins](README.md). Surveyed 2026-10-27 with `gh api` and Codebe
 
 ## KMP libraries
 
-- [maplibre-compose](https://github.com/maplibre/maplibre-compose) (moved from `sargunv`), BSD-3, already used at 0.20.0. Pre 1.0, pin carefully.
+- [maplibre-compose](https://github.com/maplibre/maplibre-compose) (moved from `sargunv`), BSD-3, already used at 0.20.0. Pre-1.0, pin carefully.
 - [Kable](https://github.com/JuulLabs/kable), Apache-2.0. Reference for a coroutine BLE API shape only, we keep our own links.
-- [Metro](https://github.com/ZacSweers/metro), kotlin-inject with anvil, Koin. All offer multibindings on every KMP target. Since `:core` avoids DI frameworks, a hand written list checked by a test (or a KSP generated one later) is the lightest option.
+- [Metro](https://github.com/ZacSweers/metro), kotlin-inject with anvil, Koin. All offer multibindings on every KMP target. Since `:core` avoids DI frameworks, a hand written list checked by a test (or a KSP-generated one later) is the lightest option.

@@ -5,7 +5,7 @@ Part of [Thing plugins](README.md). Proposal, 2026-10-27.
 ## 1. Today
 
 - The 4 step wizard (`FIND → NAME → LOCATION → WIFI → DONE`) exists only in [2026-10-12-stations-ux-design.md](../2026-10-12-stations-ux-design.md) slice 3. There is no `feature/setup`, and `KnownDevice` has no nickname or setup flag. A user adds a sensor by scanning on My devices and opening it. Pairing happens in the OS dialog on first connect. Android writes the known row before the link opens, so a failed pairing leaves a ghost entry.
-- Board specific parts. Find uses the BLE service UUID scan. Pairing has random, fixed and none modes. Wi-Fi join and the LAN token go over Bluetooth only. The sensor sticker is Plantower only.
+- Board-specific parts. Find uses the BLE service UUID scan. Pairing has random, fixed and none modes. Wi-Fi join and the LAN token go over Bluetooth only. The sensor sticker is Plantower only.
 - Device settings are a fixed list of cards in `DeviceConfigSection.kt`. The sensor card is gated by one column name.
 - `SET_CONFIG` fields are hardcoded three times. `ConfigPatch.Builder` has one method per key with firmware limits as constants and a closed `ConfigProblem` enum, plus a fixed secret key set and a LAN refusal (`core/protocol/.../DeviceConfig.kt`). Confirmations are four dialog objects and one `when` in `DeviceConfigController.kt`. Change kinds are a closed `DeviceConfigChange` enum.
 
@@ -51,9 +51,17 @@ data class ConfigField(
 ```
 
 - Confirmations come from data. `ble.pair=none` is `CONFIRM` when the value is `none`. Clearing bonds and rotating the token are `CONFIRM_DISRUPT`. Reboot stays its own action. `DeviceConfigController.confirm()` stays the single place that sends a confirmed write.
+- `ConfigField` gains `val dialog: DeviceConfigDialog?`, and a gated field without one fails the table test. The table maps keys onto today's closed types, so no second list appears.
+
+| Key | Gate | `DeviceConfigDialog` | `DeviceConfigChange` |
+| --- | --- | --- | --- |
+| `ble.pair` when `confirmWhen = "none"` | `CONFIRM` | `PairingNone` | `PAIRING` |
+| `ble.clear_bonds` | `CONFIRM_DISRUPT` | `ForgetBonds` | `BONDS_CLEARED` |
+| `lan.rotate_token` | `CONFIRM_DISRUPT` | `RotateToken` | none, the token is refetched |
+| reboot, an action and not a field | `CONFIRM_DISRUPT` | `Reboot` | none |
 - Secrets are marked in the schema. A secret field is never logged, drafted, sent over LAN or used as a default. `SECRET_KEYS` is built from the schema. The redaction tests stay.
 - Labels stay in the app. An unknown string id falls back to Developer only display.
-- App floor rules win over any schema. A plugin can never add a secret key or a disruptive action unnoticed, so the app keeps a fixed list of keys that must be secret or gated and a test that the schema agrees.
+- App floor rules win over any schema. The app owns an allowlist of every key it knows, each with its secret flag and gate. A schema can make a known key stricter, never looser. An unknown key fails closed. It is not editable, never sent, and shows read only at Developer level until an app release classifies it. `SECRET_KEYS` is the union of the allowlist's secret keys and any key a schema marks secret, and a test checks the schema against the allowlist.
 - Step 1 mirrors today's builder keys in a `ConfigField` table in `:core:protocol`, with no firmware change. Step 2 proposes an optional `config` block on the firmware #117 module and board manifests, copied into the template, so firmware owns limits and gates and the app stops duplicating them. The typed builders stay as tested shortcuts.
 
 ## 4. Phone and health flows
@@ -69,7 +77,7 @@ Health. Pick read types, the system permission sheet, then a "stays on this phon
 
 - [Home Assistant config flow](https://developers.home-assistant.io/docs/config_entries_config_flow_handler), [options flow](https://developers.home-assistant.io/docs/config_entries_options_flow_handler), [selectors](https://github.com/home-assistant/core/blob/dev/homeassistant/helpers/selector.py).
 - [Matter commissioning](https://developers.home.google.com/matter/primer/commissioning). Fixed phases with one failure message per phase.
-- [ESPHome](https://esphome.io) and [Improv Wi-Fi](https://www.improv-wifi.com/ble/). Host side schema validation, Wi-Fi provisioning over BLE as one small state machine.
+- [ESPHome](https://esphome.io) and [Improv Wi-Fi](https://www.improv-wifi.com/ble/). Host-side schema validation, Wi-Fi provisioning over BLE as one small state machine.
 - [JSON Forms](https://github.com/eclipsesource/jsonforms). Data schema split from UI hints.
 - [Meshtastic `ConfigRoute`](https://github.com/meshtastic/Meshtastic-Android/blob/main/feature/settings/src/commonMain/kotlin/org/meshtastic/feature/settings/navigation/ConfigRoute.kt). Wire config sections as the unit of settings. Avoid its hand written screen per section.
 

@@ -15,7 +15,8 @@ Part of [Thing plugins](README.md). Proposal, 2026-10-27.
 
 ## 2. Cards and Station page from template plus profile
 
-- `ThingCard(thing)` shows the profile label, the `primary[0]` value at `display_step`, the unit, the scale step name beside its colour, freshness and one action.
+- `ThingCard(thing)` shows the profile label, the first `primary` value at `display_step`, the unit, the scale step name beside its colour, freshness and one action.
+- `Thing.primary` can be empty when every primary name is hidden or missing from the template. The card and Station page then show the name, freshness and a "No main reading" line, with the full metric list one tap away. Catalog validation warns about a bundled profile with no visible primary.
 - The Station page has a hero, a Day, Week and Month strip for `primary`, and rows that unlock with the detail level. All of it reads `ThingDatastream`.
 - `lastDayPm25Mean` becomes `lastDayPrimaryMean` plus a property id.
 
@@ -46,12 +47,12 @@ Layers, bottom to top.
 3. Own moving Thing track, owner only. Stored on the phone as `(res 8 cell, hour, mean)` rows, drawn as a fill layer with its own id plus a line through cell centres. Never published (stac-opensensor#2 use case 3). If ever published, the res 7 trimmed copy (section B).
 4. Selection.
 
-- Own Things never mix into the public source, so privacy holds by construction. A test asserts the public GeoJSON never carries owned cells.
+- Own Things never mix into the public source, so privacy holds by construction. A test asserts that no owned Thing record or id appears in the public GeoJSON. Shared cell ids are allowed, since a public station can sit in the same cell as an owned one.
 - Public cells need no clustering, since coarser H3 resolution with zoom already does that.
 - Following Meshtastic, each source is keyed by Thing id plus last update, and its GeoJSON is rebuilt only when keys change, off the main thread, after the 400 ms rest.
-- Property picker. The union of `ObservedProperty` ids from own templates and the feed dictionary, ranked by count in view. Group chips by family only when there is more than one. Cap at 6 ranked chips plus More. The first chip stays a stable default.
+- Property picker. The union of `ObservedProperty` ids from own templates and the feed dictionary, ranked by count in view. Group chips by family only when there is more than one. Cap at 6 chips plus More. The first chip is a fixed default that never moves with the camera, the first `primary` of the user's first own Thing, else `pm25` when the feed has it, else the feed's most common property. Only the chips after it are ranked.
 - Filters live in one compact floating surface (Family, Property) that grows on touch and folds back. Cells that do not measure the property keep the outline only style.
-- Legends come from `StepScale` steps and names, or from the percentile ramp labelled relative to view. Always show the scale source name. Colour follows the scale, never the family. Brand blue stays for selection only.
+- Legends come from `StepScale` steps and names, or from the percentile ramp labelled relative to view. The ramp gets five fixed bands for text (lowest fifth to highest fifth in view, plus below range and above range for clamped values), with localised labels. Cells, legend and the list read those labels, and the colour stays continuous. Always show the scale source name. Colour follows the scale, never the family. Brand blue stays for selection only.
 - Frame time needs a dated measurement on the OnePlus and an iPhone.
 
 ## 4. Accessibility, RTL and font scale
@@ -59,15 +60,15 @@ Layers, bottom to top.
 - Every coloured mark carries its step name in text. A cluster badge reads like "3 stations, worst Hazy".
 - Map features have a list alternative, the existing sheet list, since canvas features are not reachable by TalkBack or VoiceOver.
 - Legends and chips mirror in Arabic. Numbers and units use bidi isolation.
-- Chips, legend items and card values use `FitText` with a floor at 1.0 font scale and never break mid word. Minimal copy with an info button.
+- Chips, legend items and card values use `FitText` with a floor at 1.0 font scale and never break mid-word. Minimal copy with an info button.
 
 ## 5. Prior art
 
 - [Home Assistant tile card](https://www.home-assistant.io/dashboards/tile/). One generic card with optional features. Copy it, skip the YAML configuration.
 - [openSenseMap](https://opensensemap.org). Phenomenon picker across arbitrary sensors, clustered boxes, mobile boxes as tracks. Avoid its raw coordinate tracks.
-- [Sensor.Community](https://maps.sensor.community). Hex aggregation with a legend per metric and a drill down to a list.
+- [Sensor.Community](https://maps.sensor.community). Hex aggregation with a legend per metric and a drill-down to a list.
 - [Netatmo Weathermap](https://weathermap.netatmo.com). Clustered averages when zoomed out, only opted in outdoor modules shared.
-- [PurpleAir](https://map.purpleair.com). Map first, no sign in. Avoid one grey for both stale and not measured.
+- [PurpleAir](https://map.purpleair.com). Map first, no sign-in. Avoid one grey for both stale and not measured.
 
 ## 6. First step
 

@@ -23,7 +23,7 @@ Board assumptions. `IosLink.kind` is Wi-Fi or Bluetooth. Link identity is a firm
 | CMAltimeter pressure | Kotlin iosMain (`platform.CoreMotion`) | plain ObjC API. Private serial `NSOperationQueue`, copy the value out as a Double |
 | CLLocationManager to cell | Kotlin iosMain | already done this way. A background session may need a thin Swift shim for `CLBackgroundActivitySession` |
 | AVAudioSession metering | Swift adapter implementing `SamplerPort` | category, interruptions and route changes are safer in Swift 6. Only dBFS crosses |
-| HealthKit reader | Swift | entitlements and Swift first APIs. Returns aggregates to a private view only |
+| HealthKit reader | Swift | entitlements and Swift-first APIs. Returns aggregates to a private view only |
 | Core Bluetooth board | Swift, unchanged | `BlePhysicalLink` actor on its serial queue |
 | Live Activity | Swift widget extension | ActivityKit is Swift only. Kotlin publishes session state, Swift mirrors it |
 
@@ -43,7 +43,7 @@ Board assumptions. `IosLink.kind` is Wi-Fi or Bluetooth. Link identity is a firm
 - Usage strings per plugin. `NSMotionUsageDescription` (barometer), `NSMicrophoneUsageDescription`, `NSHealthShareUsageDescription`. Location keeps `NSLocationWhenInUseUsageDescription`.
 - HealthKit needs `com.apple.developer.healthkit`, and `healthkit.background-delivery` only if needed. Guidelines 2.5.1 and 5.1.3 apply ([guidelines](https://developer.apple.com/app-store/review/guidelines/#health-and-health-research)).
 - Live Activities need `NSSupportsLiveActivities` and a widget extension, with a limit of about 8 hours.
-- CoreMotion, AVAudio and HealthKit are not required reason APIs. Publishing phone data under CC BY probably counts as collected, so `NSPrivacyCollectedDataTypes` and the App Store label in `docs/store-compliance.md` change in the release that publishes.
+- CoreMotion, AVAudio and HealthKit are not required reason APIs. Uploading phone data to the public feed makes it collected, as `docs/store-compliance.md` already records for boards. So `NSPrivacyCollectedDataTypes` and the App Store label change in the release that uploads phone data.
 
 ## 6. Keeping one plist and entitlement set honest
 
