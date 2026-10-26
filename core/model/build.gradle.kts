@@ -14,6 +14,7 @@ plugins {
  * `BundledFiles` with one entry per file, keyed by its path under [source] such as
  * `templates/cores3-telemetry-v5.json`.
  */
+@CacheableTask
 abstract class BundleFiles : DefaultTask() {
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)

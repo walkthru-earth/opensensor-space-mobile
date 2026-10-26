@@ -28,8 +28,11 @@ derived from the template when none is bundled), `StationCollection`, `Scale`, `
 `Station.join`, which joins them. A station keeps every datastream whatever its role, the profile
 picks what shows first. `Aggregate`, `Role` and `Family` are open value classes, so an unknown value
 parses (an unknown aggregate rolls up as `point`). The template sample interval is a default, the
-runtime interval and a file footer `sample_interval_ms` win (`Station.sampleIntervalFor`). LIVE
-values are not modelled here. No caller uses it yet. It is the first module in the `space.opensensor`
+runtime interval and a file footer `sample_interval_ms` win (`Station.sampleIntervalFor`). `LiveColumns`
+maps a template's columns to LIVE keys and picks the temperature and humidity keys, and
+`BundledCatalog.live` reads it for a bundled `dict`. `LiveProfiles` in `protocol/` resolves LIVE
+through it, `DeviceCapabilities` in `history/` carries the result, and the Today screen
+reads it from there. It is the first module in the `space.opensensor`
 package (`space.opensensor.model`), the rest move in #192.
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo

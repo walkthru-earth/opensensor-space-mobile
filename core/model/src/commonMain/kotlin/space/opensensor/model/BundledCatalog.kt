@@ -18,11 +18,11 @@ object BundledCatalog {
     val profiles: List<AppProfile> = BundledFiles.files.filterKeys { it.startsWith(PROFILES) }.values.map { AppProfile.parse(it) }
 
     private val bundledIndex = TemplateIndex(templates)
-    private val profilesByDict: Map<String, AppProfile> = profiles.associateBy { it.dict }
+    private val profilesByDict: Map<String, AppProfile> = byDict(profiles)
 
-    init {
-        require(profilesByDict.size == profiles.size) { "two bundled profiles share a dict" }
-    }
+    /** [profiles] keyed by dict. Two profiles for one dict fail, so neither wins silently. */
+    internal fun byDict(profiles: List<AppProfile>): Map<String, AppProfile> =
+        profiles.associateBy { it.dict }.also { require(it.size == profiles.size) { "two bundled profiles share a dict" } }
 
     /** A [TemplateIndex] over the bundled templates and any [served] ones. */
     fun index(served: Iterable<BoardTemplate> = emptyList()): TemplateIndex =

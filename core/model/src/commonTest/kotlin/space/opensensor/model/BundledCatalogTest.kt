@@ -2,6 +2,7 @@ package space.opensensor.model
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -152,5 +153,12 @@ class BundledCatalogTest {
         assertEquals(reference.datastreams.map { it.copy(classes = emptyList()) }, template.datastreams.map { it.copy(classes = emptyList()) })
         assertEquals(reference.datastream("pms_status")!!.classes, template.datastream("pms_status")!!.classes)
         assertEquals(reference.liveKeys, template.liveKeys)
+    }
+
+    @Test
+    fun twoProfilesForOneDictAreRefused() {
+        val profile = assertNotNull(BundledCatalog.profile(cores3Dict))
+        assertEquals(mapOf(cores3Dict to profile), BundledCatalog.byDict(listOf(profile)))
+        assertFailsWith<IllegalArgumentException> { BundledCatalog.byDict(listOf(profile, profile.copy())) }
     }
 }
