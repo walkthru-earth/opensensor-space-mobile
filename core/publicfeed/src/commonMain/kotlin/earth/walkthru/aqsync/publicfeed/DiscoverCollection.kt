@@ -78,8 +78,9 @@ class DiscoverCollection private constructor(
 
         /**
          * Parses [json], resolving relative asset hrefs against [root], the folder of the file. An
-         * http or https href is kept as it is. An asset whose key is not `h3_res=<n>`, or whose href
-         * has another scheme, is skipped. A scale in `opensensor:scales` that does not parse is dropped
+         * absolute href is kept only when it is https on the same host as an https [root], so a
+         * Collection cannot send the app to another host, to cleartext or to a local address. Any
+         * other asset, and one whose key is not `h3_res=<n>`, is dropped alone. A scale in `opensensor:scales` that does not parse is dropped
          * alone, so its property falls back to the neutral ramp and the rest of the Collection stands.
          *
          * @throws IllegalArgumentException when [json] is not a Collection.
@@ -130,10 +131,20 @@ class DiscoverCollection private constructor(
         private const val SCALES = "opensensor:scales"
 
         private fun resolve(base: String, href: String): String? = when {
-            href.startsWith("https://") || href.startsWith("http://") -> href
-            "://" in href || href.startsWith("/") || href.split('/').any { it == ".." } -> null
+            href.startsWith(HTTPS) -> href.takeIf { authority(it) != null && authority(it) == authority(base) }
+            ':' in href || '\\' in href || href.startsWith("/") || href.split('/').any { it == ".." } -> null
             else -> "$base/${href.removePrefix("./")}"
         }
+
+        /** The host and port of an https [url], or null for any other URL or one with user info. */
+        private fun authority(url: String): String? {
+            if (!url.startsWith(HTTPS)) return null
+            val rest = url.removePrefix(HTTPS)
+            val end = rest.indexOfAny(charArrayOf('/', '?', '#')).let { if (it < 0) rest.length else it }
+            return rest.take(end).lowercase().takeIf { it.isNotEmpty() && '@' !in it && '\\' !in it }
+        }
+
+        private const val HTTPS = "https://"
 
         private const val ISO_DATE_LENGTH = 10
 

@@ -46,7 +46,7 @@ class DiscoverCollectionTest {
                 """
                 "h3_res=4":{"href":"./cells/h3_res=4/data.parquet"},
                 "h3_res=5":{"href":"cells/h3_res=5/data.parquet"},
-                "h3_res=6":{"href":"https://cdn.example.test/r6.parquet"},
+                "h3_res=6":{"href":"https://example.test/mirror/r6.parquet"},
                 "h3_res=7":{"href":"../other/r7.parquet"},
                 "h3_res=8":{"href":"/abs/r8.parquet"},
                 "h3_res=9":{"href":"file:///etc/r9.parquet"},
@@ -60,10 +60,39 @@ class DiscoverCollectionTest {
             mapOf(
                 4 to "$root/cells/h3_res=4/data.parquet",
                 5 to "$root/cells/h3_res=5/data.parquet",
-                6 to "https://cdn.example.test/r6.parquet",
+                6 to "https://example.test/mirror/r6.parquet",
             ),
             c.cells,
         )
+    }
+
+    @Test
+    fun anAbsoluteHrefMustBeHttpsOnTheRootHostAndAnyOtherIsDroppedAlone() {
+        val c = DiscoverCollection.parse(
+            collection(
+                """
+                "h3_res=2":{"href":"http://example.test/discover/r2.parquet"},
+                "h3_res=3":{"href":"https://evil.test/r3.parquet"},
+                "h3_res=4":{"href":"https://127.0.0.1/r4.parquet"},
+                "h3_res=5":{"href":"https://example.test@evil.test/r5.parquet"},
+                "h3_res=6":{"href":"https://example.test.evil.test/r6.parquet"},
+                "h3_res=7":{"href":"https://EXAMPLE.test/discover/r7.parquet"},
+                "h3_res=8":{"href":"./cells/h3_res=8/data.parquet"},
+                "h3_res=9":{"href":"javascript:alert(1)"}
+                """.trimIndent(),
+            ),
+            root,
+        )
+        assertEquals(
+            mapOf(7 to "https://EXAMPLE.test/discover/r7.parquet", 8 to "$root/cells/h3_res=8/data.parquet"),
+            c.cells,
+        )
+        // A root that is not https accepts no absolute href, only relative ones.
+        val cleartext = DiscoverCollection.parse(
+            collection(""""h3_res=5":{"href":"http://example.test/r5.parquet"},"h3_res=6":{"href":"cells/r6.parquet"}"""),
+            "http://example.test",
+        )
+        assertEquals(mapOf(6 to "http://example.test/cells/r6.parquet"), cleartext.cells)
     }
 
     @Test
