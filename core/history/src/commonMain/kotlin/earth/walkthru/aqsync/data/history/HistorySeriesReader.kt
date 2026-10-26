@@ -271,7 +271,7 @@ class HistorySeriesReader(
             val bootHi = long("boot_id_hi")
             val bootLo = long("boot_id_lo")
             val seq = long(ParquetIndexer.SEQ)
-            val anchor = if (f.hasEstimatedUtc) anchors[f.bootId]?.takeIf { it.boot == md.footer?.bootId } else null
+            val anchor = if (f.hasEstimatedUtc) anchors[f.bootId]?.takeIf { it.boot == pf.rowBootId() } else null
             val mono = if (anchor != null) long(ParquetIndexer.MONO) else null
             val file = templates.of(md.keyValueMetadata)
             // A file whose template lacks the metric, or stores it in another unit, gives it no values (rule 9).

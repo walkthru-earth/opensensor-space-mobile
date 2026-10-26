@@ -147,7 +147,6 @@
     <string name="fm_rows">الصفوف</string>
     <string name="fm_columns">الأعمدة</string>
     <string name="fm_columns_codec">%1$d · الترميز %2$s</string>
-    <string name="fm_schema">المخطط</string>
     <string name="fm_writer">الكاتب</string>
     <string name="fm_statistics">الإحصاءات</string>
     <string name="fm_statistics_minmax">الأدنى والأعلى لكل عمود (v6)</string>

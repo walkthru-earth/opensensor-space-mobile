@@ -70,8 +70,8 @@ flowchart LR
 
 ## Index (`ParquetIndexer` → `archived_file`, Room v4)
 
-Derived from the **file**, never its name: rows, row groups, and from the `opensensor` footer JSON
-`firmware.schema`, `firmware.boot_id` and `file.purpose`, then the UTC row count + span, monotonic span, sequence span, the valid rows of the headline metric (the template's primary column through its gate and settle time, null when no bundled template knows the file or the column cannot be read),
+Derived from the **file**, never its name: rows, row groups, `file.purpose` from the `opensensor`
+footer JSON, the boot from the first row's `boot_id_hi` and `boot_id_lo`, then the UTC row count + span, monotonic span, sequence span, the valid rows of the headline metric (the template's primary column through its gate and settle time, null when no bundled template knows the file or the column cannot be read),
 `indexedAt`/`indexError`. v6 footers answer spans from statistics without decoding
 (`fromStatistics`); v1/v2 files decode three columns. Statistics with a negative null count or a
 minimum above the maximum are no answer, the column is decoded instead. `purpose = codec-comparison-duplicate-rows`
@@ -103,15 +103,17 @@ specs and never name a column. A spec whose column a file lacks yields **no valu
 **Each file is read by its own template (`FileTemplates`).** A file carries one footer key,
 `opensensor`, whose value is compact JSON (stac-opensensor `PROFILE.md` "Parquet footer", version
 `0.1.0`, in the style of GeoParquet `geo`). `OpenSensorFooter` reads only `template.sha256`,
-`dictionary.sha256`, `acquisition.sample_interval_ms`, `station.id`, `firmware.boot_id`,
-`firmware.schema` and `file.purpose` from it and ignores every other field. A missing key, JSON that
-is not an object, an unknown major version, a digest that is not 64 lowercase hex, an interval that is
-not an integer or a station, boot, schema or purpose that is not a non-empty string means the file has
-no footer. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
+`dictionary.sha256`, `acquisition.sample_interval_ms`, `station.id` and `file.purpose` from it and
+ignores every other member. A missing key, JSON that is not an object, an unknown major version, a
+digest that is not 64 lowercase hex, an interval that is not an integer or a station or purpose that
+is not a non-empty string means the file has no footer. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
 keys (`station_id`, `boot_id`, `schema_version`, `purpose`, `dictionary_sha256`,
-`sample_interval_ms`, `reconciliation_anchor_*`) has no footer, so it keeps its rows, has no metrics
-and no boot. Such files are wiped after the matched reflash (decision 14). The repair checks a file's
+`sample_interval_ms`, `reconciliation_anchor_*`) has no footer, so it keeps its rows and has no
+metrics. Such files are wiped after the matched reflash (decision 14). The repair checks a file's
 `station.id` against its archive station, and the daily builder checks each source the same way.
+The boot is not read from `firmware.boot_id`. Every row carries `boot_id_hi` and `boot_id_lo`, and
+`rowBootId` formats the first pair as 32 lowercase hex digits, the same text firmware writes and sends
+in its clock receipts. The schema name is not read at all.
 The template is the bundled one whose exact bytes hash to `template.sha256` (the build precomputes
 that digest for every bundled file), else the bundled one for `dictionary.sha256`. A template digest
 whose dict disagrees with the footer's is not used. The bundled templates are hand bytes until the

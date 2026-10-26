@@ -63,7 +63,7 @@ class ArchiveIndexRepair(
                 indexError = null,
                 rows = index.rows,
                 rowGroups = index.rowGroups,
-                schemaVersion = index.schemaVersion,
+                schemaVersion = null,
                 bootId = index.bootId,
                 purpose = index.purpose,
                 utcRows = index.utcRows,

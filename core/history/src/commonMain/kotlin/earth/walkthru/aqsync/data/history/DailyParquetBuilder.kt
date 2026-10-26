@@ -189,7 +189,7 @@ object DailyParquetBuilder {
                     val bootHi = col("boot_id_hi")?.let(LongColumn::of)
                     val bootLo = col("boot_id_lo")?.let(LongColumn::of)
                     val seq = col(ParquetIndexer.SEQ)?.let(LongColumn::of)
-                    val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == footer?.bootId } else null
+                    val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == pf.rowBootId() } else null
                     val mono = if (anchor != null) col(ParquetIndexer.MONO)?.let(LongColumn::of) else null
                     val estimated = if (anchor != null && mono != null) estimates(utc.size, mono, anchor) else null
                     val tierColumns = aggregator?.columns(::col, md.keyValueMetadata)
@@ -292,7 +292,6 @@ object DailyParquetBuilder {
             put("source_count", opened.size.toString())
             put("coverage_rows", kept.toString())
             put("complete", complete.toString())
-            put("schema_versions", opened.map { it.footer?.schema ?: "?" }.distinct().joinToString(","))
             put("purpose", "telemetry-derived-day")
             if (anyEstimated) {
                 put("estimated_rows", opened.filter { it.estimated != null }.sumOf { it.keepCount }.toString())

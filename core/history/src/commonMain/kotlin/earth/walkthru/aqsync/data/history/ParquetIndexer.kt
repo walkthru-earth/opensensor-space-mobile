@@ -20,9 +20,8 @@ data class ParquetIndex(
     val rows: Long,
     val rowGroups: Int,
     val columns: Int,
-    /** Footer `firmware.schema`: for example `cores3-telemetry-v5` or `waveshare-sim7670g-telemetry-v4`, null on a foreign writer. */
-    val schemaVersion: String?,
     val createdBy: String?,
+    /** The boot of the file's rows, as [rowBootId] reads it. */
     val bootId: String?,
     /** Footer `file.purpose`: `telemetry`, or `codec-comparison-duplicate-rows` for benchmark copies that must stay out of History. */
     val purpose: String?,
@@ -89,9 +88,8 @@ object ParquetIndexer {
             rows = md.numRows,
             rowGroups = md.rowGroups.size,
             columns = md.leaves.size,
-            schemaVersion = footer?.schema,
             createdBy = md.createdBy,
-            bootId = footer?.bootId,
+            bootId = file.rowBootId(),
             purpose = footer?.purpose,
             utcRows = utc?.count ?: 0L,
             firstUtcNs = utc?.min,

@@ -239,18 +239,16 @@ class CurrentBoardFilesTest {
     }
 
     @Test
-    fun theStationAndPurposeComeFromTheFooterJsonAndNeverFromAnOldKey() {
-        val json = opensensorFooterJson(coreS3Template.dict, coreS3Template.key.desc, 10_000, station = station, boot = "0f3a")
-        val own = ParquetIndexer.index(ParquetFile.wrap(boardFile(coreS3Template, footer = mapOf(OpenSensorFooter.KEY to json))), templates = FileTemplates.BUNDLED)
+    fun theStationAndPurposeComeFromTheFooterJsonAndTheBootFromTheRows() {
+        val json = opensensorFooterJson(coreS3Template.dict, coreS3Template.key.desc, 10_000, station = station)
+        val own = ParquetIndexer.index(ParquetFile.wrap(boardFile(coreS3Template, boot = 7, footer = mapOf(OpenSensorFooter.KEY to json))), templates = FileTemplates.BUNDLED)
         assertEquals("telemetry", own.purpose)
-        assertEquals("0f3a", own.bootId)
-        assertEquals("cores3-telemetry-v5", own.schemaVersion)
+        // The boot comes from the rows, as firmware formats it, never from firmware.boot_id.
+        assertEquals("0000000000000000" + "0000000000000007", own.bootId)
         // The old unprefixed keys alone are not read.
         val old = mapOf("station_id" to "other", "purpose" to "telemetry", "boot_id" to "0f3a", "schema_version" to "cores3-telemetry-v3")
         val legacy = ParquetIndexer.index(ParquetFile.wrap(boardFile(coreS3Template, footer = old)), templates = FileTemplates.BUNDLED)
         assertEquals(null, legacy.purpose)
-        assertEquals(null, legacy.bootId)
-        assertEquals(null, legacy.schemaVersion)
         dailyOf(boardFile(coreS3Template, footer = old))
         // A source whose station.id names another station fails the day.
         val foreign = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(coreS3Template.dict, null, 10_000, station = "other"))

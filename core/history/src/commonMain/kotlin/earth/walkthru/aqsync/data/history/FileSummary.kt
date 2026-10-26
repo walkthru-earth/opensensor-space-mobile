@@ -61,7 +61,7 @@ data class FileSummary(
             fun col(colName: String): ColumnValues? = md.leaf(colName)?.let { file.readColumn(it) }
             val rows = file.numRows.toInt()
             val utc = UtcColumns.readEventNs(file)
-            val applicable = anchor?.takeIf { it.boot == md.footer?.bootId }
+            val applicable = anchor?.takeIf { it.boot == file.rowBootId() }
             val mono = if (applicable != null) col(ParquetIndexer.MONO) else null
             var timed = 0
             var estimated = 0

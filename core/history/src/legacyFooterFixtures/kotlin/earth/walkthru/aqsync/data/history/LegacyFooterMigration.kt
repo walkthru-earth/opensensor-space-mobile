@@ -4,8 +4,9 @@ package earth.walkthru.aqsync.data.history
 // tests, which both read the :core:parquet device fixtures. Never part of a release build.
 
 /**
- * [bytes] with the old footer keys the app used to read (`station_id`, `boot_id`, `schema_version`,
- * `purpose`) moved into an `opensensor` entry, and the dropped `reconciliation_anchor_*` keys removed.
+ * [bytes] with the old `station_id` and `purpose` keys moved into an `opensensor` entry, and the old
+ * `boot_id`, `schema_version` and dropped `reconciliation_anchor_*` keys removed. The app takes the
+ * boot from the rows, so nothing else needs to move.
  * Only the key-value list of the Thrift FileMetaData changes. The data pages, the row groups and every
  * other footer field stay byte for byte, so a migrated fixture decodes to the same rows. A file that
  * already has an `opensensor` entry, or none of the old keys, comes back unchanged.
@@ -21,8 +22,6 @@ fun migrateLegacyFooter(bytes: ByteArray): ByteArray {
     if (OpenSensorFooter.KEY in old || (LEGACY.none { it in old } && old.keys.none { it.startsWith(ANCHOR) })) return bytes
     val moved = OpenSensorFooter(
         stationId = old["station_id"]?.takeIf { it.isNotEmpty() },
-        bootId = old["boot_id"]?.takeIf { it.isNotEmpty() },
-        schema = old["schema_version"]?.takeIf { it.isNotEmpty() },
         purpose = old["purpose"]?.takeIf { it.isNotEmpty() },
     )
     val kept = keyValues.filter { (k, _) -> k !in LEGACY && !k.startsWith(ANCHOR) } + (OpenSensorFooter.KEY to moved.encode())

@@ -115,9 +115,10 @@ val waveshareTemplate: space.opensensor.model.BoardTemplate = space.opensensor.m
 val CoreS3Files: FileTemplates = FileTemplates { _, _ -> coreS3Template }
 
 /**
- * A full stac-opensensor v0.1.0 `opensensor` footer value, shaped like `footers/cores3-telemetry-v5.json`,
- * naming [dict], [desc], [intervalMs], [station] and [boot]. A null leaves that field out. Every other
- * field is there so the reader is shown to ignore it.
+ * A full stac-opensensor v0.1.0 `opensensor` footer value, shaped member for member like the footer
+ * firmware writes (aq-parquet #105), naming [dict], [desc], [intervalMs], [station] and [purpose]. A null
+ * leaves that member out. The firmware version is a placeholder, so no test pins a release string.
+ * Every member the app does not read is there so the reader is shown to ignore it.
  */
 fun opensensorFooterJson(
     dict: String?,
@@ -126,17 +127,20 @@ fun opensensorFooterJson(
     board: String = "m5stack-cores3",
     schema: String = "cores3-telemetry-v5",
     station: String? = null,
-    boot: String? = null,
+    purpose: String? = "telemetry",
 ): String {
-    val dictionary = dict?.let { """"dictionary":{"sha256":"$it","version":"$schema"},""" }.orEmpty()
-    val template = desc?.let { """"template":{"href":"https://example.invalid/templates/$schema.json","sha256":"$it"},""" }.orEmpty()
-    val interval = intervalMs?.let { """"sample_interval_ms":$it,""" }.orEmpty()
     val id = station?.let { """"id":"$it",""" }.orEmpty()
-    val bootId = boot?.let { ""","boot_id":"$it"""" }.orEmpty()
-    return """{"version":"0.1.0","station":{$id"device_id":"441bf6e26b40","board":"$board","deployment_id":"unknown"},""" +
-        """"firmware":{"version":"6.14.0","schema":"$schema"$bootId},$dictionary$template""" +
-        """"acquisition":{$interval"time_semantics":"sample instant, UTC","config_id":"default","calibration_id":"unknown"},""" +
-        """"file":{"rotation_interval_s":3600,"row_groups":4,"row_group_rows_max":90,"compression":"zstd","purpose":"telemetry"}}"""
+    val dictionary = dict?.let {
+        """"dictionary":{"sha256":"$it","version":"$schema","uri":"https://example.invalid/dictionaries/$schema.inc"},"""
+    }.orEmpty()
+    val template = desc?.let { """"template":{"href":"https://example.invalid/templates/$board/$it.json","sha256":"$it"},""" }.orEmpty()
+    val interval = intervalMs?.let { """"sample_interval_ms":$it,""" }.orEmpty()
+    val filePurpose = purpose?.let { ""","purpose":"$it"""" }.orEmpty()
+    return """{"version":"0.1.0","station":{$id"device_id":"0123456789ab","board":"$board","deployment_id":"unknown"},""" +
+        """"firmware":{"version":"test-firmware","schema":"$schema","boot_id":"0123456789abcdef0123456789abcdef"},""" +
+        dictionary + template +
+        """"acquisition":{$interval"time_semantics":"sample instant, UTC","config_id":"default","config":"{}","calibration_id":"unknown"},""" +
+        """"file":{"rotation_interval_s":3600,"row_groups":4,"row_group_rows_max":90,"compression":"LZ4_RAW"$filePurpose}}"""
 }
 
 /** The `opensensor` footer entry of a file written under [template], with its dict, its desc and [intervalMs]. */

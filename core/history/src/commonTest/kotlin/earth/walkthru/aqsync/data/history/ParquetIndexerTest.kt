@@ -14,6 +14,9 @@ class ParquetIndexerTest {
 
     private fun bytes(path: String) = fixtureBytes("parquet/$path")
 
+    /** The `boot_id` key the fixture was written with, before the test migration drops it. */
+    private fun oldBootKey(path: String) = ParquetFile.wrap(rawFixtureBytes("parquet/$path")).metadata.keyValueMetadata.getValue("boot_id")
+
     private fun expected(label: String) = Json.parseToJsonElement(
         fixtureBytes("parquet/expected.json").decodeToString()
     ).jsonObject["files"]!!.jsonArray.map { it.jsonObject }.first { it["label"]!!.jsonPrimitive.content == label }
@@ -28,7 +31,8 @@ class ParquetIndexerTest {
         assertEquals(4L, index.rows)
         assertEquals(1, index.rowGroups)
         assertEquals(77, index.columns)
-        assertEquals("cores3-telemetry-v2", index.schemaVersion)
+        // The row boot is the text firmware wrote in its old boot_id key.
+        assertEquals(oldBootKey("device/v2-lz4-4rows-dated.parquet"), index.bootId)
         assertEquals("telemetry", index.purpose)
         assertTrue(index.isTelemetry)
         val utc = column("v2-lz4-4rows-dated", "event_time_utc_ns")
@@ -59,7 +63,6 @@ class ParquetIndexerTest {
         val file = ParquetFile.wrap(bytes("v3/v3-contract-lz4-anchored.parquet"))
         val index = ParquetIndexer.index(file, templates = CoreS3Files)
         assertTrue("v6 footer statistics used", index.fromStatistics)
-        assertEquals("cores3-telemetry-v3", index.schemaVersion)
         for (name in listOf(UtcColumns.EVENT_NS, ParquetIndexer.MONO, ParquetIndexer.SEQ)) {
             val leaf = file.leaf(name)
             val stats = ParquetIndexer.rangeFromStatistics(file, leaf)

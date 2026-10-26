@@ -13,8 +13,8 @@ class OpenSensorFooterTest {
     @Test
     fun aFullFooterGivesOnlyTheFieldsTheAppReads() {
         assertEquals(
-            OpenSensorFooter(10_000, dict, desc, stationId = "station-a", bootId = "0f3a", schema = "cores3-telemetry-v5", purpose = "telemetry"),
-            parse(opensensorFooterJson(dict, desc, 10_000, station = "station-a", boot = "0f3a")),
+            OpenSensorFooter(10_000, dict, desc, stationId = "station-a", purpose = "telemetry"),
+            parse(opensensorFooterJson(dict, desc, 10_000, station = "station-a")),
         )
     }
 
@@ -33,8 +33,6 @@ class OpenSensorFooterTest {
                 "e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b",
                 "fb4230b3eb6e8eac881c719f900c8bd9c7e4bbd6ad247520a27368ec9d9a7218",
                 stationId = "station-3f2b9c1e",
-                bootId = "0f3a",
-                schema = "cores3-telemetry-v5",
                 purpose = "telemetry",
             ),
             parse(example),
@@ -48,6 +46,8 @@ class OpenSensorFooterTest {
 
     @Test
     fun leftOutFieldsAreNull() {
+        // Firmware members the app does not read are ignored, whatever their value.
+        assertEquals(OpenSensorFooter(), parse("""{"version":"0.1.0","firmware":{"boot_id":null,"schema":["v5"]}}"""))
         assertEquals(OpenSensorFooter(), parse("""{"version":"0.1.0"}"""))
         assertEquals(OpenSensorFooter(), parse("""{"version":"0.1.0","acquisition":{"time_semantics":"x"},"dictionary":{"version":"v"}}"""))
         // A non-positive interval is unknown, so the template default applies.
@@ -78,8 +78,6 @@ class OpenSensorFooterTest {
             """{"version":"0.1.0","station":{"id":7}}""",
             """{"version":"0.1.0","station":{"id":""}}""",
             """{"version":"0.1.0","station":"station-a"}""",
-            """{"version":"0.1.0","firmware":{"boot_id":null}}""",
-            """{"version":"0.1.0","firmware":{"schema":["v5"]}}""",
             """{"version":"0.1.0","file":{"purpose":true}}""",
         )
         for (json in bad) assertNull(parse(json), json)
@@ -115,7 +113,7 @@ class OpenSensorFooterTest {
 
     @Test
     fun encodeRoundTrips() {
-        val full = OpenSensorFooter(10_000, dict, desc, stationId = "station-a", bootId = "0f3a", schema = "cores3-telemetry-v5", purpose = "telemetry")
+        val full = OpenSensorFooter(10_000, dict, desc, stationId = "station-a", purpose = "telemetry")
         for (footer in listOf(full, OpenSensorFooter(10_000, dict, desc), OpenSensorFooter(sampleIntervalMs = 30_000), OpenSensorFooter(dictionarySha256 = dict))) {
             assertEquals(footer, parse(footer.encode()))
         }

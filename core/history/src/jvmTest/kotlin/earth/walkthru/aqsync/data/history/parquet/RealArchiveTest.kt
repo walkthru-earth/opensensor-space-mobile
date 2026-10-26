@@ -29,7 +29,7 @@ class RealArchiveTest {
     fun `first v6 board file - two row groups, statistics agree with rows`() {
         val pf = ParquetFile.wrap(resource("parquet/device/v3-board-2rg-105rows.parquet"), "board v6")
         val md = pf.metadata
-        assertEquals("cores3-telemetry-v3", md.footer?.schema)
+        assertEquals("telemetry", md.footer?.purpose)
         assertEquals(2, pf.rowGroupCount)
         assertEquals(listOf(90L, 15L), md.rowGroups.map { it.numRows })
         assertEquals(105L, pf.numRows)

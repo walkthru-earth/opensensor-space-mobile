@@ -37,7 +37,7 @@ class HistoryIndexerTest {
         val g = dao.rows.first { it.name == good }
         assertTrue(g.isIndexed)
         assertEquals(4L, g.rows)
-        assertEquals("cores3-telemetry-v2", g.schemaVersion)
+        assertEquals("telemetry", g.purpose)
         assertNotNull(g.firstUtcNs)
         val b = dao.rows.first { it.name == bogus }
         assertFalse(b.isIndexed)

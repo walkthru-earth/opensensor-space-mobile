@@ -58,7 +58,7 @@ internal class LegacyAggregator(
         val md = file.metadata
         val utc = UtcColumns.readEventNs(file) ?: return
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
-        val applicable = anchor?.takeIf { it.boot == md.footer?.bootId }
+        val applicable = anchor?.takeIf { it.boot == file.rowBootId() }
         val monoAll = col(ParquetIndexer.MONO)
         val mono = if (applicable != null) monoAll else null
         val bootHi = col("boot_id_hi")
@@ -150,7 +150,7 @@ internal object LegacyDailyParquetBuilder {
                 val bootHi = md.leaf("boot_id_hi")?.let { pf.readColumn(it) }
                 val bootLo = md.leaf("boot_id_lo")?.let { pf.readColumn(it) }
                 val seq = md.leaf(ParquetIndexer.SEQ)?.let { pf.readColumn(it) }
-                val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.footer?.bootId } else null
+                val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == pf.rowBootId() } else null
                 val mono = if (anchor != null) md.leaf(ParquetIndexer.MONO)?.let { pf.readColumn(it) } else null
                 val estimated = if (anchor != null && mono != null) LongArray(utc.size) { i -> mono.asLong(i)?.let(anchor::estimateNsOrNull) ?: Long.MIN_VALUE } else null
                 val keep = ArrayList<Int>()
@@ -171,7 +171,7 @@ internal object LegacyDailyParquetBuilder {
                 if (estimated != null && keep.isNotEmpty()) anyEstimated = true
                 // Decode every column of a contributing source once, while it is open.
                 val decoded = if (keep.isEmpty()) emptyMap() else pf.leaves.associate { leaf -> UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(pf.readColumn(leaf), leaf) else pf.readColumn(leaf) }
-                Src(src, keep.toIntArray(), estimated, decoded, md.keyValueMetadata, md.footer?.schema)
+                Src(src, keep.toIntArray(), estimated, decoded, md.keyValueMetadata, null)
             } ?: continue
         }
         if (opened.isEmpty() || opened.all { it.keep.isEmpty() }) return null
@@ -206,7 +206,6 @@ internal object LegacyDailyParquetBuilder {
             put("source_count", opened.size.toString())
             put("coverage_rows", refs.size.toString())
             put("complete", complete.toString())
-            put("schema_versions", opened.map { it.schemaVersion ?: "?" }.distinct().joinToString(","))
             put("purpose", "telemetry-derived-day")
             if (anyEstimated) {
                 put("estimated_rows", refs.count { r -> opened[r.src].estimated != null }.toString())

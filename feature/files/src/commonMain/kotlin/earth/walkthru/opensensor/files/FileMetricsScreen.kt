@@ -83,7 +83,6 @@ import earth.walkthru.opensensor.files.resources.fm_rows_previous
 import earth.walkthru.opensensor.files.resources.fm_rows_range
 import earth.walkthru.opensensor.files.resources.fm_rows_retry
 import earth.walkthru.opensensor.files.resources.fm_rows_unavailable
-import earth.walkthru.opensensor.files.resources.fm_schema
 import earth.walkthru.opensensor.files.resources.fm_sequence
 import earth.walkthru.opensensor.files.resources.fm_size
 import earth.walkthru.opensensor.files.resources.fm_size_footer
@@ -173,7 +172,6 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                     if (developer) stringResource(Res.string.fm_columns_codec, idx.columns, s.codec?.toString() ?: NO_VALUE) else idx.columns.toString(),
                 )
                 if (developer) {
-                    StatLine(stringResource(Res.string.fm_schema), idx.schemaVersion ?: NO_VALUE)
                     StatLine(stringResource(Res.string.fm_writer), idx.createdBy ?: NO_VALUE)
                     StatLine(stringResource(Res.string.fm_statistics), stringResource(if (s.columnOrders > 0) Res.string.fm_statistics_minmax else Res.string.fm_statistics_nulls))
                     StatLine(stringResource(Res.string.fm_index_source), stringResource(if (idx.fromStatistics) Res.string.fm_index_footer else Res.string.fm_index_rows))

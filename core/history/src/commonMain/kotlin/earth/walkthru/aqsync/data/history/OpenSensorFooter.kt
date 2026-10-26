@@ -26,10 +26,6 @@ data class OpenSensorFooter(
     val templateSha256: String? = null,
     /** `station.id`, the station that wrote the file. */
     val stationId: String? = null,
-    /** `firmware.boot_id`, the boot the file's rows belong to. */
-    val bootId: String? = null,
-    /** `firmware.schema`, the firmware schema name such as `cores3-telemetry-v5`. */
-    val schema: String? = null,
     /** `file.purpose`, `telemetry` for station data. */
     val purpose: String? = null,
 ) {
@@ -40,12 +36,6 @@ data class OpenSensorFooter(
     fun encode(): String = buildJsonObject {
         put(VERSION, CURRENT_VERSION)
         if (stationId != null) putJsonObject(STATION) { put(ID, stationId) }
-        if (bootId != null || schema != null) {
-            putJsonObject(FIRMWARE) {
-                schema?.let { put(SCHEMA, it) }
-                bootId?.let { put(BOOT_ID, it) }
-            }
-        }
         dictionarySha256?.let { sha -> putJsonObject(DICTIONARY) { put(SHA256, sha) } }
         templateSha256?.let { sha -> putJsonObject(TEMPLATE) { put(SHA256, sha) } }
         sampleIntervalMs?.let { ms -> putJsonObject(ACQUISITION) { put(SAMPLE_INTERVAL_MS, ms) } }
@@ -69,11 +59,8 @@ data class OpenSensorFooter(
         private const val TEMPLATE = "template"
         private const val ACQUISITION = "acquisition"
         private const val STATION = "station"
-        private const val FIRMWARE = "firmware"
         private const val FILE = "file"
         private const val ID = "id"
-        private const val SCHEMA = "schema"
-        private const val BOOT_ID = "boot_id"
         private const val PURPOSE = "purpose"
         private const val SHA256 = "sha256"
         private const val SAMPLE_INTERVAL_MS = "sample_interval_ms"
@@ -102,8 +89,6 @@ data class OpenSensorFooter(
                 dictionarySha256 = root.member(DICTIONARY, SHA256)?.let(::sha256),
                 templateSha256 = root.member(TEMPLATE, SHA256)?.let(::sha256),
                 stationId = root.member(STATION, ID)?.let(::text),
-                bootId = root.member(FIRMWARE, BOOT_ID)?.let(::text),
-                schema = root.member(FIRMWARE, SCHEMA)?.let(::text),
                 purpose = root.member(FILE, PURPOSE)?.let(::text),
             )
         } catch (_: Malformed) {

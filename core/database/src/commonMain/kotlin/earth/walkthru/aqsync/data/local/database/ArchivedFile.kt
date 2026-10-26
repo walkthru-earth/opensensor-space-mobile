@@ -44,7 +44,7 @@ data class ArchivedFile(
     val indexError: String? = null,
     val rows: Long? = null,
     val rowGroups: Int? = null,
-    /** `firmware.schema` of the `opensensor` footer (for example `cores3-telemetry-v5`). */
+    /** Schema name from older receipts. The app no longer reads it from a file, so the index writes null. */
     val schemaVersion: String? = null,
     val bootId: String? = null,
     /** `file.purpose` of the `opensensor` footer, `telemetry` for station data, `codec-comparison-duplicate-rows` for benchmark copies. */
