@@ -180,7 +180,6 @@ class LegacyReceiptImport(
                 lastMonoUs = long("lastMonoUs"),
                 firstSeq = long("firstSeq"),
                 lastSeq = long("lastSeq"),
-                pmValidRows = long("pmValidRows"),
                 estFirstUtcNs = long("estFirstUtcNs"),
                 estLastUtcNs = long("estLastUtcNs"),
                 estAnchorFile = text("estAnchorFile"),

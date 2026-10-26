@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import space.opensensor.model.ValidityGate
 
 /**
  * One archived Parquet file folded into one chart column — the "chart by file" view on the Files
@@ -11,7 +12,7 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFile
  * Every row counts, timed or not — an unsynced file with no anchor still has readings — so [rows]
  * is the whole file; [timedRows] / [estimatedRows] say how many of them sit on the timeline and
  * [firstS]/[lastS] is that span (real UTC, else the estimate, else null). Aggregates are over every
- * registered metric, like [Aggregator], with the same gates.
+ * metric the file's template defines, like [Aggregator], with that template's gates and aggregates.
  */
 data class FileSummary(
     val name: String,
@@ -49,7 +50,13 @@ data class FileSummary(
 
     companion object {
         /** Folds [file]; with an [anchor] for the file's boot, rows without UTC get an estimated time. */
-        fun of(name: String, file: ParquetFile, anchor: TimeEstimate.Anchor? = null, metrics: List<MetricSpec> = Metrics.all): FileSummary {
+        fun of(
+            name: String,
+            file: ParquetFile,
+            anchor: TimeEstimate.Anchor? = null,
+            metrics: List<MetricSpec> = Metrics.all,
+            templates: FileTemplates = FileTemplates.BUNDLED,
+        ): FileSummary {
             val md = file.metadata
             fun col(colName: String): ColumnValues? = md.leaf(colName)?.let { file.readColumn(it) }
             val rows = file.numRows.toInt()
@@ -76,27 +83,25 @@ data class FileSummary(
                     if (e > estLast) estLast = e
                 }
             }
-            val values = metrics.map { col(it.column) }
-            val humidity = metrics.mapNotNull { it.humidityColumn }.distinct().associateWith { col(it) }
-            val gates = metrics.mapNotNull { it.gate?.column }.distinct().associateWith { col(it) }
+            val bound = templates.of(md.keyValueMetadata).bind(metrics)
+            val gates = HashMap<ValidityGate, GateColumn>()
+            val doubles = HashMap<String, DoubleColumn?>()
+            fun double(name: String) = doubles.getOrPut(name) { col(name)?.let(DoubleColumn::of) }
             val per = LinkedHashMap<String, MetricAgg>()
-            for ((k, spec) in metrics.withIndex()) {
-                val colv = values[k] ?: continue
-                var n = 0
-                var sum = 0.0
-                var min = Float.POSITIVE_INFINITY
-                var max = Float.NEGATIVE_INFINITY
+            for ((k, spec) in bound.withIndex()) {
+                if (spec == null) continue
+                val stored = double(spec.column) ?: continue
+                val colv = spec.humidityColumn?.let { stored.correctedBy(spec, double(it)) } ?: stored
+                val gate = spec.gate?.let { g -> gates.getOrPut(g) { GateColumn(g, col(g.column)) } }
+                val rollup = Rollup(spec.aggregate)
                 for (i in 0 until rows) {
-                    if (!spec.accepts(spec.gate?.let { g -> gates[g.column]?.asLong(i) })) continue
-                    val v = colv.asDouble(i)?.let { raw -> spec.valueOf(raw, spec.humidityColumn?.let { h -> humidity[h]?.asDouble(i) }) } ?: continue
+                    if (gate != null && !gate.passes(i)) continue
+                    if (!colv.has(i)) continue
+                    val v = colv.values[i]
                     if (v.isNaN() || v.isInfinite()) continue
-                    n++
-                    sum += v
-                    val f = v.toFloat()
-                    if (f < min) min = f
-                    if (f > max) max = f
+                    rollup.add(v, i.toLong())
                 }
-                if (n > 0) per[spec.id] = MetricAgg(n, (sum / n).toFloat(), min, max)
+                rollup.agg()?.let { per[metrics[k].id] = it }
             }
             val (spanFirst, spanLast) = when {
                 timed > 0 -> first to last

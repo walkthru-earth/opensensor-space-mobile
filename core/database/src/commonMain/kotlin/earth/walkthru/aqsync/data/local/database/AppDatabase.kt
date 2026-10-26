@@ -44,11 +44,15 @@ import kotlinx.coroutines.IO
  * - v12: `pruned_file`, the files the user removed from this phone in Settings, which sync skips while
  *   the device lists them at the same size. A whole LIST that no longer names one drops it, and Download
  *   again clears them all; `AutoMigration` (new table only).
+ * - v13: History reads each file by its board template (#186). `archived_file.pmValidRows` is dropped,
+ *   `metric_bucket` gains `sampleIntervalMs` and its metric ids become column names, so the tier cache
+ *   (`metric_bucket` and `derived_day`) is dropped and rebuilt from the archive. Devices and the archive
+ *   index stay.
  */
 @ConstructedBy(AppDatabaseConstructor::class)
 @Database(
     entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, StationEpoch::class, SensorInstallation::class, PrunedFileEntity::class],
-    version = 12,
+    version = 13,
     exportSchema = true,
     autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7, spec = AppDatabase.DropWideTiers::class), AutoMigration(from = 7, to = 8), AutoMigration(from = 11, to = 12)],
 )
@@ -100,7 +104,18 @@ abstract class AppDatabase : RoomDatabase() {
         const val MIGRATION_10_11_SQL: String =
             "UPDATE archived_file SET indexedAtEpochMs = NULL WHERE indexedAtEpochMs IS NOT NULL AND indexError IS NULL AND COALESCE(utcRows, 0) = 0"
         val MIGRATION_10_11: Migration = sqlMigration(10, 11, MIGRATION_10_11_SQL)
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+        val MIGRATION_12_13: Migration = sqlMigration(
+            12,
+            13,
+            "ALTER TABLE archived_file DROP COLUMN pmValidRows",
+            // The tiers are a cache of the archive. Old rows carry the old metric ids, so drop them
+            // and let the deriver rebuild every day.
+            "DROP TABLE IF EXISTS metric_bucket",
+            "CREATE TABLE IF NOT EXISTS metric_bucket (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, station TEXT NOT NULL, metricId TEXT NOT NULL, resolution INTEGER NOT NULL, startEpochS INTEGER NOT NULL, rows INTEGER NOT NULL, validRows INTEGER NOT NULL, estimatedRows INTEGER NOT NULL, mean REAL NOT NULL, min REAL NOT NULL, max REAL NOT NULL, sampleIntervalMs INTEGER NOT NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_metric_bucket_station_metricId_resolution_startEpochS ON metric_bucket (station, metricId, resolution, startEpochS)",
+            "DELETE FROM derived_day",
+        )
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_12_13)
 
         /**
          * The settings both phones open the database with: every migration, the bundled SQLite driver

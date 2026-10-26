@@ -68,7 +68,17 @@ object DayPass {
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long,
         tiers: Boolean = true,
-    ): DayPassResult = DailyParquetBuilder.pass(station, epochDay, sources, sink, anchors, nowEpochS, if (tiers) Aggregator(station) else null, strict = false)
+        templates: FileTemplates = FileTemplates.BUNDLED,
+    ): DayPassResult = DailyParquetBuilder.pass(
+        station,
+        epochDay,
+        sources,
+        sink,
+        anchors,
+        nowEpochS,
+        if (tiers) Aggregator(station, templates = templates) else null,
+        strict = false,
+    )
 }
 
 /**
@@ -181,7 +191,7 @@ object DailyParquetBuilder {
                     val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.bootId } else null
                     val mono = if (anchor != null) col(ParquetIndexer.MONO)?.let(LongColumn::of) else null
                     val estimated = if (anchor != null && mono != null) estimates(utc.size, mono, anchor) else null
-                    val tierColumns = aggregator?.columns(::col)
+                    val tierColumns = aggregator?.columns(::col, md.keyValueMetadata)
                     for (i in 0 until utc.size) {
                         val real = utc.has(i)
                         val ns = if (real) utc.values[i] else estimated?.takeIf { it.has(i) }?.values?.get(i) ?: continue
@@ -273,6 +283,9 @@ object DailyParquetBuilder {
         val invariant = LinkedHashMap<String, String>()
         val firstMeta = opened.first().keyValueMetadata
         for ((k, v) in firstMeta) if (k in COPIED_METADATA && opened.all { it.keyValueMetadata[k] == v }) invariant[k] = v
+        // Sources at different intervals give the shortest, as a tier bucket keeps it. Agreeing sources keep the copied key in place.
+        opened.mapNotNull { it.keyValueMetadata[FileTemplates.SAMPLE_INTERVAL_KEY]?.toLongOrNull()?.takeIf { ms -> ms > 0 } }.minOrNull()
+            ?.let { invariant[FileTemplates.SAMPLE_INTERVAL_KEY] = it.toString() }
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
             putAll(invariant)

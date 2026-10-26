@@ -66,6 +66,8 @@ class IosDailyDerivedStore(
     root: String,
     private val atomic: AtomicFiles = IosAtomicFiles("${root.trimEnd('/')}/${AtomicFiles.TEMP_DIR}"),
     private val tierStore: TierStore = TierStore.NONE,
+    /** Resolves each file's board template, so the saved tiers read its metrics with that template's gates. */
+    private val templates: FileTemplates = FileTemplates.BUNDLED,
 ) : DerivedDayFiles {
     private val root = root.trimEnd('/')
     private val mutex = Mutex()
@@ -106,7 +108,7 @@ class IosDailyDerivedStore(
                     val daily = sources.map { source -> DailyParquetSource(source) { ParquetFile.open(archive.reader(source.key)) } }
                     val sink = FileSink(temporary)
                     val pass = try {
-                        DayPass.run(station, day, daily, sink, anchors, nowEpochS)
+                        DayPass.run(station, day, daily, sink, anchors, nowEpochS, templates = templates)
                     } finally {
                         sink.close()
                     }

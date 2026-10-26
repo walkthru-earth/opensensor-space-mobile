@@ -4,6 +4,17 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-26, History reads template datastreams (code only)
+
+Host tests and the iOS simulator only. No phone run is recorded.
+
+- History metrics come from the board template datastreams and the app profile (#186). Each file
+  is read by the template its footer names, at the footer's sample interval. Rollups follow
+  `opensensor:aggregate`. Room 13 drops the old tier caches, so every day is derived again once.
+  A daily file of sources at different intervals writes the shortest one. Simple History and the
+  Simple Files chart offer only the profile primary metrics.
+- To check on phones. History of each board after the rebuild, and the default metric.
+
 ## 2026-10-18, main `958148ea` (code only)
 
 Merged on 2026-10-17 and 2026-10-18. Host tests, the iOS simulator and `./gradlew verify` on CI only.

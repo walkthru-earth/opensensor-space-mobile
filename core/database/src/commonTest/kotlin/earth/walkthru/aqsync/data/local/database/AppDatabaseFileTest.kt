@@ -20,7 +20,7 @@ class AppDatabaseFileTest {
     fun cleanUp() = deleteTempDir(dir)
 
     @Test
-    fun rowsSurviveAReopenAtSchemaVersion12() = runTest {
+    fun rowsSurviveAReopenAtSchemaVersion13() = runTest {
         val record = ArchiveRecord("station-a", "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device", utcRows = 3, lastUtcNs = 42)
         val mark = PrunedFile("station-a", "year=2026/month=10/day=02/data.parquet", 7, 8, 9)
         fileAppDatabase(path).apply {
@@ -34,7 +34,7 @@ class AppDatabaseFileTest {
             assertEquals(listOf(record), RoomArchiveIndex(again.archivedFileDao()).observeAll().first())
             assertEquals(listOf(mark), RoomPrunedFiles(again.prunedFileDao()).observeAll().first())
             val version = again.useReaderConnection { c -> c.usePrepared("PRAGMA user_version") { it.step(); it.getLong(0) } }
-            assertEquals(12L, version)
+            assertEquals(13L, version)
         } finally {
             again.close()
         }

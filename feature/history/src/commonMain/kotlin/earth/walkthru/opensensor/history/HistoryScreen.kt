@@ -309,11 +309,16 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
 }
 
 /**
- * The History metric chips. Detailed offers corrected PM2.5 first and raw second. Simple offers
- * corrected only, and raw only when no corrected value exists, so it is still labelled raw.
+ * The History metric chips. Detailed and Developer offer every measured metric, corrected PM2.5 first
+ * and raw second. Simple offers only the app profile's primary metrics, corrected PM2.5 only, and raw
+ * only when no corrected value exists, so it is still labelled raw. A board with no primary metric
+ * offers them all, so Simple is never empty.
  */
-internal fun pickerMetrics(available: List<MetricSpec>, level: DetailLevel): List<MetricSpec> =
-    if (!level.detailed && Metrics.PM25_CORRECTED in available) available - Metrics.PM25 else available
+internal fun pickerMetrics(available: List<MetricSpec>, level: DetailLevel): List<MetricSpec> {
+    if (level.detailed) return available
+    val shown = available.filter { it.primary }.ifEmpty { available }
+    return if (Metrics.PM25_CORRECTED in shown) shown - Metrics.PM25 else shown
+}
 
 /** The archive info line about PM colours. Simple never names WHO. */
 internal fun colourInfoRes(level: DetailLevel): StringResource = if (level.detailed) Res.string.info_history_body5 else Res.string.info_history_body5_simple

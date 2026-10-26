@@ -51,9 +51,9 @@ class DerivedDayViewTest {
         val store = Store()
         val index = Index()
         // Actual all-null UTC device bytes. A durable same-boot receipt places these rows at noon.
-        val bytes = fixtureBytes("parquet/device/v1-none-64rows-unsynced.parquet")
+        val bytes = withCoreS3Dict(fixtureBytes("parquet/device/v1-none-64rows-unsynced.parquet"))
         val (station, summary) = ParquetFile.wrap(bytes).use { file ->
-            (file.metadata.stationId ?: "estimated-station") to ParquetIndexer.index(file)
+            (file.metadata.stationId ?: "estimated-station") to ParquetIndexer.index(file, templates = CoreS3Files)
         }
         assertEquals(0L, summary.utcRows)
         val startS = day * 86_400 + 12 * 3_600
@@ -91,13 +91,13 @@ class DerivedDayViewTest {
             }
             put("real.parquet", sink.toByteArray())
         }
-        ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, nowEpochMs = { 42L }).backfillAll()
+        ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
         val estimatedSource = index.rows.value.single { it.name == "estimated.parquet" }
         assertTrue(estimatedSource.hasEstimatedUtc)
         assertEquals(64L, estimatedSource.rows)
         val anchors = TimeEstimate.anchors(index.rows.value.map { it.info() }, listOf(receipt))
         val sink = MemorySink()
-        val pass = DayPass.run(station, day, index.rows.value.map { record -> DailyParquetSource(record) { ParquetFile.wrap(store.files.getValue(record.key)) } }, sink, anchors, nowEpochS = (day + 2) * 86_400)
+        val pass = DayPass.run(station, day, index.rows.value.map { record -> DailyParquetSource(record) { ParquetFile.wrap(store.files.getValue(record.key)) } }, sink, anchors, nowEpochS = (day + 2) * 86_400, templates = CoreS3Files)
         val daily = assertNotNull(pass.daily)
         assertEquals(if (includeRealRows) 128 else 64, daily.rows)
         val derivedBytes = sink.toByteArray()
@@ -116,9 +116,9 @@ class DerivedDayViewTest {
             derivedOpens++
             MemoryRangeSource(derivedBytes, "estimated/$includeRealRows")
         }
-        val tiers = ArchiveHistoryTiers(store, index, clockAnchors = clockAnchors)
-        val rawReader = HistorySeriesReader(store, index, tiers, clockAnchors = clockAnchors)
-        val derivedReader = HistorySeriesReader(store, index, tiers, clockAnchors = clockAnchors, derived = derived)
+        val tiers = ArchiveHistoryTiers(store, index, clockAnchors = clockAnchors, templates = CoreS3Files)
+        val rawReader = HistorySeriesReader(store, index, tiers, clockAnchors = clockAnchors, templates = CoreS3Files)
+        val derivedReader = HistorySeriesReader(store, index, tiers, clockAnchors = clockAnchors, derived = derived, templates = CoreS3Files)
         val windows = listOf(
             HistoryWindow(day * 86_400, (day + 1) * 86_400, TimeZone.UTC),
             HistoryWindow(startS + 125, startS + 425, TimeZone.UTC),
@@ -195,12 +195,12 @@ class DerivedDayViewTest {
         for (source in sources) source.open().use { legacy.add(it) }
         assertEquals(94.5f, legacy.buckets().first { it.resolution == Resolution.DAY }.metrics.getValue(Metrics.BOARD_TEMP.id).mean)
         val sink = MemorySink()
-        val pass = DayPass.run(station, day, sources, sink, nowEpochS = 0)
+        val pass = DayPass.run(station, day, sources, sink, nowEpochS = 0, templates = CoreS3Files)
         assertEquals(15f, pass.buckets.first { it.resolution == Resolution.DAY }.metrics.getValue(Metrics.BOARD_TEMP.id).mean)
         val derived = DerivedDayFiles { _, _, _, _ -> MemoryRangeSource(sink.toByteArray(), "duplicates") }
-        val tiers = ArchiveHistoryTiers(store, index)
-        val rawReader = HistorySeriesReader(store, index, tiers)
-        val derivedReader = HistorySeriesReader(store, index, tiers, derived = derived)
+        val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
+        val rawReader = HistorySeriesReader(store, index, tiers, templates = CoreS3Files)
+        val derivedReader = HistorySeriesReader(store, index, tiers, derived = derived, templates = CoreS3Files)
         val windows = listOf(
             HistoryWindow(day * 86_400, (day + 1) * 86_400, TimeZone.UTC),
             HistoryWindow(day * 86_400 + 9_000, day * 86_400 + 12_600, TimeZone.UTC),
@@ -278,19 +278,19 @@ class DerivedDayViewTest {
             store.files[r.key] = bytes
             index.put(r)
         }
-        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
-        val tiers = ArchiveHistoryTiers(store, index)
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
+        val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         var opened = 0
         val derived = DerivedDayFiles { s, epochDay, sources, anchors ->
             val sink = MemorySink()
-            val pass = DayPass.run(s, epochDay, sources.map { r -> DailyParquetSource(r) { ParquetFile.wrap(store.files.getValue(r.key), r.name) } }, sink, anchors, (epochDay + 2) * 86_400, tiers = false)
+            val pass = DayPass.run(s, epochDay, sources.map { r -> DailyParquetSource(r) { ParquetFile.wrap(store.files.getValue(r.key), r.name) } }, sink, anchors, (epochDay + 2) * 86_400, tiers = false, templates = CoreS3Files)
             pass.daily?.let {
                 opened++
                 MemoryRangeSource(sink.toByteArray(), "derived/$epochDay")
             }
         }
-        val raw = HistorySeriesReader(store, index, tiers)
-        val fromDerived = HistorySeriesReader(store, index, tiers, derived = derived)
+        val raw = HistorySeriesReader(store, index, tiers, templates = CoreS3Files)
+        val fromDerived = HistorySeriesReader(store, index, tiers, derived = derived, templates = CoreS3Files)
         // Ends inside the second UTC day, so the window takes rows from both days and both sides of midnight.
         val ends = listOf((day + 1) * 86_400 + 9 * 3_600, (day + 1) * 86_400 + 18 * 3_600)
         for (zone in listOf(TimeZone.UTC, TimeZone.of("Asia/Kolkata"))) {
@@ -325,16 +325,16 @@ class DerivedDayViewTest {
         val r = ArchiveRecord(station, "humid.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
-        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
-        val tiers = ArchiveHistoryTiers(store, index)
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
+        val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val sink = MemorySink()
-        val pass = DayPass.run(station, humidDay, index.rows.value.map { s -> DailyParquetSource(s) { ParquetFile.wrap(store.files.getValue(s.key)) } }, sink, emptyMap(), (humidDay + 2) * 86_400, tiers = false)
+        val pass = DayPass.run(station, humidDay, index.rows.value.map { s -> DailyParquetSource(s) { ParquetFile.wrap(store.files.getValue(s.key)) } }, sink, emptyMap(), (humidDay + 2) * 86_400, tiers = false, templates = CoreS3Files)
         assertNotNull(pass.daily)
         val derivedBytes = sink.toByteArray()
         val derived = DerivedDayFiles { _, epochDay, _, _ -> if (epochDay == humidDay) MemoryRangeSource(derivedBytes, "humid") else null }
         val window = HistoryWindow(humidDay * 86_400, (humidDay + 1) * 86_400, TimeZone.UTC)
-        val rawReader = HistorySeriesReader(store, index, tiers)
-        val derivedReader = HistorySeriesReader(store, index, tiers, derived = derived)
+        val rawReader = HistorySeriesReader(store, index, tiers, templates = CoreS3Files)
+        val derivedReader = HistorySeriesReader(store, index, tiers, derived = derived, templates = CoreS3Files)
         val first = EpaPm25Correction.correct(10.0, 50.0)!!.toFloat()
         val second = EpaPm25Correction.correct(250.0, 80.0)!!.toFloat()
         store.reads = 0
@@ -361,8 +361,8 @@ class DerivedDayViewTest {
             val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
             store.files[r.key] = bytes
             index.put(r)
-            ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
-            return HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index))
+            ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
+            return HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index), templates = CoreS3Files)
         }
         val old = reader(nanos)
         val new = reader(micros)
@@ -386,12 +386,12 @@ class DerivedDayViewTest {
         val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
-        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
-        val tiers = ArchiveHistoryTiers(store, index)
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
+        val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val window = HistoryWindow.endingAt((day + 1) * 86_400 + 9 * 3_600, HistoryRange.DAY, TimeZone.UTC)
-        val expected = HistorySeriesReader(store, index, tiers).observe(station, Metrics.PM25, HistoryRange.DAY, window).first()
+        val expected = HistorySeriesReader(store, index, tiers, templates = CoreS3Files).observe(station, Metrics.PM25, HistoryRange.DAY, window).first()
         val broken = DerivedDayFiles { _, _, _, _ -> MemoryRangeSource(ByteArray(64), "broken") }
-        val actual = HistorySeriesReader(store, index, tiers, derived = broken).observe(station, Metrics.PM25, HistoryRange.DAY, window).first()
+        val actual = HistorySeriesReader(store, index, tiers, derived = broken, templates = CoreS3Files).observe(station, Metrics.PM25, HistoryRange.DAY, window).first()
         assertEquals(expected.points, actual.points)
         assertTrue(actual.points.isNotEmpty())
 
@@ -400,7 +400,7 @@ class DerivedDayViewTest {
         var failedCloses = 0
         val failsAfterReading = DerivedDayFiles { s, epochDay, sources, anchors ->
             val sink = MemorySink()
-            val pass = DayPass.run(s, epochDay, sources.map { source -> DailyParquetSource(source) { ParquetFile.wrap(store.files.getValue(source.key)) } }, sink, anchors, 0, tiers = false)
+            val pass = DayPass.run(s, epochDay, sources.map { source -> DailyParquetSource(source) { ParquetFile.wrap(store.files.getValue(source.key)) } }, sink, anchors, 0, tiers = false, templates = CoreS3Files)
             pass.daily?.let {
                 object : RangeSource by MemoryRangeSource(sink.toByteArray(), "close-failure/$epochDay") {
                     override fun close() {
@@ -410,7 +410,7 @@ class DerivedDayViewTest {
                 }
             }
         }
-        val recovered = HistorySeriesReader(store, index, tiers, derived = failsAfterReading).observe(station, Metrics.PM25, HistoryRange.DAY, window).first()
+        val recovered = HistorySeriesReader(store, index, tiers, derived = failsAfterReading, templates = CoreS3Files).observe(station, Metrics.PM25, HistoryRange.DAY, window).first()
         assertTrue(failedCloses > 0)
         assertEquals(expected, recovered)
     }
@@ -424,12 +424,12 @@ class DerivedDayViewTest {
         val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
-        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
-        val tiers = ArchiveHistoryTiers(store, index)
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
+        val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val days = HashMap<Long, ByteArray>()
         for (epochDay in listOf(day, day + 1)) {
             val sink = MemorySink()
-            DayPass.run(station, epochDay, index.rows.value.map { s -> DailyParquetSource(s) { ParquetFile.wrap(store.files.getValue(s.key)) } }, sink, emptyMap(), 0, tiers = false)
+            DayPass.run(station, epochDay, index.rows.value.map { s -> DailyParquetSource(s) { ParquetFile.wrap(store.files.getValue(s.key)) } }, sink, emptyMap(), 0, tiers = false, templates = CoreS3Files)
             days[epochDay] = sink.toByteArray()
         }
         // The same identity as the good file, but the footer in its tail is garbage. Only a reader
@@ -449,7 +449,7 @@ class DerivedDayViewTest {
         // Both sides of midnight, so the window reads two derived days.
         val window = HistoryWindow(day * 86_400 + 9 * 3_600, (day + 1) * 86_400 + 9 * 3_600, TimeZone.UTC)
         val footers = FooterCache(4)
-        val reader = HistorySeriesReader(store, index, tiers, derived = derived, footers = footers)
+        val reader = HistorySeriesReader(store, index, tiers, derived = derived, footers = footers, templates = CoreS3Files)
         store.reads = 0
         val expected = reader.observe(station, Metrics.PM25, HistoryRange.DAY, window).first()
         assertTrue(expected.points.isNotEmpty())
@@ -457,7 +457,7 @@ class DerivedDayViewTest {
 
         corrupt = true
         store.reads = 0
-        val cold = HistorySeriesReader(store, index, tiers, derived = derived).observe(station, Metrics.BOARD_TEMP, HistoryRange.DAY, window).first()
+        val cold = HistorySeriesReader(store, index, tiers, derived = derived, templates = CoreS3Files).observe(station, Metrics.BOARD_TEMP, HistoryRange.DAY, window).first()
         assertTrue(store.reads > 0, "without the footer the damaged tail falls back to the raw file")
         store.reads = 0
         val warm = reader.observe(station, Metrics.BOARD_TEMP, HistoryRange.DAY, window).first()

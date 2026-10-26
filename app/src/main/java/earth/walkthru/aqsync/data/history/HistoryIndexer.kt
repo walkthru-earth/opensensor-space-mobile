@@ -24,11 +24,16 @@ import javax.inject.Singleton
  * last attempt failed. A file the reader refuses gets `indexError` and stays archived untouched.
  */
 @Singleton
-class HistoryIndexer @Inject constructor(
+class HistoryIndexer internal constructor(
     archive: FileArchive,
     archivedFileDao: ArchivedFileDao,
     coordinator: DeviceCoordinator,
+    /** Resolves each file's board template from its footer, for the index and for [HistoryDeriver]. */
+    val templates: FileTemplates,
 ) {
+    @Inject constructor(archive: FileArchive, archivedFileDao: ArchivedFileDao, coordinator: DeviceCoordinator) :
+        this(archive, archivedFileDao, coordinator, FileTemplates.BUNDLED)
+
     val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
 
     /** Only the durable receipt; reconciliation stays in a cancellable history pass. */
@@ -44,6 +49,7 @@ class HistoryIndexer @Inject constructor(
         clockAnchors = clockAnchors,
         coordinator = coordinator,
         log = { Log.i(TAG, it) },
+        templates = templates,
     )
 
     /** [row] with the index columns filled from [file] (already verified). Never throws. */

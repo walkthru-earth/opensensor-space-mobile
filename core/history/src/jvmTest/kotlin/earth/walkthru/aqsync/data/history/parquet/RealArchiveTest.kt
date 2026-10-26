@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.history.parquet
 
+import earth.walkthru.aqsync.data.history.CoreS3Files
 import earth.walkthru.aqsync.data.history.ParquetIndexer
 import earth.walkthru.aqsync.data.history.UtcColumns
 import org.junit.Assert.assertEquals
@@ -36,12 +37,12 @@ class RealArchiveTest {
         assertEquals(ParquetLogicalType.TimeUnit.NANOS, pf.leaf("clock_anchor_utc_ns").timestampUtcUnit)
         assertEquals(77, md.columnOrders.size)
 
-        val index = ParquetIndexer.index(pf)
+        val index = ParquetIndexer.index(pf, templates = CoreS3Files)
         assertTrue("v6 statistics fast path", index.fromStatistics)
         assertEquals(105L, index.utcRows)
         assertEquals(2L, index.firstSeq)
         assertEquals(106L, index.lastSeq)
-        assertEquals(105L, index.pmValidRows)
+        assertEquals(105L, index.validRows)
         // 09:42:35Z … 09:59:55Z on 2026-09-17 (PyArrow shows the same instants).
         assertEquals(1_789_638_155L, index.firstUtcNs!! / 1_000_000_000L)
         assertEquals(1_789_639_195L, index.lastUtcNs!! / 1_000_000_000L)
@@ -84,7 +85,7 @@ class RealArchiveTest {
             } catch (e: ParquetFormatException) {
                 throw AssertionError("${f.name}: ${e.message}", e)
             }
-            val index = ParquetIndexer.index(pf)
+            val index = ParquetIndexer.index(pf, templates = CoreS3Files)
             assertEquals(f.name, pf.numRows, index.rows)
             var decodedRows = -1L
             for (leaf in pf.leaves) {

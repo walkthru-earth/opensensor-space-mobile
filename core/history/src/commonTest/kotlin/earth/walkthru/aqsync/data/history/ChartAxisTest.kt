@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.airquality.WhoGuidelines
+import space.opensensor.model.PlausibleRange
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.test.Test
@@ -11,9 +12,12 @@ import kotlin.test.assertTrue
 class ChartAxisTest {
     private fun column(mean: Float?, max: Float? = mean) = HistoryColumn(0, 3600, mean, max, 1f, 0f)
 
+    /** A neutral metric with a known plausible range, so these cases do not follow the bundled templates. */
+    private val temp = Metrics.AMBIENT_TEMP.copy(plausibleRange = PlausibleRange(-40.0, 125.0))
+
     @Test
     fun `subzero temperature columns and mixed signs use a zero baseline`() {
-        val axis = ChartAxes.of(listOf(column(-23f, -19f), column(12f, 14f)), Metrics.AMBIENT_TEMP)
+        val axis = ChartAxes.of(listOf(column(-23f, -19f), column(12f, 14f)), temp)
         assertTrue(axis.min < -23f)
         assertTrue(axis.max >= 14f)
         assertTrue(axis.fraction(-23f) < axis.fraction(0f))
@@ -22,20 +26,29 @@ class ChartAxisTest {
     }
 
     @Test
-    fun `isolated negative extreme is included rather than percentile clipped`() {
-        val columns = List(99) { column(10f) } + column(-800f)
-        val axis = ChartAxes.of(columns, Metrics.AMBIENT_TEMP)
-        assertTrue(axis.min < -800f)
-        assertTrue(axis.fraction(-800f) > 0f)
+    fun `a negative extreme inside the plausible range is included rather than percentile clipped`() {
+        val columns = List(99) { column(10f) } + column(-38f)
+        val axis = ChartAxes.of(columns, temp)
+        assertTrue(axis.min < -38f)
+        assertTrue(axis.fraction(-38f) > 0f)
     }
 
     @Test
-    fun `empty gap and nonfinite readings have a finite nonzero axis`() {
+    fun `an implausible reading cannot stretch the axis past the template range`() {
+        val axis = ChartAxes.of(List(99) { column(10f) } + column(-800f, 900f), temp)
+        assertTrue(axis.min <= -40f && axis.min > -100f, "min ${axis.min}")
+        assertTrue(axis.max >= 125f && axis.max < 200f, "max ${axis.max}")
+    }
+
+    @Test
+    fun `with no data the axis is the plausible range and without one a small positive span`() {
         for (columns in listOf(emptyList(), listOf(column(null)), listOf(column(Float.NaN, Float.POSITIVE_INFINITY)))) {
-            val axis = ChartAxes.of(columns, Metrics.AMBIENT_TEMP)
-            assertEquals(0f, axis.min)
-            assertTrue(axis.max.isFinite() && axis.max >= Metrics.AMBIENT_TEMP.axisFloor)
-            assertTrue(axis.step > 0f && axis.span > 0f)
+            val ranged = ChartAxes.of(columns, temp)
+            assertTrue(ranged.min <= -40f && ranged.max >= 125f, "${ranged.min}..${ranged.max}")
+            val bare = ChartAxes.of(columns, temp.copy(plausibleRange = null))
+            assertEquals(0f, bare.min)
+            assertTrue(bare.max.isFinite() && bare.max > bare.min)
+            assertTrue(bare.step > 0f && bare.span > 0f)
         }
     }
 

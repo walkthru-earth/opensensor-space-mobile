@@ -4,7 +4,8 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * One metric's aggregate in one UTC tier bucket, the plain form of Android's `metric_bucket` row.
- * [rows] counts every timed row in the slot, [validRows] those that passed the metric's gate.
+ * [rows] counts every timed row in the slot, [validRows] those that passed the metric's gate. [mean]
+ * is the metric's aggregate of them. [sampleIntervalMs] is the bucket's footer interval, 0 when unknown.
  */
 data class TierBucket(
     val startEpochS: Long,
@@ -14,7 +15,14 @@ data class TierBucket(
     val mean: Float,
     val min: Float,
     val max: Float,
-)
+    val sampleIntervalMs: Long = 0,
+) {
+    /** Share of the rows the interval allows in a [tier] bucket that are valid, 0 when the interval is unknown. */
+    fun coverage(tier: Resolution): Float {
+        val expected = tier.expectedRows(sampleIntervalMs)
+        return if (expected <= 0) 0f else (validRows.toFloat() / expected).coerceIn(0f, 1f)
+    }
+}
 
 /** The UTC days that hold derived data for one station: how many, the first and the last (epoch seconds of UTC midnight). */
 data class DaySpan(val count: Int = 0, val firstDayS: Long? = null, val lastDayS: Long? = null)
@@ -37,5 +45,5 @@ interface HistoryTiers {
 
 /** The tier rows of one aggregated [Bucket], one per metric that had values. */
 fun Bucket.tierBuckets(): Map<String, TierBucket> = metrics.mapValues { (_, a) ->
-    TierBucket(startEpochS, rows, a.n, estimatedRows, a.mean, a.min, a.max)
+    TierBucket(startEpochS, rows, a.n, estimatedRows, a.mean, a.min, a.max, sampleIntervalMs)
 }

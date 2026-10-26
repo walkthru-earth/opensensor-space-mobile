@@ -21,7 +21,7 @@ class AggregationTest {
 
     @Test
     fun `board file lands in the right 15-minute and hourly and daily buckets`() {
-        val agg = Aggregator(station)
+        val agg = Aggregator(station, templates = CoreS3Files)
         agg.add(boardFile)
         val buckets = agg.buckets()
         val q = buckets.filter { it.resolution == Resolution.MIN15 }
@@ -30,7 +30,7 @@ class AggregationTest {
         // 09:30 bucket holds 09:42:35–09:44:55 (15 rows), 09:45 bucket holds 09:45:05–09:59:55 (90 rows).
         assertEquals(listOf(1_789_637_400L, 1_789_638_300L), q.map { it.startEpochS })
         assertEquals(listOf(15, 90), q.map { it.rows })
-        assertEquals(listOf(15, 90), q.map { it.validRows })
+        assertEquals(listOf(15L, 90L), q.map { it.agg(Metrics.PM25)!!.n.toLong() })
         assertEquals(1, h.size)
         assertEquals(1_789_635_600L, h[0].startEpochS) // 09:00Z
         assertEquals(105, h[0].rows)
@@ -78,7 +78,7 @@ class AggregationTest {
             ),
         )
         w.finish()
-        val agg = Aggregator(station, setOf(Resolution.HOUR))
+        val agg = Aggregator(station, setOf(Resolution.HOUR), templates = CoreS3Files)
         agg.add(ParquetFile.wrap(out.toByteArray()))
         val b = agg.buckets().single()
         assertEquals(3600L, b.startEpochS)
@@ -94,7 +94,7 @@ class AggregationTest {
 
     @Test
     fun `corrected pm25 is the mean of corrected rows and never the corrected mean`() {
-        val agg = Aggregator(station, setOf(Resolution.HOUR))
+        val agg = Aggregator(station, setOf(Resolution.HOUR), templates = CoreS3Files)
         agg.add(ParquetFile.wrap(humidPm25Parquet()))
         val b = agg.buckets().single()
         assertEquals(HUMID_HOUR_S, b.startEpochS)
@@ -116,7 +116,7 @@ class AggregationTest {
 
     @Test
     fun `file summaries correct each row too`() {
-        val summary = FileSummary.of("humid.parquet", ParquetFile.wrap(humidPm25Parquet()))
+        val summary = FileSummary.of("humid.parquet", ParquetFile.wrap(humidPm25Parquet()), templates = CoreS3Files)
         val a = EpaPm25Correction.correct(10.0, 50.0)!!
         val c = EpaPm25Correction.correct(250.0, 80.0)!!
         assertEquals(((a + c) / 2).toFloat(), summary.metrics.getValue(Metrics.PM25_CORRECTED.id).mean, 1e-3f)
@@ -125,7 +125,7 @@ class AggregationTest {
 
     @Test
     fun `unsynced file contributes nothing`() {
-        val agg = Aggregator(station)
+        val agg = Aggregator(station, templates = CoreS3Files)
         agg.add(ParquetFile.wrap(bytes("device/v2-none-90rows-unsynced.parquet")))
         assertTrue(agg.buckets().isEmpty())
     }

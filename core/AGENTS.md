@@ -44,12 +44,12 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   PyArrow/DuckDB oracles where the format is involved.
 - The core is sensor agnostic. Air quality is one device family, and new
   families arrive as data (a measurement dictionary and a family entry), never as
-  a code branch or a schema string check in a screen. Today add metrics through
-  `history/.../Metrics.kt` (`MetricSpec`), with column, unit, validity gate and
-  an optional scale. A missing column produces no value. `:core:model` holds
-  the data model they move onto (#183) and the bundled board templates and app
-  profiles under `core/model/bundled/` (#184). LIVE (`LiveReading`, #185) and the batch
-  estimate read them. History switches in #186. Read `docs/devices-and-discovery.md` first. New shared types use generic
+  a code branch or a schema string check in a screen. `:core:model` holds
+  the data model (#183) and the bundled board templates and app profiles under
+  `core/model/bundled/` (#184). LIVE (`LiveReading`, #185), the batch estimate and
+  History read them. History builds each `MetricSpec` from a template datastream
+  and the profile (`Metrics.of`), and reads each file by the template of its
+  footer (`FileTemplates`). A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading`, or a future `MetricCard`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and
   the privacy rules. The phone uses H3 (`publicfeed`, `H3Grid`) for geometry, viewport cover, descendant

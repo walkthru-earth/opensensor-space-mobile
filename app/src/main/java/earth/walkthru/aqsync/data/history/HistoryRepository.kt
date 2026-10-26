@@ -30,6 +30,8 @@ class HistoryRepository internal constructor(
     derived: DerivedDayFiles,
     /** Coverage counts only the elapsed part of a window holding now. Tests pin it. */
     nowEpochS: () -> Long,
+    /** Resolves each file's board template from its footer. Tests read old fixtures through their own. */
+    private val templates: FileTemplates = FileTemplates.BUNDLED,
 ) {
     @Inject constructor(archive: FileArchive, archivedFileDao: ArchivedFileDao, bucketDao: MetricBucketDao, derived: DerivedDayFiles) :
         this(archive, archivedFileDao, bucketDao, derived, { System.currentTimeMillis() / 1_000 })
@@ -38,7 +40,7 @@ class HistoryRepository internal constructor(
     val store = FileArchiveStore(archive, Dispatchers.IO)
     val tiers: HistoryTiers = RoomHistoryTiers(bucketDao)
     private val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
-    val reader = HistorySeriesReader(store, index, tiers, Dispatchers.IO, clockAnchors, derived, nowEpochS = nowEpochS)
+    val reader = HistorySeriesReader(store, index, tiers, Dispatchers.IO, clockAnchors, derived, nowEpochS = nowEpochS, templates = templates)
 
     fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> =
         reader.observe(station, metric, range, window)
@@ -63,7 +65,7 @@ class HistoryRepository internal constructor(
             val file = archive.fileFor(f.station, f.name)
             if (!file.isFile) return@mapNotNull null
             try {
-                ParquetFile.open(file).use { FileSummary.of(f.name, it, if (f.hasEstimatedUtc) anchors[f.bootId] else null) }
+                ParquetFile.open(file).use { FileSummary.of(f.name, it, if (f.hasEstimatedUtc) anchors[f.bootId] else null, templates = templates) }
                     .also { synchronized(summaryCache) { summaryCache[key] = it } }
             } catch (e: ParquetFormatException) {
                 null

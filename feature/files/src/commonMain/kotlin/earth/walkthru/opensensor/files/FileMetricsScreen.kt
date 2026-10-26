@@ -95,7 +95,7 @@ import earth.walkthru.opensensor.files.resources.fm_uptime_span
 import earth.walkthru.opensensor.files.resources.fm_utc
 import earth.walkthru.opensensor.files.resources.fm_utc_none
 import earth.walkthru.opensensor.files.resources.fm_utc_rows
-import earth.walkthru.opensensor.files.resources.fm_valid_pm_rows
+import earth.walkthru.opensensor.files.resources.fm_valid_rows
 import earth.walkthru.opensensor.files.resources.fm_writer
 import earth.walkthru.opensensor.files.resources.history_of
 import earth.walkthru.opensensor.files.resources.row_groups
@@ -194,7 +194,7 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                 } else {
                     StatLine(stringResource(Res.string.fm_utc), stringResource(Res.string.fm_utc_none))
                 }
-                StatLine(stringResource(Res.string.fm_valid_pm_rows), stringResource(Res.string.history_of, idx.pmValidRows, idx.rows))
+                idx.validRows?.let { valid -> StatLine(stringResource(Res.string.fm_valid_rows), stringResource(Res.string.history_of, valid, idx.rows)) }
                 if (developer) {
                     StatLine(stringResource(Res.string.fm_uptime_span), "${idx.firstMonoUs?.let(::formatMonoUs) ?: NO_VALUE} → ${idx.lastMonoUs?.let(::formatMonoUs) ?: NO_VALUE}")
                     StatLine(stringResource(Res.string.fm_sequence), "${idx.firstSeq ?: NO_VALUE} → ${idx.lastSeq ?: NO_VALUE}")

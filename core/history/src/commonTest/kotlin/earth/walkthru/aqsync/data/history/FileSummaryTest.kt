@@ -9,7 +9,7 @@ class FileSummaryTest {
 
     @Test
     fun `a timed board file is one column with the PyArrow mean and its UTC span`() {
-        val s = FileSummary.of("data_0930.parquet", ParquetFile.wrap(bytes("device/v3-board-2rg-105rows.parquet")))
+        val s = FileSummary.of("data_0930.parquet", ParquetFile.wrap(bytes("device/v3-board-2rg-105rows.parquet")), templates = CoreS3Files)
         assertEquals(105, s.rows)
         assertEquals(105, s.timedRows)
         assertEquals(0, s.estimatedRows)
@@ -29,7 +29,7 @@ class FileSummaryTest {
 
     @Test
     fun `an unsynced file without an anchor still has readings but no place on the timeline`() {
-        val s = FileSummary.of("data_unsynced.parquet", ParquetFile.wrap(bytes("device/v2-none-90rows-unsynced.parquet")))
+        val s = FileSummary.of("data_unsynced.parquet", ParquetFile.wrap(bytes("device/v2-none-90rows-unsynced.parquet")), templates = CoreS3Files)
         assertEquals(90, s.rows)
         assertEquals(0, s.timedRows)
         assertEquals(0, s.estimatedRows)

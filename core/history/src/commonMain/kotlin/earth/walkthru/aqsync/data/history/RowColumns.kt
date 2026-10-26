@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
+import space.opensensor.model.GateValue
+import space.opensensor.model.ValidityGate
 
 /**
  * A decoded column as unboxed longs for the per-row loops of the history pass (#63). The integer
@@ -51,6 +53,25 @@ internal class DoubleColumn(val values: DoubleArray, private val valid: BooleanA
         fun of(column: ColumnValues): DoubleColumn = when (column) {
             is ColumnValues.Binary -> DoubleColumn(DoubleArray(column.size), BooleanArray(column.size))
             else -> DoubleColumn(column.doubleValues(), column.valid)
+        }
+    }
+}
+
+/**
+ * A [ValidityGate] over one file's decoded [column], read row by row without boxing. A missing column
+ * or a null cell never passes. Numbers compare by value, a flag is true when non-zero, text needs a
+ * string column.
+ */
+internal class GateColumn(private val gate: ValidityGate, column: ColumnValues?) {
+    private val numbers: DoubleColumn? = column?.takeUnless { it is ColumnValues.Binary }?.let(DoubleColumn::of)
+    private val text: ColumnValues.Binary? = column as? ColumnValues.Binary
+
+    fun passes(i: Int): Boolean = when (gate) {
+        is ValidityGate.Finite -> numbers != null && numbers.has(i) && numbers.values[i].isFinite()
+        is ValidityGate.Equals -> when (val want = gate.value) {
+            is GateValue.Number -> numbers != null && numbers.has(i) && numbers.values[i] == want.value
+            is GateValue.Flag -> numbers != null && numbers.has(i) && (numbers.values[i] != 0.0) == want.value
+            is GateValue.Text -> text != null && text.string(i) == want.value
         }
     }
 }

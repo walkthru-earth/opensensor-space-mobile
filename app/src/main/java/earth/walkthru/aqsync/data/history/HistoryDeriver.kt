@@ -64,7 +64,7 @@ class HistoryDeriver @Inject constructor(
     /** [daysDeferred] counts stale days a post-sync pass left to [DeriveBackfill]. */
     data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long, val daysDeferred: Int = 0)
 
-    private val dailyBuilder = DailyDerivedBuilder(store) { station, name -> archive.fileFor(station, name) }
+    private val dailyBuilder = DailyDerivedBuilder(store, indexer.templates) { station, name -> archive.fileFor(station, name) }
 
     /** Which station-days a set of indexed files touches, by real UTC or by the estimated span (§4.6). */
     fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> = StationDays.of(files.map { it.toRecord() })
@@ -249,6 +249,7 @@ class HistoryDeriver @Inject constructor(
             mean = a.mean,
             min = a.min,
             max = a.max,
+            sampleIntervalMs = sampleIntervalMs,
         )
     }
 
@@ -286,8 +287,8 @@ class HistoryDeriver @Inject constructor(
         /** Each day's sources from one station listing, the same files and order as `withUtcBetween`. */
         fun sourcesByDay(files: List<ArchivedFile>): Map<Long, List<ArchivedFile>> = StationDays.sourcesByDay(files) { it.toRecord() }
 
-        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order, 6 = MICROS UTC and field_id in the daily file, 7 = EPA corrected PM2.5 tier. */
-        const val DERIVE_VERSION = 7
+        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order, 6 = MICROS UTC and field_id in the daily file, 7 = EPA corrected PM2.5 tier, 8 = template datastreams and the footer sample interval. */
+        const val DERIVE_VERSION = 8
         const val DAY_NS = StationDays.DAY_NS
     }
 }

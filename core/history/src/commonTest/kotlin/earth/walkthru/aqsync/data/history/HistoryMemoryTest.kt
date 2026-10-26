@@ -106,7 +106,7 @@ class HistoryMemoryTest {
             store.files[r.key] = bytes
             index.put(r)
         }
-        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
         return store to index
     }
 
@@ -116,7 +116,7 @@ class HistoryMemoryTest {
         // A day of this fixture estimates about 63 KB, so 8 MiB holds about 133 days and 200 overflow it.
         val days = 200
         val (store, index) = archive(days)
-        val tiers = ArchiveHistoryTiers(store, index)
+        val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val budget = ArchiveHistoryTiers.DEFAULT_BUDGET_BYTES
 
         assertEquals(days, tiers.observeDays(station).first().count)
@@ -146,7 +146,7 @@ class HistoryMemoryTest {
         index.put(broken.copy(indexedAtEpochMs = 42L, rows = 1, utcRows = 1, firstUtcNs = firstDay * StationDays.DAY_NS, lastUtcNs = firstDay * StationDays.DAY_NS + 1))
         store.opened.clear()
 
-        val tiers = ArchiveHistoryTiers(store, index)
+        val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         assertEquals(3, tiers.observeDays(station).first().count)
 
         assertEquals(4, store.opened.size)
@@ -157,7 +157,7 @@ class HistoryMemoryTest {
     fun theRowReaderClosesEveryReaderItOpensOnce() = runTest {
         val (store, index) = archive(2)
         store.opened.clear()
-        val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index))
+        val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index), templates = CoreS3Files)
         val toS = (firstDay + 1) * 86_400L
 
         val day = reader.observe(station, Metrics.PM25, HistoryRange.DAY, HistoryWindow.endingAt(toS, HistoryRange.DAY, TimeZone.UTC)).first()
@@ -169,7 +169,7 @@ class HistoryMemoryTest {
 
     @Test
     fun indexRepairClosesTheReaderOnceWhateverTheOutcome() {
-        val repair = ArchiveIndexRepair(Store(), Index(), nowEpochMs = { 42L })
+        val repair = ArchiveIndexRepair(Store(), Index(), nowEpochMs = { 42L }, templates = CoreS3Files)
         val good = CountingReader(board)
         val indexed = repair.indexed(record("data.parquet", board), { good })
         assertNull(indexed.indexError)

@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
+import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
@@ -78,6 +79,7 @@ fun humidPm25Parquet(): ByteArray {
             ParquetWriter.Column("relative_humidity_percent", ParquetType.FLOAT),
         ),
         ParquetCodec.UNCOMPRESSED,
+        keyValueMetadata = coreS3Footer(),
     )
     w.begin()
     w.rowGroup(
@@ -91,4 +93,37 @@ fun humidPm25Parquet(): ByteArray {
     )
     w.finish()
     return out.toByteArray()
+}
+
+/** The bundled CoreS3 template, the board every device fixture comes from. */
+val coreS3Template: space.opensensor.model.BoardTemplate = space.opensensor.model.BundledCatalog.templates.single { it.id.startsWith("cores3-") }
+
+/** The bundled Waveshare template. */
+val waveshareTemplate: space.opensensor.model.BoardTemplate = space.opensensor.model.BundledCatalog.templates.single { it.id.startsWith("waveshare-") }
+
+/**
+ * Reads every file as the bundled CoreS3 template. The device fixtures predate the bundled dict,
+ * so the default [FileTemplates.BUNDLED] gives them rows and no metric values.
+ */
+val CoreS3Files: FileTemplates = FileTemplates { coreS3Template }
+
+/** A footer naming the bundled CoreS3 dict and a 10 s cadence, as a current CoreS3 file carries. */
+fun coreS3Footer(extra: Map<String, String> = emptyMap()): Map<String, String> =
+    mapOf(FileTemplates.DICTIONARY_KEY to coreS3Template.dict, FileTemplates.SAMPLE_INTERVAL_KEY to "10000") + extra
+
+/**
+ * [bytes] rewritten with the bundled CoreS3 dict in the footer. The device fixtures predate it, and a
+ * derived day file without a dict gives way to the raw files.
+ */
+fun withCoreS3Dict(bytes: ByteArray): ByteArray = ParquetFile.wrap(bytes).use { file ->
+    val sink = MemorySink()
+    val w = ParquetWriter(
+        sink,
+        file.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) },
+        keyValueMetadata = file.metadata.keyValueMetadata + coreS3Footer(),
+    )
+    w.begin()
+    w.rowGroup(file.leaves.map { file.readColumn(it) })
+    w.finish()
+    sink.toByteArray()
 }

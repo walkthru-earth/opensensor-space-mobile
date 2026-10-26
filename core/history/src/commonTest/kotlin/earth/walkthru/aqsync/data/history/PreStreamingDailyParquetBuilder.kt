@@ -113,7 +113,7 @@ object PreStreamingDailyParquetBuilder {
                     val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.bootId } else null
                     val mono = if (anchor != null) col(ParquetIndexer.MONO)?.let(LongColumn::of) else null
                     val estimated = if (anchor != null && mono != null) estimates(utc.size, mono, anchor) else null
-                    val tierColumns = aggregator?.columns(::col)
+                    val tierColumns = aggregator?.columns(::col, md.keyValueMetadata)
                     for (i in 0 until utc.size) {
                         val real = utc.has(i)
                         val ns = if (real) utc.values[i] else estimated?.takeIf { it.has(i) }?.values?.get(i) ?: continue

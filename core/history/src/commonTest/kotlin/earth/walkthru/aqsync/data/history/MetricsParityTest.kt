@@ -25,7 +25,7 @@ class MetricsParityTest {
 
     private fun gateMatches(spec: MetricSpec, gate: ValidityGate?): Boolean = when (val expected = spec.gate) {
         null -> gate == null || gate == ValidityGate.Finite(spec.column)
-        else -> gate == ValidityGate.Equals(expected.column, GateValue.Number(expected.value.toDouble()))
+        else -> gate == expected
     }
 
     @Test
@@ -59,8 +59,8 @@ class MetricsParityTest {
     @Test
     fun thePrimaryReadingIsTheMetricsPrimaryOnEveryBoard() {
         stations.forEach { station ->
-            assertEquals(Metrics.primary.column, station.primary.first().name, station.template.id)
-            assertEquals(Metrics.primary.label, station.primary.first().label("en"), station.template.id)
+            assertEquals(Metrics.PM25.column, station.primary.first().name, station.template.id)
+            assertEquals(Metrics.PM25.label, station.primary.first().label("en"), station.template.id)
         }
     }
 

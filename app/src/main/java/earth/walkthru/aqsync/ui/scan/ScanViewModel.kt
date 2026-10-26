@@ -98,7 +98,7 @@ class ScanViewModel @Inject constructor(
                 lastDataUtcNs = g.lastDataUtcNs,
                 lastDayStartS = day?.startEpochS,
                 lastDayPm25Mean = day?.mean,
-                lastDayCoverage = day?.let { (it.validRows.toFloat() / Resolution.DAY.expectedRows).coerceIn(0f, 1f) },
+                lastDayCoverage = day?.let { d -> Resolution.DAY.expectedRows(d.sampleIntervalMs).takeIf { it > 0 }?.let { (d.validRows.toFloat() / it).coerceIn(0f, 1f) } },
                 lastDayPm25Basis = basis,
             )
         }

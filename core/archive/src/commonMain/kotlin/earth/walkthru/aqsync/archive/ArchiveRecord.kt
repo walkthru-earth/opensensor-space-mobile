@@ -36,7 +36,6 @@ data class ArchiveRecord(
     val lastMonoUs: Long? = null,
     val firstSeq: Long? = null,
     val lastSeq: Long? = null,
-    val pmValidRows: Long? = null,
     val estFirstUtcNs: Long? = null,
     val estLastUtcNs: Long? = null,
     val estAnchorFile: String? = null,
