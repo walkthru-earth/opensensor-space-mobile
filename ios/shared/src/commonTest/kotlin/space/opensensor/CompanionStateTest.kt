@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 
 class CompanionStateTest {
     /** The bundled Waveshare dictionary, so LIVE has a thing to read through. */
-    private val dict = "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb"
+    private val dict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7"
 
     private fun lanConnected(state: CompanionState, name: String, thing: String = "thing-$name") {
         state.lanSessionChanged(name, true, false, "connected", 0, 0, 0)

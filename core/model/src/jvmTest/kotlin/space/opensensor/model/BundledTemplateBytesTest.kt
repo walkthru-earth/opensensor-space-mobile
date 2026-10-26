@@ -27,13 +27,13 @@ class BundledTemplateBytesTest {
             "templates/" + e.getValue("href").jsonPrimitive.content to e.getValue("desc").jsonPrimitive.content
         }
 
-    /** aq-parquet 248c487 `docs/shared/templates`. The template pins equal their index desc. */
+    /** aq-parquet 9915aec `docs/shared/templates`. The template pins equal their index desc. */
     private val pinned = mapOf(
-        "templates/index.json" to "e45494923e634eba111bb98a66aab60c2ec9ab5c6c4f8770b428fd8a37437f0f",
-        "templates/m5stack-cores3/4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94.json" to
-            "bb0ab0a3eaafb05e45bbbf5216194ab808110df92e6ee277c8ef2af6f2f314b0",
-        "templates/waveshare-esp32-s3-sim7670g/6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb.json" to
-            "7f2bbf5314ce8d6f4d0e5ee518991a9c3d43ab7b66d973e8a5921e811059872a",
+        "templates/index.json" to "d51cf30858947e53ff1f583c55d3fcc843dc6dcb787ada7042c01b9acafe8adb",
+        "templates/m5stack-cores3/3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9.json" to
+            "1c9511bd6836876bf90bbdbe3224b00bd5d176e0fdd5293d5ee6dd73ef6ea45a",
+        "templates/waveshare-esp32-s3-sim7670g/50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7.json" to
+            "1180e7273bf1dd4cce94ba02b84af61bdddeeb11dc7ddcef61967aca7031c472",
     )
 
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

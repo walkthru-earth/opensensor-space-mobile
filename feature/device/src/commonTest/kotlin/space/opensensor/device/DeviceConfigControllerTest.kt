@@ -37,7 +37,7 @@ private const val SECRET_PSK = "correct horse battery"
 private val v2Info = DeviceInfo(
     proto = 3,
     schema = "waveshare-sim7670g-telemetry-v5",
-    dict = "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb",
+    dict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7",
 )
 
 private fun config(wifiState: String = "off", sensor: SensorConfig? = null) = ConfigSnapshot(
