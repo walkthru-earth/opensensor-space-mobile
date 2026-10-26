@@ -12,8 +12,8 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * Aggregate tier row (schema v7), **one row per metric**: identity `(station, metricId, resolution,
- * startEpochS)`. `metricId` is `MetricSpec.id` from the registry, so a new sensor is a new registry
- * entry and nothing here changes. Rebuilt per UTC day by `HistoryDeriver` from the verified files —
+ * startEpochS)`. `metricId` is `MetricSpec.id`, the template column name, so a new sensor is a new
+ * template datastream and nothing here changes. Rebuilt per UTC day by `HistoryDeriver` from the verified files —
  * a cache of the archive, never a source: deleting every row and re-deriving yields the same table.
  */
 @Entity(
@@ -33,9 +33,12 @@ data class MetricBucket(
     val validRows: Int,
     /** Of `rows`, those on estimated time (§4.6). */
     val estimatedRows: Int,
+    /** The metric's aggregate of the valid rows (a mean, a total, the latest value) and their extremes. */
     val mean: Float,
     val min: Float,
     val max: Float,
+    /** The bucket's footer `sample_interval_ms`, 0 when unknown. Coverage divides by the rows it allows. */
+    val sampleIntervalMs: Long,
 )
 
 /**

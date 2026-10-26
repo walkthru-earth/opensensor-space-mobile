@@ -56,6 +56,8 @@ class ArchiveHistoryTiers(
     private val beforeBuild: suspend (String, List<ArchiveRecord>, Map<String, TimeEstimate.Anchor>) -> Unit = { _, _, _ -> },
     /** Runs after the prepared tiers were loaded, for deferred derived quota enforcement on iOS. */
     private val afterBuild: suspend () -> Unit = {},
+    /** Resolves each file's board template, so its metrics read with that template's gates and units. */
+    private val templates: FileTemplates = FileTemplates.BUNDLED,
 ) : HistoryTiers,
     MemoryTrimmable {
     internal class Day(val signature: String, val buckets: DayTiers, val cacheable: Boolean = true)
@@ -204,7 +206,7 @@ class ArchiveHistoryTiers(
         val sources = files.map { src -> DailyParquetSource(src) { ParquetFile.open(store.reader(src.key), src.name) } }
         // The pass keeps the buckets that start inside this day. A file across midnight gives its other
         // rows to the neighbouring day, whose source set holds it too.
-        val pass = DayPass.run(station, epochDay, sources, sink = null, anchors = anchors, nowEpochS = 0)
+        val pass = DayPass.run(station, epochDay, sources, sink = null, anchors = anchors, nowEpochS = 0, templates = templates)
         return Day(signature, TierStore.fromBuckets(pass.buckets), cacheable = pass.failedSources.isEmpty())
     }
 

@@ -124,7 +124,7 @@
     <string name="fm_last">last</string>
     <string name="fm_utc">UTC</string>
     <string name="fm_utc_none">none, the sensor had no clock</string>
-    <string name="fm_valid_pm_rows">valid particle rows</string>
+    <string name="fm_valid_rows">valid readings</string>
     <string name="fm_uptime_span">uptime span</string>
     <string name="fm_sequence">sequence</string>
     <string name="fm_boot">boot</string>

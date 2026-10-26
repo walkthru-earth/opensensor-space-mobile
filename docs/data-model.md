@@ -72,7 +72,6 @@ erDiagram
     long lastMonoUs
     long firstSeq
     long lastSeq
-    long pmValidRows
     long estFirstUtcNs "v6 time estimate →"
     long estLastUtcNs
     string estAnchorFile
@@ -80,7 +79,7 @@ erDiagram
   metric_bucket {
     long id PK "UNIQUE (station,metricId,resolution,startEpochS)"
     string station
-    string metricId "Metrics.id"
+    string metricId "template column name"
     long resolution "900 · 3600 · 86400"
     long startEpochS
     int rows
@@ -89,6 +88,7 @@ erDiagram
     float mean
     float min
     float max
+    long sampleIntervalMs "footer interval, 0 unknown"
   }
   derived_day {
     long id PK "UNIQUE (station,epochDay)"
@@ -148,6 +148,7 @@ that cannot list the archive writes no marker and imports on the next launch.
 | 9 → 10 | explicit | `sensor_installation`; the replaceable module's phone-local identity and assertion time, with one current row per device address and prior rows retained when the asserted module changes |
 | 10 → 11 | explicit | no schema change; rows indexed with no UTC rows and no error are marked never indexed, so the reader indexes them again |
 | 11 → 12 | `AutoMigration` | new table `pruned_file` |
+| 12 → 13 | explicit | drops `archived_file.pmValidRows`, recreates `metric_bucket` empty with `sampleIntervalMs` and clears `derived_day`. Tiers key metrics by template column now, so the deriver rebuilds every day. The archive and its index stay |
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores
 the full sticker, vendor/model, batch, source (`barcode` or `manual`), phone UTC assertion time,

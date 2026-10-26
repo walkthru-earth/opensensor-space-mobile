@@ -18,23 +18,34 @@ object ChartAxes {
      * Banded quantities start at zero and keep the 95th percentile cap (spikes above it get a
      * labelled cap), then snap up to the next WHO edge so the guideline is always in view and two
      * days on the same scale read alike. Above the loosest interim target the top is a round number.
-     * Neutral quantities use the full finite mean/peak range, with room below a negative minimum;
-     * ordinary signed values are never flattened onto zero or clipped to a percentile. Both signs
-     * share a zero baseline.
+     * Neutral quantities use the finite mean and peak range, with room below a negative minimum, held
+     * inside the metric's plausible range so one suspect row cannot flatten the chart. With no data
+     * the axis is the plausible range. Both signs share a zero baseline.
      */
     fun of(columns: List<HistoryColumn>, metric: MetricSpec): ChartAxis {
         val finite = columns.map {
             it.copy(mean = it.mean?.takeIf(Float::isFinite), max = it.max?.takeIf(Float::isFinite))
         }
         val scale = metric.healthScale
-        if (scale != null) return snapped(Columns.axisRaw(finite, metric.axisFloor), scale)
+        if (scale != null) return snapped(Columns.axisRaw(finite, Metrics.axisFloorOf(metric) ?: 0f), scale)
         val values = finite.flatMap { listOfNotNull(it.mean, it.max) }
-        val upper = maxOf(values.maxOrNull() ?: 0f, metric.axisFloor)
-        val lowest = values.minOrNull()?.coerceAtMost(0f) ?: 0f
-        val lower = lowest - abs(lowest) * 0.1f
+        val range = metric.plausibleRange
+        val rangeMin = range?.min?.toFloat()
+        val rangeMax = range?.max?.toFloat()
+        var upper = values.maxOrNull() ?: rangeMax ?: DEFAULT_TOP
+        var lowest = minOf(values.minOrNull() ?: rangeMin ?: 0f, 0f)
+        if (rangeMin != null && rangeMax != null) {
+            upper = upper.coerceIn(rangeMin, rangeMax)
+            lowest = lowest.coerceIn(rangeMin, rangeMax)
+        }
+        if (upper <= lowest) upper = rangeMax?.takeIf { it > lowest } ?: (lowest + DEFAULT_TOP)
+        val lower = if (lowest < 0f) lowest - abs(lowest) * 0.1f else lowest
         val step = Columns.niceStep(upper - lower)
         return ChartAxis(floor(lower / step) * step, ceil(upper / step) * step, step)
     }
+
+    /** The top of a neutral axis with neither data nor a plausible range. */
+    private const val DEFAULT_TOP = 10f
 
     /** A zero-based axis whose top is the first WHO edge at or above [raw], with a step that divides it. */
     internal fun snapped(raw: Float, scale: HealthScale): ChartAxis {

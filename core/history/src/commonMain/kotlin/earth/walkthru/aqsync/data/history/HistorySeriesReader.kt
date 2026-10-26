@@ -49,6 +49,10 @@ fun interface DerivedDayFiles {
  * [footers] keeps the parsed footers and page indexes of derived day files, keyed by path, size and
  * modification time, so switching the metric or re-reading the same Day window parses nothing again.
  * A rebuilt day is a new file with a new identity and never matches an old entry.
+ *
+ * Each file is read by the board template of its footer ([templates]), so a metric takes that
+ * template's gate, a file that stores it in another unit gives no values, and the cadence is the
+ * footer `sample_interval_ms`. Summaries roll up with the metric's aggregate.
  */
 class HistorySeriesReader(
     private val store: ArchiveStore,
@@ -59,12 +63,15 @@ class HistorySeriesReader(
     private val derived: DerivedDayFiles = DerivedDayFiles.NONE,
     private val footers: FooterCache = FooterCache(DERIVED_FOOTERS),
     private val nowEpochS: () -> Long = { Clock.System.now().epochSeconds },
+    private val templates: FileTemplates = FileTemplates.BUNDLED,
 ) {
     /**
-     * Rows the logger could have written in `[fromS, toS)` by now. A window holding now (today, this
-     * week) counts only its elapsed part, so a device that never missed a reading shows 100 %.
+     * Rows a logger writing every [sampleIntervalMs] could have written in `[fromS, toS)` by now, 0 when
+     * the interval is unknown. A window holding now (today, this week) counts only its elapsed part, so
+     * a device that never missed a reading shows 100 %.
      */
-    private fun expectedRows(fromS: Long, toS: Long): Long = (minOf(toS, nowEpochS()) - fromS).coerceAtLeast(0) / 10
+    private fun expectedRows(fromS: Long, toS: Long, sampleIntervalMs: Long): Long =
+        if (sampleIntervalMs <= 0) 0L else (minOf(toS, nowEpochS()) - fromS).coerceAtLeast(0) * MS_PER_S / sampleIntervalMs
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> {
@@ -106,33 +113,31 @@ class HistorySeriesReader(
                 b.mean,
                 if (metric.envelope) b.min else null,
                 if (metric.envelope) b.max else null,
-                (b.validRows.toFloat() / tier.expectedRows).coerceIn(0f, 1f),
+                b.coverage(tier),
                 estimated = b.estimatedRows * 2 >= b.rows && b.estimatedRows > 0,
             )
         } + trailing?.points.orEmpty()
-        var weighted = 0.0
-        var weight = 0L
+        val edges = listOfNotNull(leading, trailing)
+        val parts = whole.map { Partial(it.mean, it.validRows.toLong(), it.startEpochS) } +
+            edges.mapNotNull { e -> e.mean?.let { Partial(it, e.validRows, e.fromS) } }
         var max: Float? = null
         for (b in whole) {
-            weighted += b.mean.toDouble() * b.validRows
-            weight += b.validRows
             val hi = if (metric.envelope) b.max else b.mean
             max = if (max == null || hi > max) hi else max
         }
-        for (edge in listOfNotNull(leading, trailing)) {
-            weighted += (edge.mean ?: 0f).toDouble() * edge.validRows
-            weight += edge.validRows
-            edge.max?.let { hi -> max = if (max == null || hi > max) hi else max }
-        }
+        for (edge in edges) edge.max?.let { hi -> max = if (max == null || hi > max) hi else max }
+        val interval = (whole.map { it.sampleIntervalMs } + edges.map { it.sampleIntervalMs }).fold(0L, ::shorterInterval)
+        val weight = parts.sumOf { it.n }
         return HistorySeries(
             metric, range, fromS, toS, points,
             validRows = weight,
-            expectedRows = expectedRows(fromS, toS),
-            mean = if (weight > 0) (weighted / weight).toFloat() else null,
+            expectedRows = expectedRows(fromS, toS, interval),
+            mean = combine(metric.aggregate, parts),
             max = max,
             binned = false,
-            estimatedRows = whole.sumOf { it.estimatedRows.toLong() } + listOfNotNull(leading, trailing).sumOf { it.estimatedRows },
-            unreadableSources = listOfNotNull(leading, trailing).sumOf { it.unreadableSources },
+            estimatedRows = whole.sumOf { it.estimatedRows.toLong() } + edges.sumOf { it.estimatedRows },
+            unreadableSources = edges.sumOf { it.unreadableSources },
+            sampleIntervalMs = interval,
         )
     }
 
@@ -175,49 +180,50 @@ class HistorySeriesReader(
         val values = rows.values
         val estimatedFlags = rows.estimated
         val binned = order.size > RAW_POINT_CAP
+        val interval = rows.sampleIntervalMs
+        val rowS = if (interval > 0) maxOf(1L, interval / MS_PER_S) else 1L
         val points = ArrayList<HistoryPoint>(if (binned) 1_440 else order.size)
-        var sum = 0.0
-        var n = 0L
+        val total = Rollup(metric.aggregate)
         var max: Float? = null
         if (!binned) {
             for (i in order) {
                 val v = values[i]
                 val valid = !v.isNaN()
-                points += HistoryPoint(times[i], times[i] + 10, if (valid) v else null, null, null, if (valid) 1f else 0f, estimated = estimatedFlags[i])
+                points += HistoryPoint(times[i], times[i] + rowS, if (valid) v else null, null, null, if (valid) 1f else 0f, estimated = estimatedFlags[i])
                 if (valid) {
-                    sum += v
-                    n++
+                    total.add(v.toDouble(), times[i])
                     if (max == null || v > max) max = v
                 }
             }
         } else {
+            // Rows a full minute bin holds, 0 when the interval is unknown and coverage cannot be judged.
+            val perMinute = if (interval > 0) MINUTE_S * MS_PER_S.toFloat() / interval else 0f
             var bucket = Long.MIN_VALUE
-            var bSum = 0.0
-            var bN = 0
+            var bin = Rollup(metric.aggregate)
             var bEst = 0
             var bAll = 0
             var bMin = Float.MAX_VALUE
             var bMax = -Float.MAX_VALUE
             fun flush() {
                 if (bucket != Long.MIN_VALUE) {
+                    val n = bin.n
                     points += HistoryPoint(
                         bucket,
-                        bucket + 60,
-                        if (bN > 0) (bSum / bN).toFloat() else null,
-                        if (bN > 0) bMin else null,
-                        if (bN > 0) bMax else null,
-                        bN / 6f,
+                        bucket + MINUTE_S,
+                        bin.value,
+                        if (n > 0 && metric.envelope) bMin else null,
+                        if (n > 0 && metric.envelope) bMax else null,
+                        if (perMinute > 0f) (n / perMinute).coerceIn(0f, 1f) else 0f,
                         estimated = bEst * 2 >= bAll && bEst > 0,
                     )
                 }
             }
             for (i in order) {
-                val b = times[i].floorDiv(60L) * 60
+                val b = times[i].floorDiv(MINUTE_S) * MINUTE_S
                 if (b != bucket) {
                     flush()
                     bucket = b
-                    bSum = 0.0
-                    bN = 0
+                    bin = Rollup(metric.aggregate)
                     bEst = 0
                     bAll = 0
                     bMin = Float.MAX_VALUE
@@ -227,18 +233,27 @@ class HistorySeriesReader(
                 if (estimatedFlags[i]) bEst++
                 val v = values[i]
                 if (!v.isNaN()) {
-                    bSum += v
-                    bN++
+                    bin.add(v.toDouble(), times[i])
                     if (v < bMin) bMin = v
                     if (v > bMax) bMax = v
-                    sum += v
-                    n++
+                    total.add(v.toDouble(), times[i])
                     if (max == null || v > max) max = v
                 }
             }
             flush()
         }
-        return HistorySeries(metric, range, fromS, toS, points, validRows = n, expectedRows = expectedRows(fromS, toS), mean = if (n > 0) (sum / n).toFloat() else null, max = max, binned = binned, estimatedRows = rows.estimatedValid, unreadableSources = unreadable.size)
+        val n = total.n.toLong()
+        return HistorySeries(
+            metric, range, fromS, toS, points,
+            validRows = n,
+            expectedRows = expectedRows(fromS, toS, interval),
+            mean = total.value,
+            max = max,
+            binned = binned,
+            estimatedRows = rows.estimatedValid,
+            unreadableSources = unreadable.size,
+            sampleIntervalMs = interval,
+        )
     }
 
     /**
@@ -258,10 +273,13 @@ class HistorySeriesReader(
             val seq = long(ParquetIndexer.SEQ)
             val anchor = if (f.hasEstimatedUtc) anchors[f.bootId]?.takeIf { it.boot == md.bootId } else null
             val mono = if (anchor != null) long(ParquetIndexer.MONO) else null
-            val gate = metric.gate?.let { g -> long(g.column) }
-            val col = md.leaf(metric.column)?.let { DoubleColumn.of(pf.readColumn(it)) }
-            val rh = metric.humidityColumn?.let { name -> md.leaf(name)?.let { DoubleColumn.of(pf.readColumn(it)) } }
-            val staged = StagedRows(utc.size)
+            val file = templates.of(md.keyValueMetadata)
+            // A file whose template lacks the metric, or stores it in another unit, gives it no values (rule 9).
+            val spec = file.template?.let(metric::inTemplate)
+            val gate = spec?.gate?.let { g -> GateColumn(g, md.leaf(g.column)?.let { pf.readColumn(it) }) }
+            val col = spec?.let { md.leaf(it.column) }?.let { DoubleColumn.of(pf.readColumn(it)) }
+            val rh = spec?.humidityColumn?.let { name -> md.leaf(name)?.let { DoubleColumn.of(pf.readColumn(it)) } }
+            val staged = StagedRows(utc.size, file.sampleIntervalMs)
             for (i in 0 until utc.size) {
                 var est = false
                 val ns = if (utc.has(i)) {
@@ -273,9 +291,9 @@ class HistorySeriesReader(
                 }
                 if (ns < dayFromNs || ns >= dayToNs) continue
                 val bySeq = seq != null && seq.has(i)
-                val ok = metric.accepts(if (gate != null && gate.has(i)) gate.values[i] else null)
+                val ok = gate == null || gate.passes(i)
                 val v = if (ok && col != null && col.has(i)) {
-                    metric.valueOf(col.values[i], if (rh != null && rh.has(i)) rh.values[i] else null)?.toFloat()?.takeIf { it.isFinite() }
+                    spec.valueOf(col.values[i], if (rh != null && rh.has(i)) rh.values[i] else null)?.toFloat()?.takeIf { it.isFinite() }
                 } else {
                     null
                 }
@@ -308,13 +326,18 @@ class HistorySeriesReader(
         return try {
             val source = derived.open(station, day, sources, anchors) ?: return false
             val staged = ParquetReader.open(source, footerCache = footers).use { reader ->
+                val keyValues = reader.metadata.keyValueMetadata
+                // A day file mixing dictionaries carries no digest, and its rows go back to the raw files.
+                if (keyValues[FileTemplates.DICTIONARY_KEY] == null) return@use null
+                val file = templates.of(keyValues)
+                val spec = file.template?.let(metric::inTemplate)
                 val names = reader.leaves.mapTo(HashSet()) { it.name }
                 val utcLeaf = reader.leaves.firstOrNull { it.name == UtcColumns.EVENT_US } ?: reader.leaves.firstOrNull { it.name == UtcColumns.EVENT_NS } ?: return@use null
                 val estLeaf = reader.leaves.firstOrNull { it.name == DailyParquetBuilder.ESTIMATED_UTC }
                 // Both scales come from the TIMESTAMP unit, so a file in another unit is read right or refused.
                 val utcScale = UtcColumns.nanosPerUnit(utcLeaf)
                 val estScale = estLeaf?.let(UtcColumns::nanosPerUnit) ?: 1L
-                val wanted = listOfNotNull(utcLeaf.name, estLeaf?.name, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, metric.gate?.column, metric.column, metric.humidityColumn).filter { it in names }
+                val wanted = listOfNotNull(utcLeaf.name, estLeaf?.name, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, spec?.gate?.column, spec?.column, spec?.humidityColumn).filter { it in names }
                 // Rows dated by an estimate have a null UTC, so only a file without them can prune by UTC.
                 val range = UtcColumns.nsToUnit(fromNs, utcScale) until UtcColumns.nsToUnitCeil(toNs, utcScale)
                 val batch = reader.scan(
@@ -325,10 +348,10 @@ class HistorySeriesReader(
                 val bootHi = batch["boot_id_hi"]
                 val bootLo = batch["boot_id_lo"]
                 val seq = batch[ParquetIndexer.SEQ]
-                val gate = metric.gate?.let { batch[it.column] }
-                val col = batch[metric.column]
-                val rh = metric.humidityColumn?.let { batch[it] }
-                val staged = StagedRows(batch.rowCount)
+                val gate = spec?.gate?.let { g -> GateColumn(g, batch[g.column]?.toColumnValues()) }
+                val col = spec?.let { batch[it.column] }
+                val rh = spec?.humidityColumn?.let { batch[it] }
+                val staged = StagedRows(batch.rowCount, file.sampleIntervalMs)
                 for (i in 0 until batch.rowCount) {
                     val real = !utc.isNull(i)
                     val ns = if (real) {
@@ -340,8 +363,8 @@ class HistorySeriesReader(
                     }
                     if (ns < fromNs || ns >= toNs) continue
                     val bySeq = seq != null && !seq.isNull(i)
-                    val ok = metric.accepts(gate?.asLong(i))
-                    val v = if (ok) col?.asDouble(i)?.let { metric.valueOf(it, rh?.asDouble(i)) }?.toFloat()?.takeIf { it.isFinite() } else null
+                    val ok = gate == null || gate.passes(i)
+                    val v = if (ok) col?.asDouble(i)?.let { spec.valueOf(it, rh?.asDouble(i)) }?.toFloat()?.takeIf { it.isFinite() } else null
                     staged.add(bootHi.longOrZero(i), bootLo.longOrZero(i), bySeq, if (bySeq) seq!!.long(i) else ns, true, ns.floorDiv(NS), v ?: Float.NaN, !real)
                 }
                 staged
@@ -381,7 +404,7 @@ class HistorySeriesReader(
      * The rows of one source, raw or derived, staged until both extraction and closing succeeded, with
      * their row keys. [inWindow] marks the rows inside the chart window, the others only claim their key.
      */
-    private class StagedRows(capacity: Int) {
+    private class StagedRows(capacity: Int, private val sampleIntervalMs: Long = 0) {
         private val rows = Rows()
         private val hi = LongArray(capacity)
         private val lo = LongArray(capacity)
@@ -404,6 +427,7 @@ class HistorySeriesReader(
          * day before the window applies, then [seen] keeps each row once across sources.
          */
         fun commitTo(daySeen: RowKeys?, seen: RowKeys, out: Rows) {
+            if (rows.size > 0) out.sampleIntervalMs = shorterInterval(out.sampleIntervalMs, sampleIntervalMs)
             for (i in 0 until rows.size) {
                 if (daySeen != null && !daySeen.firstSight(hi[i], lo[i], bySequence[i], key[i])) continue
                 if (!inWindow[i]) continue
@@ -423,6 +447,9 @@ class HistorySeriesReader(
         /** Estimated rows that hold a value. */
         var estimatedValid = 0L
 
+        /** The shortest footer interval of the committed sources, 0 when none said. */
+        var sampleIntervalMs = 0L
+
         fun add(second: Long, value: Float, isEstimate: Boolean) {
             if (size == times.size) {
                 times = times.copyOf(size * 2)
@@ -438,12 +465,14 @@ class HistorySeriesReader(
     }
 
     companion object {
-        /** Above this many rows the day view bins to minutes. A full day is 8,640 rows, so a full day always bins. */
+        /** Above this many rows the day view bins to minutes. */
         const val RAW_POINT_CAP = 3_000
 
         /** Derived day footers kept, a month of days. Each is a few tens of KB with its page index. */
         const val DERIVED_FOOTERS = 32
         private const val NS = 1_000_000_000L
+        private const val MS_PER_S = 1000L
+        private const val MINUTE_S = 60L
         private const val DAY_S = 86_400L
 
         /**

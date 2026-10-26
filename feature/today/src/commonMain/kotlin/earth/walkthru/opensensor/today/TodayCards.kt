@@ -198,6 +198,7 @@ internal fun particleBins(reading: LiveReading?): List<Pair<String, String>> =
 private val CF1_COLUMNS = listOf("pm1_cf1_ug_m3", Metrics.PM25_CORRECTED.column, "pm10_cf1_ug_m3")
 
 private const val BATTERY_MV = "battery_mv"
+private const val VBUS_MV = "vbus_mv"
 private const val CHARGING_STATUS = "charging_status"
 
 private val PARTICLE_BINS = listOf(
@@ -757,7 +758,7 @@ internal fun BoardCard(
                 }
                 val chargingText = stringResource(Res.string.board_charging)
                 val millivolts = live?.value(BATTERY_MV)?.toInt()?.let { stringResource(Res.string.board_millivolts, it) }
-                val usb = live?.value(Metrics.VBUS.column)?.toInt()?.takeIf { it > 0 }?.let { stringResource(Res.string.board_usb_millivolts, it) }
+                val usb = live?.value(VBUS_MV)?.toInt()?.takeIf { it > 0 }?.let { stringResource(Res.string.board_usb_millivolts, it) }
                 val detail = buildList {
                     if (charging) add(chargingText)
                     if (level.developer) {

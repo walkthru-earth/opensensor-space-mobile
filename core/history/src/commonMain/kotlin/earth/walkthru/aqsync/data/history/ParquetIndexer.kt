@@ -5,11 +5,12 @@ import earth.walkthru.aqsync.data.history.parquet.LeafColumn
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFileMetadata
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * What the archive index remembers about one verified file so that History never re-opens files it
  * does not need: the row count, the time span (UTC where the rows have it, monotonic always), the
- * sequence range and how many rows carry a valid PMS reading.
+ * sequence range and how many rows hold a valid reading of the file's headline metric.
  *
  * Every field is derived from the file itself, never from its name: the Hive path says which UTC
  * window a file *belongs to*, the rows say what it *contains* (a boot mid-window, a `FLUSH`, or a
@@ -33,8 +34,12 @@ data class ParquetIndex(
     val lastMonoUs: Long?,
     val firstSeq: Long?,
     val lastSeq: Long?,
-    /** Rows with `pms_status == 4` (present, warmed up, fresh, no sensor error). */
-    val pmValidRows: Long,
+    /**
+     * Rows that pass the gate of the file template's headline metric (the first of its profile's
+     * primary list) and hold a finite value. Null when no template resolves the file's dictionary, or
+     * when that column fails to read. A damaged page then costs the count, never the file's index.
+     */
+    val validRows: Long?,
     /** True when the UTC span came from footer statistics without decoding (v6 writer). */
     val fromStatistics: Boolean,
 ) {
@@ -49,16 +54,13 @@ object ParquetIndexer {
     const val UTC = UtcColumns.EVENT_US
     const val MONO = "monotonic_us"
     const val SEQ = "sequence"
-    const val PMS_STATUS = "pms_status"
-    const val PMS_VALID = 4
 
-    fun index(file: ParquetFile): ParquetIndex {
+    fun index(file: ParquetFile, templates: FileTemplates = FileTemplates.BUNDLED): ParquetIndex {
         val md = file.metadata
         val utcLeaf = UtcColumns.eventLeaf(md)
         val utcScale = utcLeaf?.let(UtcColumns::nanosPerUnit)
         val monoLeaf = md.leaf(MONO)
         val seqLeaf = md.leaf(SEQ)
-        val pmsLeaf = md.leaf(PMS_STATUS)
 
         // Fast path: v6 footers carry min/max + null_count per row group for every column.
         val utcStats = utcLeaf?.let { rangeFromStatistics(file, it) }?.scaled(utcScale!!)
@@ -69,12 +71,18 @@ object ParquetIndexer {
         val utc = utcStats ?: utcLeaf?.let { rangeByDecoding(UtcColumns.readNs(file, it)) }
         val mono = monoStats ?: monoLeaf?.let { rangeByDecoding(file.readColumn(it)) }
         val seq = seqStats ?: seqLeaf?.let { rangeByDecoding(file.readColumn(it)) }
-        val pmValid = pmsLeaf?.let { leaf ->
-            val col = file.readColumn(leaf)
-            var n = 0L
-            for (i in 0 until col.size) if (col.asLong(i) == PMS_VALID.toLong()) n++
-            n
-        } ?: 0L
+        val headline = templates.of(md.keyValueMetadata).template?.let { t ->
+            Metrics.of(t).firstOrNull { it.primary && it.humidityColumn == null }
+        }
+        val validRows = headline?.let { metric ->
+            try {
+                validRows(file, metric)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+        }
 
         return ParquetIndex(
             rows = md.numRows,
@@ -91,9 +99,22 @@ object ParquetIndexer {
             lastMonoUs = mono?.max,
             firstSeq = seq?.min,
             lastSeq = seq?.max,
-            pmValidRows = pmValid,
+            validRows = validRows,
             fromStatistics = fromStats,
         )
+    }
+
+    /** Rows of [file] that pass [metric]'s gate and hold a finite value of its column. */
+    private fun validRows(file: ParquetFile, metric: MetricSpec): Long {
+        val md = file.metadata
+        val values = md.leaf(metric.column)?.let { DoubleColumn.of(file.readColumn(it)) } ?: return 0L
+        val gate = metric.gate?.let { g -> GateColumn(g, md.leaf(g.column)?.let { file.readColumn(it) }) }
+        var n = 0L
+        for (i in 0 until values.size) {
+            if (gate != null && !gate.passes(i)) continue
+            if (values.has(i) && values.values[i].isFinite()) n++
+        }
+        return n
     }
 
     /** Non-null count and min/max of an integer column. `min`/`max` are null when every value is null. */

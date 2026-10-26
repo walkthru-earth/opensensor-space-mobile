@@ -164,7 +164,7 @@
     <string name="fm_last">الأخير</string>
     <string name="fm_utc">UTC</string>
     <string name="fm_utc_none">لا شيء، لم تكن للمستشعر ساعة</string>
-    <string name="fm_valid_pm_rows">صفوف الجسيمات الصالحة</string>
+    <string name="fm_valid_rows">القراءات الصالحة</string>
     <string name="fm_uptime_span">مدة التشغيل</string>
     <string name="fm_sequence">التسلسل</string>
     <string name="fm_boot">التشغيل</string>

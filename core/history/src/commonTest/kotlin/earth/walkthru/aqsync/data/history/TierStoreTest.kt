@@ -113,11 +113,12 @@ class TierStoreTest {
 
     @Test
     fun tiersSavedByAnOlderVersionAreRebuilt() = runTest {
-        // Version 3 added the EPA corrected PM2.5 metric (#92). Saved days must rebuild to gain it.
-        assertEquals(3, TierCodec.VERSION)
+        // Version 4 keys metrics by template column and keeps each bucket's sample interval (#186).
+        // Saved days must rebuild to gain them.
+        assertEquals(4, TierCodec.VERSION)
         val (store, index, station) = archive()
         val tierStore = MemoryTierStore()
-        ArchiveHistoryTiers(store, index, tierStore = tierStore).observeDays(station).first()
+        ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files).observeDays(station).first()
         assertTrue(tierStore.saved.isNotEmpty())
         // Rewrite each saved day's leading version, little endian, to the previous one.
         for (bytes in tierStore.saved.values) {
@@ -126,7 +127,7 @@ class TierStoreTest {
             assertNull(TierCodec.decodeSaved(bytes))
         }
         val saves = tierStore.saves
-        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         assertTrue(restarted.observeDays(station).first().count > 0)
         assertTrue(restarted.decodedDays > 0, "an old saved day is rebuilt from the archive")
         assertTrue(tierStore.saves > saves)
@@ -155,7 +156,7 @@ class TierStoreTest {
         val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
-        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
         return Triple(store, index, station)
     }
 
@@ -163,14 +164,14 @@ class TierStoreTest {
     fun aNewProcessReadsSavedTiersWithoutDecodingParquet() = runTest {
         val (store, index, station) = archive()
         val tierStore = MemoryTierStore()
-        val first = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val first = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         val expected = first.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
         assertTrue(expected.isNotEmpty())
         assertTrue(first.decodedDays > 0)
         assertEquals(first.decodedDays, tierStore.saves)
 
         store.reads = 0
-        val second = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val second = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         val actual = second.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
         assertEquals(0, second.decodedDays)
         assertEquals(0, store.reads)
@@ -182,7 +183,7 @@ class TierStoreTest {
     fun aDayThatLostItsSourcesLeavesTheStore() = runTest {
         val (store, index, station) = archive()
         val tierStore = MemoryTierStore()
-        val tiers = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val tiers = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         tiers.observeDays(station).first()
         assertTrue(tierStore.saved.isNotEmpty())
         index.rows.value = emptyList()
@@ -194,7 +195,7 @@ class TierStoreTest {
     fun aDayAWaitingRecordHoldsStaysInTheStore() = runTest {
         val (store, index, station) = archive()
         val tierStore = MemoryTierStore()
-        val tiers = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val tiers = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         tiers.observeDays(station).first()
         val saved = tierStore.saved.keys.toSet()
         assertTrue(saved.isNotEmpty())
@@ -212,7 +213,7 @@ class TierStoreTest {
 
         // Indexed again, a new process reads the held tiers back instead of decoding the file.
         index.rows.value = listOf(record)
-        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         assertEquals(saved.size, restarted.observeDays(station).first().count)
         assertEquals(0, restarted.decodedDays)
     }
@@ -221,7 +222,7 @@ class TierStoreTest {
     fun aDayAWaitingRecordHoldsStaysVisibleInHistoryUntilItIndexesAgain() = runTest {
         val (store, index, station) = archive()
         val tierStore = MemoryTierStore()
-        val tiers = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val tiers = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         val span = tiers.observeDays(station).first()
         val buckets = tiers.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
         val metrics = tiers.observeMetricsWithData(station).first()
@@ -237,7 +238,7 @@ class TierStoreTest {
 
         // A record with no span holds every day, and a new process shows them from the store alone.
         index.rows.value = listOf(record.copy(indexedAtEpochMs = null, utcRows = 0, firstUtcNs = null, lastUtcNs = null))
-        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         assertEquals(span, restarted.observeDays(station).first())
         assertEquals(buckets, restarted.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first())
         assertEquals(0, restarted.decodedDays)
@@ -250,7 +251,7 @@ class TierStoreTest {
     @Test
     fun theStationsObserversShareOneIndexCollection() = runTest {
         val (store, index, station) = archive()
-        val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), shareScope = backgroundScope)
+        val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), shareScope = backgroundScope, templates = CoreS3Files)
         index.stationObservers = 0
         val jobs = listOf(
             backgroundScope.launch { tiers.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).collect {} },
@@ -267,7 +268,7 @@ class TierStoreTest {
     fun sharedReplayDoesNotKeepBucketsAfterMemoryTrim() = runTest {
         val (store, index, station) = archive()
         val tierStore = MemoryTierStore()
-        val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), tierStore = tierStore, shareScope = backgroundScope)
+        val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), tierStore = tierStore, shareScope = backgroundScope, templates = CoreS3Files)
         val summary = backgroundScope.launch { tiers.observeDays(station).collect {} }
         runCurrent()
         val expected = tiers.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
@@ -286,7 +287,7 @@ class TierStoreTest {
     @Test
     fun idleSharedReplayExpiresBeforeReturningToHistory() = runTest {
         val (store, index, station) = archive()
-        val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), shareScope = backgroundScope)
+        val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), shareScope = backgroundScope, templates = CoreS3Files)
         assertTrue(tiers.observeDays(station).first().count > 0)
         runCurrent()
         advanceTimeBy(5_001)
@@ -299,13 +300,13 @@ class TierStoreTest {
     fun failedSourcesDoNotPersistPartialTiersAcrossRestart() = runTest {
         val (store, index, station) = archive()
         val tierStore = MemoryTierStore()
-        val first = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val first = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         store.failures = 1
         assertEquals(0, first.observeDays(station).first().count)
         assertEquals(0, first.cachedDays())
         assertEquals(0, tierStore.saves)
         assertTrue(tierStore.saved.isEmpty())
-        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         assertTrue(restarted.observeDays(station).first().count > 0)
         assertTrue(restarted.decodedDays > 0)
         assertTrue(tierStore.saves > 0)

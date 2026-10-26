@@ -215,6 +215,7 @@ fun BandColumnChart(
         val zeroY = y(0f)
         // Every label goes through here, so what a test records is what the canvas draws.
         val drawn = ArrayList<DrawnLabel>()
+        val marks = ArrayList<Rect>()
         fun put(label: DrawnLabel) {
             drawText(label.layout, topLeft = label.at)
             drawn += label
@@ -262,6 +263,7 @@ fun BandColumnChart(
             val color = metric.valueColor(m.toDouble(), muted)
             val alpha = 0.35f + 0.65f * c.coverage
             val isSel = selected != null && selected.startS == c.startS
+            marks += Rect(Offset(x0, topY), Size(w, barHeight))
             if (c.estimated) {
                 drawRoundRect(color.copy(alpha = alpha), Offset(x0, topY), Size(w, barHeight), radius, style = Stroke(1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 3f))))
                 drawRoundRect(color.copy(alpha = alpha * 0.25f), Offset(x0, topY), Size(w, barHeight), radius)
@@ -315,35 +317,37 @@ fun BandColumnChart(
         labels.x.forEach(::put)
         drawLine(muted.copy(alpha = 0.6f), Offset(plot.left, plot.bottom), Offset(plot.right, plot.bottom), 1f)
         if (axis.min < 0f) drawLine(muted.copy(alpha = 0.6f), Offset(plot.left, zeroY), Offset(plot.right, zeroY), 1f)
-        recorder?.invoke(ChartDrawing(Rect(Offset.Zero, size), plot, drawn))
+        recorder?.invoke(ChartDrawing(Rect(Offset.Zero, size), plot, drawn, marks))
     }
     // One node per bar with a reading, laid over the canvas at the drawn LTR positions. Semantics only
     // (no pointer input), so a finger still lands on the canvas. Activating a bar selects it.
-    BoxWithConstraints(Modifier.matchParentSize()) {
-        val left = with(density) { margins.left.toDp() }
-        val top = with(density) { margins.top.toDp() }
-        val plotHeight = maxHeight - top - with(density) { margins.bottom.toDp() }
-        val plotWidth = maxWidth - left
-        val span = (toS - fromS).toFloat()
-        if (span > 0f && plotWidth > 0.dp && plotHeight > 0.dp) {
-            for ((i, c) in bars.withIndex()) {
-                val description = spoken[i]
-                val isSel = selected != null && selected.startS == c.startS
-                Box(
-                    Modifier
-                        .absoluteOffset(x = left + plotWidth * ((c.startS - fromS) / span), y = top)
-                        .size(plotWidth * ((c.endS - c.startS) / span), plotHeight)
-                        .semantics {
-                            role = Role.Button
-                            contentDescription = description
-                            this.selected = isSel
-                            traversalIndex = i.toFloat()
-                            onClick {
-                                onSelect(c)
-                                true
-                            }
-                        },
-                )
+    ExactTouchBounds {
+        BoxWithConstraints(Modifier.matchParentSize()) {
+            val left = with(density) { margins.left.toDp() }
+            val top = with(density) { margins.top.toDp() }
+            val plotHeight = maxHeight - top - with(density) { margins.bottom.toDp() }
+            val plotWidth = maxWidth - left
+            val span = (toS - fromS).toFloat()
+            if (span > 0f && plotWidth > 0.dp && plotHeight > 0.dp) {
+                for ((i, c) in bars.withIndex()) {
+                    val description = spoken[i]
+                    val isSel = selected != null && selected.startS == c.startS
+                    Box(
+                        Modifier
+                            .absoluteOffset(x = left + plotWidth * ((c.startS - fromS) / span), y = top)
+                            .size(plotWidth * ((c.endS - c.startS) / span), plotHeight)
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = description
+                                this.selected = isSel
+                                traversalIndex = i.toFloat()
+                                onClick {
+                                    onSelect(c)
+                                    true
+                                }
+                            },
+                    )
+                }
             }
         }
     }
@@ -495,8 +499,11 @@ internal fun fitGuideLabel(measurer: TextMeasurer, texts: List<String>, style: T
     return null
 }
 
-/** Everything one frame of the chart drew, the canvas, the plot and each label. */
-internal class ChartDrawing(val canvas: Rect, val plot: Rect, val labels: List<DrawnLabel>)
+/**
+ * Everything one frame of a chart drew, the canvas, the plot, each label and each mark (a bar or a
+ * calendar cell with a reading), the marks in the order of their screen reader nodes.
+ */
+internal class ChartDrawing(val canvas: Rect, val plot: Rect, val labels: List<DrawnLabel>, val marks: List<Rect> = emptyList())
 
 /** A test hook that receives each frame the chart draws. Null in the app. */
 internal val LocalChartDrawRecorder = staticCompositionLocalOf<((ChartDrawing) -> Unit)?> { null }

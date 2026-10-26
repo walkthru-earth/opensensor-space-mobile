@@ -40,11 +40,11 @@ class HistoryRepositoryTest {
         val firstOne = LocalDateTime.of(2026, 11, 1, 1, 0).atOffset(ZoneOffset.ofHours(-4)).toEpochSecond()
         val secondOne = LocalDateTime.of(2026, 11, 1, 1, 0).atOffset(ZoneOffset.ofHours(-5)).toEpochSecond()
         val buckets = Buckets().apply {
-            rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = firstOne, rows = 360, validRows = 360, estimatedRows = 0, mean = 10f, min = 10f, max = 10f)
-            rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = secondOne, rows = 360, validRows = 360, estimatedRows = 0, mean = 20f, min = 20f, max = 20f)
+            rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = firstOne, rows = 360, validRows = 360, estimatedRows = 0, mean = 10f, min = 10f, max = 10f, sampleIntervalMs = 10_000)
+            rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = secondOne, rows = 360, validRows = 360, estimatedRows = 0, mean = 20f, min = 20f, max = 20f, sampleIntervalMs = 10_000)
         }
         val tmp = File.createTempFile("aq-hist-dst", "").apply { delete(); mkdirs(); deleteOnExit() }
-        val repo = HistoryRepository(FileArchive(tmp), Files(), buckets, DerivedDayFiles.NONE, afterFixtures)
+        val repo = HistoryRepository(FileArchive(tmp), Files(), buckets, DerivedDayFiles.NONE, afterFixtures, CoreS3Files)
         val result = repo.observeHourlyDay(station, Metrics.PM25, fall).first()
         assertEquals(25 * 360L, result.expectedRows)
         assertEquals(720L, result.validRows)
@@ -52,6 +52,9 @@ class HistoryRepositoryTest {
         assertEquals(2f / 25f, result.coverage, 1e-6f)
         assertEquals(setOf(firstOne, secondOne), result.points.map { it.startS }.toSet())
 
+        // The 23 hour day expects rows at the footer cadence of its one bucket, never an assumed 10 s.
+        val springNoon = LocalDateTime.of(2026, 3, 8, 12, 0).atOffset(ZoneOffset.ofHours(-4)).toEpochSecond()
+        buckets.rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = springNoon, rows = 360, validRows = 360, estimatedRows = 0, mean = 10f, min = 10f, max = 10f, sampleIntervalMs = 10_000)
         val spring = HistoryWindow.endingOn(LocalDate.of(2026, 3, 9).toKotlinLocalDate(), HistoryRange.DAY, zone.toKotlinTimeZone())
         val springResult = repo.observeHourlyDay(station, Metrics.PM25, spring).first()
         assertEquals(23 * 360L, springResult.expectedRows)
@@ -66,15 +69,15 @@ class HistoryRepositoryTest {
         val files = Files()
         val name = "station=$station/year=2026/month=09/day=08/data_1844.parquet"
         val file = archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes("device/v1-none-1row-dated.parquet")) }
-        files.rows += HistoryIndexer(archive, files, DeviceCoordinator()).indexed(
+        files.rows += HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files).indexed(
             ArchivedFile(station = station, name = name, bytes = file.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"),
             file,
         )
         val utcBucketStart = day.fromS - 1_800
         val buckets = Buckets().apply {
-            rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = utcBucketStart, rows = 360, validRows = 360, estimatedRows = 0, mean = 999f, min = 999f, max = 999f)
+            rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = utcBucketStart, rows = 360, validRows = 360, estimatedRows = 0, mean = 999f, min = 999f, max = 999f, sampleIntervalMs = 10_000)
         }
-        val result = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE, afterFixtures).observeHourlyDay(station, Metrics.PM25, day).first()
+        val result = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE, afterFixtures, CoreS3Files).observeHourlyDay(station, Metrics.PM25, day).first()
         assertEquals(1L, result.validRows)
         assertEquals(31f, result.mean!!, 1e-6f)
         assertEquals(1, result.points.size)
@@ -89,11 +92,11 @@ class HistoryRepositoryTest {
         val buckets = Buckets()
         val name = "station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
         archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes("device/v3-board-2rg-105rows.parquet")) }
-        files.rows += HistoryIndexer(archive, files, DeviceCoordinator()).indexed(ArchivedFile(station = station, name = name, bytes = 1, crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), archive.fileFor(station, name))
-        val agg = Aggregator(station).also { it.add(earth.walkthru.aqsync.data.history.parquet.ParquetFile.wrap(bytes("device/v3-board-2rg-105rows.parquet"))) }
-        buckets.rows += agg.buckets().flatMap { b -> b.metrics.map { (id, a) -> MetricBucket(station = station, metricId = id, resolution = b.resolution.seconds, startEpochS = b.startEpochS, rows = b.rows, validRows = a.n, estimatedRows = b.estimatedRows, mean = a.mean, min = a.min, max = a.max) } }
+        files.rows += HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files).indexed(ArchivedFile(station = station, name = name, bytes = 1, crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), archive.fileFor(station, name))
+        val agg = Aggregator(station, templates = CoreS3Files).also { it.add(earth.walkthru.aqsync.data.history.parquet.ParquetFile.wrap(bytes("device/v3-board-2rg-105rows.parquet"))) }
+        buckets.rows += agg.buckets().flatMap { b -> b.metrics.map { (id, a) -> MetricBucket(station = station, metricId = id, resolution = b.resolution.seconds, startEpochS = b.startEpochS, rows = b.rows, validRows = a.n, estimatedRows = b.estimatedRows, mean = a.mean, min = a.min, max = a.max, sampleIntervalMs = b.sampleIntervalMs) } }
 
-        val repo = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE, afterFixtures)
+        val repo = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE, afterFixtures, CoreS3Files)
 
         // Day: 24 h ending at midnight after the data → 105 raw points (below the binning cap).
         val day = repo.observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
@@ -133,13 +136,13 @@ class HistoryRepositoryTest {
             "station=$station/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet",
         ).withIndex()) {
             val file = archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(fixture) }
-            files.rows += HistoryIndexer(archive, files, DeviceCoordinator()).indexed(
+            files.rows += HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files).indexed(
                 ArchivedFile(station = station, name = name, bytes = fixture.size.toLong(), crc32 = index.toLong(), sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"),
                 file,
             )
         }
 
-        val day = HistoryRepository(archive, files, Buckets(), DerivedDayFiles.NONE, afterFixtures)
+        val day = HistoryRepository(archive, files, Buckets(), DerivedDayFiles.NONE, afterFixtures, CoreS3Files)
             .observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(105, day.points.size)
         assertEquals(105L, day.validRows)

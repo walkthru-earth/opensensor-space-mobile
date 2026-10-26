@@ -39,7 +39,7 @@ class DailyParquetMemoryTest {
             writer.rowGroup(values)
             writer.finish()
             val bytes = sink.toByteArray()
-            val index = ParquetIndexer.index(ParquetFile.wrap(bytes))
+            val index = ParquetIndexer.index(ParquetFile.wrap(bytes), templates = CoreS3Files)
             ArchiveRecord(
                 station, "memory/$f.parquet", bytes.size.toLong(), f.toLong(), "sha-$f", 1, "fixture",
                 indexedAtEpochMs = 1, rows = index.rows, bootId = index.bootId, utcRows = index.utcRows,

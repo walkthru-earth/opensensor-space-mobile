@@ -1,7 +1,7 @@
 # History pipeline — index → tiers → derived day → charts
 
 **Scope:** everything between a verified file in the archive and a coloured column on screen: the file index, the metric registry, aggregation tiers, the derived daily Parquet, time estimation for unsynced boots, the friendly layer, chart binning.
-**Code (pure, `:core:history` `commonMain`, JVM and iOS since W8):** `Metrics.kt`, `Aggregation.kt` (`Resolution`, `Aggregator`, `Bucket`), `TimeEstimate.kt`, `Columns.kt`, `AirMood.kt` (+ `NowReading`), `HistoryModel.kt` (`HistoryRange`, `HistorySeries`, `HistoryColumn`), `HistoryWindow.kt`, `FileSummary.kt`, `ParquetIndexer.kt`.
+**Code (pure, `:core:history` `commonMain`, JVM and iOS since W8):** `Metrics.kt`, `FileTemplates.kt`, `Rollup.kt`, `Aggregation.kt` (`Resolution`, `Aggregator`, `Bucket`), `TimeEstimate.kt`, `Columns.kt`, `AirMood.kt` (+ `NowReading`), `HistoryModel.kt` (`HistoryRange`, `HistorySeries`, `HistoryColumn`), `HistoryWindow.kt`, `FileSummary.kt`, `ParquetIndexer.kt`.
 **Code (`:app`):** `data/history/HistoryIndexer.kt`, `HistoryDeriver.kt`, `DailyDerived.kt` (`DailyDerivedBuilder`, `DerivedStore`), `HistoryRepository.kt`; `ui/history/*`, `ui/files/FileChartCard.kt`, with the shared day builder in `core/history` (`DailyParquetBuilder`).
 **Tests:** `AggregationTest`, `TimeEstimateTest`, `ColumnsTest`, `AirMoodTest`, `FileSummaryTest`, `ParquetIndexerTest`, `RealArchiveTest` (all 766 real files when the firmware repo is a sibling); `HistoryIndexerTest`, `HistoryDeriverTest`, `HistoryRepositoryTest`.
 **Related:** [parquet.md](parquet.md) (the reader/writer underneath), [data-model.md](data-model.md) (the tables), [screens.md](screens.md) (what is drawn).
@@ -71,7 +71,7 @@ flowchart LR
 ## Index (`ParquetIndexer` → `archived_file`, Room v4)
 
 Derived from the **file**, never its name: rows, row groups, `schema_version`, `boot_id`,
-`purpose`, UTC row count + span, monotonic span, sequence span, `pms_status == 4` count,
+`purpose`, UTC row count + span, monotonic span, sequence span, the valid rows of the headline metric (the template's primary column through its gate and settle time, null when no bundled template knows the file or the column cannot be read),
 `indexedAt`/`indexError`. v6 footers answer spans from statistics without decoding
 (`fromStatistics`); v1/v2 files decode three columns. Statistics with a negative null count or a
 minimum above the maximum are no answer, the column is decoded instead. `purpose = codec-comparison-duplicate-rows`
@@ -87,22 +87,30 @@ once. Until the back-fill reaches it, such a row awaits its index.
 
 ## Metric registry
 
-**A new sensor is a registry entry, not code.** (`:core:model` holds the board template and datastream model that generalizes this, not used here yet, see [devices-and-discovery.md](devices-and-discovery.md).) Every quantity is a `MetricSpec(id, column, label,
-unit, kind, gate, healthScale, chartable, envelope, axisFloor, settleSeconds)`. Tiers, daily files, the
-History picker (`Metrics.chartable`) and the charts iterate the registry and never name a column.
-A spec whose column a file lacks yields **no values, never zeros**, so the registry may be ahead of
-the hardware.
+**A new sensor is a template, not code.** Every metric is a `MetricSpec` built from one board
+template datastream and the app profile (`Metrics.of(template, profile)`). A datastream counts when
+its role is `physicalMeasurement` or `modelResult`. The spec's id and column are the datastream's
+column name, with no mapping of older ids. The spec takes its gate from `opensensor:valid_when`,
+its warm-up from `opensensor:settle_s`, its rollup from `opensensor:aggregate`, its unit and its
+`opensensor:plausible_range` from the template. A missing aggregate rolls up as a mean. An unknown
+one becomes `point` (the last value), so counters stay point. The profile's primary columns come
+first, and `Metrics.defaultOf` opens History on the first of them.
 
-| id | column | gate | health scale | chartable | axisFloor | settle |
-| --- | --- | --- | --- | --- | --- | --- |
-| `pm25_epa` | `pm25_cf1_ug_m3`, corrected with `relative_humidity_percent` | `pms_status == 4` and a valid RH | `WhoGuidelines.PM25` | ✓ envelope | 37.5 | 180 s |
-| `pm25` | `pm25_atmospheric_ug_m3` (raw) | `pms_status == 4` | `WhoGuidelines.PM25` | ✓ envelope | 37.5 | 180 s |
-| `pm10` | `pm10_atmospheric_ug_m3` | `pms_status == 4` | `WhoGuidelines.PM10` | ✓ envelope | 75 | 180 s |
-| `pm1` | `pm1_atmospheric_ug_m3` | `pms_status == 4` | – | ✓ envelope | 60 | 180 s |
-| `n03` / `n25` | `particles_gt03_per_01l` / `…gt25…` | `pms_status == 4` | – | ✗ | 10 | 180 s |
-| `board_c` | `imu_temperature_c` (**not** ambient) | – | – | ✓ | 10 | – |
-| `ambient_c` / `rh` | `ambient_temperature_c` / `relative_humidity_percent` | – | – | ✓ | 10 / 100 | – (all null on CoreS3, SHT20 unresolved. Waveshare writes them from the PMS5003T) |
-| `battery` / `vbus` | `battery_percent` / `vbus_mv` | – | – | ✗ | 100 / 10 | – |
+`Metrics.all` is the union of the bundled templates. Where two boards describe one column, the first
+keeps its unit and aggregate. Tiers, daily files, the History picker and the charts iterate these
+specs and never name a column. A spec whose column a file lacks yields **no values, never zeros**.
+
+**Each file is read by its own template (`FileTemplates`).** The footer's `dictionary_sha256` picks
+the bundled template and `sample_interval_ms` gives the cadence. The footer interval wins. Without it
+the template's default interval is used, and without both the interval is 0 and expected rows are 0.
+A tier bucket fed by files at different intervals keeps the shortest. The daily file writes the
+shortest `sample_interval_ms` of its sources too, so a daily file read back gives the same expected rows.
+`FileTemplates.bind` gives a file only the specs its template stores in the same unit and rollup,
+with that template's gate and settle time. A file whose dict no bundled template knows keeps its rows
+and has no metrics.
+
+The chart axis (`ChartAxes.of`) snaps to the WHO scale when the metric has one. Otherwise it spans the
+data, held inside the plausible range, and with no data it is the plausible range.
 
 PMS concentrations are **INT32** µg/m³ in the files; only IMU/temperature/humidity are FLOAT.
 
@@ -114,7 +122,7 @@ row before any mean, min or max. A row without a valid RH yields no corrected va
 without humidity has no `pm25_epa` buckets and every screen falls back to `pm25`, labelled raw.
 Both PM2.5 specs carry `property = "pm25"` for the WHO scale and a `basis` (`CORRECTED` or `RAW`)
 for the label. Daily files keep the raw `pm25_cf1_ug_m3` and RH columns, so they need no change.
-The corrected tier came with `HistoryDeriver.DERIVE_VERSION` 7 on Android and `TierCodec.VERSION` 3
+Template metrics came with `HistoryDeriver.DERIVE_VERSION` 8 on Android and `TierCodec.VERSION` 4
 on iOS, so installed days rebuild once.
 
 ### Sensor warm-up and settling (2026-09-17)
@@ -130,10 +138,11 @@ bucket for a future "n settling" hint. No humidity correction, no "AQI".
 
 ## Tiers (`Aggregator` → `metric_bucket`, Room v7)
 
-`Resolution`: `MIN15` 900 s · `HOUR` 3600 s · `DAY` 86 400 s; `expectedRows = seconds / 10` (90 /
-360 / 8 640). Identity `(station, metricId, resolution, startEpochS)`; per row: `rows`,
-`validRows` (passed the gate), `estimatedRows`, `mean`, `min`, `max`. `coverage = validRows /
-expected`. Rows without UTC are off the timeline unless dated by `TimeEstimate`. Built per UTC
+`Resolution`: `MIN15` 900 s · `HOUR` 3600 s · `DAY` 86 400 s. `expectedRows` is the span over the
+footer's sample interval, and 0 when no interval is known. Identity `(station, metricId, resolution,
+startEpochS)`; per row: `rows`, `validRows` (passed the gate), `estimatedRows`, `mean`, `min`, `max`
+and `sampleIntervalMs`. The value follows the metric's aggregate (`Rollup.kt`), so a sum adds, a
+mode keeps the most common value and a point keeps the last. `coverage = validRows / expected`. Rows without UTC are off the timeline unless dated by `TimeEstimate`. Built per UTC
 station-day, replaced atomically per day. **Duplicate rows** across files are skipped on one
 shared key, `RowKey` in `:core:history`: `(boot_id_hi, boot_id_lo, sequence)`, or
 `(boot_id_hi, boot_id_lo, timeline ns)` when the sequence is absent or null, a missing boot half
@@ -328,7 +337,7 @@ controller over a fake archive. It runs as the Android host test and on the iOS 
 
 | Edit… | Affects… |
 | --- | --- |
-| `Metrics` (add/rename a spec) | `metric_bucket.metricId` strings, picker chips, `DailyDerivedBuilder` columns, Now card if PM2.5; bump `DERIVE_VERSION` |
+| A bundled template or app profile, or `Metrics` | `metric_bucket.metricId` strings, picker chips and the default metric, `DailyDerivedBuilder` columns, Now card if PM2.5; bump `DERIVE_VERSION` |
 | `WhoGuidelines` edges (`:core:airquality`) | `AirMood`, `MetricSpec.healthScale`, chart axis snap and colours, Home/Today moods, calendar colours, Discover |
 | `Aggregator` semantics | `DERIVE_VERSION`, `AggregationTest`, `HistoryDeriverTest` |
 | `TimeEstimate` | day signatures (anchor), dashed drawing, daily file's estimated column |

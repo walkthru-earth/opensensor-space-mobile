@@ -36,7 +36,7 @@ data class HistoryUiState(
     val station: String? = null,
     /** Station generations to choose from, oldest first. The last one is the current station. */
     val stations: List<String> = emptyList(),
-    val metric: MetricSpec = Metrics.PM25_CORRECTED,
+    val metric: MetricSpec = Metrics.default,
     val availableMetrics: List<MetricSpec> = emptyList(),
     val range: HistoryRange = HistoryRange.DAY,
     val zone: TimeZone = TimeZone.UTC,
@@ -72,7 +72,7 @@ class HistoryController(
     tickMs: Long = 60_000,
 ) {
     private val selectedStation = MutableStateFlow<String?>(null)
-    private val metric = MutableStateFlow(Metrics.PM25_CORRECTED)
+    private val metric = MutableStateFlow(Metrics.default)
     private val range = MutableStateFlow(HistoryRange.DAY)
     private val toS = MutableStateFlow(nowRounded(HistoryRange.DAY))
     private val nowToS = MutableStateFlow(toS.value)
@@ -110,10 +110,10 @@ class HistoryController(
     }
 
     private val availableMetrics = station.archiveQueryResults { s ->
-        if (s == null) flowOf(emptyList()) else tiers.observeMetricsWithData(s).map { ids -> Metrics.chartable.filter { it.id in ids } }
+        if (s == null) flowOf(emptyList()) else tiers.observeMetricsWithData(s).map { ids -> Metrics.all.filter { it.id in ids } }
     }.onEach { result ->
         val available = result.value.orEmpty()
-        if (available.isNotEmpty() && metric.value !in available) metric.value = available.first()
+        if (available.isNotEmpty() && metric.value !in available) metric.value = Metrics.defaultOf(available) ?: available.first()
     }
 
     private val series = combine(station, metric, range, toS) { s, m, r, t -> ArchiveSeriesQuery(s, m, r, HistoryWindow.endingAt(t, r, zone)) }

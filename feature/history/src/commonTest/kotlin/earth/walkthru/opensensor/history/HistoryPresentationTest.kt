@@ -9,6 +9,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class HistoryPresentationTest {
     private fun file(station: String, producer: String, dated: Boolean, indexed: Boolean = true, lastUtcNs: Long = 1_800_000_000_000_000_000): ArchiveRecord = ArchiveRecord(
@@ -86,5 +87,17 @@ class HistoryPresentationTest {
         // No humidity anywhere, so Simple keeps raw PM2.5, labelled raw.
         val rawOnly = listOf(Metrics.PM25, Metrics.AMBIENT_TEMP)
         assertEquals(rawOnly, pickerMetrics(rawOnly, DetailLevel.SIMPLE))
+    }
+
+    @Test
+    fun simpleOffersOnlyTheProfilePrimaryMetrics() {
+        val measured = listOf(Metrics.PM25_CORRECTED, Metrics.PM25, Metrics.PM10, Metrics.PARTICLES_GT03, Metrics.BOARD_TEMP, Metrics.PARTICLES_GT25)
+        assertTrue(Metrics.PARTICLES_GT03.primary.not() && Metrics.PARTICLES_GT25.primary.not() && Metrics.PM10.primary)
+        assertEquals(listOf(Metrics.PM25_CORRECTED, Metrics.PM10, Metrics.BOARD_TEMP), pickerMetrics(measured, DetailLevel.SIMPLE))
+        assertEquals(measured, pickerMetrics(measured, DetailLevel.DETAILED))
+        assertEquals(measured, pickerMetrics(measured, DetailLevel.DEVELOPER))
+        // A board whose profile names no primary column still offers its metrics in Simple.
+        val noPrimary = listOf(Metrics.PARTICLES_GT03, Metrics.PARTICLES_GT25)
+        assertEquals(noPrimary, pickerMetrics(noPrimary, DetailLevel.SIMPLE))
     }
 }

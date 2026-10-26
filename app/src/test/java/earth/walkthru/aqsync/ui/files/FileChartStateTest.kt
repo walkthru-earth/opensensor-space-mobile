@@ -87,4 +87,27 @@ class FileChartStateTest {
             assertEquals(Metrics.PM25, state.metrics.first())
         }
     }
+
+    @Test
+    fun `while the summaries load Simple opens on corrected PM2_5 never raw`() {
+        // #136. No summary is read yet, so nothing says the files lack humidity. Simple keeps corrected.
+        val request = FileSummaryRequest("station-a", listOf(file("station-a", "one.parquet")))
+        val pending = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, null)
+        val simple = fileChartState(null, false, null, request, pending)
+        assertTrue(simple.loading)
+        assertEquals(Metrics.PM25_CORRECTED, simple.metric)
+        assertFalse(Metrics.PM25 in simple.metrics)
+    }
+
+    @Test
+    fun `Simple offers only the profile primary metrics and Detailed every metric`() {
+        val request = FileSummaryRequest("station-a", listOf(file("station-a", "one.parquet")))
+        val result = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, listOf(humid("one.parquet")))
+        val simple = fileChartState(null, false, null, request, result).metrics
+        assertTrue(simple.isNotEmpty() && simple.all { it.primary })
+        assertFalse(Metrics.PARTICLES_GT03 in simple)
+        assertTrue(Metrics.PM10 in simple)
+        val detailed = fileChartState(null, true, null, request, result).metrics
+        assertEquals(Metrics.all, detailed)
+    }
 }

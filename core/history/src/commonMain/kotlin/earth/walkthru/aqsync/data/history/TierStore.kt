@@ -50,11 +50,11 @@ class SavedDay(val signature: String, val tiers: DayTiers)
 
 /**
  * The binary form of one saved day: a version, the signature, then per resolution and metric the
- * buckets as fixed width fields, little endian. About 40 bytes a bucket.
+ * buckets as fixed width fields, little endian. About 48 bytes a bucket.
  */
 object TierCodec {
-    /** 3 = the EPA corrected PM2.5 metric, so tiers saved before it are rebuilt with it. */
-    internal const val VERSION = 3
+    /** 4 = template column ids, per metric aggregates and the footer sample interval (#186). */
+    internal const val VERSION = 4
 
     fun encode(signature: String, tiers: DayTiers): ByteArray {
         val out = Out()
@@ -75,6 +75,7 @@ object TierCodec {
                     out.int(b.mean.toRawBits())
                     out.int(b.min.toRawBits())
                     out.int(b.max.toRawBits())
+                    out.long(b.sampleIntervalMs)
                 }
             }
         }
@@ -100,8 +101,8 @@ object TierCodec {
                 val perMetric = LinkedHashMap<String, List<TierBucket>>()
                 repeat(inp.count(8)) {
                     val metric = inp.string()
-                    perMetric[metric] = List(inp.count(32)) {
-                        TierBucket(inp.long(), inp.int(), inp.int(), inp.int(), Float.fromBits(inp.int()), Float.fromBits(inp.int()), Float.fromBits(inp.int()))
+                    perMetric[metric] = List(inp.count(40)) {
+                        TierBucket(inp.long(), inp.int(), inp.int(), inp.int(), Float.fromBits(inp.int()), Float.fromBits(inp.int()), Float.fromBits(inp.int()), inp.long())
                     }
                 }
                 tiers[resolution] = perMetric

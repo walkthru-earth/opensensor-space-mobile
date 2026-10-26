@@ -196,4 +196,21 @@ class FileInspectorTest {
         runCurrent()
         assertEquals(100L, assertIs<RowsState.Shown>(controller.rows.value).page.from)
     }
+
+    @Test
+    fun aNewFileShowsLoadingUntilItIsReadNeverTheOldSummary() = runTest {
+        val io = StandardTestDispatcher(testScheduler)
+        val other = "station=s/year=2026/month=09/day=17/data_1000_b_2-3-1.parquet"
+        val finals = mapOf(ArchiveKey("s", name) to bytes, ArchiveKey("s", other) to bytes)
+        val controller = FileMetricsController(CoroutineScope(backgroundScope.coroutineContext + io), Store(finals), io)
+        assertEquals(FileMetricsState.Loading, controller.state.value)
+        controller.load("s", name)
+        runCurrent()
+        assertIs<FileMetricsState.Loaded>(controller.state.value)
+        // The first file's summary is not left on screen as if it described the second file.
+        controller.load("s", other)
+        assertEquals(FileMetricsState.Loading, controller.state.value)
+        runCurrent()
+        assertIs<FileMetricsState.Loaded>(controller.state.value)
+    }
 }

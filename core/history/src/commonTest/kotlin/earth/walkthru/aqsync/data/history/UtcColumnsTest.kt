@@ -39,13 +39,13 @@ class UtcColumnsTest {
         val new = ParquetFile.wrap(current())
         assertEquals(TimeUnit.NANOS, old.leaf(UtcColumns.EVENT_NS).timestampUtcUnit)
         assertEquals(TimeUnit.MICROS, new.leaf(UtcColumns.EVENT_US).timestampUtcUnit)
-        val oldIndex = ParquetIndexer.index(old)
-        val newIndex = ParquetIndexer.index(new)
+        val oldIndex = ParquetIndexer.index(old, templates = CoreS3Files)
+        val newIndex = ParquetIndexer.index(new, templates = CoreS3Files)
         assertTrue(oldIndex.utcRows > 0)
         // The fixture's instants are whole microseconds, so nothing is lost by the MICROS layout.
         fun ParquetIndex.layoutFree() = copy(columns = 0, rowGroups = 0, createdBy = null)
         assertEquals(oldIndex.layoutFree(), newIndex.layoutFree())
-        assertEquals(FileSummary.of("a", old), FileSummary.of("a", new))
+        assertEquals(FileSummary.of("a", old, templates = CoreS3Files), FileSummary.of("a", new, templates = CoreS3Files))
         assertEquals(UtcColumns.readEventNs(old)!!.values.toList(), UtcColumns.readEventNs(new)!!.values.toList())
     }
 
@@ -125,9 +125,9 @@ class UtcColumnsTest {
         val newBytes = current(seqOffset = 1_000_000)
         val old = ParquetFile.wrap(oldBytes)
         val station = old.metadata.stationId ?: "station-a"
-        val day = StationDays.dayOf(ParquetIndexer.index(old).firstUtcNs!!)
+        val day = StationDays.dayOf(ParquetIndexer.index(old, templates = CoreS3Files).firstUtcNs!!)
         fun source(name: String, bytes: ByteArray, n: Long): DailyParquetSource {
-            val index = ParquetIndexer.index(ParquetFile.wrap(bytes))
+            val index = ParquetIndexer.index(ParquetFile.wrap(bytes), templates = CoreS3Files)
             val record = ArchiveRecord(
                 station, name, bytes.size.toLong(), n, "sha-$n", 1, "fixture",
                 indexedAtEpochMs = 1, rows = index.rows, bootId = index.bootId, utcRows = index.utcRows,

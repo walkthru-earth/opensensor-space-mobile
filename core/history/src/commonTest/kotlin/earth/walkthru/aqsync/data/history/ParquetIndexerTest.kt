@@ -23,7 +23,7 @@ class ParquetIndexerTest {
 
     @Test
     fun `real v2 file - index comes from decoding and matches PyArrow`() {
-        val index = ParquetIndexer.index(ParquetFile.wrap(bytes("device/v2-lz4-4rows-dated.parquet")))
+        val index = ParquetIndexer.index(ParquetFile.wrap(bytes("device/v2-lz4-4rows-dated.parquet")), templates = CoreS3Files)
         assertFalse(index.fromStatistics)
         assertEquals(4L, index.rows)
         assertEquals(1, index.rowGroups)
@@ -45,7 +45,7 @@ class ParquetIndexerTest {
 
     @Test
     fun `unsynced file has no UTC span but a monotonic one`() {
-        val index = ParquetIndexer.index(ParquetFile.wrap(bytes("device/v1-none-64rows-unsynced.parquet")))
+        val index = ParquetIndexer.index(ParquetFile.wrap(bytes("device/v1-none-64rows-unsynced.parquet")), templates = CoreS3Files)
         assertEquals(0L, index.utcRows)
         assertNull(index.firstUtcNs)
         assertFalse(index.hasUtc)
@@ -57,7 +57,7 @@ class ParquetIndexerTest {
     @Test
     fun `v3 file - statistics fast path agrees with decoding`() {
         val file = ParquetFile.wrap(bytes("v3/v3-contract-lz4-anchored.parquet"))
-        val index = ParquetIndexer.index(file)
+        val index = ParquetIndexer.index(file, templates = CoreS3Files)
         assertTrue("v6 footer statistics used", index.fromStatistics)
         assertEquals("cores3-telemetry-v3", index.schemaVersion)
         for (name in listOf(UtcColumns.EVENT_NS, ParquetIndexer.MONO, ParquetIndexer.SEQ)) {
@@ -67,7 +67,7 @@ class ParquetIndexerTest {
             assertEquals(name, decoded, stats)
         }
         // 89 of 90 rows have pms_status 4 in the contract fixture (row 0 has no PMS frame yet).
-        assertEquals(89L, index.pmValidRows)
+        assertEquals(89L, index.validRows)
     }
 
     @Test

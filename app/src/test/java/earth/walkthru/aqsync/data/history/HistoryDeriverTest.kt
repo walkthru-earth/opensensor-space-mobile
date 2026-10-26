@@ -54,15 +54,15 @@ class HistoryDeriverTest {
 
     @Test
     fun `tiers and daily cache of the previous derive version rebuild without a source change`() = runBlocking {
-        // Version 7 added the EPA corrected PM2.5 tier (#92). Installed days must rebuild to gain it.
-        assertEquals(7, HistoryDeriver.DERIVE_VERSION)
+        // Version 8 reads each file by its template and keeps the footer interval (#186). Installed days must rebuild.
+        assertEquals(8, HistoryDeriver.DERIVE_VERSION)
         val tmp = java.nio.file.Files.createTempDirectory("aq-derive-upgrade").toFile()
         try {
             val archive = FileArchive(tmp)
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/day=2026-09-17/raw.parquet"
@@ -116,7 +116,7 @@ class HistoryDeriverTest {
             val archive = FileArchive(tmp)
             val files = InMemoryFiles()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val passes = indexer.passes(files)
             val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, DerivedStore(tmp), indexer, derivedQuota(tmp), passes)
             val name = "station=$station/day=2026-09-17/raw.parquet"
@@ -155,7 +155,7 @@ class HistoryDeriverTest {
             val archive = FileArchive(tmp)
             val files = InMemoryFiles()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/day=2026-09-17/raw.parquet"
@@ -216,7 +216,7 @@ class HistoryDeriverTest {
                 val files = InMemoryFiles()
                 val buckets = InMemoryBuckets()
                 val days = InMemoryDays()
-                val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+                val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
                 val store = DerivedStore(tmp, atomic)
                 val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
                 val name = "station=$station/day=2026-09-17/raw.parquet"
@@ -227,7 +227,7 @@ class HistoryDeriverTest {
                 files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
 
                 assertEquals(1, deriver.deriveStale().daysRebuilt)
-                assertEquals(105, buckets.rows.first { it.metricId == "pm25" && it.resolution == 86_400L }.rows)
+                assertEquals(105, buckets.rows.first { it.metricId == Metrics.PM25.id && it.resolution == 86_400L }.rows)
                 assertEquals(null, days.rows.single().dailyFile)
                 assertTrue(days.rows.single().sourceSignature.endsWith(":no-daily-file"))
                 failing = false
@@ -248,7 +248,7 @@ class HistoryDeriverTest {
         val files = InMemoryFiles()
         val buckets = InMemoryBuckets()
         val days = InMemoryDays()
-        val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+        val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
         val store = DerivedStore(tmp)
         val quota = derivedQuota(tmp)
         val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota, indexer.passes(files))
@@ -265,7 +265,7 @@ class HistoryDeriverTest {
         assertEquals(1, first.daysRebuilt)
         assertEquals(105L, first.rowsAggregated)
         assertEquals(4, buckets.rows.map { it.resolution to it.startEpochS }.distinct().size) // 2 × 15 min + 1 h + 1 day, one row per metric each
-        assertTrue(buckets.rows.any { it.metricId == "pm25" } && buckets.rows.any { it.metricId == "board_c" } && buckets.rows.none { it.metricId == "rh" })
+        assertTrue(buckets.rows.any { it.metricId == Metrics.PM25.id } && buckets.rows.any { it.metricId == Metrics.BOARD_TEMP.id } && buckets.rows.none { it.metricId == Metrics.HUMIDITY.id })
         assertEquals(1, days.rows.size)
         // The derived daily file exists, is read back by our own reader, and carries the manifest index column.
         val dayFile = store.dayFile(station, 20713)
@@ -305,7 +305,7 @@ class HistoryDeriverTest {
         val third = deriver.deriveStale()
         assertEquals(1, third.daysRebuilt)
         assertEquals(210L, third.rowsAggregated) // rows read
-        assertEquals(105, buckets.rows.first { it.resolution == 86_400L && it.metricId == "pm25" }.rows) // rows counted: duplicates (same boot + sequence) skipped, like the daily file
+        assertEquals(105, buckets.rows.first { it.resolution == 86_400L && it.metricId == Metrics.PM25.id }.rows) // rows counted: duplicates (same boot + sequence) skipped, like the daily file
         assertEquals(2, days.rows.single().sourceFiles)
         // Same rows under two names: the daily file de-duplicates on (boot, sequence) — 105 rows, 2 sources in the manifest.
         assertEquals(105L, earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(store.dayFile(station, 20713)).numRows)
@@ -321,7 +321,7 @@ class HistoryDeriverTest {
         assertEquals(listOf(105L, 180L), twoWindows.metadata.rowGroups.map { it.numRows })
         val seq = twoWindows.readColumn("sequence") as earth.walkthru.aqsync.data.history.parquet.ColumnValues.Int64
         for (i in 1 until seq.size) assertEquals("contiguous across the two device files", seq.values[i - 1] + 1, seq.values[i])
-        assertEquals(285, buckets.rows.first { it.resolution == 86_400L && it.metricId == "pm25" }.rows)
+        assertEquals(285, buckets.rows.first { it.resolution == 86_400L && it.metricId == Metrics.PM25.id }.rows)
         File("build/parquet-samples").apply { mkdirs() }.let { dir ->
             store.dayFile(station, 20713).copyTo(File(dir, "derived-day-two-windows.parquet"), overwrite = true)
             store.manifestFile(station, 20713).copyTo(File(dir, "derived-day-two-windows.manifest.json"), overwrite = true)
@@ -344,7 +344,7 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             var backfills = 0
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files)) { backfills++ }
@@ -389,7 +389,7 @@ class HistoryDeriverTest {
         try {
             val archive = FileArchive(tmp)
             val files = InMemoryFiles()
-            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val passes = indexer.passes(files)
             val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), InMemoryDays(), DerivedStore(tmp), indexer, derivedQuota(tmp), passes)
             val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
@@ -426,7 +426,7 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val quota = derivedQuota(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota, indexer.passes(files))
@@ -448,7 +448,7 @@ class HistoryDeriverTest {
             assertEquals(0L, files.rows.single().utcRows)
             assertEquals(utcNs, files.rows.single().estLastUtcNs)
             assertEquals(0, deriver.deriveStale().daysRebuilt)
-            val restarted = HistoryIndexer(archive, files, DeviceCoordinator())
+            val restarted = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             assertEquals(0, restarted.estimateTimes())
             assertEquals(utcNs, files.rows.single().estLastUtcNs)
             for (day in days.rows) {
@@ -481,7 +481,7 @@ class HistoryDeriverTest {
             val files = db.archivedFileDao()
             val days = db.derivedDayDao()
             val buckets = db.metricBucketDao()
-            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
@@ -542,7 +542,7 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/unsynced/boot=00000000000000000000000000000000/raw.parquet"
@@ -557,7 +557,7 @@ class HistoryDeriverTest {
 
             // Restart reads the exact durable acknowledgement, while the older archive row and
             // derived caches stay untouched until a cancellable pass explicitly reconciles them.
-            val restarted = HistoryIndexer(archive, files, DeviceCoordinator())
+            val restarted = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
             val anchor = restarted.clockAnchors.anchors(station).single()
             assertEquals(before.bootId, anchor.boot)
             assertEquals(utcNs, anchor.utcNs)

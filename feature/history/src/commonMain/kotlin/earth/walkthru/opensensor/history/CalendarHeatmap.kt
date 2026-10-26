@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -80,6 +81,7 @@ internal fun CalendarHeatmap(
     val labelPx = with(LocalDensity.current) { 10.sp.toPx() }
     val measurer = rememberTextMeasurer()
     val labelStyle = remember(muted) { chartTextStyle(muted, 10) }
+    val recorder = LocalChartDrawRecorder.current
 
     // Whole weeks: the first column starts on the Monday on or before `fromS`.
     val firstDay = localDateOf(fromS, zone)
@@ -130,6 +132,7 @@ internal fun CalendarHeatmap(
             val pad = (minOf(cellW, cellH) * 0.15f).coerceAtLeast(1f)
             val radius = CornerRadius((minOf(cellW, cellH) * 0.2f).coerceAtMost(6f))
             var lastMonth: Int = -1
+            val marks = ArrayList<Rect>()
             for (week in 0 until weeks) {
                 for (dow in 0 until rows) {
                     val date: LocalDate = gridStart.plus(week * 7 + dow, DateTimeUnit.DAY)
@@ -140,6 +143,7 @@ internal fun CalendarHeatmap(
                     val y0 = gridTop + dow * cellH + pad
                     val sz = Size(cellW - 2 * pad, cellH - 2 * pad)
                     val m = col?.mean
+                    if (startS in readable) marks += Rect(Offset(x0, y0), sz)
                     if (m == null) {
                         drawRoundRect(empty, Offset(x0, y0), sz, radius)
                     } else {
@@ -162,43 +166,47 @@ internal fun CalendarHeatmap(
                     }
                 }
             }
+            recorder?.invoke(ChartDrawing(Rect(Offset.Zero, size), Rect(Offset.Zero, size), emptyList(), marks))
         }
-        // The day cells for screen readers, laid over the canvas at the same LTR positions as the drawing.
-        BoxWithConstraints(Modifier.fillMaxWidth().height(heightDp)) {
-            val cellW = maxWidth / weeks
-            val gridTop = with(LocalDensity.current) { (labelPx * 1.6f).toDp() }
-            val cellH = (maxHeight - gridTop) / rows
-            for (week in 0 until weeks) {
-                for (dow in 0 until rows) {
-                    val date: LocalDate = gridStart.plus(week * 7 + dow, DateTimeUnit.DAY)
-                    val startS = startOfDay(date, zone)
-                    if (startS < fromS || startS >= toS) continue
-                    // Only days with a reading get a button (P68). Empty days stay out of the swipe order.
-                    val col = readable[startS] ?: continue
-                    val m = col.mean ?: continue
-                    val mood = metric.moodOf(m.toDouble())
-                    val description = listOfNotNull(
-                        formatEpoch(startS, zone, DAY_SPOKEN),
-                        fmtValue(units.value(m, metric.unit)) + " " + units.unit(metric.unit),
-                        mood?.let { moodTitles[it] },
-                        if (showStep) metric.stepOf(m.toDouble())?.let { stepLabels[it] } else null,
-                        estimated.takeIf { col.estimated },
-                    ).let { spokenList(it, separator) }
-                    val order = (week * 7 + dow).toFloat()
-                    Box(
-                        Modifier
-                            .absoluteOffset(x = cellW * week, y = gridTop + cellH * dow)
-                            .size(cellW, cellH)
-                            .semantics {
-                                role = Role.Button
-                                contentDescription = description
-                                traversalIndex = order
-                                onClick {
-                                    onPickDay(col)
-                                    true
-                                }
-                            },
-                    )
+        // The day cells for screen readers, laid over the canvas at the same LTR positions as the drawing,
+        // each node exactly its cell, never grown to the minimum touch size (#141).
+        ExactTouchBounds {
+            BoxWithConstraints(Modifier.fillMaxWidth().height(heightDp)) {
+                val cellW = maxWidth / weeks
+                val gridTop = with(LocalDensity.current) { (labelPx * 1.6f).toDp() }
+                val cellH = (maxHeight - gridTop) / rows
+                for (week in 0 until weeks) {
+                    for (dow in 0 until rows) {
+                        val date: LocalDate = gridStart.plus(week * 7 + dow, DateTimeUnit.DAY)
+                        val startS = startOfDay(date, zone)
+                        if (startS < fromS || startS >= toS) continue
+                        // Only days with a reading get a button (P68). Empty days stay out of the swipe order.
+                        val col = readable[startS] ?: continue
+                        val m = col.mean ?: continue
+                        val mood = metric.moodOf(m.toDouble())
+                        val description = listOfNotNull(
+                            formatEpoch(startS, zone, DAY_SPOKEN),
+                            fmtValue(units.value(m, metric.unit)) + " " + units.unit(metric.unit),
+                            mood?.let { moodTitles[it] },
+                            if (showStep) metric.stepOf(m.toDouble())?.let { stepLabels[it] } else null,
+                            estimated.takeIf { col.estimated },
+                        ).let { spokenList(it, separator) }
+                        val order = (week * 7 + dow).toFloat()
+                        Box(
+                            Modifier
+                                .absoluteOffset(x = cellW * week, y = gridTop + cellH * dow)
+                                .size(cellW, cellH)
+                                .semantics {
+                                    role = Role.Button
+                                    contentDescription = description
+                                    traversalIndex = order
+                                    onClick {
+                                        onPickDay(col)
+                                        true
+                                    }
+                                },
+                        )
+                    }
                 }
             }
         }

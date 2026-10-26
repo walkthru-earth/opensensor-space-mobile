@@ -57,8 +57,6 @@ data class ArchivedFile(
     val lastMonoUs: Long? = null,
     val firstSeq: Long? = null,
     val lastSeq: Long? = null,
-    /** Rows with `pms_status == 4`. */
-    val pmValidRows: Long? = null,
 
     // ---- Estimated time (schema v6). Set only for files with no UTC rows whose boot later received a
     // time anchor (`TimeEstimate`): the span of the file on the estimated UTC axis and the anchor file.

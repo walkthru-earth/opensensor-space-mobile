@@ -113,9 +113,9 @@ class IosDailyDerivedStoreTest {
             override suspend fun indexedForStation(station: String) = listOf(record)
             override suspend fun stations() = listOf(record.station)
         }
-        val derived = IosDailyDerivedStore(root, atomic, disk)
+        val derived = IosDailyDerivedStore(root, atomic, disk, CoreS3Files)
         var prepares = 0
-        val tiers = ArchiveHistoryTiers(archive, index, io = StandardTestDispatcher(testScheduler), tierStore = disk, shareScope = backgroundScope, beforeBuild = { station, files, _ ->
+        val tiers = ArchiveHistoryTiers(archive, index, io = StandardTestDispatcher(testScheduler), tierStore = disk, shareScope = backgroundScope, templates = CoreS3Files, beforeBuild = { station, files, _ ->
             prepares++
             derived.rebuild(station, files, archive, anchors, now)
         })
@@ -127,7 +127,7 @@ class IosDailyDerivedStoreTest {
         // Each UTC day opens the source twice, once to time its rows and feed the tiers, once to write its hours (#98).
         assertEquals(4, reads, "two source opens for each UTC day build both daily files and tiers")
         assertEquals(0, tiers.decodedDays)
-        val restarted = ArchiveHistoryTiers(archive, index, tierStore = IosFileTierStore(root, atomic))
+        val restarted = ArchiveHistoryTiers(archive, index, tierStore = IosFileTierStore(root, atomic), templates = CoreS3Files)
         assertEquals(daySpan, restarted.observeDays(record.station).first())
         assertEquals(4, reads, "a restart reads the tiers from disk, not the source")
         assertEquals(0, restarted.decodedDays)

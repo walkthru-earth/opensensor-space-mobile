@@ -39,6 +39,8 @@ class ArchiveIndexRepair(
     private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
     /** The archive's one coordinator. Each row update runs under its station gate. */
     private val coordinator: DeviceCoordinator = DeviceCoordinator(),
+    /** Resolves each file's board template for its valid row count. */
+    private val templates: FileTemplates = FileTemplates.BUNDLED,
 ) {
     private val mutex = Mutex()
 
@@ -54,7 +56,7 @@ class ArchiveIndexRepair(
             val index = ParquetFile.open(reader(), record.name).use { file ->
                 val metadataStation = file.metadata.keyValueMetadata["station_id"]
                 require(metadataStation == null || metadataStation == record.station) { "file metadata belongs to another station" }
-                ParquetIndexer.index(file)
+                ParquetIndexer.index(file, templates)
             }
             record.copy(
                 indexedAtEpochMs = nowEpochMs,
@@ -71,7 +73,6 @@ class ArchiveIndexRepair(
                 lastMonoUs = index.lastMonoUs,
                 firstSeq = index.firstSeq,
                 lastSeq = index.lastSeq,
-                pmValidRows = index.pmValidRows,
             )
         }
     } catch (e: ParquetFormatException) {
@@ -217,7 +218,6 @@ class ArchiveIndexRepair(
             lastMonoUs = indexed.lastMonoUs,
             firstSeq = indexed.firstSeq,
             lastSeq = indexed.lastSeq,
-            pmValidRows = indexed.pmValidRows,
         )
 
         /** [file] with its estimate set from [anchors], or cleared when the anchor is gone or the file now has UTC. */

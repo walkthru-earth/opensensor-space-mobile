@@ -74,7 +74,7 @@ class HistoryGoldenTest {
         val synthetic = listOf("synthetic/midnight.parquet" to respread(20_000), "synthetic/midnight-later-sync.parquet" to respread(20_000, nullBefore = 70))
         val entries = (corpus.map { it to fixtureBytes("parquet/$it") } + synthetic).mapIndexed { n, (path, bytes) ->
             val file = ParquetFile.wrap(bytes)
-            val index = ParquetIndexer.index(file)
+            val index = ParquetIndexer.index(file, templates = CoreS3Files)
             val station = file.metadata.stationId ?: "golden-station"
             var record = ArchiveRecord(
                 station, "golden/$n/${path.substringAfterLast('/')}", bytes.size.toLong(), n.toLong(), "sha-$n", 1, "fixture",
@@ -113,7 +113,7 @@ class HistoryGoldenTest {
                 val legacyDaily = LegacyDailyParquetBuilder.build(station, day, dayEntries.map { it.source() }, legacySink, anchors, now)
 
                 val sink = MemorySink()
-                val pass = DayPass.run(station, day, dayEntries.map { it.source() }, sink, anchors, now)
+                val pass = DayPass.run(station, day, dayEntries.map { it.source() }, sink, anchors, now, templates = CoreS3Files)
                 assertEquals(legacyBuckets, pass.buckets, "tiers of $station day $day")
                 assertEquals(emptyList(), pass.failedSources)
                 if (legacyDaily == null) {
@@ -150,9 +150,9 @@ class HistoryGoldenTest {
                 val dayEntries = entries.filter { it.record.onTimeline(from, from + StationDays.DAY_NS) }
                 val now = (day + 2) * 86_400
                 val oldSink = MemorySink()
-                val old = PreStreamingDailyParquetBuilder.pass(station, day, dayEntries.map { it.source() }, oldSink, anchors, now, Aggregator(station), strict = false)
+                val old = PreStreamingDailyParquetBuilder.pass(station, day, dayEntries.map { it.source() }, oldSink, anchors, now, Aggregator(station, templates = CoreS3Files), strict = false)
                 val newSink = MemorySink()
-                val new = DayPass.run(station, day, dayEntries.map { it.source() }, newSink, anchors, now)
+                val new = DayPass.run(station, day, dayEntries.map { it.source() }, newSink, anchors, now, templates = CoreS3Files)
                 assertEquals(old.buckets, new.buckets, "tiers of $station day $day")
                 assertEquals(old.rowsRead, new.rowsRead)
                 assertEquals(old.failedSources, new.failedSources)
@@ -182,8 +182,8 @@ class HistoryGoldenTest {
         val (stations, anchors) = archive()
         val (station, entries) = stations.entries.first { (_, list) -> list.any { it.record.hasUtc && it.record.rows!! > 100 } }
         val day = StationDays.of(entries.map { it.record })[station]!!.first()
-        val withDaily = DayPass.run(station, day, entries.map { it.source() }, MemorySink(), anchors, 0)
-        val tiersOnly = DayPass.run(station, day, entries.map { it.source() }, null, anchors, 0)
+        val withDaily = DayPass.run(station, day, entries.map { it.source() }, MemorySink(), anchors, 0, templates = CoreS3Files)
+        val tiersOnly = DayPass.run(station, day, entries.map { it.source() }, null, anchors, 0, templates = CoreS3Files)
         assertEquals(withDaily.buckets, tiersOnly.buckets)
         assertEquals(null, tiersOnly.daily)
     }

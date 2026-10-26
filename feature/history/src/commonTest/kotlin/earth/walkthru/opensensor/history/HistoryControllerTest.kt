@@ -96,7 +96,7 @@ class HistoryControllerTest {
     )
 
     private fun TestScope.controller(
-        metricIds: Set<String> = setOf("ambient_c", "rh"),
+        metricIds: Set<String> = setOf(Metrics.AMBIENT_TEMP.id, Metrics.HUMIDITY.id),
         index: Index = Index(listOf(record("s1"))),
         current: String = "s1",
         stations: List<String> = listOf("s1"),
@@ -132,7 +132,7 @@ class HistoryControllerTest {
 
     @Test
     fun opensOnCorrectedPm25WhenTheArchiveHasIt() = runTest {
-        val c = controller(metricIds = setOf("pm25_epa", "pm25", "rh"))
+        val c = controller(metricIds = setOf(Metrics.PM25_CORRECTED.id, Metrics.PM25.id, Metrics.HUMIDITY.id))
         val s = c.state.first { !it.initializing && it.toS == lastDayEndS }
         assertEquals(Metrics.PM25_CORRECTED, s.metric)
         assertEquals(listOf(Metrics.PM25_CORRECTED, Metrics.PM25), s.availableMetrics.take(2))

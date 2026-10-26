@@ -83,7 +83,7 @@ data class FilesUiState(
 data class FileChartState(
     val metric: MetricSpec,
     /** The chips offered, from [fileChartMetrics]. */
-    val metrics: List<MetricSpec> = Metrics.chartable,
+    val metrics: List<MetricSpec> = Metrics.all,
     /** Every telemetry file of the station, oldest first (timed by first row, then untimed by name). */
     val total: Int,
     /** Index of the first column shown into the full list. */
@@ -101,15 +101,16 @@ internal data class FileSummaryRequest(val station: String, val files: List<Arch
 /**
  * #92. The metrics the Files chart offers, the same rule as History. Corrected PM2.5 comes first and
  * is the default. Once the files are read and none has a humidity reading, corrected is dropped and raw
- * leads. Simple never offers raw next to corrected, Detailed always does.
+ * leads. Simple never offers raw next to corrected, Detailed always does. Simple offers only the
+ * profile primary metrics, Detailed every metric.
  */
 internal fun fileChartMetrics(summaries: List<FileSummary>, detailed: Boolean): List<MetricSpec> {
     val corrected = summaries.isEmpty() || summaries.any { (it.agg(Metrics.PM25_CORRECTED)?.n ?: 0) > 0 }
-    return Metrics.chartable.filter { m ->
+    return Metrics.all.filter { m ->
         when (m) {
             Metrics.PM25_CORRECTED -> corrected
             Metrics.PM25 -> detailed || !corrected
-            else -> true
+            else -> detailed || m.primary
         }
     }
 }

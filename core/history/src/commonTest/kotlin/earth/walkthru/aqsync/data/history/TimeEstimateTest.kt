@@ -15,7 +15,7 @@ class TimeEstimateTest {
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     private fun indexedRow(resource: String, name: String): IndexedFileInfo {
-        val i = ParquetIndexer.index(ParquetFile.wrap(bytes(resource)))
+        val i = ParquetIndexer.index(ParquetFile.wrap(bytes(resource)), templates = CoreS3Files)
         return IndexedFileInfo(name, i.bootId, i.purpose, true, i.rows, i.utcRows, i.firstUtcNs, i.lastUtcNs, i.firstMonoUs, i.lastMonoUs)
     }
 
@@ -80,7 +80,7 @@ class TimeEstimateTest {
     @Test
     fun `aggregator dates the unsynced rows with the anchor and counts them as estimated`() {
         val a = TimeEstimate.anchors(listOf(anchorFile))["e452563e96c72ca057a48924550779b6"]!!
-        val agg = Aggregator(station, setOf(Resolution.HOUR, Resolution.DAY))
+        val agg = Aggregator(station, setOf(Resolution.HOUR, Resolution.DAY), templates = CoreS3Files)
         agg.add(ParquetFile.wrap(bytes("device/v1-none-64rows-unsynced.parquet")), a)
         agg.add(ParquetFile.wrap(bytes("device/v1-lz4-1row-unsynced.parquet")), a)
         agg.add(ParquetFile.wrap(bytes("device/v1-lz4-90rows-dated.parquet")), a) // has UTC: anchor ignored

@@ -78,6 +78,33 @@ class MigrationSchemaTest {
     }
 
     @Test
+    fun migration12To13DropsTheTierCacheAndKeepsTheArchive() {
+        // #186. Old tier rows carry the old metric ids and no sample interval, so they must not survive.
+        val connection = BundledSQLiteDriver().open("$dir/tiers-12.db")
+        try {
+            ExportedSchema(12).create(connection)
+            connection.execSQL(
+                "INSERT INTO archived_file (station, name, bytes, crc32, sha256, syncedAtEpochMs, sourceDevice, pmValidRows) " +
+                    "VALUES ('station-a', 'data.parquet', 10, 1, 'ab', 5, 'device', 7)",
+            )
+            connection.execSQL(
+                "INSERT INTO metric_bucket (station, metricId, resolution, startEpochS, rows, validRows, estimatedRows, mean, min, max) " +
+                    "VALUES ('station-a', 'pm25', 3600, 0, 360, 360, 0, 10.0, 9.0, 11.0)",
+            )
+            connection.execSQL(
+                "INSERT INTO derived_day (station, epochDay, sourceSignature, sourceFiles, rows, builtAtEpochMs) VALUES ('station-a', 1, 'sig', 1, 360, 5)",
+            )
+            AppDatabase.MIGRATION_12_13.migrate(connection)
+            fun count(table: String) = connection.prepare("SELECT COUNT(*) FROM $table").use { s -> s.step(); s.getLong(0) }
+            assertEquals(1L, count("archived_file"))
+            assertEquals(0L, count("metric_bucket"))
+            assertEquals(0L, count("derived_day"))
+        } finally {
+            connection.close()
+        }
+    }
+
+    @Test
     fun theDiffCatchesADroppedARenamedAndARetypedColumn() {
         val expected = ExportedSchema(LATEST).tables()
         val table = expected.getValue("known_device")
@@ -107,6 +134,6 @@ class MigrationSchemaTest {
 
     private companion object {
         const val FIRST = 1
-        const val LATEST = 12
+        const val LATEST = 13
     }
 }

@@ -10,6 +10,9 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
+import space.opensensor.model.BundledCatalog
+import space.opensensor.model.GateValue
+import space.opensensor.model.ValidityGate
 
 // The two-pass history code as it was before #63, frozen as the oracle of HistoryGoldenTest. Each pass
 // decodes a source on its own and de-duplicates with a HashSet of RowKey objects. Do not optimise it.
@@ -20,6 +23,17 @@ internal class LegacyRowKeys {
     fun firstSight(bootHi: Long?, bootLo: Long?, sequence: Long?, timelineNs: Long): Boolean = seen.add(RowKey.of(bootHi, bootLo, sequence, timelineNs))
 }
 
+/** The oracle's own row gate, so the benchmark build needs nothing internal. The bundled templates use these two forms. */
+private class LegacyGate(private val gate: ValidityGate, private val column: ColumnValues?) {
+    fun passes(i: Int): Boolean {
+        val v = column?.asDouble(i) ?: return false
+        return when (gate) {
+            is ValidityGate.Finite -> v.isFinite()
+            is ValidityGate.Equals -> (gate.value as? GateValue.Number)?.value == v
+        }
+    }
+}
+
 internal class LegacyAggregator(
     private val station: String,
     private val resolutions: Set<Resolution> = Resolution.entries.toSet(),
@@ -28,6 +42,7 @@ internal class LegacyAggregator(
     private class Acc(metricCount: Int) {
         var rows = 0
         var estimated = 0
+        var intervalMs = 0L
         val n = IntArray(metricCount)
         val settling = IntArray(metricCount)
         val sum = DoubleArray(metricCount)
@@ -37,7 +52,6 @@ internal class LegacyAggregator(
 
     private val accs = HashMap<Pair<Resolution, Long>, Acc>()
     private val seen = LegacyRowKeys()
-    private val gateColumns: List<String> = metrics.mapNotNull { it.gate?.column }.distinct()
 
     /** Adds every timed row of [file]; with an [anchor] for the file's boot, unsynced rows get an estimated time. */
     fun add(file: ParquetFile, anchor: TimeEstimate.Anchor? = null) {
@@ -52,7 +66,10 @@ internal class LegacyAggregator(
         val seq = col(ParquetIndexer.SEQ)
         val values = metrics.map { col(it.column) }
         val humidity = metrics.mapNotNull { it.humidityColumn }.distinct().associateWith { col(it) }
-        val gates = gateColumns.associateWith { col(it) }
+        val gates = metrics.map { spec -> spec.gate?.let { g -> LegacyGate(g, col(g.column)) } }
+        // The footer interval, else the CoreS3 default the tests read every file with.
+        val interval = md.keyValueMetadata["sample_interval_ms"]?.toLongOrNull()?.takeIf { it > 0 }
+            ?: (BundledCatalog.templates.single { it.id.startsWith("cores3-") }.defaultSampleIntervalS * 1000).toLong()
         for (i in 0 until utc.size) {
             var estimated = false
             val ns = utc.asLong(i) ?: run {
@@ -66,9 +83,10 @@ internal class LegacyAggregator(
                 val acc = accs.getOrPut(r to r.bucketStart(s)) { Acc(metrics.size) }
                 acc.rows++
                 if (estimated) acc.estimated++
+                if (acc.intervalMs == 0L || interval < acc.intervalMs) acc.intervalMs = interval
                 for ((k, spec) in metrics.withIndex()) {
                     val colv = values[k] ?: continue
-                    if (!spec.accepts(spec.gate?.let { g -> gates[g.column]?.asLong(i) })) continue
+                    if (gates[k]?.passes(i) == false) continue
                     val v = colv.asDouble(i)?.let { raw -> spec.valueOf(raw, spec.humidityColumn?.let { h -> humidity[h]?.asDouble(i) }) } ?: continue
                     if (v.isNaN() || v.isInfinite()) continue
                     acc.n[k]++
@@ -89,7 +107,7 @@ internal class LegacyAggregator(
             for ((k, spec) in metrics.withIndex()) {
                 if (a.n[k] > 0) per[spec.id] = MetricAgg(a.n[k], (a.sum[k] / a.n[k]).toFloat(), a.min[k], a.max[k], a.settling[k])
             }
-            Bucket(station, key.first, key.second, a.rows, a.estimated, per)
+            Bucket(station, key.first, key.second, a.rows, a.estimated, per, a.intervalMs)
         }
 }
 

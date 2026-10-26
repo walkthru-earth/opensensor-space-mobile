@@ -123,7 +123,11 @@ data class DailyBuildResult(val file: File, val manifest: File, val rows: Int, v
 class DailyDerivedPass(val pass: DayPassResult, val daily: DailyBuildResult?)
 
 /** Android atomic-file adapter for the shared Android/iOS UTC-day writer. */
-class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: (station: String, name: String) -> File) {
+class DailyDerivedBuilder(
+    private val store: DerivedStore,
+    private val templates: FileTemplates = FileTemplates.BUNDLED,
+    private val fileFor: (station: String, name: String) -> File,
+) {
     /** The daily file alone, as the export's rebuild of an evicted file needs it. Throws when a source fails. */
     fun build(
         station: String,
@@ -173,7 +177,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
                     }
                     override fun flush() { buffered.flush(); output.fd.sync() }
                 }
-                DayPass.run(station, epochDay, daily, sink, anchors, nowEpochS, tiers).also { decoded = it }
+                DayPass.run(station, epochDay, daily, sink, anchors, nowEpochS, tiers, templates = templates).also { decoded = it }
             }
             val result = pass.daily ?: return DailyDerivedPass(pass, null)
             // The writer counted the rows, the synced length says every byte reached the file. No footer re-parse.
@@ -201,7 +205,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
         } catch (e: Exception) {
             // Decode without a sink only if cache setup failed before the pass. A later write or commit
             // failure keeps the buckets from that same pass, so no source is opened twice.
-            val pass = decoded ?: DayPass.run(station, epochDay, daily, null, anchors, nowEpochS, tiers)
+            val pass = decoded ?: DayPass.run(station, epochDay, daily, null, anchors, nowEpochS, tiers, templates = templates)
             return DailyDerivedPass(DayPassResult(pass.buckets, null, pass.rowsRead, pass.failedSources, e), null)
         } finally {
             tmp?.delete()
