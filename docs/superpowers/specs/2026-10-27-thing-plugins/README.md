@@ -21,6 +21,7 @@ Inputs.
 | [screens-and-map.md](screens-and-map.md) | Generic cards and Station page, hero slot, one map for own and public Things |
 | [setup-wizard.md](setup-wizard.md) | Step graph per kind, config fields from data, confirmations and secrets |
 | [prior-art.md](prior-art.md) | Open source projects studied and what to copy or avoid |
+| [ai-pilot.md](ai-pilot.md) | On-device model page that uses app abilities as tools, from Google AI Edge Gallery |
 
 ## 1. Verdict
 
