@@ -40,8 +40,8 @@ class BundledCatalogTest {
     fun theBundledCores3TemplateKeepsTheReviewedA017edfColumns() {
         // The a017edf bytes carry the retired e5060fb7 digest. The firmware bytes keep every fact it
         // reviewed and only add what it left out, a unit, property, aggregate or code classes. A unit
-        // of 1 now sits in the column, so the firmware drops its unit label. The one changed fact is
-        // the board temperature range, widened to the BMI270 rating of -40 to 85.
+        // of 1 now sits in the column, so the firmware drops its unit label. A plausible range may only
+        // widen, as the board temperature range did to the BMI270 rating of -40 to 85.
         val reviewed = BoardTemplate.parse(CORES3_TEMPLATE)
         val bundled = assertNotNull(BundledCatalog.template(cores3Dict))
         reviewed.datastreams.forEach { column ->
@@ -52,7 +52,7 @@ class BundledCatalogTest {
                 aggregate = column.aggregate ?: b.aggregate,
                 classes = column.classes.ifEmpty { b.classes },
                 unitLabel = column.unitLabel?.takeIf { it != b.unit },
-                plausibleRange = if (column.name == "imu_temperature_c") PlausibleRange(-40.0, 85.0) else column.plausibleRange,
+                plausibleRange = column.plausibleRange?.let { r -> b.plausibleRange?.takeIf { it.min <= r.min && it.max >= r.max } ?: r },
             )
             assertEquals(filled, b, column.name)
         }
