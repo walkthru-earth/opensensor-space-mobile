@@ -177,7 +177,7 @@ timestamp was retained. APK SHA-256:
 
 Xcode 27.0 built the signed Debug device app for the paired iPad Air 13-inch M2
 (iPad14,11, iPadOS 27.0.1). Strict/deep signature verification passed;
-`devicectl` installed `earth.walkthru.opensensor` in place and successfully
+`devicectl` installed `space.opensensor.app` in place and successfully
 launched it; a follow-up process check confirmed it remained running. Neither
 app was uninstalled or its data cleared. The iPad data-container identifier
 changed during the update; no before-install file inventory was taken, so
@@ -194,7 +194,7 @@ No source changes or commit were made, and the full `verify` gate was not rerun.
 Xcode 27.0 built the signed Debug device app from mobile `bed7949`, which includes
 the fresh archive snapshot fix. Strict/deep signature verification passed. The
 USB-connected iPhone 16 Pro (iOS 26.6.2, Developer Mode enabled) accepted the
-`earth.walkthru.opensensor` installation, and `devicectl` successfully launched
+`space.opensensor.app` installation, and `devicectl` successfully launched
 the app. Debug dylib SHA-256:
 `6bd2511ead905b86226b553e1adab0f68a1bc26c775bac55d93bf673df012548`.
 Build, install and launch evidence is retained under ignored
@@ -294,7 +294,7 @@ the connected iPhone 16 Pro and expires on 2026-10-16. Debug dylib SHA-256:
 `10ee1af01d3f126095235d84366d22b61bdc8e608f4cac80bfd6e00bd98fd5a5`.
 
 The iPhone (iOS 26.6.2, Developer Mode enabled) had no installed opensensor app
-before this run. `devicectl` successfully installed `earth.walkthru.opensensor`.
+before this run. `devicectl` successfully installed `space.opensensor.app`.
 The initial launch was denied by iOS with its signature/entitlements/developer
 trust security message. The bundle signature, application identity and matching
 unexpired device profile were checked; owner completion of developer trust and
@@ -332,7 +332,7 @@ no iPhone install or radio test was performed for this change.
 
 After the owner deleted both apps, GitHub `main` still matched local commit
 `76f31e2`. The locally signed, minified Android release APK built with
-`-Paqsync.localRelease=true` and installed on the connected OnePlus 7 Pro
+`-Popensensor.localRelease=true` and installed on the connected OnePlus 7 Pro
 (`GM1911`). Launch succeeded and `adb` listed its process. APK SHA-256:
 `0d2768ae810c6d9e16bb73fd6e1f77b70ef3c36d195c12cb39041af400d44e94`.
 The previously built and locally signed Debug iOS app from the same commit was
@@ -345,7 +345,7 @@ tested on either phone.
 
 Commit `76f31e2` on `main` matched GitHub `origin/main`. Xcode 27.0 built the
 signed Debug iOS app for the paired iPhone 16 Pro using the existing local
-development team. `devicectl` installed `earth.walkthru.opensensor` in place,
+development team. `devicectl` installed `space.opensensor.app` in place,
 launched it, and listed its process running afterward. The app's Debug dylib
 SHA-256 was `85a523c66b2a192f44b8e6dd1a2ef91533bdb2a67596cdd711bcc777818ed3a2`.
 This confirms the build, install and launch; no screen, radio or sync behavior was
@@ -371,7 +371,7 @@ the phone, and no iPhone radio behavior was tested.
 APK SHA-256: `558f15e5d85c2dffac22d124e41261917249c3eed3ec019b5f63fbafd68d050f`.
 
 Verification passed with the bundled JBR: `./gradlew --no-daemon verify
-:app:assembleRelease -Paqsync.localRelease=true` (1045 tasks), including Android lint,
+:app:assembleRelease -Popensensor.localRelease=true` (1045 tasks), including Android lint,
 host tests, shared iOS simulator tests and framework link, plus a locally signed
 minified release APK. The unsigned Debug iOS simulator app also built successfully.
 All nine peacock resources match their source hashes in the debug APK and iOS app;
@@ -688,7 +688,7 @@ The focused History presentation tests and `./gradlew --no-daemon verify` passed
 1. **Instrumented phone runs** → `bench-verified.md` (date, firmware SHA-256, app commit, phone): full sync over BLE and LAN with the foreground-service build; BLE/Wi-Fi coexistence soak; energy; `lan.rotate_token`, `ble.clear_bonds`, `fixed`/`none` pairing.
 2. **Auto-sync overnight on the OnePlus**: count 15-min periods that ran (`adb logcat -s AutoSyncScheduler SyncWorker CompanionPresence AdvertFlagScan SyncTriggers`), whether `setForeground` was refused, whether BLE-by-address connects with the screen off; record OEM battery settings needed. **Triggers first:** the owner taps *Set up wake when nearby* — does the association dialog find the advertising logger; does `EVENT_BLE_APPEARED` arrive after walking back in; does a screen-off LAN sync survive with the device present (no "Destroyed live tcp sockets") and does `setForeground` stop being refused. The flag scan firing within a minute of `PARQUET READY` is measured (19 s, one event); repeat for a distribution and after a Bluetooth toggle.
 3. **API 37 local-network permission** on a real Android 17 device (grant / deny / revoke while connected) and `NsdManager` across API 31–37.
-4. **Further transports** (LoRa relays) behind `AqTransport`; engine, archive, verification unchanged.
+4. **Further transports** (LoRa relays) behind `DeviceTransport`; engine, archive, verification unchanged.
 5. **Opt-in cloud step after local sync** — off by default, own setting and review; `INTERNET` for LAN does not pre-approve it. Privacy boundaries: `../aq-parquet/product/mobile-architecture.md`.
 
 ## Test phone

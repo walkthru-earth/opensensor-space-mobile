@@ -13,9 +13,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMAS = ROOT / "core/database/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase"
+SCHEMAS = ROOT / "core/database/schemas/space.opensensor.data.local.database.AppDatabase"
 DATABASE_SOURCE = ROOT / (
-    "core/database/src/commonMain/kotlin/earth/walkthru/aqsync/data/local/database/AppDatabase.kt"
+    "core/database/src/commonMain/kotlin/space/opensensor/data/local/database/AppDatabase.kt"
 )
 
 

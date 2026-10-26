@@ -47,10 +47,10 @@ private final class TaskFinish {
 @MainActor
 final class AutoSync {
     /// The scheduled run, a `BGProcessingTask` (Info.plist `BGTaskSchedulerPermittedIdentifiers`).
-    static let processingId = "earth.walkthru.opensensor.autosync"
+    static let processingId = "space.opensensor.app.autosync"
     /// The Collect all continued task on iOS 26 and later. Each pass adds a unique suffix to this
-    /// prefix, which Info.plist permits as `earth.walkthru.opensensor.sync.*`.
-    static let continuedPrefix = "earth.walkthru.opensensor.sync"
+    /// prefix, which Info.plist permits as `space.opensensor.app.sync.*`.
+    static let continuedPrefix = "space.opensensor.app.sync"
     /// The summary notification. A new one replaces the last, and a tap opens My devices.
     nonisolated static let notificationThread = "autosync"
     nonisolated static let pausedThread = "sync.paused"
@@ -60,7 +60,7 @@ final class AutoSync {
     private let devices: DevicesBridge
     /// The shared collections, set at launch. Auto-sync skips a sensor that a run holds.
     var runs: SensorCollections?
-    private let logger = Logger(subsystem: "earth.walkthru.opensensor", category: "autosync")
+    private let logger = Logger(subsystem: "space.opensensor.app", category: "autosync")
     /// The raw UNAuthorizationStatus, refreshed when the app comes back and after the prompt.
     private var notificationStatus = UNAuthorizationStatus.notDetermined.rawValue
     private var progressTitle = "Syncing sensors"

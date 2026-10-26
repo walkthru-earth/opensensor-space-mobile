@@ -55,7 +55,7 @@ again. `SensorSync` reports progress at most four times a second and finishes wi
 
 The archive is `Application Support/SensorArchive/<station>/<Hive path>`, with partials under
 `archive-partial/<station>/`, through `IosArchiveStore` in `:core:archive`. The index and pruned marks
-live in the shared Room database `Application Support/database/aq-sync.db` (`IosArchiveDatabase` in
+live in the shared Room database `Application Support/database/opensensor.db` (`IosArchiveDatabase` in
 `:core:database`), which uses the same protection class and is excluded from backup. A final name
 appears only after size, CRC-32 and `PAR1` pass, and its record also holds SHA-256. On its first open
 the database imports the `.verified.json` receipts and `pruned.v1` marks an older build left. Only a

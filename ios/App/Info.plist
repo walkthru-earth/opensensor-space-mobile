@@ -25,7 +25,7 @@
     <key>UILaunchScreen</key><dict/>
     <key>UIBackgroundModes</key><array><string>processing</string><string>bluetooth-central</string></array>
     <key>BGTaskSchedulerPermittedIdentifiers</key>
-    <array><string>earth.walkthru.opensensor.autosync</string><string>earth.walkthru.opensensor.sync.*</string></array>
+    <array><string>space.opensensor.app.autosync</string><string>space.opensensor.app.sync.*</string></array>
     <key>UISupportedInterfaceOrientations</key>
     <array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
     <key>UISupportedInterfaceOrientations~ipad</key>

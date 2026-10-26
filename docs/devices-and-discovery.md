@@ -55,7 +55,7 @@ Rules.
    (advert, manifest or schema ID), its transports, capabilities, dictionary and its headline
    properties (which one or two values the device card shows). Adding a family needs no change
    to the sync engine, the screens or the design system.
-6. **Keep wire names.** The Android package `earth.walkthru.aqsync`, opcodes, UUIDs and archive
+6. **Keep wire names.** Opcodes, UUIDs and archive
    paths stay. New shared types use generic names (`Reading`, `MetricCard`), never `Air*`.
 
 ### Adding a device family

@@ -84,7 +84,7 @@
         android:required="false" />
 
     <application
-        android:name=".AqSyncApplication"
+        android:name="space.opensensor.OpenSensorApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
@@ -92,15 +92,15 @@
         android:localeConfig="@xml/locales_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AqSync"
+        android:theme="@style/Theme.OpenSensor"
         tools:targetApi="33">
         <!-- Play services hosts the optional barcode UI; no camera permission is requested. -->
         <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />
         <activity
-            android:name=".ui.MainActivity"
+            android:name="space.opensensor.ui.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:theme="@style/Theme.AqSync"
+            android:theme="@style/Theme.OpenSensor"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -115,7 +115,7 @@
           progress notification with a Stop action, and stops itself when the sync ends.
         -->
         <service
-            android:name=".data.background.SyncForegroundService"
+            android:name="space.opensensor.data.background.SyncForegroundService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|dataSync" />
 
@@ -146,7 +146,7 @@
           signature permission, as the API requires.
         -->
         <service
-            android:name=".data.background.CompanionPresenceService"
+            android:name="space.opensensor.data.background.CompanionPresenceService"
             android:exported="true"
             android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
             <intent-filter>
@@ -156,7 +156,7 @@
 
         <!-- Explicit target of the Wi-Fi-arrival PendingIntent (SyncTriggers); never exported. -->
         <receiver
-            android:name=".data.background.WifiArrivalReceiver"
+            android:name="space.opensensor.data.background.WifiArrivalReceiver"
             android:exported="false" />
 
         <!--
@@ -164,12 +164,12 @@
           wakes the app when a bonded Auto-sync logger advertises new_files / no_utc. Never exported.
         -->
         <receiver
-            android:name=".data.background.AdvertScanReceiver"
+            android:name="space.opensensor.data.background.AdvertScanReceiver"
             android:exported="false" />
 
         <!-- Starts the process after boot/update so Application.onCreate re-arms the triggers. -->
         <receiver
-            android:name=".data.background.BootReceiver"
+            android:name="space.opensensor.data.background.BootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

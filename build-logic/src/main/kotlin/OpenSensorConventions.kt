@@ -23,7 +23,7 @@ internal object OpenSensorConventions {
     const val MIN_SDK: Int = 31
 
     /** Namespace root of the shared Compose modules. The module name is appended. */
-    const val COMPOSE_NAMESPACE_ROOT: String = "earth.walkthru.opensensor"
+    const val COMPOSE_NAMESPACE_ROOT: String = "space.opensensor"
 
     /** Name of the static framework the Xcode project links. Changing it breaks `ios/`. */
     const val IOS_FRAMEWORK_NAME: String = "OpenSensorShared"

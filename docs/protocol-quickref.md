@@ -3,7 +3,7 @@
 **Scope:** constants as implemented in `:core:protocol`, for lookup. The **owner** is
 `../aq-parquet/docs/shared/ble-sync-protocol.md`; do not change a layout, opcode, UUID, JSON key
 or error code here before changing it there (and the firmware).
-**Code:** `core/protocol/…/data/protocol/Frames.kt`, `AqUuids.kt`, `LanFraming.kt`, `DeviceConfig.kt`, `JsonModels.kt`, `ParquetVerify.kt`.
+**Code:** `core/protocol/…/data/protocol/Frames.kt`, `DeviceUuids.kt`, `LanFraming.kt`, `DeviceConfig.kt`, `JsonModels.kt`, `ParquetVerify.kt`.
 **Related:** [transports.md](transports.md) (pipes), [sync-engine.md](sync-engine.md) (how the file opcodes are driven).
 
 ## Request → response shape
@@ -18,7 +18,7 @@ sequenceDiagram
   Note over P,D: ERROR(op, code) may replace any response — op echoes the request opcode
 ```
 
-## GATT (`AqUuids`)
+## GATT (`DeviceUuids`)
 
 | Attribute | UUID (`255f595e-XXXX-47ed-8e0d-59994199b680`) | Role |
 | --- | --- | --- |

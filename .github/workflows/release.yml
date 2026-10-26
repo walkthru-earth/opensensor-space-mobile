@@ -120,12 +120,12 @@ jobs:
       - name: Run the full verification suite and build the release APK
         shell: bash
         env:
-          AQSYNC_VERSION_CODE: ${{ steps.meta.outputs.version_code }}
-          AQSYNC_VERSION_NAME: ${{ steps.meta.outputs.version_name }}
-          AQSYNC_KEYSTORE_FILE: ${{ steps.keystore.outputs.file }}
-          AQSYNC_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          AQSYNC_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          AQSYNC_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          OPENSENSOR_VERSION_CODE: ${{ steps.meta.outputs.version_code }}
+          OPENSENSOR_VERSION_NAME: ${{ steps.meta.outputs.version_name }}
+          OPENSENSOR_KEYSTORE_FILE: ${{ steps.keystore.outputs.file }}
+          OPENSENSOR_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          OPENSENSOR_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          OPENSENSOR_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
           python3 tools/validate_station_epoch_migration.py

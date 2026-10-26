@@ -18,7 +18,7 @@ struct LanCredentialEntry {
 }
 
 final class LanCredentials {
-    private let service = "earth.walkthru.opensensor.lan"
+    private let service = "space.opensensor.app.lan"
     func save(_ value: LanCredential) throws {
         guard value.token.count == 32, (1...65535).contains(value.port) else { throw LanFailure.invalidReply }
         let query: [String: Any] = [

@@ -1,13 +1,13 @@
 # Data model — Room, DataStore, files on disk, backup
 
 **Scope:** what the phone stores, where, and how it moves between phones. Not how it is computed (see history-pipeline) or fetched (see sync-engine).
-**Code:** `core/database` commonMain `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `StationEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`aq-sync.db`); `core/database/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase/1…12.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
+**Code:** `core/database` commonMain `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `StationEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`opensensor.db`); `core/database/schemas/space.opensensor.data.local.database.AppDatabase/1…12.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
 **Related:** [sync-engine.md](sync-engine.md) (who writes `archived_file`), [history-pipeline.md](history-pipeline.md) (who writes the tiers), [transports.md](transports.md#lan-token-lifecycle) (the token).
 
 ## Finding and exporting the mobile archive
 
 Android raw Parquet files live in app-private
-`/data/user/0/earth.walkthru.aqsync/files/archive/<station>/<relative Hive path>`.
+`/data/user/0/space.opensensor/files/archive/<station>/<relative Hive path>`.
 Ordinary file managers cannot browse this directory. Open the sensor's **Files** screen,
 then **⋮ → Save zip to…**, **Share archive as zip**, or **Share N Parquet files**.
 Derived daily exports are separate from the original sensor files.
@@ -20,11 +20,11 @@ station/Hive paths. Partial downloads are not exported. The original archive sta
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
-## Room schema v12 (`aq-sync.db`)
+## Room schema v12 (`opensensor.db`)
 
 One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
 keeps the file in its app database directory. iOS keeps it at
-`Application Support/database/aq-sync.db`, excluded from backup, and uses only `archived_file` and
+`Application Support/database/opensensor.db`, excluded from backup, and uses only `archived_file` and
 `pruned_file`. Exported schemas live in `core/database/schemas/`.
 
 ```mermaid
@@ -269,7 +269,7 @@ zip stays the byte-exact mirror and the derived zip is the small analysis-ready 
 | Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 h (derived builds stream into theirs), released export runs after 1 h (a leased run stays, `ExportRuns`), partials of an unknown station after 1 h, any partial after 30 days |
 | Settings | `datastore/` | never deletes |
 
-Every writer goes through `AtomicFiles`. Temps are `storage-tmp/.aqtmp-*` beside the roots, on the
+Every writer goes through `AtomicFiles`. Temps are `storage-tmp/.ostmp-*` beside the roots, on the
 same volume. `commitNoReplace` refuses an existing destination with `AlreadyCommitted` and leaves
 the partial. Android has no hard links for apps (SELinux), so the JVM adapter takes a process lock,
 checks the destination and runs `ATOMIC_MOVE`. iOS uses `renamex_np(RENAME_EXCL)`. Durable data is
@@ -277,7 +277,7 @@ flushed with `F_FULLFSYNC` on iOS (fsync only when the volume does not support i
 directory is synced on both platforms. Clock receipts are written once with `createNoReplace`.
 
 `StorageJanitor` runs once per process as the first step of the shared `HistoryStartup.start`,
-before the back-fill, from `AqSyncApplication` on Android and `IosArchive.startIndexRepair` on iOS. It also finds final files without an index record (a crash
+before the back-fill, from `OpenSensorApplication` on Android and `IosArchive.startIndexRepair` on iOS. It also finds final files without an index record (a crash
 between commit and record), checks size, CRC-32, SHA-256 and `PAR1`, and indexes them with
 `sourceDevice = "adopted"` through `ArchiveIndex.putIfAbsent` (Room `INSERT OR IGNORE` on both
 phones), so a record the engine writes meanwhile is never replaced. A final that
@@ -335,7 +335,7 @@ so does Download again.
 ```mermaid
 flowchart LR
   PREFS[(UI preferences)] --> C["Cloud Auto Backup<br/>encrypted-capable devices only"]
-  DB[(aq-sync.db)] -."excluded: contains bearer secret".-> C
+  DB[(opensensor.db)] -."excluded: contains bearer secret".-> C
   DB --> T["Device-to-device transfer"]
   AR["archive/"] --> T
   AP["archive-partial/"] -.excluded.-> X[( )]

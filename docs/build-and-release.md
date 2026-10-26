@@ -1,7 +1,7 @@
 # Build, verify, release. Stack, hooks, CI, signing, the fake device
 
 **Scope:** toolchain versions, permissions declared, the `verify` gate, git hooks, GitHub Actions, release signing, and the debug-only fake device used by tests and demos.
-**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/aqsync.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `.github/dependabot.yml`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
+**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/opensensor.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `.github/dependabot.yml`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
 **Related:** [architecture.md](architecture.md) (modules the gate builds), [status.md](status.md) (what the gate proves and what it cannot).
 
 ## Gate
@@ -22,7 +22,7 @@ tools/setup-hooks.sh                 # once per clone
 ./gradlew --no-daemon clean verify   # the gate; on a Mac it includes verifyIos (needs Xcode)
 python3 tools/validate_station_epoch_migration.py        # stdlib SQLite, actual v8→v9 SQL vs Room exports
 python3 tools/validate_sensor_installation_migration.py  # v9→v10
-./gradlew --no-daemon :app:assembleRelease -Paqsync.localRelease=true   # R8 check, debug key, never publish
+./gradlew --no-daemon :app:assembleRelease -Popensensor.localRelease=true   # R8 check, debug key, never publish
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -161,7 +161,7 @@ release credentials. See [GitHub deployment environments](https://docs.github.co
 
 Before implementing upload, complete these prerequisites:
 
-1. Register `earth.walkthru.opensensor` with the Apple team and create its App Store
+1. Register `space.opensensor.app` with the Apple team and create its App Store
    Connect record. Review app icons, privacy disclosures, capabilities and entitlements.
 2. Replace the hardcoded `0.1.0` / `1` in `ios/App/Info.plist` with controlled release
    version/build inputs. Each uploaded build needs a new build number.
@@ -205,7 +205,7 @@ linking of the iOS framework and R8 on the release APK. A second run of the gate
 
 The release build type uses the AGP 9.3+ `optimization { enable = true }` block, which turns on R8
 code optimization and resource shrinking with the default `proguard-android-optimize` rules. Project
-keep rules live in `app/src/main/keepRules/aqsync.keep`, the source set the new DSL reads. See
+keep rules live in `app/src/main/keepRules/opensensor.keep`, the source set the new DSL reads. See
 [Enable app optimization](https://developer.android.com/topic/performance/app-optimization/enable-app-optimization).
 
 | Rule | Why |
@@ -214,7 +214,7 @@ keep rules live in `app/src/main/keepRules/aqsync.keep`, the source set the new 
 | `-keepnames class * extends java.lang.Throwable` | messages fall back to `e::class.simpleName`, which people and diagnostics see |
 | `-keepnames` for `ConnectionState`, `Frame`, `Request` and their subtypes | their simple names appear in the Debug screen, frame log and protocol errors |
 | `-keepattributes InnerClasses,EnclosingMethod` | `getSimpleName` of a nested class reads these attributes |
-| kotlinx.serialization companion rules for `earth.walkthru.aqsync.**` | `serializer<T>()` lookups of the app's `@Serializable` types, in addition to the library's consumer rules |
+| kotlinx.serialization companion rules for `space.opensensor.**` | `serializer<T>()` lookups of the app's `@Serializable` types, in addition to the library's consumer rules |
 | `-keepnames class * implements NavKey` | Navigation 3 saves keys by class name and restores them with `Class.forName` |
 | `-keepattributes SourceFile,LineNumberTable` | readable stack traces after retrace |
 | `-keep class com.uber.h3core.** { *; }` | the h3 JNI library binds `NativeMethods` by name and constructs `LatLng`, `H3Exception` and `ArrayList` from native code |
@@ -223,9 +223,9 @@ Each release publishes `mapping-<version>.txt` next to the APK, and the release 
 the mapping is missing. Retrace a stack trace with `retrace` from the Android SDK command-line tools
 and that mapping.
 
-**Local check without the release key.** `-Paqsync.localRelease=true` lets
-`./gradlew :app:assembleRelease -Paqsync.localRelease=true` build the minified release signed with
-the debug key. Without the flag, release tasks still require all four `AQSYNC_*` signing variables.
+**Local check without the release key.** `-Popensensor.localRelease=true` lets
+`./gradlew :app:assembleRelease -Popensensor.localRelease=true` build the minified release signed with
+the debug key. Without the flag, release tasks still require all four `OPENSENSOR_*` signing variables.
 The flag is refused when `CI` is set, so it can not produce a published artifact. A debug-signed
 release can not update an installed release build, so uninstall first when testing it on a phone.
 
@@ -283,18 +283,18 @@ qualify a controlled v8→v9 Android Room migration; that scenario remains unver
 Every push to `main` refreshes the rolling **`latest`** pre-release (one APK with the two ARM ABIs,
 `arm64-v8a` and `armeabi-v7a`, the only ones every native library ships, h3 has no x86 build, plus
 `SHA256SUMS.txt`); a `v*` tag publishes a permanent release. Artifact retention 14 days (org max).
-Signing is **fail-closed**. Release tasks require all four `AQSYNC_*` signing variables and an
+Signing is **fail-closed**. Release tasks require all four `OPENSENSOR_*` signing variables and an
 existing keystore. Gradle substitutes the debug signing config only for the explicit local
-`-Paqsync.localRelease=true` check, which is refused on CI. The release job requires the
+`-Popensensor.localRelease=true` check, which is refused on CI. The release job requires the
 four keystore secrets plus `RELEASE_CERT_SHA256`, validates that the alias/private-key entry opens,
 compares its certificate fingerprint to the configured value, runs the full `verify` suite in the
 same job, builds the APK, and checks the APK signer with `apksigner` before publishing. A missing,
 partial, wrong, or debug configuration fails before release creation. The expected project key is
-`CN=AQ Sync, O=walkthru.earth`, SHA-256 `b039d9e8…f04f3f7`.
+`CN=OpenSensor, O=walkthru.earth`, SHA-256 `b039d9e8…f04f3f7`.
 
 `tools/setup-signing.sh` generated `secrets/release.jks` (PKCS12, RSA 4096, 30 y) and
-`secrets/.env` with the `AQSYNC_*` variables `app/build.gradle.kts` reads
-(`AQSYNC_KEYSTORE_FILE/PASSWORD`, `AQSYNC_KEY_ALIAS/PASSWORD`, `AQSYNC_VERSION_CODE/NAME`) and
+`secrets/.env` with the `OPENSENSOR_*` variables `app/build.gradle.kts` reads
+(`OPENSENSOR_KEYSTORE_FILE/PASSWORD`, `OPENSENSOR_KEY_ALIAS/PASSWORD`, `OPENSENSOR_VERSION_CODE/NAME`) and
 uploaded the four Actions secrets. Local signed release:
 `set -a; source secrets/.env; set +a; ./gradlew :app:assembleRelease`. `secrets/` is git-ignored.
 **Back the keystore up.** Without it no future release installs over an existing one.
@@ -385,11 +385,10 @@ that drops the link and applies pending `ble.*` changes. Persists for the proces
 ```sh
 git clone --depth 1 --branch base https://github.com/android/architecture-templates.git opensensor-space-android
 cd opensensor-space-android && rm -rf .git
-/opt/homebrew/bin/bash customizer.sh earth.walkthru.aqsync Device "AQ Sync"   # bash ≥ 4; macOS ships 3
+/opt/homebrew/bin/bash customizer.sh space.opensensor Device "OpenSensor"   # bash ≥ 4; macOS ships 3
 ```
 
-`customizer.sh` cannot take a spaced application name (`class AQ Sync`, `Theme.AQ Sync`), fixed by
-hand after generation; the raw output is the first commit so the fix is visible.
+`customizer.sh` cannot take a spaced application name. Use one word.
 
 ## Uses → affects
 
@@ -400,6 +399,6 @@ hand after generation; the raw output is the first commit so the fix is visible.
 | manifest permissions | AGENTS.md non-negotiables; `LanPermission`, `NotificationPermission`, `BluetoothGate` |
 | `FakeTransport` behaviour | `AutoSyncRunnerTest`, `HistoryDeriverTest` and every debug demo |
 | `.editorconfig` ktlint rules | the pre-commit hook and CI's `pre-commit --all-files` |
-| `app/src/main/keepRules/*.keep` or the release `optimization` block | the published APK; needs a host `-Paqsync.localRelease=true` build and a phone run |
+| `app/src/main/keepRules/*.keep` or the release `optimization` block | the published APK; needs a host `-Popensensor.localRelease=true` build and a phone run |
 | `app/lint-baseline.xml` | `lintDebug` in `verify`; new warnings fail the gate |
 | action SHA pins, `.github/dependabot.yml` | every workflow run; keep the version comment in step with the SHA |

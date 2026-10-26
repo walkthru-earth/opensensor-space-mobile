@@ -13,9 +13,9 @@ kotlin.sourceSets.main {
     kotlin.srcDir("../../core/history/src/commonTest/kotlin")
     kotlin.srcDir("../../core/history/src/legacyFooterFixtures/kotlin")
     kotlin.include(
-        "earth/walkthru/aqsync/data/history/LegacyHistoryPipeline.kt",
-        "earth/walkthru/aqsync/data/history/HistoryBenchmark.kt",
-        "earth/walkthru/aqsync/data/history/FirmwareFooterFixture.kt",
+        "space/opensensor/data/history/LegacyHistoryPipeline.kt",
+        "space/opensensor/data/history/HistoryBenchmark.kt",
+        "space/opensensor/data/history/FirmwareFooterFixture.kt",
     )
 }
 
