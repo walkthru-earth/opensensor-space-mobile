@@ -211,12 +211,34 @@ because Android may encrypt a bonded link right after connect but flaky stacks a
 bonds do at the edge of range.
 
 The reflash for firmware #93 (aq-parquet #102) is a partial erase. The settings namespace `oscfg`
-starts empty, while `parquet` (station UUID, codec) and the BLE bonds stay. The board then holds a
-new first-boot token, the first-boot pairing mode and PIN, and no Wi-Fi, location or NTP settings.
-The app treats it as a known station with nothing provisioned. Sync runs over BLE because the board
-is not on the LAN. Once Wi-Fi is set again, the old stored token fails the `OSS1` handshake with
-`ERROR` 14, `LanTokenPolicy` clears it and the next bonded BLE session fetches the new one. The owner
-sets Wi-Fi, location and NTP again in Device settings, as on a new board.
+starts empty, and nothing is copied from the old one. `parquet` keeps the station UUID and the
+codec, so the app sees the same station and keeps its archive. Lost on the board, back to first
+boot defaults.
+
+- Pairing mode and PIN (`<dev pin>`) and the display flag. A headless board makes a new random
+  fixed PIN, read it with the owner serial path (`parquet owner-pin`).
+- Wi-Fi on, SSID and passphrase, and `lan.on` (back to on).
+- The LAN token. The board makes a new one.
+- Sensor identity, `sensor.vendor`, `sensor.model`, `sensor.serial` and `sensor.batch_candidate`.
+  Until it is set again, Waveshare files carry no sensor identity and the batch candidate stays off.
+- Location and the NTP settings.
+
+BLE bonds survive the reflash, but the phone may cache the old GATT table, so pair again cleanly.
+Re-provision in this order on the Device settings page.
+
+1. Forget the board in the phone's Bluetooth settings.
+2. Connect from My devices, then use Paired phones, Clear (`ble.clear_bonds=1`), and pair again
+   with the code on the display or `<dev pin>`.
+3. Bluetooth pairing, the mode and PIN if they should differ from the default, then Restart.
+4. Find networks and Join. Sync over Wi-Fi stays on unless the owner turns it off.
+5. Get Wi-Fi token. If the phone still holds the old token, the first `OSS1` handshake fails with
+   `ERROR` 14, `LanTokenPolicy` clears it and the next bonded BLE session fetches the new one.
+6. Particle sensor sticker on Waveshare, which sends vendor, model, serial and the batch choice.
+7. Device location, with Use phone location or a chosen cell.
+
+The display flag is detected again at first boot and has no setting. The app has no NTP settings,
+so NTP runs on the firmware defaults (on, DHCP servers, public fallback, one hour interval).
+Custom NTP servers or interval need the host tools.
 
 Station generations preserve the original archive and Hive paths; they do not reparent old data
 ([data model](data-model.md#station-generations-and-device-continuity)). The policies and migration
