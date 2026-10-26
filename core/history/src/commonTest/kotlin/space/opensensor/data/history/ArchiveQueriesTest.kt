@@ -20,7 +20,7 @@ class ArchiveQueriesTest {
 
     @Test
     fun `thing and metric and range and paging changes hide old data before new reads complete`() = runTest {
-        val first = ArchiveSeriesQuery("thing-a", Metrics.PM25, HistoryRange.DAY, HistoryWindow.endingAt(86_400L, HistoryRange.DAY, zone))
+        val first = ArchiveSeriesQuery("thing-a", AirMetrics.PM25, HistoryRange.DAY, HistoryWindow.endingAt(86_400L, HistoryRange.DAY, zone))
         val queries = MutableStateFlow(first)
         var result: ArchiveQueryResult<ArchiveSeriesQuery, String>? = null
         backgroundScope.launch {
@@ -31,7 +31,7 @@ class ArchiveQueriesTest {
         runCurrent()
         assertEquals("thing-a", result?.forQuery(first))
 
-        for (next in listOf(first.copy(thing = "thing-b"), first.copy(metric = Metrics.HUMIDITY), first.copy(range = HistoryRange.WEEK, window = HistoryWindow.endingAt(first.toS, HistoryRange.WEEK, zone)), first.copy(window = HistoryWindow.endingAt(172_800L, HistoryRange.DAY, zone)))) {
+        for (next in listOf(first.copy(thing = "thing-b"), first.copy(metric = AirMetrics.HUMIDITY), first.copy(range = HistoryRange.WEEK, window = HistoryWindow.endingAt(first.toS, HistoryRange.WEEK, zone)), first.copy(window = HistoryWindow.endingAt(172_800L, HistoryRange.DAY, zone)))) {
             queries.value = next
             // The UI label can update before the result collector is scheduled: old data must be hidden already.
             assertNull(result?.forQuery(next))

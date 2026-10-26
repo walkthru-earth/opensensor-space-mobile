@@ -13,7 +13,7 @@ class ChartAxisTest {
     private fun column(mean: Float?, max: Float? = mean) = HistoryColumn(0, 3600, mean, max, 1f, 0f)
 
     /** A neutral metric with a known plausible range, so these cases do not follow the bundled templates. */
-    private val temp = Metrics.AMBIENT_TEMP.copy(plausibleRange = PlausibleRange(-40.0, 125.0))
+    private val temp = AirMetrics.AMBIENT_TEMP.copy(plausibleRange = PlausibleRange(-40.0, 125.0))
 
     @Test
     fun `subzero temperature columns and mixed signs use a zero baseline`() {
@@ -55,32 +55,32 @@ class ChartAxisTest {
     @Test
     fun `PM keeps its positive cap and snaps up to a WHO edge`() {
         val columns = List(99) { column(12f) } + column(379f)
-        val axis = ChartAxes.of(columns, Metrics.PM25)
+        val axis = ChartAxes.of(columns, AirMetrics.PM25)
         assertEquals(0f, axis.min)
         // p95 is 12, so the floor rules and snaps to IT-3, with the guideline line in view.
         assertEquals(37.5f, axis.max)
         assertEquals(7.5f, axis.step)
-        assertEquals(15f, ChartAxes.guidelineOf(Metrics.PM25))
+        assertEquals(15f, ChartAxes.guidelineOf(AirMetrics.PM25))
         assertTrue(15f < axis.max)
         // A hazy day snaps to the next edge, not to a round number.
-        assertEquals(50f, ChartAxes.of(List(20) { column(40f) }, Metrics.PM25).max)
-        assertEquals(75f, ChartAxes.of(List(20) { column(55f) }, Metrics.PM25).max)
+        assertEquals(50f, ChartAxes.of(List(20) { column(40f) }, AirMetrics.PM25).max)
+        assertEquals(75f, ChartAxes.of(List(20) { column(55f) }, AirMetrics.PM25).max)
         // Above the loosest interim target the top is round again.
-        val smoky = ChartAxes.of(List(20) { column(90f) }, Metrics.PM25)
+        val smoky = ChartAxes.of(List(20) { column(90f) }, AirMetrics.PM25)
         assertTrue(smoky.max >= 108f && smoky.max % smoky.step == 0f)
     }
 
     @Test
     fun `PM10 gets its own WHO guideline and neutral metrics none`() {
-        val axis = ChartAxes.of(List(10) { column(20f) }, Metrics.PM10)
+        val axis = ChartAxes.of(List(10) { column(20f) }, AirMetrics.PM10)
         assertEquals(0f, axis.min)
         assertEquals(75f, axis.max)
-        assertEquals(45f, ChartAxes.guidelineOf(Metrics.PM10))
+        assertEquals(45f, ChartAxes.guidelineOf(AirMetrics.PM10))
         assertTrue(45f < axis.max)
-        assertEquals(100f, ChartAxes.of(List(10) { column(70f) }, Metrics.PM10).max)
-        assertNull(ChartAxes.guidelineOf(Metrics.PM1))
-        assertNull(ChartAxes.guidelineOf(Metrics.AMBIENT_TEMP))
-        assertNull(ChartAxes.guidelineOf(Metrics.PM25_BATCH_ESTIMATE))
+        assertEquals(100f, ChartAxes.of(List(10) { column(70f) }, AirMetrics.PM10).max)
+        assertNull(ChartAxes.guidelineOf(AirMetrics.PM1))
+        assertNull(ChartAxes.guidelineOf(AirMetrics.AMBIENT_TEMP))
+        assertNull(ChartAxes.guidelineOf(AirMetrics.PM25_BATCH_ESTIMATE))
     }
 
     @Test

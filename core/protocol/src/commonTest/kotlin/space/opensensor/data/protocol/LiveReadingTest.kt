@@ -11,13 +11,10 @@ import kotlin.test.assertTrue
 
 /** Contract fixtures from the bundled board templates, not phone captures or hardware verification. */
 class LiveReadingTest {
-    private fun thing(prefix: String): Thing {
-        val dict = BundledCatalog.templates.first { it.schema.startsWith(prefix) }.dict
-        return assertNotNull(BundledCatalog.thing("thing", dict))
-    }
+    private fun thing(dict: String): Thing = assertNotNull(BundledCatalog.thing("thing", dict))
 
-    private val cores3 = thing("cores3-")
-    private val waveshare = thing("waveshare-")
+    private val cores3 = thing("3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9")
+    private val waveshare = thing("50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7")
 
     @Test
     fun `CoreS3 reads its board temperature from imu_t and hides the always null t and rh`() {
@@ -28,7 +25,7 @@ class LiveReadingTest {
         assertFalse(reading.declares("ambient_temperature_c"))
         assertNull(reading.value("ambient_temperature_c"))
         assertEquals(5.5, reading.value("pm25_atmospheric_ug_m3")!!, 0.0)
-        assertTrue(reading.pmValid)
+        assertEquals(PmsStatus.VALID.code, reading.code("pms_status"))
     }
 
     @Test
@@ -65,15 +62,14 @@ class LiveReadingTest {
         assertNull(reading.value("pm25_atmospheric_ug_m3"))
         assertFalse(reading.carries("relative_humidity_percent"))
         assertTrue(reading.declares("relative_humidity_percent"))
-        assertEquals(PmsStatus.fromCode(1), reading.pmsStatus)
-        assertFalse(reading.pmValid)
+        assertEquals(1, reading.code("pms_status"))
     }
 
     @Test
     fun `an overflow sample reads every column as no reading now`() {
         val reading = LiveReading(LiveSample.parse("""{"seq":null,"pms":null,"pm25":null,"t":null,"rh":null}"""), waveshare)
         assertTrue(reading.sample.overflow)
-        assertNull(reading.pmsStatus)
+        assertNull(reading.code("pms_status"))
         assertNull(reading.value("pm25_atmospheric_ug_m3"))
         assertNull(reading.value("ambient_temperature_c"))
     }

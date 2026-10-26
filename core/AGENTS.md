@@ -63,7 +63,8 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   included, so never reformat it and update the pins with each copy. A re-copy is
   `rsync -a --delete ../opensensor-space-firmware/docs/shared/templates/ core/model/bundled/templates/`. LIVE (`LiveReading`, #185), the batch estimate and
   History read them. History builds each `MetricSpec` from a template datastream
-  and the profile (`Metrics.of`), and reads each file by the template of its
+  and the profile (`Metrics.of`), plus the derived metrics of each
+  `DerivedMetricProvider` (`AirDerivedMetrics` for corrected PM2.5), and reads each file by the template of its
   `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by
   `template.sha256` first and then `dictionary.sha256`. The old unprefixed footer
   keys are not read. A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic

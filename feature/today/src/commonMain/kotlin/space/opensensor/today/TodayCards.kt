@@ -39,10 +39,12 @@ import space.opensensor.data.SyncProgress
 import space.opensensor.data.ble.ConfigSnapshot
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.DeviceCapabilities
-import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.NowReading
 import space.opensensor.data.history.TodaySoFar
+import space.opensensor.data.history.pmValid
+import space.opensensor.data.history.pmsStatus
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
 import space.opensensor.data.protocol.LiveReading
@@ -195,7 +197,7 @@ internal fun particleBins(reading: LiveReading?): List<Pair<String, String>> =
     PARTICLE_BINS.filter { (_, column) -> reading?.declares(column) == true }
 
 /** The CF=1 PM1, PM2.5 and PM10 columns, a Developer line on the readings card. */
-private val CF1_COLUMNS = listOf("pm1_cf1_ug_m3", Metrics.PM25_CORRECTED.column, "pm10_cf1_ug_m3")
+private val CF1_COLUMNS = listOf("pm1_cf1_ug_m3", AirMetrics.PM25_CORRECTED.column, "pm10_cf1_ug_m3")
 
 private const val BATTERY_MV = "battery_mv"
 private const val VBUS_MV = "vbus_mv"
@@ -327,7 +329,7 @@ internal fun MetricHeroCard(
                             color = if (fresh) onCard else quiet,
                             maxLines = 1,
                         )
-                        Text("${pm25Label(reading.basis)}  ${Metrics.PM25.unit}", style = MaterialTheme.typography.titleMedium, color = quiet)
+                        Text("${pm25Label(reading.basis)}  ${AirMetrics.PM25.unit}", style = MaterialTheme.typography.titleMedium, color = quiet)
                         // Detailed shows the sensor's own value second, under the corrected one.
                         val raw = reading.raw
                         if (level.detailed && reading.basis == Pm25Basis.CORRECTED && raw != null) {
@@ -631,7 +633,7 @@ internal fun BatchEstimateCard(live: LiveReading?, receivedAtEpochMs: Long?, con
             config?.config?.sensor?.serial,
             config?.config?.sensor?.batchCandidate,
             live?.pmsStatus?.code,
-            live?.value(Metrics.PARTICLES_GT03.column)?.toLong(),
+            live?.value(AirMetrics.PARTICLES_GT03.column)?.toLong(),
         )
     } else {
         null
@@ -660,8 +662,8 @@ internal fun ReadingsCard(live: LiveReading?, receivedAtEpochMs: Long?, level: D
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            BigValue(Metrics.PM10.label, if (showPm) fmt(live.value(Metrics.PM10.column)) else NO_VALUE, Metrics.PM10.unit, Modifier.weight(1f))
-            BigValue(Metrics.PM1.label, if (showPm) fmt(live.value(Metrics.PM1.column)) else NO_VALUE, Metrics.PM1.unit, Modifier.weight(1f))
+            BigValue(AirMetrics.PM10.label, if (showPm) fmt(live.value(AirMetrics.PM10.column)) else NO_VALUE, AirMetrics.PM10.unit, Modifier.weight(1f))
+            BigValue(AirMetrics.PM1.label, if (showPm) fmt(live.value(AirMetrics.PM1.column)) else NO_VALUE, AirMetrics.PM1.unit, Modifier.weight(1f))
         }
         if (!showPm) {
             val status = live?.pmsStatus
@@ -726,7 +728,7 @@ internal fun BoardCard(
                 if (temperature != null) {
                     TemperatureValue(temperature, live)
                 } else {
-                    BigValue(Metrics.BOARD_TEMP.label, NO_VALUE, LocalTodayUnits.current.unit(Metrics.BOARD_TEMP.unit))
+                    BigValue(AirMetrics.BOARD_TEMP.label, NO_VALUE, LocalTodayUnits.current.unit(AirMetrics.BOARD_TEMP.unit))
                 }
                 Text(
                     stringResource(
@@ -744,7 +746,7 @@ internal fun BoardCard(
             // Battery label, percent and charging state read as one element.
             Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
                 val charging = live?.code(CHARGING_STATUS) == 1
-                Eyebrow(Metrics.BATTERY.label, uppercase = false)
+                Eyebrow(AirMetrics.BATTERY.label, uppercase = false)
                 Row(verticalAlignment = Alignment.Bottom) {
                     Icon(
                         if (charging) AppIcons.BatteryChargingFull else AppIcons.BatteryStd,
@@ -752,9 +754,9 @@ internal fun BoardCard(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
-                    Text(live?.value(Metrics.BATTERY.column)?.toLong()?.let { "$it" } ?: NO_VALUE, style = MaterialTheme.typography.displaySmall)
+                    Text(live?.value(AirMetrics.BATTERY.column)?.toLong()?.let { "$it" } ?: NO_VALUE, style = MaterialTheme.typography.displaySmall)
                     Spacer(Modifier.width(4.dp))
-                    Text(Metrics.BATTERY.unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 7.dp))
+                    Text(AirMetrics.BATTERY.unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 7.dp))
                 }
                 val chargingText = stringResource(Res.string.board_charging)
                 val millivolts = live?.value(BATTERY_MV)?.toInt()?.let { stringResource(Res.string.board_millivolts, it) }

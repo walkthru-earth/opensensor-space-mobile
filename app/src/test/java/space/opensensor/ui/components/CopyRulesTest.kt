@@ -8,7 +8,6 @@ import space.opensensor.data.history.NowReading
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
 import space.opensensor.data.protocol.PmsStatus
-import space.opensensor.model.BundledCatalog
 import space.opensensor.publicfeed.DiscoverCollection
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
@@ -77,7 +76,7 @@ class CopyRulesTest {
     @Test
     fun `Today owns the warming hint`() {
         // Today (`:feature:today`) owns the warming hint on both apps.
-        val waveshare = DeviceInfo(dict = BundledCatalog.templates.first { it.schema.startsWith("waveshare-") }.dict)
+        val waveshare = DeviceInfo(dict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7")
         val sample = LiveSample.parse("""{"pms":${PmsStatus.WARMING.code}}""")
         val warming = NowReading.of(DeviceCapabilities.from(waveshare).reading(sample)) as NowReading.SensorNotReady
         assertEquals(sharedStrings().getValue("today").getValue("pms_warming_hint"), warming.hint)

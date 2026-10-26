@@ -33,6 +33,7 @@ import space.opensensor.data.SyncProgress
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.ThingStatus
 import space.opensensor.data.ble.TransportKind
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.ArchiveQueryResult
 import space.opensensor.data.history.DerivedStore
 import space.opensensor.data.history.FileSummary
@@ -105,11 +106,11 @@ internal data class FileSummaryRequest(val thing: String, val files: List<Archiv
  * profile primary metrics, Detailed every metric.
  */
 internal fun fileChartMetrics(summaries: List<FileSummary>, detailed: Boolean): List<MetricSpec> {
-    val corrected = summaries.isEmpty() || summaries.any { (it.agg(Metrics.PM25_CORRECTED)?.n ?: 0) > 0 }
+    val corrected = summaries.isEmpty() || summaries.any { (it.agg(AirMetrics.PM25_CORRECTED)?.n ?: 0) > 0 }
     return Metrics.all.filter { m ->
         when (m) {
-            Metrics.PM25_CORRECTED -> corrected
-            Metrics.PM25 -> detailed || !corrected
+            AirMetrics.PM25_CORRECTED -> corrected
+            AirMetrics.PM25 -> detailed || !corrected
             else -> detailed || m.primary
         }
     }

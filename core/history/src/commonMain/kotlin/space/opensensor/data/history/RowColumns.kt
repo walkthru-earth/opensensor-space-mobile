@@ -34,15 +34,15 @@ internal class DoubleColumn(val values: DoubleArray, private val valid: BooleanA
     fun has(i: Int): Boolean = valid == null || valid[i]
 
     /**
-     * This column's rows as [metric] shows them, [MetricSpec.valueOf] of each row and its [rh]. A row
-     * whose result is null (no valid RH, say) is a missing cell. With no RH column every row is missing.
+     * This column's rows as [metric] shows them, [MetricSpec.valueOf] of each row and its [aux] value. A
+     * row whose result is null (no valid RH, say) is a missing cell.
      */
-    fun correctedBy(metric: MetricSpec, rh: DoubleColumn?): DoubleColumn {
+    fun correctedBy(metric: MetricSpec, aux: DoubleColumn?): DoubleColumn {
         val out = DoubleArray(size)
         val ok = BooleanArray(size)
         for (i in 0 until size) {
             if (!has(i)) continue
-            val v = metric.valueOf(values[i], if (rh != null && rh.has(i)) rh.values[i] else null) ?: continue
+            val v = metric.valueOf(values[i], if (aux != null && aux.has(i)) aux.values[i] else null) ?: continue
             out[i] = v
             ok[i] = true
         }

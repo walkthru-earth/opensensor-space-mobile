@@ -3,12 +3,11 @@ package space.opensensor.data.history
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveReading
 import space.opensensor.data.protocol.LiveSample
-import space.opensensor.model.BundledCatalog
 
 /** INFO and LIVE readings over the bundled templates, for tests. */
 internal object LiveFixtures {
-    val waveshareDict = BundledCatalog.templates.first { it.schema.startsWith("waveshare-") }.dict
-    val cores3Dict = BundledCatalog.templates.first { it.schema.startsWith("cores3-") }.dict
+    val waveshareDict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7"
+    val cores3Dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
     val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = waveshareDict)
     val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = cores3Dict)
 

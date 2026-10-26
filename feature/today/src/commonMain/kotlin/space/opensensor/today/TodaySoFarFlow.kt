@@ -9,11 +9,11 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.TimeZone
 import space.opensensor.airquality.Pm25Basis
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.ArchiveDayQuery
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
-import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.history.archiveQueryResults
 import space.opensensor.data.history.localDateOf
@@ -50,7 +50,7 @@ fun todaySoFar(
                 flowOf(null)
             } else {
                 // Corrected PM2.5 when the day has rows with a valid RH, else raw, labelled by its basis.
-                combine(observeHourlyDay(id, Metrics.PM25_CORRECTED, query.window), observeHourlyDay(id, Metrics.PM25, query.window)) { corrected, raw ->
+                combine(observeHourlyDay(id, AirMetrics.PM25_CORRECTED, query.window), observeHourlyDay(id, AirMetrics.PM25, query.window)) { corrected, raw ->
                     val series = if (corrected.mean != null) corrected else raw
                     series.mean?.let { TodaySoFar(it, series.validRows.toInt(), series.coverage, series.metric.basis ?: Pm25Basis.RAW) }
                 }

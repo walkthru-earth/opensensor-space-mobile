@@ -72,7 +72,7 @@ object ParquetIndexer {
         val seq = seqStats ?: seqLeaf?.let { rangeByDecoding(file.readColumn(it)) }
         val footer = md.footer
         val headline = templates.of(footer).template?.let { t ->
-            Metrics.of(t).firstOrNull { it.primary && it.humidityColumn == null }
+            Metrics.of(t).firstOrNull { it.primary && !it.derived }
         }
         val validRows = headline?.let { metric ->
             try {

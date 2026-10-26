@@ -103,10 +103,10 @@ fun humidPm25Parquet(thing: String = "thing-a"): ByteArray {
 }
 
 /** The bundled CoreS3 template, the board every device fixture comes from. */
-val coreS3Template: space.opensensor.model.BoardTemplate = space.opensensor.model.BundledCatalog.templates.single { it.id.startsWith("cores3-") }
+val coreS3Template: space.opensensor.model.BoardTemplate = checkNotNull(space.opensensor.model.BundledCatalog.template(LiveFixtures.cores3Dict))
 
 /** The bundled Waveshare template. */
-val waveshareTemplate: space.opensensor.model.BoardTemplate = space.opensensor.model.BundledCatalog.templates.single { it.id.startsWith("waveshare-") }
+val waveshareTemplate: space.opensensor.model.BoardTemplate = checkNotNull(space.opensensor.model.BundledCatalog.template(LiveFixtures.waveshareDict))
 
 /**
  * Reads every file as the bundled CoreS3 template. The device fixtures predate the bundled dict,

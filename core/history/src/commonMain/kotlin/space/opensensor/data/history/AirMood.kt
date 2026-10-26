@@ -1,5 +1,6 @@
 package space.opensensor.data.history
 
+import space.opensensor.airquality.AirDerivedMetrics
 import space.opensensor.airquality.EpaPm25Correction
 import space.opensensor.airquality.HealthScale
 import space.opensensor.airquality.Pm25Basis
@@ -72,9 +73,9 @@ sealed interface NowReading {
             if (live == null) return Waiting
             val status = live.pmsStatus ?: return Waiting
             if (status != PmsStatus.VALID) return SensorNotReady(status, hint(status))
-            val raw = live.value(Metrics.PM25.column)
+            val raw = live.value(AirDerivedMetrics.PM25_ATMOSPHERIC)
             // The correction reads the CF=1 PM2.5 and the sensor's RH, the inputs it was fitted on.
-            val corrected = EpaPm25Correction.correct(live.value(Metrics.PM25_CORRECTED.column), live.value(Metrics.HUMIDITY.column))
+            val corrected = EpaPm25Correction.correct(live.value(AirDerivedMetrics.PM25_CF1), live.value(AirDerivedMetrics.RELATIVE_HUMIDITY))
             val pm = corrected ?: raw ?: return Waiting
             val mood = AirMood.ofOrNull(pm) ?: return Waiting
             return Reading(pm, mood, if (corrected != null) Pm25Basis.CORRECTED else Pm25Basis.RAW, raw)

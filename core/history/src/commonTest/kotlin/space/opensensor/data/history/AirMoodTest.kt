@@ -47,25 +47,25 @@ class AirMoodTest {
             val above = edge.nextUp()
             assertEquals(AirMood.entries[i], AirMood.of(edge))
             assertEquals(AirMood.entries[i + 1], AirMood.of(above))
-            assertEquals(AirMood.of(edge), Metrics.PM25.moodOf(edge))
-            assertEquals(AirMood.of(above), Metrics.PM25.moodOf(above))
+            assertEquals(AirMood.of(edge), AirMetrics.PM25.moodOf(edge))
+            assertEquals(AirMood.of(above), AirMetrics.PM25.moodOf(above))
         }
     }
 
     @Test
     fun `PM10 is banded on its own WHO scale and other metrics stay neutral`() {
-        assertEquals(WhoGuidelines.PM10, Metrics.PM10.healthScale)
-        assertEquals(AirMood.FRESH, Metrics.PM10.moodOf(45.0))
-        assertEquals(AirMood.FAIR, Metrics.PM10.moodOf(46.0))
-        assertEquals(AirMood.HAZY, Metrics.PM10.moodOf(75.0))
-        assertEquals(AirMood.THICK, Metrics.PM10.moodOf(151.0))
-        assertEquals(WhoStep.IT2, Metrics.PM10.stepOf(100.0))
-        assertNull(Metrics.PM10.moodOf(Double.NaN))
-        for (m in listOf(Metrics.PM1, Metrics.PM25_BATCH_ESTIMATE, Metrics.HUMIDITY, Metrics.AMBIENT_TEMP)) {
+        assertEquals(WhoGuidelines.PM10, AirMetrics.PM10.healthScale)
+        assertEquals(AirMood.FRESH, AirMetrics.PM10.moodOf(45.0))
+        assertEquals(AirMood.FAIR, AirMetrics.PM10.moodOf(46.0))
+        assertEquals(AirMood.HAZY, AirMetrics.PM10.moodOf(75.0))
+        assertEquals(AirMood.THICK, AirMetrics.PM10.moodOf(151.0))
+        assertEquals(WhoStep.IT2, AirMetrics.PM10.stepOf(100.0))
+        assertNull(AirMetrics.PM10.moodOf(Double.NaN))
+        for (m in listOf(AirMetrics.PM1, AirMetrics.PM25_BATCH_ESTIMATE, AirMetrics.HUMIDITY, AirMetrics.AMBIENT_TEMP)) {
             assertFalse(m.banded)
             assertNull(m.moodOf(40.0))
         }
-        assertFailsWith<IllegalArgumentException> { Metrics.AMBIENT_TEMP.copy(healthScale = WhoGuidelines.PM25) }
+        assertFailsWith<IllegalArgumentException> { AirMetrics.AMBIENT_TEMP.copy(healthScale = WhoGuidelines.PM25) }
     }
 
     @Test

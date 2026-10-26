@@ -90,8 +90,8 @@ class TierStoreTest {
 
     private val sample: DayTiers = mapOf(
         Resolution.MIN15 to mapOf(
-            Metrics.PM25.id to listOf(TierBucket(1_728_000_000, 4, 3, 1, 12.5f, 1f, Float.NaN), TierBucket(1_728_000_900, 0, 0, 0, Float.NaN, Float.NaN, Float.NaN)),
-            Metrics.BOARD_TEMP.id to emptyList(),
+            AirMetrics.PM25.id to listOf(TierBucket(1_728_000_000, 4, 3, 1, 12.5f, 1f, Float.NaN), TierBucket(1_728_000_900, 0, 0, 0, Float.NaN, Float.NaN, Float.NaN)),
+            AirMetrics.BOARD_TEMP.id to emptyList(),
         ),
         Resolution.DAY to emptyMap(),
     )
@@ -165,14 +165,14 @@ class TierStoreTest {
         val (store, index, thing) = archive()
         val tierStore = MemoryTierStore()
         val first = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
-        val expected = first.observe(thing, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
+        val expected = first.observe(thing, AirMetrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
         assertTrue(expected.isNotEmpty())
         assertTrue(first.decodedDays > 0)
         assertEquals(first.decodedDays, tierStore.saves)
 
         store.reads = 0
         val second = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
-        val actual = second.observe(thing, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
+        val actual = second.observe(thing, AirMetrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
         assertEquals(0, second.decodedDays)
         assertEquals(0, store.reads)
         assertEquals(expected.map { it.startEpochS to it.validRows }, actual.map { it.startEpochS to it.validRows })
@@ -224,7 +224,7 @@ class TierStoreTest {
         val tierStore = MemoryTierStore()
         val tiers = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         val span = tiers.observeDays(thing).first()
-        val buckets = tiers.observe(thing, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
+        val buckets = tiers.observe(thing, AirMetrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
         val metrics = tiers.observeMetricsWithData(thing).first()
         assertTrue(span.count > 0)
         assertTrue(buckets.isNotEmpty())
@@ -233,14 +233,14 @@ class TierStoreTest {
         // A backfill reopened the record. Its days stay in History as they were, on Android and iOS alike.
         index.rows.value = listOf(record.copy(indexedAtEpochMs = null))
         assertEquals(span, tiers.observeDays(thing).first())
-        assertEquals(buckets, tiers.observe(thing, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first())
+        assertEquals(buckets, tiers.observe(thing, AirMetrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first())
         assertEquals(metrics, tiers.observeMetricsWithData(thing).first())
 
         // A record with no span holds every day, and a new process shows them from the store alone.
         index.rows.value = listOf(record.copy(indexedAtEpochMs = null, utcRows = 0, firstUtcNs = null, lastUtcNs = null))
         val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files)
         assertEquals(span, restarted.observeDays(thing).first())
-        assertEquals(buckets, restarted.observe(thing, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first())
+        assertEquals(buckets, restarted.observe(thing, AirMetrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first())
         assertEquals(0, restarted.decodedDays)
 
         // Once nothing holds them, days without sources leave History.
@@ -254,7 +254,7 @@ class TierStoreTest {
         val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), shareScope = backgroundScope, templates = CoreS3Files)
         index.thingObservers = 0
         val jobs = listOf(
-            backgroundScope.launch { tiers.observe(thing, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).collect {} },
+            backgroundScope.launch { tiers.observe(thing, AirMetrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).collect {} },
             backgroundScope.launch { tiers.observeDays(thing).collect {} },
             backgroundScope.launch { tiers.observeMetricsWithData(thing).collect {} },
         )
@@ -271,13 +271,13 @@ class TierStoreTest {
         val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), tierStore = tierStore, shareScope = backgroundScope, templates = CoreS3Files)
         val summary = backgroundScope.launch { tiers.observeDays(thing).collect {} }
         runCurrent()
-        val expected = tiers.observe(thing, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
+        val expected = tiers.observe(thing, AirMetrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
         assertTrue(expected.isNotEmpty())
         tiers.trim(MemoryPressure.Level.Critical)
         assertEquals(0, tiers.cachedDays())
         val loads = tierStore.loads
         val decodes = tiers.decodedDays
-        val actual = tiers.observe(thing, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
+        val actual = tiers.observe(thing, AirMetrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
         assertEquals(expected, actual)
         assertTrue(tierStore.loads > loads, "replayed summaries reload released buckets from disk")
         assertEquals(decodes, tiers.decodedDays)

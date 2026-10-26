@@ -2,14 +2,19 @@ import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTes
 
 // Health scales for air quality values: the WHO 2021 Air Quality Guidelines with their interim
 // targets, and the one colour-blind checked palette that paints them, plus the pure quality checks
-// for suspect PM readings (QcRules, #91). Pure Kotlin, no dependencies, so :core:history,
-// :core:publicfeed, :feature:discover, :app and :ios:shared all reach it.
+// for suspect PM readings (QcRules, #91), and the air family's phone derived metrics
+// (AirDerivedMetrics). Pure Kotlin over :core:model, so :core:history, :core:publicfeed,
+// :feature:discover, :app and :ios:shared all reach it.
 plugins {
     id("opensensor.kmp.library")
 }
 
 kotlin {
     sourceSets {
+        // The derived metric provider is declared against the model's Datastream and BoardTemplate.
+        commonMain.dependencies {
+            api(project(":core:model"))
+        }
         // Tests only. The quality checks also run over a real device archive, read with the portable reader.
         commonTest.dependencies {
             implementation(project(":core:parquet"))

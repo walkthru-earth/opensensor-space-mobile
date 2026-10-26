@@ -4,7 +4,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveRecord
-import space.opensensor.data.history.Metrics
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.startOfDay
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
@@ -81,23 +81,23 @@ class HistoryPresentationTest {
 
     @Test
     fun simpleOffersCorrectedPm25OnlyAndDetailedOffersCorrectedThenRaw() {
-        val both = listOf(Metrics.PM25_CORRECTED, Metrics.PM25, Metrics.AMBIENT_TEMP)
-        assertEquals(listOf(Metrics.PM25_CORRECTED, Metrics.AMBIENT_TEMP), pickerMetrics(both, DetailLevel.SIMPLE))
+        val both = listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25, AirMetrics.AMBIENT_TEMP)
+        assertEquals(listOf(AirMetrics.PM25_CORRECTED, AirMetrics.AMBIENT_TEMP), pickerMetrics(both, DetailLevel.SIMPLE))
         assertEquals(both, pickerMetrics(both, DetailLevel.DETAILED))
         // No humidity anywhere, so Simple keeps raw PM2.5, labelled raw.
-        val rawOnly = listOf(Metrics.PM25, Metrics.AMBIENT_TEMP)
+        val rawOnly = listOf(AirMetrics.PM25, AirMetrics.AMBIENT_TEMP)
         assertEquals(rawOnly, pickerMetrics(rawOnly, DetailLevel.SIMPLE))
     }
 
     @Test
     fun simpleOffersOnlyTheProfilePrimaryMetrics() {
-        val measured = listOf(Metrics.PM25_CORRECTED, Metrics.PM25, Metrics.PM10, Metrics.PARTICLES_GT03, Metrics.BOARD_TEMP, Metrics.PARTICLES_GT25)
-        assertTrue(Metrics.PARTICLES_GT03.primary.not() && Metrics.PARTICLES_GT25.primary.not() && Metrics.PM10.primary)
-        assertEquals(listOf(Metrics.PM25_CORRECTED, Metrics.PM10, Metrics.BOARD_TEMP), pickerMetrics(measured, DetailLevel.SIMPLE))
+        val measured = listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25, AirMetrics.PM10, AirMetrics.PARTICLES_GT03, AirMetrics.BOARD_TEMP, AirMetrics.PARTICLES_GT25)
+        assertTrue(AirMetrics.PARTICLES_GT03.primary.not() && AirMetrics.PARTICLES_GT25.primary.not() && AirMetrics.PM10.primary)
+        assertEquals(listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM10, AirMetrics.BOARD_TEMP), pickerMetrics(measured, DetailLevel.SIMPLE))
         assertEquals(measured, pickerMetrics(measured, DetailLevel.DETAILED))
         assertEquals(measured, pickerMetrics(measured, DetailLevel.DEVELOPER))
         // A board whose profile names no primary column still offers its metrics in Simple.
-        val noPrimary = listOf(Metrics.PARTICLES_GT03, Metrics.PARTICLES_GT25)
+        val noPrimary = listOf(AirMetrics.PARTICLES_GT03, AirMetrics.PARTICLES_GT25)
         assertEquals(noPrimary, pickerMetrics(noPrimary, DetailLevel.SIMPLE))
     }
 }

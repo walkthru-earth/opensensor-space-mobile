@@ -10,7 +10,6 @@ import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetSink
 import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.history.parquet.ParquetWriter
-import space.opensensor.model.BundledCatalog
 import space.opensensor.model.GateValue
 import space.opensensor.model.ValidityGate
 
@@ -65,11 +64,11 @@ internal class LegacyAggregator(
         val bootLo = col("boot_id_lo")
         val seq = col(ParquetIndexer.SEQ)
         val values = metrics.map { col(it.column) }
-        val humidity = metrics.mapNotNull { it.humidityColumn }.distinct().associateWith { col(it) }
+        val humidity = metrics.mapNotNull { it.auxColumn }.distinct().associateWith { col(it) }
         val gates = metrics.map { spec -> spec.gate?.let { g -> LegacyGate(g, col(g.column)) } }
         // The footer interval, else the CoreS3 default the tests read every file with.
         val interval = OpenSensorFooter.of(md.keyValueMetadata)?.sampleIntervalMs
-            ?: (BundledCatalog.templates.single { it.id.startsWith("cores3-") }.defaultSampleIntervalS * 1000).toLong()
+            ?: (coreS3Template.defaultSampleIntervalS * 1000).toLong()
         for (i in 0 until utc.size) {
             var estimated = false
             val ns = utc.asLong(i) ?: run {
@@ -87,7 +86,7 @@ internal class LegacyAggregator(
                 for ((k, spec) in metrics.withIndex()) {
                     val colv = values[k] ?: continue
                     if (gates[k]?.passes(i) == false) continue
-                    val v = colv.asDouble(i)?.let { raw -> spec.valueOf(raw, spec.humidityColumn?.let { h -> humidity[h]?.asDouble(i) }) } ?: continue
+                    val v = colv.asDouble(i)?.let { raw -> spec.valueOf(raw, spec.auxColumn?.let { h -> humidity[h]?.asDouble(i) }) } ?: continue
                     if (v.isNaN() || v.isInfinite()) continue
                     acc.n[k]++
                     if (spec.settleSeconds > 0 && (monoAll?.asLong(i) ?: Long.MAX_VALUE) < spec.settleSeconds * 1_000_000L) acc.settling[k]++

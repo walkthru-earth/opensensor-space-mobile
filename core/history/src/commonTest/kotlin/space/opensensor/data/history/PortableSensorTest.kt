@@ -9,14 +9,14 @@ class PortableSensorTest {
     @Test fun invalidSensorDoesNotBecomeZero() {
         assertEquals(NowReading.Waiting, NowReading.of(LiveFixtures.waveshare("""{"pms":4}""")))
         assertIs<NowReading.SensorNotReady>(NowReading.of(LiveFixtures.waveshare("""{"pms":1,"pm25":0.0}""")))
-        assertNull(Metrics.BOARD_TEMP.moodOf(-12.0))
+        assertNull(AirMetrics.BOARD_TEMP.moodOf(-12.0))
     }
 
     @Test fun sharedBandsHaveIdenticalBoundaries() {
         assertEquals(AirMood.FRESH, (NowReading.of(LiveFixtures.waveshare("""{"pms":4,"pm25":14.9}""")) as NowReading.Reading).mood)
-        assertEquals(AirMood.FRESH, Metrics.PM25.moodOf(15.0))
+        assertEquals(AirMood.FRESH, AirMetrics.PM25.moodOf(15.0))
         assertEquals(AirMood.FAIR, (NowReading.of(LiveFixtures.waveshare("""{"pms":4,"pm25":15.5}""")) as NowReading.Reading).mood)
-        assertEquals(AirMood.HAZY, Metrics.PM25.moodOf(35.0))
+        assertEquals(AirMood.HAZY, AirMetrics.PM25.moodOf(35.0))
         assertEquals(NowReading.Waiting, NowReading.of(LiveFixtures.waveshare(mapOf("pms" to 4.0, "pm25" to Double.NaN))))
     }
 

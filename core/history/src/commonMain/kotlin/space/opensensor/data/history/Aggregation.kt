@@ -111,7 +111,7 @@ class Aggregator(
 
     /**
      * Reads what [metrics] need through [column], which returns null for a column the file lacks, under
-     * the template of the file's footer [keyValues]. A humidity-corrected metric gets its values
+     * the template of the file's footer [keyValues]. A derived metric gets its values
      * corrected here, row by row, so every rollup the tiers keep is of corrected rows.
      */
     internal fun columns(column: (String) -> ColumnValues?, keyValues: Map<String, String>): Columns {
@@ -125,8 +125,7 @@ class Aggregator(
             values = Array(m) { k ->
                 val spec = bound[k] ?: return@Array null
                 val stored = double(spec.column)
-                val rh = spec.humidityColumn
-                if (rh == null || stored == null) stored else stored.correctedBy(spec, double(rh))
+                if (stored == null || !spec.derived) stored else stored.correctedBy(spec, spec.auxColumn?.let(::double))
             },
             gates = Array(m) { k -> bound[k]?.gate?.let { g -> gateCache.getOrPut(g) { GateColumn(g, column(g.column)) } } },
             settleUs = LongArray(m) { k -> bound[k]?.let { (it.settleSeconds * US_PER_S).toLong() } ?: 0L },

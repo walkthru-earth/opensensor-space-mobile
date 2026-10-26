@@ -10,11 +10,11 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import space.opensensor.airquality.Pm25Basis
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
-import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.sync.ClockQuality
 import kotlin.test.Test
@@ -94,7 +94,7 @@ class TodayFormatTest {
     @Test
     fun todaySoFarFallsBackToRawLabelledRawWithoutAValidHumidity() = runTest {
         val observe = { _: String, metric: MetricSpec, window: HistoryWindow ->
-            val mean = if (metric == Metrics.PM25) 18f else null
+            val mean = if (metric == AirMetrics.PM25) 18f else null
             flowOf(
                 HistorySeries(metric, HistoryRange.DAY, window.fromS, window.toS, emptyList(), validRows = if (mean == null) 0 else 30, expectedRows = 60, mean = mean, max = mean, binned = false),
             ) as Flow<HistorySeries>

@@ -40,12 +40,12 @@ class HistoryRepositoryTest {
         val firstOne = LocalDateTime.of(2026, 11, 1, 1, 0).atOffset(ZoneOffset.ofHours(-4)).toEpochSecond()
         val secondOne = LocalDateTime.of(2026, 11, 1, 1, 0).atOffset(ZoneOffset.ofHours(-5)).toEpochSecond()
         val buckets = Buckets().apply {
-            rows += MetricBucket(thing = thing, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = firstOne, rows = 360, validRows = 360, estimatedRows = 0, mean = 10f, min = 10f, max = 10f, sampleIntervalMs = 10_000)
-            rows += MetricBucket(thing = thing, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = secondOne, rows = 360, validRows = 360, estimatedRows = 0, mean = 20f, min = 20f, max = 20f, sampleIntervalMs = 10_000)
+            rows += MetricBucket(thing = thing, metricId = AirMetrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = firstOne, rows = 360, validRows = 360, estimatedRows = 0, mean = 10f, min = 10f, max = 10f, sampleIntervalMs = 10_000)
+            rows += MetricBucket(thing = thing, metricId = AirMetrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = secondOne, rows = 360, validRows = 360, estimatedRows = 0, mean = 20f, min = 20f, max = 20f, sampleIntervalMs = 10_000)
         }
         val tmp = File.createTempFile("aq-hist-dst", "").apply { delete(); mkdirs(); deleteOnExit() }
         val repo = HistoryRepository(FileArchive(tmp), Files(), buckets, DerivedDayFiles.NONE, afterFixtures, CoreS3Files)
-        val result = repo.observeHourlyDay(thing, Metrics.PM25, fall).first()
+        val result = repo.observeHourlyDay(thing, AirMetrics.PM25, fall).first()
         assertEquals(25 * 360L, result.expectedRows)
         assertEquals(720L, result.validRows)
         assertEquals(15f, result.mean)
@@ -54,9 +54,9 @@ class HistoryRepositoryTest {
 
         // The 23 hour day expects rows at the footer cadence of its one bucket, never an assumed 10 s.
         val springNoon = LocalDateTime.of(2026, 3, 8, 12, 0).atOffset(ZoneOffset.ofHours(-4)).toEpochSecond()
-        buckets.rows += MetricBucket(thing = thing, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = springNoon, rows = 360, validRows = 360, estimatedRows = 0, mean = 10f, min = 10f, max = 10f, sampleIntervalMs = 10_000)
+        buckets.rows += MetricBucket(thing = thing, metricId = AirMetrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = springNoon, rows = 360, validRows = 360, estimatedRows = 0, mean = 10f, min = 10f, max = 10f, sampleIntervalMs = 10_000)
         val spring = HistoryWindow.endingOn(LocalDate.of(2026, 3, 9).toKotlinLocalDate(), HistoryRange.DAY, zone.toKotlinTimeZone())
-        val springResult = repo.observeHourlyDay(thing, Metrics.PM25, spring).first()
+        val springResult = repo.observeHourlyDay(thing, AirMetrics.PM25, spring).first()
         assertEquals(23 * 360L, springResult.expectedRows)
     }
 
@@ -75,9 +75,9 @@ class HistoryRepositoryTest {
         )
         val utcBucketStart = day.fromS - 1_800
         val buckets = Buckets().apply {
-            rows += MetricBucket(thing = thing, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = utcBucketStart, rows = 360, validRows = 360, estimatedRows = 0, mean = 999f, min = 999f, max = 999f, sampleIntervalMs = 10_000)
+            rows += MetricBucket(thing = thing, metricId = AirMetrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = utcBucketStart, rows = 360, validRows = 360, estimatedRows = 0, mean = 999f, min = 999f, max = 999f, sampleIntervalMs = 10_000)
         }
-        val result = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE, afterFixtures, CoreS3Files).observeHourlyDay(thing, Metrics.PM25, day).first()
+        val result = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE, afterFixtures, CoreS3Files).observeHourlyDay(thing, AirMetrics.PM25, day).first()
         assertEquals(1L, result.validRows)
         assertEquals(31f, result.mean!!, 1e-6f)
         assertEquals(1, result.points.size)
@@ -99,7 +99,7 @@ class HistoryRepositoryTest {
         val repo = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE, afterFixtures, CoreS3Files)
 
         // Day: 24 h ending at midnight after the data → 105 raw points (below the binning cap).
-        val day = repo.observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        val day = repo.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertFalse(day.binned)
         assertEquals(105, day.points.size)
         assertEquals(105L, day.validRows)
@@ -107,17 +107,17 @@ class HistoryRepositoryTest {
         assertEquals(105f / 8640f, day.coverage, 1e-6f)
         assertTrue(day.points.all { it.endS - it.startS == 10L })
         // Board temperature is not gated by pms_status and has no envelope.
-        val temp = repo.observe(thing, Metrics.BOARD_TEMP, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        val temp = repo.observe(thing, AirMetrics.BOARD_TEMP, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(41.40f, temp.mean!!, 0.01f)
         assertNull(temp.points.first().min)
 
         // A day with no data is empty, not an error.
-        val empty = repo.observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart - 86_400)).first()
+        val empty = repo.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart - 86_400)).first()
         assertTrue(empty.isEmpty)
         assertEquals(0, empty.points.size)
 
         // Week: 15-minute buckets, weighted mean equals the row mean, envelope present.
-        val week = repo.observe(thing, Metrics.PM25, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
+        val week = repo.observe(thing, AirMetrics.PM25, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
         assertEquals(2, week.points.size)
         assertEquals(27.93f, week.mean!!, 0.01f)
         assertTrue(week.points.all { it.min != null && it.max != null })
@@ -143,7 +143,7 @@ class HistoryRepositoryTest {
         }
 
         val day = HistoryRepository(archive, files, Buckets(), DerivedDayFiles.NONE, afterFixtures, CoreS3Files)
-            .observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+            .observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(105, day.points.size)
         assertEquals(105L, day.validRows)
         assertEquals(27.93f, day.mean!!, 0.01f)

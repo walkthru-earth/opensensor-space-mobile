@@ -62,6 +62,31 @@ value class Family(val id: String) {
     }
 }
 
+/**
+ * Something a thing can do or show, such as `live` or `config`. Screens ask for a capability instead
+ * of comparing schema strings, key names or families. Open, so a family plugin adds its own id
+ * without a code change here.
+ */
+@JvmInline
+value class Capability(val id: String) {
+    companion object {
+        /** LIVE samples read through a resolved template. */
+        val LIVE = Capability("live")
+
+        /** Pairing, Wi-Fi, LAN and bonds can be edited (sync protocol v2 or later). */
+        val CONFIG = Capability("config")
+
+        /** The board stores the fitted sensor's sticker serial and can opt in to a batch estimate. */
+        val SENSOR_IDENTITY = Capability("sensor-identity")
+
+        /** The board writes the unvalidated Plantower batch estimate column. */
+        val BATCH_ESTIMATE = Capability("batch-estimate")
+
+        /** An air profile whose LIVE shows a physical PM2.5 on the PM2.5 scale, the particle cards. */
+        val PARTICLES = Capability("particles")
+    }
+}
+
 /** A value a [ValidityGate.Equals] compares with, a number, a string or a boolean. */
 sealed interface GateValue {
     data class Number(val value: Double) : GateValue
