@@ -1,4 +1,4 @@
-# Transports — BLE, LAN, pairing, the token, reconnect
+# Transports, BLE, LAN, pairing, the token, reconnect
 
 **Scope:** the two byte pipes behind `DeviceTransport`, how the repository picks one, pairing, the LAN token lifecycle, link loss.
 **Code:** Android `data/ble/BleLinkDriver.kt`, `BleScanner.kt`; `data/lan/TcpLinkDriver.kt`, `LanDiscovery.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionManager.kt`, `DeviceFacade.kt`, `DeviceLinkOwner.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`), `DeviceIdentityClaims.kt`; `ui/permissions/LanPermission.kt`. Shared in `core/sync` commonMain: `data/ble/DeviceTransport.kt`, `DeviceSession.kt`, `FrameRecorder.kt`; `data/lan/LanTokenPolicy.kt`, `LanFailure.kt`; `data/DeviceContinuityPolicy.kt`, `TransportSelector.kt`, `ConnectionIntent.kt`. `core/protocol` `LanFrameSplitter.kt` (socket slices to frames).
@@ -42,7 +42,7 @@ where `xxxx` is the last four hex digits of `device_id`. Both phones find boards
 service UUID alone (Android `ScanFilter.setServiceUuid`, iOS `scanForPeripherals(withServices:)`)
 and Wi-Fi boards by the `_ossync._tcp` service type, so the app has no name prefix. The advertised
 name and the DNS-SD instance name are display data only. Identity comes from INFO `dev` and
-`station`.
+`thing`.
 
 `DeviceConnectionManager` owns one controller per enrolled public Bluetooth endpoint. Each has
 its own session, reconnect, manifest and sync state; selecting another device does not close it.
@@ -154,15 +154,15 @@ measurements do not establish Android/iPhone throughput after the upgrade.
 
 | | Bluetooth LE (`BleLinkDriver`) | LAN (`TcpLinkDriver`) |
 | --- | --- | --- |
-| Discovery | GATT scan for the service UUID (`BleScanner`), any advertised name, timeboxed by `ScanPlan`: `LOW_LATENCY` until 2 s after the first result or 10 s, then `BALANCED`, stop at 45 s; initial starts and restarts share a process-local five-starts-per-30-s budget with `AdvertFlagScan`. Exhausted discovery returns a scan failure without a radio start. Step down and flag re-registration reserve one slot for discovery. The policy is conservative, Android vendor limits and process restarts can differ. My devices folds adverts in `NearbyAdverts` (seen map at most every 250 ms, Room `touch` at most once per device per 60 s) | mDNS `_ossync._tcp` via `NsdManager` (`LanDiscovery`), TXT `station`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |
+| Discovery | GATT scan for the service UUID (`BleScanner`), any advertised name, timeboxed by `ScanPlan`: `LOW_LATENCY` until 2 s after the first result or 10 s, then `BALANCED`, stop at 45 s; initial starts and restarts share a process-local five-starts-per-30-s budget with `AdvertFlagScan`. Exhausted discovery returns a scan failure without a radio start. Step down and flag re-registration reserve one slot for discovery. The policy is conservative, Android vendor limits and process restarts can differ. My devices folds adverts in `NearbyAdverts` (seen map at most every 250 ms, Room `touch` at most once per device per 60 s) | mDNS `_ossync._tcp` via `NsdManager` (`LanDiscovery`), TXT `thing`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |
 | Auth | LE Secure Connections bond; passkey/PIN modes require encrypted, authenticated access; explicit lab `none` mode uses encrypted Just Works without MITM authentication | `"OSS1"` + 32-byte token, obtainable **only** over BLE; the socket itself is unencrypted by contract and does not authenticate server identity |
-| Framing | one notification per frame; `payload_max = min(MTU − 3, 512)` — Android silently drops notifications above the 512-byte GATT attribute limit; control requests ≤ 512 B | `len` u16 LE + frame; `payload_max` from `HELLO` (1024), `mtu` reports `payload_max + 3` |
-| Pushes | `status` / `live` characteristics. The firmware omits a snapshot notification larger than `MTU − 3` (snapshots are at most 480 B), so below MTU 483 the phone also long reads both every 10 s (`SnapshotPoller` on Android, `BleSnapshotReads` on iOS). Reads start once setup is done and stop with the link. On Android a tick skips while a transfer holds or borrows the link, and otherwise queues behind other GATT ops on `opMutex`. It runs whenever the session is open, also with the app in the background while a link the UI opened stays up. On iOS a tick skips while a run, command, lease, token request or any GATT op holds the link, and runs only while the link is kept for on screen or running work | `STATUS` 0x48 / `LIVE` 0x49 frames, **demultiplexed by type byte in the transport's single reader loop** — they may sit between two `CHUNK`s; `DeviceSession` is byte-for-byte identical for both pipes |
+| Framing | one notification per frame; `payload_max = min(MTU − 3, 512)`, Android silently drops notifications above the 512-byte GATT attribute limit; control requests ≤ 512 B | `len` u16 LE + frame; `payload_max` from `HELLO` (1024), `mtu` reports `payload_max + 3` |
+| Pushes | `status` / `live` characteristics. The firmware omits a snapshot notification larger than `MTU − 3` (snapshots are at most 480 B), so below MTU 483 the phone also long reads both every 10 s (`SnapshotPoller` on Android, `BleSnapshotReads` on iOS). Reads start once setup is done and stop with the link. On Android a tick skips while a transfer holds or borrows the link, and otherwise queues behind other GATT ops on `opMutex`. It runs whenever the session is open, also with the app in the background while a link the UI opened stays up. On iOS a tick skips while a run, command, lease, token request or any GATT op holds the link, and runs only while the link is kept for on screen or running work | `STATUS` 0x48 / `LIVE` 0x49 frames, **demultiplexed by type byte in the transport's single reader loop**, they may sit between two `CHUNK`s; `DeviceSession` is byte-for-byte identical for both pipes |
 | Liveness | GATT link state | `STATUS` keep-alive after 120 s idle (`KEEPALIVE_POLL_MS` 15 s); link declared dead after `DEAD_AFTER_MS` 180 s without a byte |
 | Timeouts | connect 15 s unattended (`BACKGROUND_BLE_CONNECT_MS`), `requestMtu` 10 s | `CONNECT_TIMEOUT_MS` 5 s, `HANDSHAKE_TIMEOUT_MS` 8 s, `PUSH_WAIT_MS` 10 s (`readStatus`), `LIVE_WAIT_MS` 15 s (`readLive`) |
 | Framing loss | n/a (per-notification) | zero-length or oversize frame, or EOF mid-frame → close the socket (a resync could deliver a wrong `CHUNK`) |
 | Kept alive by | `dataSync` foreground service during a transfer; nothing while idle | the same + `LanWifiLock` only while a LAN transfer runs |
-| Serialization | **one GATT op at a time** — `opMutex` around every read/write/descriptor call; a callback completes the pending op only when its kind and characteristic match (`PendingGattOperation`), so a late callback is dropped | one socket, one reader loop |
+| Serialization | **one GATT op at a time**, `opMutex` around every read/write/descriptor call; a callback completes the pending op only when its kind and characteristic match (`PendingGattOperation`), so a late callback is dropped | one socket, one reader loop |
 
 ## Pairing (BLE)
 
@@ -175,13 +175,13 @@ Display-equipped firmware shows a random six-digit pairing passkey; headless fir
 per-device fixed PIN obtained through the owner's physical provisioning path. Android handles
 the pairing dialog. `createBond()` before first characteristic access if unbonded; GATT status 5 / 15 / 133
 during pairing → wait for `BOND_BONDED`, retry the operation once. Reconnects are silent.
-`allowBonding = false` (unattended path) treats "not bonded" as a failure — never a passkey dialog
+`allowBonding = false` (unattended path) treats "not bonded" as a failure, never a passkey dialog
 nobody can answer. MTU < 247 is refused.
 
 ### Reset, reflash and identity continuity
 
 The wire INFO has no cryptographic fingerprint. `dev` is the full 12-hex Wi-Fi hardware MAC,
-`station` is a random UUID persisted in NVS, `boot` is a fresh random identifier per boot,
+`thing` is a random UUID persisted in NVS `parquet/thing`, `boot` is a fresh random identifier per boot,
 `fw` is a text label and `dict` hashes the telemetry dictionary, not the firmware binary. `desc`
 is the first 16 hex of the SHA-256 of the board template the firmware serves over
 `GET_DESCRIPTOR`. Both links fetch it after open, BLE only once bonded, see
@@ -310,10 +310,10 @@ After `REBOOTING(delay_ms)`: wait `delay_ms`, drop the session, wait `REBOOT_REC
 
 ## Local-network permission (API 37+)
 
-**Path B — broad `ACCESS_LOCAL_NETWORK` runtime permission**, not the per-device picker
+**Path B, broad `ACCESS_LOCAL_NETWORK` runtime permission**, not the per-device picker
 (`DiscoveryRequest.FLAG_SHOW_PICKER`): the app manages devices persistently and reconnects on its
 own. It is in the NEARBY_DEVICES group with the Bluetooth permissions so it is *usually* granted with
-them — but a runtime permission can be missing while its group is granted, and below API 37 the
+them, but a runtime permission can be missing while its group is granted, and below API 37 the
 constant does not exist. `LanPermission` returns "granted" below 37 and asks above; a denial hides
 LAN with an explanation while BLE keeps working. `INTERNET` covers these local sockets
 and anonymous, read-only public feed and basemap GETs behind
@@ -342,8 +342,8 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 | Edit… | Affects… |
 | --- | --- |
 | `DeviceTransport` interface | all three transports, `DeviceSession`, repository, `TransportFactory` |
-| `TcpLinkDriver` reader loop | push demux (`LIVE` between `CHUNK`s) — `TcpLinkDriverTest` asserts it |
-| `BleLinkDriver.allowBonding` / timeouts | `AutoSyncRunner` path (`bleUnattended`) — a passkey dialog in the background is a bug |
+| `TcpLinkDriver` reader loop | push demux (`LIVE` between `CHUNK`s), `TcpLinkDriverTest` asserts it |
+| `BleLinkDriver.allowBonding` / timeouts | `AutoSyncRunner` path (`bleUnattended`), a passkey dialog in the background is a bug |
 | `LanTokenPolicy` | repository `tryLan`, token refetch after Ready, snackbar copy |
 | `DeviceContinuityPolicy` / `DeviceIdentityClaims` | INFO acceptance, thing epochs, credential renewal and prevention of duplicate physical-device owners |
 | `DeviceConnectionManager` | per-device ownership and snapshots; selection must not close another controller |

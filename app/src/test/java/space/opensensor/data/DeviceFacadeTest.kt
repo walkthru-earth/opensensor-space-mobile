@@ -701,7 +701,7 @@ class DeviceFacadeTest {
         // While the link is down the card changes: every file not yet archived is gone and one new
         // file appears. A resume driven by the previous plan would OPEN names that no longer exist.
         val replacement = FakeTransport.FakeFile(
-            "station=${h.device.thing}/year=2026/month=09/day=17/data_0900_${h.device.bootId}_20000-20089-90.parquet",
+            "thing=${h.device.thing}/year=2026/month=09/day=17/data_0900_${h.device.bootId}_20000-20089-90.parquet",
             h.device.files.first { it.name in done }.bytes,
         )
         h.device.disconnect()
@@ -1487,7 +1487,7 @@ class DeviceFacadeTest {
         )
 
         fun newFile() = FakeTransport.FakeFile(
-            "station=${device.thing}/year=2026/month=09/day=17/data_0900_${device.bootId}_20000-20089-90.parquet",
+            "thing=${device.thing}/year=2026/month=09/day=17/data_0900_${device.bootId}_20000-20089-90.parquet",
             device.files.first().bytes,
         )
 

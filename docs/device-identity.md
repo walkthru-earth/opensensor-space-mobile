@@ -25,7 +25,7 @@ Never show or log a stored PIN, Wi-Fi PSK or LAN token.
 | --- | --- | --- |
 | BLE address | Public, stable transport address. The enrollment key | Scan filters and the Android presence association use it |
 | `info.dev` | Full 12-hex Wi-Fi thing MAC | Normally stable. Correlation evidence, not a credential |
-| `info.station` | Random UUID in NVS `parquet/station` | Survives a normal reset, recreated after an NVS erase |
+| `info.thing` | Random Thing UUID in NVS `parquet/thing` | Survives a normal reset, recreated after an NVS erase |
 | `info.boot` | Random 128-bit boot ID | Changes every boot, never means a new device |
 | `info.fw` | Firmware version text | Supported versions are accepted automatically |
 | `info.dict` and `schema` | Measurement dictionary digest and schema ID | Refresh interpretation only |

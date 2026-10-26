@@ -13,8 +13,8 @@ class BundledCatalogTest {
     private val indexFile = "templates/index.json"
 
     // The current digests, aq-parquet docs/shared/templates (#86). A desc move keeps them.
-    private val cores3Dict = "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94"
-    private val waveshareDict = "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb"
+    private val cores3Dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
+    private val waveshareDict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7"
     private val unknownDict = "a".repeat(64)
     private val cores3File = "templates/m5stack-cores3/$cores3Dict.json"
     private val waveshareFile = "templates/waveshare-esp32-s3-sim7670g/$waveshareDict.json"
@@ -41,12 +41,17 @@ class BundledCatalogTest {
         // The a017edf bytes carry the retired e5060fb7 digest. The firmware bytes keep every fact it
         // reviewed and only add what it left out, a unit, property, aggregate or code classes. A unit
         // of 1 now sits in the column, so the firmware drops its unit label. A plausible range may only
-        // widen, as the board temperature range did to the BMI270 rating of -40 to 85.
+        // widen, as the board temperature range did to the BMI270 rating of -40 to 85. Dictionary v7
+        // replaces the two H3 centre columns with location_source and geometry, and the sensor board
+        // follows the schema name.
         val reviewed = BoardTemplate.parse(CORES3_TEMPLATE)
         val bundled = assertNotNull(BundledCatalog.template(cores3Dict))
-        reviewed.datastreams.forEach { column ->
+        val replaced = setOf("h3_center_lat_e7", "h3_center_lon_e7")
+        reviewed.datastreams.filterNot { it.name in replaced }.forEach { column ->
             val b = assertNotNull(bundled.datastream(column.name), column.name)
             val filled = column.copy(
+                sensor = column.sensor?.copy(board = b.sensor?.board),
+                fieldId = b.fieldId,
                 unit = column.unit ?: b.unit,
                 property = column.property ?: b.property,
                 aggregate = column.aggregate ?: b.aggregate,
@@ -165,7 +170,7 @@ class BundledCatalogTest {
         val index = ModelJson.parseTemplateIndex(BundledFiles.files.getValue("templates/index.json")).associate { it.dict to it.desc }
         assertEquals(index.getValue(cores3Dict), BundledCatalog.template(cores3Dict)?.key?.desc)
         assertEquals(index.getValue(waveshareDict), BundledCatalog.template(waveshareDict)?.key?.desc)
-        assertEquals(listOf("cores3-telemetry-v5", "waveshare-sim7670g-telemetry-v5"), BundledCatalog.templates.map { it.schema })
+        assertEquals(listOf("cores3-telemetry-v6", "waveshare-sim7670g-telemetry-v6"), BundledCatalog.templates.map { it.schema })
     }
 
     @Test
@@ -190,7 +195,7 @@ class BundledCatalogTest {
     @Test
     fun theIndexSchemaMustMatchTheTemplateSchema() {
         val index = BundledFiles.files.getValue(indexFile)
-        val renamed = index.replace("\"schema\": \"cores3-telemetry-v5\"", "\"schema\": \"cores3-telemetry-v99\"")
+        val renamed = index.replace("\"schema\": \"cores3-telemetry-v6\"", "\"schema\": \"cores3-telemetry-v99\"")
         assertTrue(renamed != index)
         val error = assertFailsWith<IllegalArgumentException> { BundledCatalog.templatesOf(BundledFiles.files + (indexFile to renamed)) }
         assertTrue("schema" in error.message.orEmpty(), error.message)
@@ -206,7 +211,7 @@ class BundledCatalogTest {
     @Test
     fun aRealFirmwareDescResolvesWithoutADict() {
         // The desc aq-parquet firmware writes in template.sha256 for the CoreS3 v5 template.
-        val desc = "bb0ab0a3eaafb05e45bbbf5216194ab808110df92e6ee277c8ef2af6f2f314b0"
+        val desc = "1c9511bd6836876bf90bbdbe3224b00bd5d176e0fdd5293d5ee6dd73ef6ea45a"
         val template = assertNotNull(BundledCatalog.templateByDesc(desc))
         assertEquals(cores3Dict, template.dict)
         assertEquals(desc, template.key.desc)

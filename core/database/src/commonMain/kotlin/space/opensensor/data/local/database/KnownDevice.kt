@@ -16,7 +16,7 @@ data class KnownDevice(
     @PrimaryKey override val address: String,
     /** Advertised local name such as `OS-6b40`, shown as is and never parsed. */
     override val name: String?,
-    /** `info.station` UUID once read; null until the first successful connection. */
+    /** `info.thing` UUID once read; null until the first successful connection. */
     override val thing: String?,
     /** `info.dev`, 12 hex. */
     val deviceId: String?,
@@ -52,7 +52,7 @@ data class KnownDevice(
 
     /** Safe for logs: identity without the secret. */
     override fun toString(): String =
-        "KnownDevice(address=$address, name=$name, station=$thing, lanToken=${if (lanToken != null) "<set>" else "null"}, lanPort=$lanPort, autoSync=$autoSync, companion=$companionAssociationId)"
+        "KnownDevice(address=$address, name=$name, thing=$thing, lanToken=${if (lanToken != null) "<set>" else "null"}, lanPort=$lanPort, autoSync=$autoSync, companion=$companionAssociationId)"
 
     companion object {
         /** API 31–32 associations have no id visible to the app; this marks "associated, id unknown". */

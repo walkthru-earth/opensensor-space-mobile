@@ -36,8 +36,8 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FilesControllerTest {
-    private val nameA = "station=s/year=2026/month=09/day=17/data_0900_b_1-2-1.parquet"
-    private val nameB = "station=s/year=2026/month=09/day=17/data_1000_b_3-4-1.parquet"
+    private val nameA = "thing=s/year=2026/month=09/day=17/data_0900_b_1-2-1.parquet"
+    private val nameB = "thing=s/year=2026/month=09/day=17/data_1000_b_3-4-1.parquet"
     private val bytesA = "PAR1-a-PAR1".encodeToByteArray()
     private val bytesB = "PAR1-b-PAR1".encodeToByteArray()
 
@@ -209,7 +209,7 @@ class FilesControllerTest {
         return Fixture(this, store, Index(listOf(a, b, other)), owner, daily, holdDaily)
     }
 
-    private val orphanName = "station=s/year=2026/month=09/day=17/data_1100_b_5-6-1.parquet"
+    private val orphanName = "thing=s/year=2026/month=09/day=17/data_1100_b_5-6-1.parquet"
 
     /** The names inside a STORED zip, read from its central directory. */
     private fun zipNames(zip: ByteArray): List<String> {
@@ -543,7 +543,7 @@ class FilesControllerTest {
         assertEquals(listOf("t"), f.controller.state.value.records.map { it.thing })
         // Another thing's new file does not reach this owner's list.
         val before = f.controller.state.value
-        f.index.rows.value = f.index.rows.value + record("s", "station=s/year=2026/month=09/day=21/data_0900_b_1-2-1.parquet", bytesA)
+        f.index.rows.value = f.index.rows.value + record("s", "thing=s/year=2026/month=09/day=21/data_0900_b_1-2-1.parquet", bytesA)
         advanceUntilIdle()
         assertEquals(before.records, f.controller.state.value.records)
         f.owner.value = null

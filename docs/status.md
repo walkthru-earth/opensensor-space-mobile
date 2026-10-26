@@ -1,8 +1,17 @@
-# Status — what is verified, where, and what is next
+# Status, what is verified, where, and what is next
 
 **Scope:** a dated log of what was checked and where. Host tests, the iOS simulator, an Android phone and an iPhone are kept apart, and anything not recorded here or in a board bench file is unverified.
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
+
+## 2026-10-26, Thing contract and dictionary v7 templates (code only)
+
+Host tests and the iOS simulator only. No phone run is recorded.
+
+- The bundled templates are byte copies of aq-parquet 9915aec `docs/shared/templates`, CoreS3
+  (`3b4d8500…`, firmware v6.21) and Waveshare (`50a53393…`, firmware v2.15). The two H3 centre
+  columns become `location_source` and `geometry`. The v6 digests are retired.
+- To check on phones. LIVE and History on boards flashed from aq-parquet main.
 
 ## 2026-10-26, History reads template datastreams (code only)
 
@@ -241,7 +250,7 @@ Mermaid diagrams, is `SYNC-STABILITY-INVESTIGATION-2026-10-10.md` in the parent 
 Ignored app evidence is under `ios/build/DeviceInstall/evidence-bed7949/`.
 No current iPhone radio qualification was performed.
 
-## 2026-10-10 — incomplete LAN listings, memory bounds and Android recovery
+## 2026-10-10, incomplete LAN listings, memory bounds and Android recovery
 
 On the connected OnePlus 7 Pro (GM1911, Android 16), the old firmware returned
 successful Wi-Fi LIST snapshots of only 12–13 files, ending near 02:30–02:45
@@ -284,7 +293,7 @@ Captures are ignored board
 artifacts under `lan-memory-20261010/`. This is a short Android/SD/LAN check;
 overnight endurance and real iPhone radio behavior are not qualified.
 
-## 2026-10-10 — pushed interval fix and fresh iPhone installation
+## 2026-10-10, pushed interval fix and fresh iPhone installation
 
 Firmware `4d20dad` and mobile `655d865` were pushed to their GitHub `main`
 branches. The mobile pre-push `verify` gate passed. Xcode 27.0 built the signed
@@ -302,7 +311,7 @@ a successful launch remain pending. No iPhone BLE, LAN or file transfer behavior
 is established by this installation. Build/install/launch evidence is retained
 under ignored `ios/build/DeviceInstall/evidence-20261010/`.
 
-## 2026-10-10 — interval fragmentation fix, clean Android install and shared iOS checks
+## 2026-10-10, interval fragmentation fix, clean Android install and shared iOS checks
 
 Android and iOS now use the shared clock policy to request fresh device status
 before automatic maintenance. A usable recent external anchor survives reconnect;
@@ -328,7 +337,7 @@ build also passed. Independent review completed without a remaining blocking
 finding. Logs are ignored build artifacts. The owner deferred iPhone deployment;
 no iPhone install or radio test was performed for this change.
 
-## 2026-10-09 — fresh installs on Android and iPhone
+## 2026-10-09, fresh installs on Android and iPhone
 
 After the owner deleted both apps, GitHub `main` still matched local commit
 `76f31e2`. The locally signed, minified Android release APK built with
@@ -341,7 +350,7 @@ unlocked. CoreDevice listed its process running. These are fresh install and
 launch checks; no sensor connection, archive, permission or screen behavior was
 tested on either phone.
 
-## 2026-10-09 — iPhone install of current main
+## 2026-10-09, iPhone install of current main
 
 Commit `76f31e2` on `main` matched GitHub `origin/main`. Xcode 27.0 built the
 signed Debug iOS app for the paired iPhone 16 Pro using the existing local
@@ -351,7 +360,7 @@ SHA-256 was `85a523c66b2a192f44b8e6dd1a2ef91533bdb2a67596cdd711bcc777818ed3a2`.
 This confirms the build, install and launch; no screen, radio or sync behavior was
 inspected during this check.
 
-## 2026-10-09 — peacock expressions and Today layout (OnePlus and host/simulator)
+## 2026-10-09, peacock expressions and Today layout (OnePlus and host/simulator)
 
 Eight transparent expression portraits now share the original peacock's identity,
 with wings, masks and feather gestures for air quality, missing data and work states.
@@ -383,7 +392,7 @@ corrected, and the audit now declares the external source and catalogue files it
 reads as Gradle inputs. All 19 copy-audit tests passed; a temporary source violation
 also proved that a normal incremental run invalidates the prior passing result.
 
-## 2026-10-09 — OnePlus update after automatic UTC changes
+## 2026-10-09, OnePlus update after automatic UTC changes
 
 Mobile commit `5d5db51` was pushed to `main` after the full pre-push `verify` gate
 passed. Its debug APK was installed over the existing app with `adb install -r`
@@ -416,7 +425,7 @@ Older phone readings with no retained boot anchor remain undated as designed. Pr
 inspection via `adb run-as` was unavailable because this phone ROM rejected its target-SDK-37
 SELinux context; the observations above use app UI and firmware serial evidence.
 
-## 2026-10-09 — automatic UTC and derived partition recovery (host/simulator)
+## 2026-10-09, automatic UTC and derived partition recovery (host/simulator)
 
 The working tree now synchronizes device UTC automatically on Android/iOS connection,
 without a manual clock setting. A boot-scoped receipt preserves the acknowledged clock
@@ -468,7 +477,7 @@ on "Sensors nearby" with the known sensor listed and no permission dialog. `dump
 three still not granted after launch. Still to check on this phone: Scan asks for Nearby
 devices, Sync now asks for notifications, deny twice then the settings link, and the info sheets.
 
-## 2026-10-08 — iOS interruption recovery and Parquet export
+## 2026-10-08, iOS interruption recovery and Parquet export
 
 The owner reports that switching to another app during M5Stack collection stops sync,
 and the next run appears to start over. Code inspection confirms that the old scene
@@ -652,7 +661,7 @@ The focused History presentation tests and `./gradlew --no-daemon verify` passed
 
 ## 2026-09-16 to 2026-09-29, earlier changes
 
-- **2026-09-29** — Rebranded visible copy/releases/exports without changing Android install or wire
+- **2026-09-29**, Rebranded visible copy/releases/exports without changing Android install or wire
   identities. Added per-device assisted ViewModels/controllers, two-transfer budget, shared legacy
   mDNS resolver, foreground aggregation and worker ownership; immutable archive writer leases and
   reference-counted LAN protection; Room v9 station epochs and continuity policy; reviewed nullable
@@ -662,20 +671,20 @@ The focused History presentation tests and `./gradlew --no-daemon verify` passed
   is recorded above. Qualification and limitations are in
   [opensensor-space.md](device-identity.md).
 
-- **2026-09-20** — LAN bearer tokens are encrypted at rest with Android Keystore AES-GCM. Startup
+- **2026-09-20**, LAN bearer tokens are encrypted at rest with Android Keystore AES-GCM. Startup
   completes plaintext migration before Auto-sync services can consume tokens. Missing keys, failed
   authentication and malformed encrypted values fail closed by clearing only that device's token and
   port (the device row remains for a later BLE refresh); DAO reads and flows stay usable while
   unrelated failures still surface. Covered by focused JVM tests; not yet exercised on a phone or
   across a real device-to-device transfer.
-- **2026-09-19** — **Post-sync `LIST` no longer dies with the link.** Seen on the phone after a completed sync: "LIST failed: link lost while waiting for a response" replaced the whole file list. Cause: the refresh was launched after `running = false`, i.e. after the foreground service let go of the uid, so the socket was killed under it (transport of that run not recorded — LAN + backgrounded phone fits; confirm with `adb logcat -s SyncEngine SyncFgs ConnectivityService` on the next run). The re-list now runs inside the protected run; `ManifestState` keeps the last listing through `Loading`/`Error` (`ManifestStateTest`), so the Files screen shows "Refresh failed: … — showing the last listing." instead of a blank list, and `plan` stays usable. Not yet on the phone.
-- **2026-09-18** (14:03 local) — app `678c1c0` (APK `3c454c74…`) installed on the OnePlus over Wi-Fi adb against firmware `-v6.3`; **first device-flagged wake measured** — see the firmware repo's [bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#board-1-advertising-payload-wakes-the-phone-firmware-v63-protocol-21). `setForeground` still refused (no companion association yet); Wi-Fi callback fires at every process start and is throttled as designed.
-- **2026-09-18** (evening) — **Event-driven Auto-sync** ([background-sync.md](background-sync.md#triggers--starting-a-run-before-the-period-is-up)): Companion Device Manager "wake when nearby" (association dialog on the Device screen, `CompanionPresenceService`, `REQUEST_COMPANION_*` exemptions, Room v8 `companionAssociationId`), offloaded advertising-flag scan on the firmware's new protocol-2.1 service data (`Advertisement`, `AdvertFlagScan`), Wi-Fi-arrival LAN-only run (`SyncTriggers`), `SyncTrigger` on every one-time run. 151 tests, lint clean. **Not yet on the phone**; design and measurement list in `../aq-parquet/docs/shared/background-sync-triggers.md`.
+- **2026-09-19**, **Post-sync `LIST` no longer dies with the link.** Seen on the phone after a completed sync: "LIST failed: link lost while waiting for a response" replaced the whole file list. Cause: the refresh was launched after `running = false`, i.e. after the foreground service let go of the uid, so the socket was killed under it (transport of that run not recorded, LAN + backgrounded phone fits; confirm with `adb logcat -s SyncEngine SyncFgs ConnectivityService` on the next run). The re-list now runs inside the protected run; `ManifestState` keeps the last listing through `Loading`/`Error` (`ManifestStateTest`), so the Files screen shows "Refresh failed: …, showing the last listing." instead of a blank list, and `plan` stays usable. Not yet on the phone.
+- **2026-09-18** (14:03 local), app `678c1c0` (APK `3c454c74…`) installed on the OnePlus over Wi-Fi adb against firmware `-v6.3`; **first device-flagged wake measured**, see the firmware repo's [bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#board-1-advertising-payload-wakes-the-phone-firmware-v63-protocol-21). `setForeground` still refused (no companion association yet); Wi-Fi callback fires at every process start and is throttled as designed.
+- **2026-09-18** (evening), **Event-driven Auto-sync** ([background-sync.md](background-sync.md#triggers--starting-a-run-before-the-period-is-up)): Companion Device Manager "wake when nearby" (association dialog on the Device screen, `CompanionPresenceService`, `REQUEST_COMPANION_*` exemptions, Room v8 `companionAssociationId`), offloaded advertising-flag scan on the firmware's new protocol-2.1 service data (`Advertisement`, `AdvertFlagScan`), Wi-Fi-arrival LAN-only run (`SyncTriggers`), `SyncTrigger` on every one-time run. 151 tests, lint clean. **Not yet on the phone**; design and measurement list in `../aq-parquet/docs/shared/background-sync-triggers.md`.
 
-- **2026-09-18** (later) — Files list grouped by **local calendar day** (`FileGrouping`, zone-pinned tests): the headers were the SD card's UTC `day=` folder, so at UTC+3 every file after 21:00 local sat under tomorrow. Header subtitle names the UTC folder(s); each row shows its local start time. Installed on the OnePlus (commit `c6c27cd`), not yet recorded in bench-verified.
-- **2026-09-18** — bugs found on the phone, fixed: `derived_day` upsert that never updated (every pass rebuilt every day), Today card on the UTC day, History span frozen at open time, Day re-read on every Room write. Day view → **24 hourly columns**; Files gained **Chart by file**.
-- **2026-09-17** — GeoParquet 2.0 (D11); modules split into `:core:protocol` / `:core:parquet` / `:core:history`; metric registry, tiers one row per metric (Room v7); History steps 1–5 + §4.6 time estimate; Now card, detail levels, Home cards, Collect from all loggers; first phone run fixes (foreground service, auto-reconnect, token renewal, WifiLock, resume policy, REBOOT audit); Auto-sync; protocol v2.
-- **2026-09-16** — v1 protocol bench-verified from a macOS host; decisions mirrored into `ble-sync-protocol.md`.
+- **2026-09-18** (later), Files list grouped by **local calendar day** (`FileGrouping`, zone-pinned tests): the headers were the SD card's UTC `day=` folder, so at UTC+3 every file after 21:00 local sat under tomorrow. Header subtitle names the UTC folder(s); each row shows its local start time. Installed on the OnePlus (commit `c6c27cd`), not yet recorded in bench-verified.
+- **2026-09-18**, bugs found on the phone, fixed: `derived_day` upsert that never updated (every pass rebuilt every day), Today card on the UTC day, History span frozen at open time, Day re-read on every Room write. Day view → **24 hourly columns**; Files gained **Chart by file**.
+- **2026-09-17**, GeoParquet 2.0 (D11); modules split into `:core:protocol` / `:core:parquet` / `:core:history`; metric registry, tiers one row per metric (Room v7); History steps 1–5 + §4.6 time estimate; Now card, detail levels, Home cards, Collect from all loggers; first phone run fixes (foreground service, auto-reconnect, token renewal, WifiLock, resume policy, REBOOT audit); Auto-sync; protocol v2.
+- **2026-09-16**, v1 protocol bench-verified from a macOS host; decisions mirrored into `ble-sync-protocol.md`.
 
 ## Next
 
@@ -686,10 +695,10 @@ The focused History presentation tests and `./gradlew --no-daemon verify` passed
 
 
 1. **Instrumented phone runs** → `bench-verified.md` (date, firmware SHA-256, app commit, phone): full sync over BLE and LAN with the foreground-service build; BLE/Wi-Fi coexistence soak; energy; `lan.rotate_token`, `ble.clear_bonds`, `fixed`/`none` pairing.
-2. **Auto-sync overnight on the OnePlus**: count 15-min periods that ran (`adb logcat -s AutoSyncScheduler SyncWorker CompanionPresence AdvertFlagScan SyncTriggers`), whether `setForeground` was refused, whether BLE-by-address connects with the screen off; record OEM battery settings needed. **Triggers first:** the owner taps *Set up wake when nearby* — does the association dialog find the advertising logger; does `EVENT_BLE_APPEARED` arrive after walking back in; does a screen-off LAN sync survive with the device present (no "Destroyed live tcp sockets") and does `setForeground` stop being refused. The flag scan firing within a minute of `PARQUET READY` is measured (19 s, one event); repeat for a distribution and after a Bluetooth toggle.
+2. **Auto-sync overnight on the OnePlus**: count 15-min periods that ran (`adb logcat -s AutoSyncScheduler SyncWorker CompanionPresence AdvertFlagScan SyncTriggers`), whether `setForeground` was refused, whether BLE-by-address connects with the screen off; record OEM battery settings needed. **Triggers first:** the owner taps *Set up wake when nearby*, does the association dialog find the advertising logger; does `EVENT_BLE_APPEARED` arrive after walking back in; does a screen-off LAN sync survive with the device present (no "Destroyed live tcp sockets") and does `setForeground` stop being refused. The flag scan firing within a minute of `PARQUET READY` is measured (19 s, one event); repeat for a distribution and after a Bluetooth toggle.
 3. **API 37 local-network permission** on a real Android 17 device (grant / deny / revoke while connected) and `NsdManager` across API 31–37.
 4. **Further transports** (LoRa relays) behind `DeviceTransport`; engine, archive, verification unchanged.
-5. **Opt-in cloud step after local sync** — off by default, own setting and review; `INTERNET` for LAN does not pre-approve it. Privacy boundaries: `../aq-parquet/product/mobile-architecture.md`.
+5. **Opt-in cloud step after local sync**, off by default, own setting and review; `INTERNET` for LAN does not pre-approve it. Privacy boundaries: `../aq-parquet/product/mobile-architecture.md`.
 
 ## Test phone
 
@@ -697,7 +706,7 @@ OnePlus 7 Pro, Android 16, over USB adb. `run-as` is refused on this ROM: inspec
 SyncEngine DeviceConnection TcpTransport BleTransport AutoSync SyncWorker SyncFgs`, not files.
 
 
-## 2026-10-08 — Kotlin Multiplatform iOS migration started
+## 2026-10-08, Kotlin Multiplatform iOS migration started
 
 The Android app and first iOS app now compile the same portable protocol and
 sensor-domain implementations. JVM-only Parquet/file adapters and existing
@@ -742,7 +751,7 @@ background collection were not implemented. The later Wi-Fi implementation is re
 this stage includes Apple Silicon simulator and physical iPhone targets.
 
 
-## 2026-10-08 — iOS authenticated Wi-Fi collection implemented
+## 2026-10-08, iOS authenticated Wi-Fi collection implemented
 
 The foreground iOS app now supports explicit BLE **Save Wi-Fi access** (`GET_TOKEN`),
 device-only Keychain credentials, Bonjour TXT/endpoint discovery and independent authenticated
@@ -771,7 +780,7 @@ behavior need dated phone runs. Offline archive charts, export UI and automatic 
 collection remain unimplemented on iOS. The preceding first-stage iPhone observation applies
 only to the older BLE live-reading and Bonjour-discovery app.
 
-## 2026-10-08 — iPhone rebuild with Wi-Fi card feedback
+## 2026-10-08, iPhone rebuild with Wi-Fi card feedback
 
 After `git pull --ff-only origin main` reported up to date, the local working copy
 with the in-progress LAN implementation was updated so tapping a discovered
@@ -789,7 +798,7 @@ This is build/installation evidence from a working copy, not a new authenticated
 Wi-Fi reading or transfer observation. The owner still needs to tap a Wi-Fi sensor
 and check the connection feedback and live value on the phone.
 
-## 2026-10-08 — owner-reported iPhone enrollment and slow LAN collection
+## 2026-10-08, owner-reported iPhone enrollment and slow LAN collection
 
 After the card showed that this phone needed Bluetooth enrollment, the owner
 confirmed **Save Wi-Fi access** succeeded and Wi-Fi file syncing started on the
@@ -805,7 +814,7 @@ No transfer tuning, firmware flash or app reinstall was performed during this
 investigation. An isolated same-file timing is still needed to distinguish
 request/storage latency from contention or radio behavior.
 
-## 2026-10-08 — transfer overhead and firmware scheduling improvements
+## 2026-10-08, transfer overhead and firmware scheduling improvements
 
 Android now throttles intermediate progress and debug CHUNK snapshots to 100 ms,
 retaining final/recovery events, secret redaction and trailing frame history when
@@ -833,7 +842,7 @@ pending schema work. See its [performance guide](../../aq-parquet/docs/shared/la
 Firmware has not been installed for this change; a sensor restart requires owner
 confirmation. Hardware throughput and sampling/coexistence results remain pending.
 
-## 2026-10-08 — authorized CoreS3 v6.7 deployment and measured host speed
+## 2026-10-08, authorized CoreS3 v6.7 deployment and measured host speed
 
 The owner approved installing the firmware and measuring Wi-Fi speed. After
 the required identity/security checks and verified private 16 MiB backup, the
@@ -859,7 +868,7 @@ The enhanced iPhone app remains installed with average KiB/s feedback. Actual
 Android/iPhone throughput after the firmware upgrade still needs phone observations;
 these are real-board host measurements, not phone or sustained-radio qualification.
 
-## 2026-10-09 — combined device discovery and iPhone LAN Smart Sync follow-up
+## 2026-10-09, combined device discovery and iPhone LAN Smart Sync follow-up
 
 The combined Bluetooth and `_ossync._tcp` My devices list and shared Today/Device
 navigation were built with `./gradlew --no-daemon verify`, Xcode Debug, and installed
@@ -887,7 +896,7 @@ Pro (`GM1911`, ADB `8ed37969`); its process was running after launch. APK SHA-25
 Android combined discovery, LAN-only open, and sensor collection were not exercised
 on that phone in this run.
 
-## 2026-10-09 — sensor screen and sync resilience follow-up
+## 2026-10-09, sensor screen and sync resilience follow-up
 
 Code now routes Android Reconnect through an enrolled, resolved LAN target when
 Bluetooth is unavailable. iOS validates saved hardware identity before accepting BLE

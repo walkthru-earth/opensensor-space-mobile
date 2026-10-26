@@ -19,15 +19,15 @@ class OpenSensorFooterTest {
     @Test
     fun aFullFooterGivesOnlyTheFieldsTheAppReads() {
         assertEquals(
-            OpenSensorFooter(10_000, dict, desc, thingId = "thing-a", purpose = "telemetry"),
+            OpenSensorFooter(10_000, dict, desc, thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED, purpose = "telemetry"),
             parse(opensensorFooterJson(dict, desc, 10_000, thing = "thing-a")),
         )
     }
 
     @Test
     fun theSpecExampleParses() {
-        // stac-opensensor a56dfb0 footers/cores3-telemetry-v5.json, compacted.
-        val example = """{"version":"0.1.0","station":{"id":"thing-3f2b9c1e","device_id":"441bf6e26b40","board":"m5stack-cores3","deployment_id":"unknown"},""" +
+        // stac-opensensor 4408c4e footers/cores3-telemetry-v5.json, compacted.
+        val example = """{"version":"0.1.0","thing":{"id":"thing-3f2b9c1e","device_id":"441bf6e26b40","board":"m5stack-cores3","deployment_id":"unknown","mobility":"fixed"},""" +
             """"firmware":{"version":"6.14.0","schema":"cores3-telemetry-v5","boot_id":"0f3a"},""" +
             """"dictionary":{"sha256":"e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b","version":"cores3-telemetry-v6"},""" +
             """"template":{"href":"https://raw.githubusercontent.com/walkthru-earth/stac-opensensor/main/templates/cores3-telemetry-v5.json","sha256":"fb4230b3eb6e8eac881c719f900c8bd9c7e4bbd6ad247520a27368ec9d9a7218"},""" +
@@ -39,10 +39,24 @@ class OpenSensorFooterTest {
                 "e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b",
                 "fb4230b3eb6e8eac881c719f900c8bd9c7e4bbd6ad247520a27368ec9d9a7218",
                 thingId = "thing-3f2b9c1e",
+                mobility = OpenSensorFooter.Mobility.FIXED,
                 purpose = "telemetry",
             ),
             parse(example),
         )
+    }
+
+    @Test
+    fun mobilityIsFixedOrMoving() {
+        assertEquals(OpenSensorFooter.Mobility.MOVING, parse(opensensorFooterJson(dict, desc, 10_000, mobility = "moving"))?.mobility)
+        assertEquals(null, parse("""{"version":"0.1.0","thing":{"mobility":"drifting"}}"""))
+        assertEquals(null, parse("""{"version":"0.1.0","thing":{"mobility":1}}"""))
+    }
+
+    @Test
+    fun aGeoKeyBesideOpensensorIsIgnored() {
+        val geo = """{"version":"2.0.0","primary_column":"geometry","columns":{"geometry":{"encoding":"WKB","geometry_types":["Point"],"bbox":[31.2,30.0,31.3,30.1]}}}"""
+        assertEquals(OpenSensorFooter(dictionarySha256 = dict), OpenSensorFooter.of(mapOf("geo" to geo, OpenSensorFooter.KEY to """{"version":"0.1.0","dictionary":{"sha256":"$dict"}}""")))
     }
 
     @Test
@@ -81,9 +95,9 @@ class OpenSensorFooterTest {
             """{"version":"0.1.0","acquisition":{"sample_interval_ms":"10000"}}""",
             """{"version":"0.1.0","acquisition":{"sample_interval_ms":10000.5}}""",
             """{"version":"0.1.0","acquisition":10000}""",
-            """{"version":"0.1.0","station":{"id":7}}""",
-            """{"version":"0.1.0","station":{"id":""}}""",
-            """{"version":"0.1.0","station":"thing-a"}""",
+            """{"version":"0.1.0","thing":{"id":7}}""",
+            """{"version":"0.1.0","thing":{"id":""}}""",
+            """{"version":"0.1.0","thing":"thing-a"}""",
             """{"version":"0.1.0","file":{"purpose":true}}""",
         )
         for (json in bad) assertNull(parse(json), json)
@@ -111,7 +125,7 @@ class OpenSensorFooterTest {
     @Test
     fun aRealFirmwareTemplateDigestResolvesWithoutADict() {
         // The template.sha256 aq-parquet firmware writes for the CoreS3 v5 template, with no dictionary member.
-        val real = "bb0ab0a3eaafb05e45bbbf5216194ab808110df92e6ee277c8ef2af6f2f314b0"
+        val real = "1c9511bd6836876bf90bbdbe3224b00bd5d176e0fdd5293d5ee6dd73ef6ea45a"
         assertSame(coreS3Template, FileTemplates.BUNDLED.template(null, real))
         assertSame(coreS3Template, resolve(null, real))
     }

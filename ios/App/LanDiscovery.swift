@@ -185,7 +185,7 @@ final class LanDiscovery {
             guard case .service(let name, let type, let domain, _) = result.endpoint,
                 type.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == state.lanServiceType,
                 domain == "local.", case .bonjour(let txt) = result.metadata,
-                case .string(let thing)? = txt.getEntry(for: "station"),
+                case .string(let thing)? = txt.getEntry(for: "thing"),
                 case .string(let device)? = txt.getEntry(for: "dev"),
                 case .string(let proto)? = txt.getEntry(for: "proto"), (Int(proto) ?? 0) >= 3
             else { continue }

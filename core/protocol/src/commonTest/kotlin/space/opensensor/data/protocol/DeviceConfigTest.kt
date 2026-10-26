@@ -161,4 +161,16 @@ class DeviceConfigTest {
         assertNull(DeviceConfig.parse("{}").location)
         assertEquals("location.cell=\nlocation.resolution=5\nlocation.country=\n", ConfigPatch.build { location("", 5, "") }.encode())
     }
+
+    @Test
+    fun `thing mobility round trips and phone cell is never sent`() {
+        val page1 = """{"location":{"cell":"","resolution":8,"cell_resolution":null,"lat":null,"lon":null,"country":""},"thing":{"mobility":"fixed"}}"""
+        assertEquals(ThingMobility.FIXED, DeviceConfig.parse(page1).thing?.thingMobility)
+        assertNull(DeviceConfig.parse("""{"thing":{"mobility":"drifting"}}""").thing?.thingMobility)
+        assertNull(DeviceConfig.parse("{}").thing)
+        val patch = ConfigPatch.build { thingMobility(ThingMobility.MOVING) }
+        assertEquals("thing.mobility=moving\n", patch.encode())
+        assertFalse(patch.carriesSecret)
+        assertFalse(ConfigPatch.KEY_LOCATION_PHONE_CELL in patch.encode())
+    }
 }

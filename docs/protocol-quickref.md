@@ -1,4 +1,4 @@
-# Protocol quick reference — the mirror, not the contract
+# Protocol quick reference, the mirror, not the contract
 
 **Scope:** constants as implemented in `:core:protocol`, for lookup. The **owner** is
 `../aq-parquet/docs/shared/ble-sync-protocol.md`; do not change a layout, opcode, UUID, JSON key
@@ -14,8 +14,8 @@ sequenceDiagram
   participant D as Device
   P->>D: request (opcode + args) ≤ 512 B
   D-->>P: response frame(s) … terminal frame
-  D-->>P: STATUS / LIVE pushes (any time — on LAN even between CHUNKs)
-  Note over P,D: ERROR(op, code) may replace any response — op echoes the request opcode
+  D-->>P: STATUS / LIVE pushes (any time, on LAN even between CHUNKs)
+  Note over P,D: ERROR(op, code) may replace any response, op echoes the request opcode
 ```
 
 ## GATT (`DeviceUuids`)
@@ -23,7 +23,7 @@ sequenceDiagram
 | Attribute | UUID (`255f595e-XXXX-47ed-8e0d-59994199b680`) | Role |
 | --- | --- | --- |
 | SERVICE | `0001` | the only scan filter. The board name (`OS-xxxx` today) is display data, never matched |
-| INFO | `0002` | read once: `proto`, `fw`, `station`, `max_read`, … |
+| INFO | `0002` | read once: `proto`, `fw`, `thing`, `max_read`, … |
 | STATUS | `0003` | read + notify: status JSON (≤ 480 B) |
 | LIVE | `0004` | read + notify: live JSON (10-s sample, ≤ 480 B) |
 | CONTROL | `0005` | write: request |
@@ -58,7 +58,7 @@ sequenceDiagram
 | 1 malformed request · 2 invalid name · 3 not a finalized Parquet · 4 open failed · 5 bad handle · 6 range outside file · 8 storage unavailable · 9 invalid epoch (2020–2100) · 10 nothing to flush · 11 unknown opcode | | outcome for that request (`FileOutcome.DeviceError` for files), never a broken pipe |
 | 7 | busy | LAN connect: fall back to BLE |
 | 12 | invalid config | names the key; nothing changed on the device |
-| 13 | not allowed on this link | `GET_TOKEN` over LAN — force BLE |
+| 13 | not allowed on this link | `GET_TOKEN` over LAN, force BLE |
 | 14 | authentication failed | LAN handshake: stored token is dead → clear + refetch over BLE (`LanTokenPolicy`) |
 | 15 | Wi-Fi unavailable | `WIFI_SCAN_END.status` → typed "Wi-Fi unavailable" |
 | 17 | no descriptor | `GET_DESCRIPTOR`: the board serves no template, keep the bundled one (`NoDescriptorException`) |
@@ -70,7 +70,7 @@ anything else is a `ProtocolViolationException`.
 
 | Constant | Value |
 | --- | --- |
-| mDNS service | `_ossync._tcp` (TXT: `station`, `dev`, `fw`, `proto`) |
+| mDNS service | `_ossync._tcp` (TXT: `thing`, `dev`, `fw`, `proto`) |
 | `DEFAULT_PORT` | 47390 |
 | Handshake | unframed `"OSS1"` + 32-byte token, phone → device within `HANDSHAKE_TIMEOUT_MS` 5 s; answer is framed `HELLO(payload_max, proto)` or `ERROR` 14 / 7 |
 | Frame | `len` u16 LE + frame; `PAYLOAD_MAX` 1024 device→phone, `REQUEST_MAX` 512 phone→device |
@@ -150,9 +150,9 @@ from the column and its label from the app profile. The thing joins the bundled 
 under `core/model/bundled/templates/` with the app profile under `core/model/bundled/profiles/`
 (`BundledCatalog.thing`). The templates are aq-parquet `docs/shared/templates` copied byte for
 byte, `<board>/<dict>.json` and `index.json`, and their `live_keys` list the keys in board LIVE order.
-Only the current digest of each board is bundled, at the firmware version the bundled templates name. CoreS3 (`4f80c26c…`)
+Only the current digest of each board is bundled, at the firmware version the bundled templates name. CoreS3 (`3b4d8500…`)
 sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
-because they are always null on CoreS3. Waveshare (`6f567b38…`) sends `t`, ambient air
+because they are always null on CoreS3. Waveshare (`50a53393…`) sends `t`, ambient air
 temperature, `rh` and `bstate`, the battery health code. A new firmware digest is a copy of the
 published templates, a profile file swap and a fixture refresh, with no code change. Any other digest, older ones included,
 has no LIVE view, and Today says so only after `INFO` arrived. The thing join (`BundledCatalog.thing`) still shows such a board from a
@@ -169,7 +169,8 @@ new session resume the run, and verified files already on the phone are never fe
 
 `GET_CONFIG` keeps its legacy empty body. Page byte `1` requests the `location`
 object with cell, maximum `resolution`, actual `cell_resolution`, derived
-center `lat`/`lon` and declared `country`. It uses the same CONFIG/CONFIG_CHUNK
+center `lat`/`lon` and declared `country`, plus the `thing` object with
+`mobility` (`fixed` or `moving`, default `fixed`). It uses the same CONFIG/CONFIG_CHUNK
 framing and 480-byte JSON limit. `Request.GetLocation` and `DeviceSession.getLocation`
 return unsupported when older firmware returns the legacy object or rejects
 that selector. A missing location object is not an unset supported location.
@@ -177,6 +178,10 @@ that selector. A missing location object is not an unset supported location.
 `ConfigPatch.location` sends only `location.cell`, `location.resolution` and
 `location.country`. SET_CONFIG acknowledges the legacy page; the app then reads
 page 1 and checks its saved values. No raw GPS coordinates cross this API.
+`ConfigPatch.Builder.thingMobility` sends `thing.mobility`, and the firmware splits the file on a
+change. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
+board keeps in RAM and writes with `location_source` 3. No released firmware accepts it, so the
+app names the key and never sends it.
 Pages 2–4 are firmware time policy/status and server configuration; this app
 currently exposes location provisioning. See [device-location.md](device-location.md)
 and the firmware-owned [wire contract](../../aq-parquet/docs/shared/ble-sync-protocol.md).

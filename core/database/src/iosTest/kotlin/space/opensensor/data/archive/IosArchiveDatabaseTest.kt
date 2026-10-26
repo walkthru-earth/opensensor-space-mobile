@@ -36,7 +36,7 @@ class IosArchiveDatabaseTest {
     private val dir = "$base/database"
     private val store = IosArchiveStore(finals, "$base/archive-partial")
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
-    private val name = "station=$thing/year=2026/month=09/day=17/data_0930.parquet"
+    private val name = "thing=$thing/year=2026/month=09/day=17/data_0930.parquet"
     private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
     private val fm = NSFileManager.defaultManager
 

@@ -94,7 +94,7 @@ class HistoryOrchestratorTest {
     private val index = Index()
 
     private suspend fun waiting(part: String): ArchiveRecord {
-        val r = ArchiveRecord(thing, "station=$thing/day/$part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        val r = ArchiveRecord(thing, "thing=$thing/day/$part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
         return r
@@ -351,7 +351,7 @@ class HistoryOrchestratorTest {
     @Test
     fun startSweepsThenAppliesTheFeedQuotaThenIndexesWhatTheJanitorAdopted() = runTest {
         // A final on disk with no record, as a crash between commit and insert leaves it.
-        val orphan = ArchiveRecord(thing, "station=$thing/day/orphan.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        val orphan = ArchiveRecord(thing, "thing=$thing/day/orphan.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[orphan.key] = bytes
         val events = ArrayList<String>()
         val (cache, blockStore) = blocks { events += "feed quota" }

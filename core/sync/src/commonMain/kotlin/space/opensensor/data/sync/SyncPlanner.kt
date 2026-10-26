@@ -8,16 +8,16 @@ import space.opensensor.data.protocol.SafeName
  * Where a manifest entry sits in the device's Hive tree.
  *
  * Names are the relative paths the firmware prints:
- * `station=…/year=…/month=…/day=…/data_HHMM_<boot>_<first>-<last>-<n>.parquet`,
- * `station=…/unsynced/boot=…/…`, `benchmarks/boot=…/…`, or `legacy-parquet/…`.
+ * `thing=…/year=…/month=…/day=…/data_HHMM_<boot>_<first>-<last>-<n>.parquet`,
+ * `thing=…/unsynced/boot=…/…`, `benchmarks/boot=…/…`, or `legacy-parquet/…`.
  */
 sealed interface HivePartition {
-    /** Rows with UTC: `station=…/year=YYYY/month=MM/day=DD/`. */
+    /** Rows with UTC: `thing=…/year=YYYY/month=MM/day=DD/`. */
     data class Dated(val thing: String, val year: Int, val month: Int, val day: Int) : HivePartition {
         val isoDate: String get() = "${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}"
     }
 
-    /** Rows sampled before the clock was set: `station=…/unsynced/boot=<id>/`. */
+    /** Rows sampled before the clock was set: `thing=…/unsynced/boot=<id>/`. */
     data class Unsynced(val thing: String, val boot: String) : HivePartition
 
     /** `benchmarks/boot=<id>/…` */
@@ -32,8 +32,8 @@ sealed interface HivePartition {
     companion object {
         private fun pad(value: Int, width: Int): String = value.toString().padStart(width, '0')
 
-        private val DATED = Regex("""^station=([^/]+)/year=(\d{4})/month=(\d{1,2})/day=(\d{1,2})/[^/]+$""")
-        private val UNSYNCED = Regex("""^station=([^/]+)/unsynced/boot=([^/]+)/[^/]+$""")
+        private val DATED = Regex("""^thing=([^/]+)/year=(\d{4})/month=(\d{1,2})/day=(\d{1,2})/[^/]+$""")
+        private val UNSYNCED = Regex("""^thing=([^/]+)/unsynced/boot=([^/]+)/[^/]+$""")
         private val BENCH = Regex("""^benchmarks/(?:boot=([^/]+)/)?[^/]+$""")
 
         fun of(name: String): HivePartition {

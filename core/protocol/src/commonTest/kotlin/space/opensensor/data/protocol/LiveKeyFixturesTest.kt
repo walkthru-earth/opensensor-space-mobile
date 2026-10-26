@@ -18,8 +18,8 @@ class LiveKeyFixturesTest {
     private data class FixtureBuild(val board: String, val digest: String, val keys: List<String>)
 
     private val current = listOf(
-        FixtureBuild("cores3", "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "n5", "n10", "imu_t", "als", "vbus", "bat", "pct", "chg", "t", "rh")),
-        FixtureBuild("waveshare", "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
+        FixtureBuild("cores3", "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "n5", "n10", "imu_t", "als", "vbus", "bat", "pct", "chg", "t", "rh")),
+        FixtureBuild("waveshare", "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
     )
 
     /** Released digests the app no longer bundles. Boards on them get no LIVE view until reflashed. */
@@ -28,12 +28,14 @@ class LiveKeyFixturesTest {
         "f35d73981ca65d9de587a4ec7988ccea19e71dce988c69eb4bb99713f2352bb3", // CoreS3 v6.11, cores3-telemetry-v4
         "22291d3aab63365404394f30c1549fb18bde0699df9b2de863de70bb3f4edf65", // CoreS3 v6.12, LIVE keys outside the digest
         "e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b", // CoreS3 v6.13, cores3-telemetry-v5
+        "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94", // CoreS3 cores3-telemetry-v6, dictionary v6
         "e840c946c10378d28831b38f71daf66981d2ea99cf47ccba80fcd2e64f920ffd", // waveshare-sim7670g-telemetry-v1
         "715685cf83ac8d6975fde845ce58fd15fa6eaaf3df32644ec15dfc89875d2e9e", // waveshare-sim7670g-telemetry-v2
         "7cd1c69da4ecd728dde2736e4c55063d9707ef53cdba1745b8896efcfd60f5da", // waveshare-sim7670g-telemetry-v3
         "0a024b85c632f621c0e1223f1ecafe3a9c4524a1ec3c0d03d910d191aaee2f82", // Waveshare v2.6, waveshare-sim7670g-telemetry-v4
         "d0d0129440e04108d8ca1f9b9555f1b45316ee0ccf3af0fcf7c3a88c8c0796b8", // first Waveshare v2.7, LIVE keys outside the digest
         "67688d0fd2e86053c1c66b961a1446ad3c225ee71823e0fadb771b645c7183ff", // Waveshare v2.7, waveshare-sim7670g-telemetry-v5
+        "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb", // Waveshare waveshare-sim7670g-telemetry-v6, dictionary v6
     )
 
     /** The CoreS3 contract maps `t` and `rh` but they are always null there, so its profile hides them. */

@@ -81,7 +81,7 @@ interface MetricBucketDao {
     @Query("SELECT COUNT(DISTINCT startEpochS) FROM metric_bucket WHERE thing = :thing AND resolution = 86400")
     fun observeDayCount(thing: String): Flow<Int>
 
-    /** Every thing's day buckets of one metric, newest first — Home picks the latest per thing. */
+    /** Every thing's day buckets of one metric, newest first. Home picks the latest per thing. */
     @Query("SELECT * FROM metric_bucket WHERE metricId = :metricId AND resolution = 86400 ORDER BY startEpochS DESC")
     fun observeAllDays(metricId: String): Flow<List<MetricBucket>>
 

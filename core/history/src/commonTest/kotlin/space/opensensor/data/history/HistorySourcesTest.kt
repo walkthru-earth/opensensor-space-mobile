@@ -121,7 +121,7 @@ class HistorySourcesTest {
         for (part in parts) { part.copyInto(bytes, offset); offset += part.size }
         val store = Store()
         val index = Index()
-        val record = record("station=$thing/unsynced/boot=$boot/raw.parquet")
+        val record = record("thing=$thing/unsynced/boot=$boot/raw.parquet")
         store.files[record.key] = bytes
         index.put(record)
         val saved = ArrayList<ClockAnchor>()
@@ -152,9 +152,9 @@ class HistorySourcesTest {
 
     @Test
     fun repairIndexesEveryVerifiedFileAndMarksForeignAndMissingOnes() = runTest {
-        val own = "station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
-        val foreign = "station=other/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
-        val missing = "station=$thing/year=2026/month=09/day=17/data_1000.parquet"
+        val own = "thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
+        val foreign = "thing=other/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
+        val missing = "thing=$thing/year=2026/month=09/day=17/data_1000.parquet"
         val store = Store()
         val index = Index()
         store.files[record(own).key] = board
@@ -177,7 +177,7 @@ class HistorySourcesTest {
 
     /** A file the engine saves late in a pass, after its last batch, which only a later pass indexes. */
     private fun putDuringRepair(store: Store, index: Index): ArchiveRecord {
-        val late = record("station=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", crc = 9)
+        val late = record("thing=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", crc = 9)
         index.onEstimate = {
             store.files[late.key] = board
             index.rows.value = index.rows.value + late
@@ -189,7 +189,7 @@ class HistorySourcesTest {
     fun aPutDuringARepairPassIsIndexedBeforeItSettles() = runTest {
         val store = Store()
         val index = Index()
-        val first = record("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        val first = record("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         store.files[first.key] = board
         index.put(first)
         val late = putDuringRepair(store, index)
@@ -203,7 +203,7 @@ class HistorySourcesTest {
     fun repairKeepsAFingerprintTheEngineFilledDuringThePass() = runTest {
         val store = Store()
         val index = Index()
-        val old = record("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet").copy(sha256 = "")
+        val old = record("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet").copy(sha256 = "")
         store.files[old.key] = board
         index.put(old)
         // The engine fills the fingerprint of an older receipt while repair reads the file.
@@ -222,7 +222,7 @@ class HistorySourcesTest {
         val repair = ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files)
         backgroundScope.launch { HistoryOrchestrator(repair, index).run {} }
         val late = putDuringRepair(store, index)
-        val first = record("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        val first = record("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         store.files[first.key] = board
         index.put(first)
         val all = withContext(Dispatchers.Default) {
@@ -235,8 +235,8 @@ class HistorySourcesTest {
     @Test
     fun dayViewReadsTheRowsOnce() = runTest {
         val (store, index) = archive(
-            "station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet",
-            "station=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet",
+            "thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet",
+            "thing=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet",
         )
         val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index), templates = CoreS3Files)
         val day = reader.observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
@@ -257,7 +257,7 @@ class HistorySourcesTest {
         val store = Store()
         val index = Index()
         val humid = humidPm25Parquet()
-        val r = ArchiveRecord(thing = thing, name = "station=$thing/year=2026/month=09/day=17/humid.parquet", bytes = humid.size.toLong(), crc32 = 7, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake")
+        val r = ArchiveRecord(thing = thing, name = "thing=$thing/year=2026/month=09/day=17/humid.parquet", bytes = humid.size.toLong(), crc32 = 7, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake")
         store.files[r.key] = humid
         index.put(r)
         ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
@@ -275,7 +275,7 @@ class HistorySourcesTest {
         assertTrue(Metrics.PM25_CORRECTED.id in tiers.observeMetricsWithData(thing).first())
 
         // A real CoreS3 file. Its RH column is all null, so it has no corrected PM2.5 at all and the cards show raw.
-        val (boardStore, boardIndex) = archive("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        val (boardStore, boardIndex) = archive("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         val boardTiers = ArchiveHistoryTiers(boardStore, boardIndex, templates = CoreS3Files)
         val none = HistorySeriesReader(boardStore, boardIndex, boardTiers, templates = CoreS3Files)
             .observe(thing, Metrics.PM25_CORRECTED, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
@@ -285,7 +285,7 @@ class HistorySourcesTest {
 
     @Test
     fun coverageOfAWindowThatContainsNowCountsOnlyElapsedTime() = runTest {
-        val (store, index) = archive("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        val (store, index) = archive("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val noon = dayStart + 43_200
         val reader = HistorySeriesReader(store, index, tiers, nowEpochS = { noon }, templates = CoreS3Files)
@@ -310,7 +310,7 @@ class HistorySourcesTest {
 
     @Test
     fun weekViewReadsTheInMemoryTiers() = runTest {
-        val (store, index) = archive("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        val (store, index) = archive("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val reader = HistorySeriesReader(store, index, tiers, templates = CoreS3Files)
         val week = reader.observe(thing, Metrics.PM25, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
@@ -333,7 +333,7 @@ class HistorySourcesTest {
         val index = Index()
         val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         assertEquals(0, tiers.observeDays(thing).first().count)
-        val name = "station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
+        val name = "thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
         store.files[record(name).key] = board
         index.put(record(name))
         // Not indexed yet, so not on the timeline.
@@ -377,8 +377,8 @@ class HistorySourcesTest {
     }
 
     private val sept8 = 1_788_825_600L // 2026-09-08T00:00Z
-    private val damagedName = "station=$thing/year=2026/month=09/day=08/data_1900_1491409bed013e1999dc4072ac91ab0f_80-169-6.parquet"
-    private val healthyName = "station=$thing/year=2026/month=09/day=08/data_1945_e452563e96c72ca057a48924550779b6_92-181-11.parquet"
+    private val damagedName = "thing=$thing/year=2026/month=09/day=08/data_1900_1491409bed013e1999dc4072ac91ab0f_80-169-6.parquet"
+    private val healthyName = "thing=$thing/year=2026/month=09/day=08/data_1945_e452563e96c72ca057a48924550779b6_92-181-11.parquet"
     private val healthy = fixtureBytes("parquet/device/v1-lz4-90rows-dated.parquet")
 
     private suspend fun day(store: Store, index: Index, metric: MetricSpec, from: Long = dayStart): HistorySeries =
@@ -407,7 +407,7 @@ class HistorySourcesTest {
 
     @Test
     fun aFileThatFailsToCloseLeavesNoRowsBehind() = runTest {
-        val (store, index) = archive("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        val (store, index) = archive("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         store.closeFailure = IllegalStateException("close failed")
         val failed = day(store, index, Metrics.PM25)
         // Every row decoded before close threw, none may chart from a source that did not read through.
@@ -423,7 +423,7 @@ class HistorySourcesTest {
 
     @Test
     fun cancellationWhileReadingARawFileStillPropagates() = runTest {
-        val (store, index) = archive("station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        val (store, index) = archive("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index), templates = CoreS3Files)
 
         // Read the rows directly, a flow would end a cancelled read quietly and hide which way it went.
@@ -439,8 +439,8 @@ class HistorySourcesTest {
 
     @Test
     fun producerThingComesFromTheHivePath() {
-        assertEquals("s1", ArchiveIndexRepair.producerThing("station=s1/year=2026/month=09/day=17/data.parquet"))
-        assertEquals("s2", ArchiveIndexRepair.producerThing("station=s2/unsynced/boot=ab/data.parquet"))
+        assertEquals("s1", ArchiveIndexRepair.producerThing("thing=s1/year=2026/month=09/day=17/data.parquet"))
+        assertEquals("s2", ArchiveIndexRepair.producerThing("thing=s2/unsynced/boot=ab/data.parquet"))
         assertNull(ArchiveIndexRepair.producerThing("benchmarks/x.parquet"))
     }
 }

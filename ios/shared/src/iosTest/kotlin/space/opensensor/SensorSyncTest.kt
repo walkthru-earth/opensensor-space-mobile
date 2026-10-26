@@ -69,8 +69,8 @@ class SensorSyncTest {
     }
 
     private val files = linkedMapOf(
-        "station=$thing/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet" to parquet(1, 5_000),
-        "station=$thing/year=2026/month=09/day=15/data_1015_b41d_15090-15179-90.parquet" to parquet(2, 3_000),
+        "thing=$thing/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet" to parquet(1, 5_000),
+        "thing=$thing/year=2026/month=09/day=15/data_1015_b41d_15090-15179-90.parquet" to parquet(2, 3_000),
     )
 
     /** Requests seen by the sensor, by opcode. */

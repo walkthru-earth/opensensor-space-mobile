@@ -5,7 +5,7 @@ package space.opensensor.data.history
 
 /**
  * A full stac-opensensor v0.1.0 `opensensor` footer value, shaped member for member like the footer
- * firmware writes (aq-parquet #105), naming [dict], [desc], [intervalMs], [thing], [purpose] and [boot]. A null
+ * firmware writes (aq-parquet #105), naming [dict], [desc], [intervalMs], [thing], [mobility], [purpose] and [boot]. A null
  * leaves that member out. The firmware version is a placeholder, so no test pins a release string.
  * Every member the app does not read is there so the reader is shown to ignore it.
  */
@@ -16,6 +16,7 @@ fun opensensorFooterJson(
     board: String = "m5stack-cores3",
     schema: String = "cores3-telemetry-v5",
     thing: String? = null,
+    mobility: String = "fixed",
     purpose: String? = "telemetry",
     boot: String = "0123456789abcdef0123456789abcdef",
 ): String {
@@ -26,7 +27,7 @@ fun opensensorFooterJson(
     val template = desc?.let { """"template":{"href":"https://example.invalid/templates/$board/$it.json","sha256":"$it"},""" }.orEmpty()
     val interval = intervalMs?.let { """"sample_interval_ms":$it,""" }.orEmpty()
     val filePurpose = purpose?.let { ""","purpose":"$it"""" }.orEmpty()
-    return """{"version":"0.1.0","station":{$id"device_id":"0123456789ab","board":"$board","deployment_id":"unknown"},""" +
+    return """{"version":"0.1.0","thing":{$id"device_id":"0123456789ab","board":"$board","deployment_id":"unknown","mobility":"$mobility"},""" +
         """"firmware":{"version":"test-firmware","schema":"$schema","boot_id":"$boot"},""" +
         dictionary + template +
         """"acquisition":{$interval"time_semantics":"sample instant, UTC","config_id":"default","config":"{}","calibration_id":"unknown"},""" +

@@ -67,7 +67,7 @@ class HistoryRepositoryTest {
         val tmp = File.createTempFile("aq-hist-half-hour", "").apply { delete(); mkdirs(); deleteOnExit() }
         val archive = FileArchive(tmp)
         val files = Files()
-        val name = "station=$thing/year=2026/month=09/day=08/data_1844.parquet"
+        val name = "thing=$thing/year=2026/month=09/day=08/data_1844.parquet"
         val file = archive.fileFor(thing, name).apply { parentFile!!.mkdirs(); writeBytes(bytes("device/v1-none-1row-dated.parquet")) }
         files.rows += HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files).indexed(
             ArchivedFile(thing = thing, name = name, bytes = file.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"),
@@ -90,7 +90,7 @@ class HistoryRepositoryTest {
         val archive = FileArchive(tmp)
         val files = Files()
         val buckets = Buckets()
-        val name = "station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
+        val name = "thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
         archive.fileFor(thing, name).apply { parentFile!!.mkdirs(); writeBytes(bytes("device/v3-board-2rg-105rows.parquet")) }
         files.rows += HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files).indexed(ArchivedFile(thing = thing, name = name, bytes = 1, crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), archive.fileFor(thing, name))
         val agg = Aggregator(thing, templates = CoreS3Files).also { it.add(space.opensensor.data.history.parquet.ParquetFile.wrap(bytes("device/v3-board-2rg-105rows.parquet"))) }
@@ -132,8 +132,8 @@ class HistoryRepositoryTest {
         val files = Files()
         val fixture = bytes("device/v3-board-2rg-105rows.parquet")
         for ((index, name) in listOf(
-            "station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet",
-            "station=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet",
+            "thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet",
+            "thing=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet",
         ).withIndex()) {
             val file = archive.fileFor(thing, name).apply { parentFile!!.mkdirs(); writeBytes(fixture) }
             files.rows += HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files).indexed(

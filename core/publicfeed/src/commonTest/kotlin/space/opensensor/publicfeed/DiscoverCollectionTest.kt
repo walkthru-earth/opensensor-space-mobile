@@ -125,8 +125,8 @@ class DiscoverCollectionTest {
         assertEquals(3, all.resolutionNear(2))
 
         val gap = DiscoverCollection.parse(collection(assets(3, 7)), root)
-        // 5 is as near 3 as 7, so the coarser wins the tie and the map is never empty.
-        assertEquals(3, gap.resolutionNear(5))
+        // 5 is as near 3 as 7, so the one nearer the default resolution 8 wins the tie.
+        assertEquals(7, gap.resolutionNear(5))
         assertEquals(7, gap.resolutionNear(6))
         assertEquals(3, gap.resolutionNear(4))
 

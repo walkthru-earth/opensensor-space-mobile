@@ -46,7 +46,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * "Chart by file": one column per archived Parquet file of the connected thing, in file order —
+ * "Chart by file": one column per archived Parquet file of the connected thing, in file order,
  * not on a time axis, so a 3-row FLUSH file is as visible as a full 15-minute window, a file on
  * estimated time is hollow, a file with no place on the timeline is marked, and a gap in the labels
  * shows where the logger was off. What the time-binned History cannot show; works from the archive

@@ -130,7 +130,7 @@ Have counsel read the privacy policy before the first public release.
 
 This is a local sensor configuration action, not a developer-server upload. The
 owner selects the resolution and taps Save before the cell leaves the phone.
-Resolution 5 is the default; finer cells can identify a particular location even
+Resolution 8 is the default; finer cells can identify a particular location even
 with an approximate OS fix. The location purpose string and trigger table include
 both map centering and device setup. No phone coordinates, background tracking or
 remote reverse geocoding is introduced. The earlier map-only statement that no

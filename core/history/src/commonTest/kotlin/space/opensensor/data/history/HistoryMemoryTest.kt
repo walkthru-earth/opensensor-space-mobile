@@ -104,7 +104,7 @@ class HistoryMemoryTest {
         val index = Index()
         for (d in 0 until days) {
             val bytes = dayFile(firstDay + d)
-            val r = record("station=$thing/day-$d/data_$d.parquet", bytes, crc = d.toLong())
+            val r = record("thing=$thing/day-$d/data_$d.parquet", bytes, crc = d.toLong())
             store.files[r.key] = bytes
             index.put(r)
         }
@@ -143,7 +143,7 @@ class HistoryMemoryTest {
     fun tiersCloseEveryReaderTheyOpenOnce() = runTest {
         val (store, index) = archive(3)
         // A file whose footer does not parse is skipped, and its reader is closed too.
-        val broken = record("station=$thing/day-x/data_x.parquet", board.copyOf(board.size - 8), crc = 99)
+        val broken = record("thing=$thing/day-x/data_x.parquet", board.copyOf(board.size - 8), crc = 99)
         store.files[broken.key] = board.copyOf(board.size - 8)
         index.put(broken.copy(indexedAtEpochMs = 42L, rows = 1, utcRows = 1, firstUtcNs = firstDay * ThingDays.DAY_NS, lastUtcNs = firstDay * ThingDays.DAY_NS + 1))
         store.opened.clear()

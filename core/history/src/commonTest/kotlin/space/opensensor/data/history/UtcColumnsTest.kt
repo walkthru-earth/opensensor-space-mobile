@@ -184,6 +184,37 @@ class UtcColumnsTest {
         val ids = sharedFile.leaves.mapNotNull { it.fieldId }
         assertEquals(ids.size, ids.toSet().size, "every field id names one column")
     }
+
+    @Test
+    fun aDayFileLeavesOutTheGeometryColumnAndTheGeoKey() {
+        val raw = ParquetFile.wrap(current())
+        val rows = raw.numRows.toInt()
+        // A 21 byte little endian WKB Point per row, the cell centre a device writes beside h3_cell_id.
+        val point = byteArrayOf(1, 1, 0, 0, 0) + ByteArray(16)
+        val geometry = ColumnValues.Binary(IntArray(rows + 1) { it * point.size }, ByteArray(rows * point.size) { point[it % point.size] }, null)
+        val geo = """{"version":"2.0.0","primary_column":"geometry","columns":{"geometry":{"encoding":"WKB","geometry_types":["Point"]}}}"""
+        val columns = raw.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) } +
+            ParquetWriter.Column("geometry", ParquetType.BYTE_ARRAY, geometry = ParquetWriter.GeometryAnnotation(), fieldId = raw.leaves.size + 1)
+        val bytes = write(columns, raw.leaves.map { raw.readColumn(it) } + geometry, raw.metadata.keyValueMetadata + ("geo" to geo))
+        val withGeometry = ParquetFile.wrap(bytes)
+        assertTrue(withGeometry.leaf("geometry").isGeospatial)
+        val index = ParquetIndexer.index(withGeometry, templates = CoreS3Files)
+        val thing = withGeometry.metadata.footer?.thingId ?: "thing-a"
+        val record = ArchiveRecord(
+            thing, "geo.parquet", bytes.size.toLong(), 1, "sha-1", 1, "fixture",
+            indexedAtEpochMs = 1, rows = index.rows, bootId = index.bootId, utcRows = index.utcRows,
+            firstUtcNs = index.firstUtcNs, lastUtcNs = index.lastUtcNs, firstMonoUs = index.firstMonoUs, lastMonoUs = index.lastMonoUs,
+            firstSeq = index.firstSeq, lastSeq = index.lastSeq,
+        )
+        val sink = MemorySink()
+        val source = DailyParquetSource(record) { ParquetFile.wrap(bytes, "geo.parquet") }
+        assertNotNull(DailyParquetBuilder.build(thing, ThingDays.dayOf(index.firstUtcNs!!), listOf(source), sink, nowEpochS = 0))
+        val daily = ParquetFile.wrap(sink.toByteArray())
+        assertNull(daily.metadata.leaf("geometry"))
+        assertNull(daily.metadata.keyValueMetadata["geo"])
+        val added = setOf(DailyParquetBuilder.SOURCE_INDEX, DailyParquetBuilder.ESTIMATED_UTC)
+        assertEquals(raw.leaves.map { it.name }.toSet(), daily.leaves.map { it.name }.toSet() - added, "every device column, no geometry")
+    }
 }
 
 /**

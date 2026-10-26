@@ -10,8 +10,8 @@ import kotlin.test.assertTrue
 
 class SyncPlannerTest {
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
-    private val dated = "station=$thing/year=2026/month=09/day=16/data_1800_b41d37a48c04031e9397e28ce48c2f43_27-28-1.parquet"
-    private val unsynced = "station=$thing/unsynced/boot=b41d37a48c04031e9397e28ce48c2f43/data_unsynced_b41d37a48c04031e9397e28ce48c2f43_0-26-0.parquet"
+    private val dated = "thing=$thing/year=2026/month=09/day=16/data_1800_b41d37a48c04031e9397e28ce48c2f43_27-28-1.parquet"
+    private val unsynced = "thing=$thing/unsynced/boot=b41d37a48c04031e9397e28ce48c2f43/data_unsynced_b41d37a48c04031e9397e28ce48c2f43_0-26-0.parquet"
     private val bench = "benchmarks/boot=e452563e96c72ca057a48924550779b6/lz4_raw_e452563e96c72ca057a48924550779b6_0-59-1.parquet"
     private val legacy = "legacy-parquet/f1179d54856fa20c31038836e5ec177e-0-6-0.parquet"
 
@@ -28,7 +28,7 @@ class SyncPlannerTest {
 
     @Test
     fun singleDigitMonthAndDayArePaddedInTheIsoDate() {
-        val d = HivePartition.of("station=$thing/year=2026/month=3/day=7/data.parquet") as HivePartition.Dated
+        val d = HivePartition.of("thing=$thing/year=2026/month=3/day=7/data.parquet") as HivePartition.Dated
         assertEquals("2026-03-07", d.isoDate)
     }
 

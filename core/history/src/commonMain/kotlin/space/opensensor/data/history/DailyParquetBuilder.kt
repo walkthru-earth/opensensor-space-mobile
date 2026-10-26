@@ -88,7 +88,7 @@ object DayPass {
  * converted by unit from older nanosecond sources, and each device column keeps its `field_id`. Callers commit the sink only
  * after success. Sources are de-duplicated by boot and sequence and split at UTC day/hour boundaries.
  * The rows are written in timeline order with a page index, and `sorting_columns = [utc]` when no
- * estimate interleaves them.
+ * estimate interleaves them. GEOMETRY and GEOGRAPHY columns are left out, the day file carries no `geo` key.
  */
 object DailyParquetBuilder {
     fun build(
@@ -212,7 +212,8 @@ object DailyParquetBuilder {
                     if (writing) {
                         try {
                             // A source whose rows are all duplicates (or outside the day) stays in the manifest with rows_used 0: provenance, not data.
-                            for (leaf in pf.leaves) {
+                            // A geometry column is the cell centre of the row's h3_cell_id. The day file keeps the cell and leaves it out.
+                            for (leaf in pf.leaves.filterNot { it.isGeospatial }) {
                                 val name = UtcColumns.canonical(leaf.name)
                                 val prev = columnOrder[name]
                                 if (prev == null) columnOrder[name] = leaf.type
@@ -365,7 +366,7 @@ object DailyParquetBuilder {
         src.source.open().use { pf ->
             if (pf.numRows != src.numRows) throw ParquetFormatException("source changed between passes")
             val md = pf.metadata
-            pf.leaves.associate { leaf ->
+            pf.leaves.filterNot { it.isGeospatial }.associate { leaf ->
                 val values = md.leaf(leaf.name)?.let { pf.readColumn(it) } ?: pf.readColumn(leaf)
                 UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(values, leaf) else values
             }

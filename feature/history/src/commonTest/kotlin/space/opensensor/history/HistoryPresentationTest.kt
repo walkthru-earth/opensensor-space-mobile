@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 class HistoryPresentationTest {
     private fun file(thing: String, producer: String, dated: Boolean, indexed: Boolean = true, lastUtcNs: Long = 1_800_000_000_000_000_000): ArchiveRecord = ArchiveRecord(
         thing = thing,
-        name = if (dated) "station=$producer/year=2026/month=09/day=29/sample.parquet" else "station=$producer/unsynced/boot=one/sample.parquet",
+        name = if (dated) "thing=$producer/year=2026/month=09/day=29/sample.parquet" else "thing=$producer/unsynced/boot=one/sample.parquet",
         bytes = 10,
         crc32 = 1,
         sha256 = "hash",
@@ -46,7 +46,7 @@ class HistoryPresentationTest {
     fun retainedProducerCopiesAreSeparateFromUntimedAndPendingFiles() {
         val own = file("current", "current", dated = false)
         val retained = file("current", "earlier", dated = true)
-        val pending = file("current", "current", dated = false, indexed = false).copy(name = "station=current/unsynced/boot=one/pending.parquet")
+        val pending = file("current", "current", dated = false, indexed = false).copy(name = "thing=current/unsynced/boot=one/pending.parquet")
         val counts = countHistoryFiles(listOf(own, retained, pending))
         assertEquals(2, counts.total)
         assertEquals(1, counts.otherThing)

@@ -35,18 +35,18 @@ EXPORT = FIRMWARE / "exports/sd-20260916T173205Z/output"
 V3_BOARD = FIRMWARE / "firmware/arduino-m5unified/artifacts/output"
 OUT = ANDROID / "core/parquet/src/test/resources/parquet"
 
-STATION = "station=53315f5f-cb85-4d8d-b623-d56266084189"
+THING = "thing=53315f5f-cb85-4d8d-b623-d56266084189"
 DEVICE_FILES = [
     # (label, relative path under output/) — one per (columns, codec, dated/unsynced, size class)
-    ("v1-lz4-90rows-dated", f"{STATION}/year=2026/month=09/day=08/data_1945_e452563e96c72ca057a48924550779b6_92-181-11.parquet"),
-    ("v1-lz4-2rows-dated", f"{STATION}/year=2026/month=09/day=08/data_2015_e452563e96c72ca057a48924550779b6_348-349-14.parquet"),
-    ("v1-lz4-1row-unsynced", f"{STATION}/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_64-64-7.parquet"),
-    ("v1-none-90rows-dated", f"{STATION}/year=2026/month=09/day=08/data_1900_1491409bed013e1999dc4072ac91ab0f_80-169-6.parquet"),
-    ("v1-none-1row-dated", f"{STATION}/year=2026/month=09/day=08/data_1830_c838cf99f4a1e867ebec9e2752bad519_3-3-1.parquet"),
-    ("v1-none-64rows-unsynced", f"{STATION}/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_0-63-6.parquet"),
-    ("v2-lz4-4rows-dated", f"{STATION}/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet"),
-    ("v2-lz4-1row-dated", f"{STATION}/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_7-7-2.parquet"),
-    ("v2-none-90rows-unsynced", f"{STATION}/unsynced/boot=16201de72e4422d744b04fddf23eec41/data_unsynced_16201de72e4422d744b04fddf23eec41_0-89-0.parquet"),
+    ("v1-lz4-90rows-dated", f"{THING}/year=2026/month=09/day=08/data_1945_e452563e96c72ca057a48924550779b6_92-181-11.parquet"),
+    ("v1-lz4-2rows-dated", f"{THING}/year=2026/month=09/day=08/data_2015_e452563e96c72ca057a48924550779b6_348-349-14.parquet"),
+    ("v1-lz4-1row-unsynced", f"{THING}/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_64-64-7.parquet"),
+    ("v1-none-90rows-dated", f"{THING}/year=2026/month=09/day=08/data_1900_1491409bed013e1999dc4072ac91ab0f_80-169-6.parquet"),
+    ("v1-none-1row-dated", f"{THING}/year=2026/month=09/day=08/data_1830_c838cf99f4a1e867ebec9e2752bad519_3-3-1.parquet"),
+    ("v1-none-64rows-unsynced", f"{THING}/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_0-63-6.parquet"),
+    ("v2-lz4-4rows-dated", f"{THING}/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet"),
+    ("v2-lz4-1row-dated", f"{THING}/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_7-7-2.parquet"),
+    ("v2-none-90rows-unsynced", f"{THING}/unsynced/boot=16201de72e4422d744b04fddf23eec41/data_unsynced_16201de72e4422d744b04fddf23eec41_0-89-0.parquet"),
 ]
 
 

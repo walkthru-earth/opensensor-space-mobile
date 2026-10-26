@@ -22,6 +22,7 @@ data class DeviceConfig(
     val lan: LanConfig? = null,
     val sensor: SensorConfig? = null,
     val location: LocationConfig? = null,
+    val thing: ThingConfig? = null,
 ) {
     companion object {
         fun parse(text: String): DeviceConfig = WireJson.decodeFromString(serializer(), text)
@@ -38,6 +39,25 @@ data class LocationConfig(
     val lon: Double? = null,
     val country: String? = null,
 )
+
+/** GET_CONFIG page 1 `thing` object. */
+@Serializable
+data class ThingConfig(
+    val mobility: String? = null,
+) {
+    val thingMobility: ThingMobility? get() = ThingMobility.fromWire(mobility)
+}
+
+/** `thing.mobility`, whether a Thing stays in one H3 cell or moves. The firmware default is [FIXED]. */
+enum class ThingMobility(val wire: String) {
+    FIXED("fixed"),
+    MOVING("moving"),
+    ;
+
+    companion object {
+        fun fromWire(value: String?): ThingMobility? = entries.firstOrNull { it.wire == value }
+    }
+}
 
 /** Board-provisioned identity of the replaceable PM module. Not a calibration certificate. */
 @Serializable
@@ -180,6 +200,9 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
             return add("location.country", country)
         }
 
+        /** How the Thing moves. The firmware writes it to the footer and splits the file on a change. */
+        fun thingMobility(mobility: ThingMobility): Builder = add(KEY_THING_MOBILITY, mobility.wire)
+
         fun clearBonds(): Builder = add("ble.clear_bonds", "1")
 
         fun wifiOn(on: Boolean): Builder = add("wifi.on", if (on) "1" else "0")
@@ -236,6 +259,13 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
         const val KEY_BLE_PAIR = "ble.pair"
         const val KEY_BLE_PIN = "ble.pin"
         const val KEY_WIFI_PSK = "wifi.psk"
+        const val KEY_THING_MOBILITY = "thing.mobility"
+
+        /**
+         * Reserved. The H3 cell hex of the phone's own fix, which the board keeps in RAM and writes
+         * with `location_source` 3. No released firmware accepts it yet, so no builder sends it.
+         */
+        const val KEY_LOCATION_PHONE_CELL = "location.phone_cell"
 
         /** Keys whose values are secrets. See [carriesSecret]. */
         val SECRET_KEYS: Set<String> = setOf(KEY_WIFI_PSK, KEY_BLE_PIN)

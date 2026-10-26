@@ -19,11 +19,11 @@ class TimeEstimateTest {
         return IndexedFileInfo(name, i.bootId, i.purpose, true, i.rows, i.utcRows, i.firstUtcNs, i.lastUtcNs, i.firstMonoUs, i.lastMonoUs)
     }
 
-    private val anchorFile = indexedRow("device/v1-lz4-90rows-dated.parquet", "station=$thing/year=2026/month=09/day=08/data_1845_e452563e96c72ca057a48924550779b6_26-79-5.parquet")
-    private val laterTimed = indexedRow("device/v1-lz4-2rows-dated.parquet", "station=$thing/year=2026/month=09/day=08/data_2015_e452563e96c72ca057a48924550779b6_348-349-14.parquet")
-    private val unsynced64 = indexedRow("device/v1-none-64rows-unsynced.parquet", "station=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_0-63-6.parquet")
-    private val unsynced1 = indexedRow("device/v1-lz4-1row-unsynced.parquet", "station=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_64-64-7.parquet")
-    private val otherBoot = indexedRow("device/v2-none-90rows-unsynced.parquet", "station=$thing/unsynced/boot=16201de72e4422d744b04fddf23eec41/data_unsynced_16201de72e4422d744b04fddf23eec41_0-89-0.parquet")
+    private val anchorFile = indexedRow("device/v1-lz4-90rows-dated.parquet", "thing=$thing/year=2026/month=09/day=08/data_1845_e452563e96c72ca057a48924550779b6_26-79-5.parquet")
+    private val laterTimed = indexedRow("device/v1-lz4-2rows-dated.parquet", "thing=$thing/year=2026/month=09/day=08/data_2015_e452563e96c72ca057a48924550779b6_348-349-14.parquet")
+    private val unsynced64 = indexedRow("device/v1-none-64rows-unsynced.parquet", "thing=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_0-63-6.parquet")
+    private val unsynced1 = indexedRow("device/v1-lz4-1row-unsynced.parquet", "thing=$thing/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_64-64-7.parquet")
+    private val otherBoot = indexedRow("device/v2-none-90rows-unsynced.parquet", "thing=$thing/unsynced/boot=16201de72e4422d744b04fddf23eec41/data_unsynced_16201de72e4422d744b04fddf23eec41_0-89-0.parquet")
 
     @Test
     fun `invalid monotonic values and overflowing estimates never create dates`() {

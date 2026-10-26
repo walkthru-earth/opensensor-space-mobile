@@ -170,7 +170,7 @@ class SyncEngineTest {
     /** A file long enough for the window to climb from 8 frames back to max_read, 8 clean windows per step. */
     private fun FakeArchiveDevice.addLongFile(): Int {
         files += FakeArchiveDevice.FakeFile(
-            "station=$thing/year=2026/month=09/day=15/data_1030_b41d_15180-15269-90.parquet",
+            "thing=$thing/year=2026/month=09/day=15/data_1030_b41d_15180-15269-90.parquet",
             FakeArchiveDevice.fakeParquet(4, 540_000),
         )
         return files.lastIndex

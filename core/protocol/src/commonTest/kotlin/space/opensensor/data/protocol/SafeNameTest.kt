@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 class SafeNameTest {
     /** A name of [length] bytes whose segments all stay within [SafeName.MAX_SEGMENT_BYTES]. */
     private fun nameOfLength(length: Int): String {
-        val prefix = "station=a1/year=2026/month=10/day=08/"
+        val prefix = "thing=a1/year=2026/month=10/day=08/"
         val suffix = ".parquet"
         var left = length - prefix.length - suffix.length
         val body = StringBuilder()
@@ -20,12 +20,12 @@ class SafeNameTest {
     }
 
     /** A name whose last segment is [segment] bytes, `.parquet` included. */
-    private fun nameWithSegment(segment: Int): String = "station=a1/" + "d".repeat(segment - ".parquet".length) + ".parquet"
+    private fun nameWithSegment(segment: Int): String = "thing=a1/" + "d".repeat(segment - ".parquet".length) + ".parquet"
 
     @Test
     fun realArchiveNamesAreAccepted() {
-        assertTrue(SafeName.isValid("station=cores3-a1b2/year=2026/month=10/day=08/data_1200_17_100-189-90.parquet"))
-        assertTrue(SafeName.isValid("station=cores3-a1b2/unsynced/boot=17/data_0000_17_1-64-64.parquet"))
+        assertTrue(SafeName.isValid("thing=cores3-a1b2/year=2026/month=10/day=08/data_1200_17_100-189-90.parquet"))
+        assertTrue(SafeName.isValid("thing=cores3-a1b2/unsynced/boot=17/data_0000_17_1-64-64.parquet"))
         assertTrue(SafeName.isValid("benchmarks/boot=3/lz4.parquet"))
         assertTrue(SafeName.isValid("legacy-parquet/data_0001.parquet"))
         assertTrue(SafeName.isValid("x.parquet"))
@@ -57,7 +57,7 @@ class SafeNameTest {
     @Test
     fun pathTraversalAndAbsoluteNamesAreRejected() {
         assertFalse(SafeName.isValid("../etc/passwd.parquet"))
-        assertFalse(SafeName.isValid("station=a/../b.parquet"))
+        assertFalse(SafeName.isValid("thing=a/../b.parquet"))
         assertFalse(SafeName.isValid("a..parquet"))
         assertFalse(SafeName.isValid("/absolute.parquet"))
         assertFalse(SafeName.isValid("a//b.parquet"))

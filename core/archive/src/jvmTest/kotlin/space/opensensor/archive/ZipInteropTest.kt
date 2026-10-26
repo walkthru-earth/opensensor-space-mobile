@@ -33,7 +33,7 @@ class ZipInteropTest {
         }
         sink.use {
             StoredZipWriter(it, zip64Limit, entryLimit).apply {
-                add("ST1/station=ST1/year=2026/a.parquet", ByteArrayReader(a), 1_709_647_629_000)
+                add("ST1/thing=ST1/year=2026/a.parquet", ByteArrayReader(a), 1_709_647_629_000)
                 add("ST2/ب.parquet", ByteArrayReader(b), 1_709_647_629_000)
                 finish()
             }
@@ -44,7 +44,7 @@ class ZipInteropTest {
     private fun checkBoth(file: File) {
         ZipFile(file).use { zip ->
             val names = zip.entries().toList().map { it.name }
-            assertEquals(listOf("ST1/station=ST1/year=2026/a.parquet", "ST2/ب.parquet"), names)
+            assertEquals(listOf("ST1/thing=ST1/year=2026/a.parquet", "ST2/ب.parquet"), names)
             assertContentEquals(a, zip.getInputStream(zip.getEntry(names[0])).readBytes())
             assertContentEquals(b, zip.getInputStream(zip.getEntry(names[1])).readBytes())
         }

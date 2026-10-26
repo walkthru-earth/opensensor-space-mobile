@@ -278,7 +278,7 @@ class DerivedDayViewTest {
         val store = Store()
         val index = Index()
         for ((i, bytes) in listOf(first, respread(nullBefore = 70)).withIndex()) {
-            val r = ArchiveRecord(thing, "station=$thing/day/part-$i.parquet", bytes.size.toLong(), i.toLong(), "s$i", 1, "fake")
+            val r = ArchiveRecord(thing, "thing=$thing/day/part-$i.parquet", bytes.size.toLong(), i.toLong(), "s$i", 1, "fake")
             store.files[r.key] = bytes
             index.put(r)
         }
@@ -362,7 +362,7 @@ class DerivedDayViewTest {
         suspend fun reader(bytes: ByteArray): HistorySeriesReader {
             val store = Store()
             val index = Index()
-            val r = ArchiveRecord(thing, "station=$thing/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+            val r = ArchiveRecord(thing, "thing=$thing/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
             store.files[r.key] = bytes
             index.put(r)
             ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
@@ -387,7 +387,7 @@ class DerivedDayViewTest {
         val thing = ParquetFile.wrap(bytes).metadata.footer?.thingId ?: "derived-thing"
         val store = Store()
         val index = Index()
-        val r = ArchiveRecord(thing, "station=$thing/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        val r = ArchiveRecord(thing, "thing=$thing/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
         ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
@@ -425,7 +425,7 @@ class DerivedDayViewTest {
         val thing = ParquetFile.wrap(bytes).metadata.footer?.thingId ?: "derived-thing"
         val store = Store()
         val index = Index()
-        val r = ArchiveRecord(thing, "station=$thing/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        val r = ArchiveRecord(thing, "thing=$thing/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
         store.files[r.key] = bytes
         index.put(r)
         ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()

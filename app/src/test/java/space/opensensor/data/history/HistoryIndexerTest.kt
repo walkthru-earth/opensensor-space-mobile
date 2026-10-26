@@ -25,13 +25,13 @@ class HistoryIndexerTest {
         val dao = InMemoryDao()
         val indexer = HistoryIndexer(archive, dao, DeviceCoordinator())
         val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
-        val good = "station=$thing/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet"
-        val bogus = "station=$thing/year=2026/month=09/day=08/data_bogus.parquet"
+        val good = "thing=$thing/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet"
+        val bogus = "thing=$thing/year=2026/month=09/day=08/data_bogus.parquet"
         archive.fileFor(thing, good).apply { parentFile!!.mkdirs(); writeBytes(bytes("device/v2-lz4-4rows-dated.parquet")) }
         archive.fileFor(thing, bogus).apply { parentFile!!.mkdirs(); writeBytes("PAR1 this is not parquet PAR1".toByteArray()) }
         dao.rows += ArchivedFile(thing = thing, name = good, bytes = 9821, crc32 = 1, sha256 = "x", syncedAtEpochMs = 1, sourceDevice = "fake")
         dao.rows += ArchivedFile(thing = thing, name = bogus, bytes = 27, crc32 = 2, sha256 = "y", syncedAtEpochMs = 1, sourceDevice = "fake")
-        dao.rows += ArchivedFile(thing = thing, name = "station=$thing/unsynced/boot=0/missing.parquet", bytes = 0, crc32 = 3, sha256 = "z", syncedAtEpochMs = 1, sourceDevice = "fake")
+        dao.rows += ArchivedFile(thing = thing, name = "thing=$thing/unsynced/boot=0/missing.parquet", bytes = 0, crc32 = 3, sha256 = "z", syncedAtEpochMs = 1, sourceDevice = "fake")
 
         assertEquals(3, indexer.backfill())
         val g = dao.rows.first { it.name == good }
@@ -55,7 +55,7 @@ class HistoryIndexerTest {
         val tmp = java.nio.file.Files.createTempDirectory("opensensor-thing-reset").toFile()
         try {
             val archive = FileArchive(tmp)
-            val name = "station=old-thing/year=2026/month=09/day=08/retained.parquet"
+            val name = "thing=old-thing/year=2026/month=09/day=08/retained.parquet"
             val payload = bytes("device/v2-lz4-4rows-dated.parquet")
             val file = archive.fileFor("new-thing", name).apply { parentFile!!.mkdirs(); writeBytes(payload) }
             val row = ArchivedFile(thing = "new-thing", name = name, bytes = payload.size.toLong(), crc32 = 1, sha256 = "saved", syncedAtEpochMs = 1, sourceDevice = "same-device")

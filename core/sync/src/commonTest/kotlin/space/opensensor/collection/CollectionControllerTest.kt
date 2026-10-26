@@ -1073,7 +1073,7 @@ class CollectionControllerTest {
         }
         links.files.clear()
         links.files += FakeArchiveDevice.FakeFile(
-            "station=${links.thing}/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet",
+            "thing=${links.thing}/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet",
             FakeArchiveDevice.fakeParquet(7, 4_000_000),
         )
         val controller = controller(links, keepAlive)
@@ -1285,7 +1285,7 @@ class CollectionControllerTest {
         assertIs<CollectionState.Done>(controller.state.value)
         // A file the firmware wrote after the first run. Only a new LIST can know it.
         val added = FakeArchiveDevice.FakeFile(
-            "station=${links.thing}/year=2026/month=09/day=15/data_1030_b41d_15180-15269-90.parquet",
+            "thing=${links.thing}/year=2026/month=09/day=15/data_1030_b41d_15180-15269-90.parquet",
             FakeArchiveDevice.fakeParquet(4, 12_000),
         )
         links.files += added
@@ -1300,7 +1300,7 @@ class CollectionControllerTest {
         assertEquals(listOf(0L), links.devices[1].readOffsets.distinct().take(1))
 
         links.files += FakeArchiveDevice.FakeFile(
-            "station=${links.thing}/year=2026/month=09/day=15/data_1045_b41d_15270-15359-90.parquet",
+            "thing=${links.thing}/year=2026/month=09/day=15/data_1045_b41d_15270-15359-90.parquet",
             FakeArchiveDevice.fakeParquet(5, 11_000),
         )
         controller.start(intent())
@@ -1317,7 +1317,7 @@ class CollectionControllerTest {
         val links = FakeLinks(backgroundScope)
         val controller = controller(links, CountingKeepAlive())
 
-        controller.start(intent(CollectionScope.One("station=${links.thing}/year=2026/month=09/day=15/gone.parquet")))
+        controller.start(intent(CollectionScope.One("thing=${links.thing}/year=2026/month=09/day=15/gone.parquet")))
         settle(controller)
 
         val done = assertIs<CollectionState.Done>(controller.state.value)

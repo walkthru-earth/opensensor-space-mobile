@@ -186,7 +186,7 @@ class LegacyFileCleanupTest {
         indexedAtEpochMs = 1, utcRows = if (firstNs == null) 0 else 1, firstUtcNs = firstNs, lastUtcNs = lastNs,
     )
 
-    private fun name(day: Long, n: Int) = "station=$thing/year=2024/month=10/day=$day/file-$n.parquet"
+    private fun name(day: Long, n: Int) = "thing=$thing/year=2024/month=10/day=$day/file-$n.parquet"
 
     private fun setup(
         vararg files: Pair<ArchiveRecord, ByteArray>,

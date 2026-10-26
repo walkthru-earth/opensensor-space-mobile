@@ -34,7 +34,7 @@ class IosArchiveLegacyTest {
     private val finals = "$base/SensorArchive"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Unconfined)
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
-    private val key = ArchiveKey(thing, "station=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+    private val key = ArchiveKey(thing, "thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
     private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
     private val meta = PartialMeta(bytes.size.toLong(), ParquetVerify.crc32(bytes))
     private val dir get() = "$finals/$thing/" + key.name.substringBeforeLast('/')
@@ -70,7 +70,7 @@ class IosArchiveLegacyTest {
     fun aSymlinkInTheArchiveIsRefused() = runTest {
         IosFiles.mkdirs("$finals/$thing")
         IosFiles.mkdirs("$base/elsewhere")
-        NSFileManager.defaultManager.createSymbolicLinkAtPath("$finals/$thing/station=$thing", "$base/elsewhere", null)
+        NSFileManager.defaultManager.createSymbolicLinkAtPath("$finals/$thing/thing=$thing", "$base/elsewhere", null)
         assertFailsWith<IllegalStateException> { store.exists(key) }
     }
 }

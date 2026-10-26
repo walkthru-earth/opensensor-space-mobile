@@ -30,7 +30,7 @@ class LegacyReceiptImportTest {
     private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
     private val crc = ParquetVerify.crc32(bytes)
 
-    private fun name(day: Int) = "station=$thing/year=2026/month=09/day=$day/data_0930.parquet"
+    private fun name(day: Int) = "thing=$thing/year=2026/month=09/day=$day/data_0930.parquet"
     private fun final(day: Int) = "$finals/$thing/${name(day)}"
     private fun receipt(day: Int) = final(day) + ArchiveLayout.LEGACY_RECEIPT_SUFFIX
     private fun importer() = LegacyReceiptImport(store, marker, settled, Dispatchers.Unconfined)

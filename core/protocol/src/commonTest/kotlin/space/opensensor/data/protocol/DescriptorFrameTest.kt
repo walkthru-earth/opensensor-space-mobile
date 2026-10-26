@@ -57,7 +57,7 @@ class DescriptorFrameTest {
     @Test
     fun `info carries desc after dict`() {
         val info = DeviceInfo.parse(
-            """{"proto":3,"fw":"f","schema":"s","cols":81,"dict":"${"a".repeat(64)}","desc":"0123456789abcdef","station":"x","dev":"d","boot":"b","max_read":16384}""",
+            """{"proto":3,"fw":"f","schema":"s","cols":81,"dict":"${"a".repeat(64)}","desc":"0123456789abcdef","thing":"x","dev":"d","boot":"b","max_read":16384}""",
         )
         assertEquals("0123456789abcdef", info.desc)
     }

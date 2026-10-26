@@ -83,7 +83,7 @@ class HistoryControllerTest {
 
     private fun record(thing: String) = ArchiveRecord(
         thing = thing,
-        name = "station=$thing/year=2026/month=09/day=20/data_1300.parquet",
+        name = "thing=$thing/year=2026/month=09/day=20/data_1300.parquet",
         bytes = 10,
         crc32 = 1,
         sha256 = "s",

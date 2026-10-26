@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 /** #98. The inspector formats a page of rows at a time, never every row of the file. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class FileInspectorTest {
-    private val name = "station=s/year=2026/month=09/day=17/data_0900_b_1-150-1.parquet"
+    private val name = "thing=s/year=2026/month=09/day=17/data_0900_b_1-150-1.parquet"
 
     /** Three row groups of 50 rows. `row` is the row index, `pm` is null on every 7th row. */
     private val bytes: ByteArray = run {
@@ -159,7 +159,7 @@ class FileInspectorTest {
         val shown = assertIs<RowsState.Shown>(controller.rows.value).page
         assertEquals(100L, shown.from)
         assertEquals(FileInspector.PAGE_ROWS, shown.rows.size)
-        controller.load("s", "station=s/year=2026/month=09/day=17/data_1000_b_2-3-1.parquet")
+        controller.load("s", "thing=s/year=2026/month=09/day=17/data_1000_b_2-3-1.parquet")
         assertEquals(RowsState.Idle, controller.rows.value)
     }
 
@@ -200,7 +200,7 @@ class FileInspectorTest {
     @Test
     fun aNewFileShowsLoadingUntilItIsReadNeverTheOldSummary() = runTest {
         val io = StandardTestDispatcher(testScheduler)
-        val other = "station=s/year=2026/month=09/day=17/data_1000_b_2-3-1.parquet"
+        val other = "thing=s/year=2026/month=09/day=17/data_1000_b_2-3-1.parquet"
         val finals = mapOf(ArchiveKey("s", name) to bytes, ArchiveKey("s", other) to bytes)
         val controller = FileMetricsController(CoroutineScope(backgroundScope.coroutineContext + io), Store(finals), io)
         assertEquals(FileMetricsState.Loading, controller.state.value)

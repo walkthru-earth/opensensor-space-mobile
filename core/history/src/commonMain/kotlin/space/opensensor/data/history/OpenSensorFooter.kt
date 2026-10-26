@@ -7,9 +7,10 @@ import kotlinx.serialization.json.longOrNull
 
 /**
  * The fields the app reads from a file's `opensensor` footer, the one Parquet key-value entry of the
- * stac-opensensor v0.1.0 footer contract (compact UTF-8 JSON, in the style of GeoParquet `geo`). No
- * other footer key is read. Every field not named here is ignored, and each named one is null when the
- * footer leaves it out. The app never writes this key. A derived day file carries [AppDay] instead.
+ * stac-opensensor v0.1.0 footer contract (compact UTF-8 JSON, in the style of GeoParquet `geo`). The
+ * standard GeoParquet `geo` key may sit beside it and is not read here. No other footer key is read.
+ * Every field not named here is ignored, and each named one is null when the footer leaves it out.
+ * The app never writes this key. A derived day file carries [AppDay] instead.
  */
 data class OpenSensorFooter(
     /** `acquisition.sample_interval_ms`, null when absent or not positive. */
@@ -18,8 +19,10 @@ data class OpenSensorFooter(
     val dictionarySha256: String? = null,
     /** `template.sha256`, the SHA-256 of the exact board template bytes. */
     val templateSha256: String? = null,
-    /** `station.id`, the thing that wrote the file. */
+    /** `thing.id`, the thing that wrote the file. */
     val thingId: String? = null,
+    /** `thing.mobility`, required by the spec. Null only when the footer leaves it out. */
+    val mobility: Mobility? = null,
     /** `file.purpose`, `telemetry` for thing data. */
     val purpose: String? = null,
 ) {
@@ -32,7 +35,8 @@ data class OpenSensorFooter(
         private const val DICTIONARY = "dictionary"
         private const val TEMPLATE = "template"
         private const val ACQUISITION = "acquisition"
-        private const val THING = "station"
+        private const val THING = "thing"
+        private const val MOBILITY = "mobility"
         private const val FILE = "file"
         private const val ID = "id"
         private const val PURPOSE = "purpose"
@@ -42,8 +46,8 @@ data class OpenSensorFooter(
 
         /**
          * The footer of a file with Parquet [keyValues], or null when it has none History can trust. A
-         * missing [KEY], JSON that is not an object, an unknown major version, a malformed digest or an
-         * interval that is not an integer all mean no footer, the same as a file written without one.
+         * missing [KEY], JSON that is not an object, an unknown major version, a malformed digest, a
+         * mobility other than `fixed` or `moving` or an interval that is not an integer all mean no footer, the same as a file written without one.
          */
         fun of(keyValues: Map<String, String>): OpenSensorFooter? = keyValues[KEY]?.let(::parse)
 
@@ -60,6 +64,7 @@ data class OpenSensorFooter(
                 dictionarySha256 = root.member(DICTIONARY, SHA256)?.let(::sha256),
                 templateSha256 = root.member(TEMPLATE, SHA256)?.let(::sha256),
                 thingId = root.member(THING, ID)?.let(::text),
+                mobility = root.member(THING, MOBILITY)?.let(::text)?.let { Mobility.of(it) ?: throw Malformed() },
                 purpose = root.member(FILE, PURPOSE)?.let(::text),
             )
         } catch (_: Malformed) {
@@ -82,6 +87,17 @@ data class OpenSensorFooter(
 
         private fun sha256(value: JsonPrimitive): String =
             value.takeIf { it.isString }?.content?.takeIf { SHA256_HEX.matches(it) } ?: throw Malformed()
+    }
+
+    /** `thing.mobility`, whether a Thing stays in one H3 cell or moves. */
+    enum class Mobility(val wire: String) {
+        FIXED("fixed"),
+        MOVING("moving"),
+        ;
+
+        companion object {
+            fun of(value: String): Mobility? = entries.firstOrNull { it.wire == value }
+        }
     }
 
     /** A footer value of the wrong kind, which makes the whole footer untrusted. */

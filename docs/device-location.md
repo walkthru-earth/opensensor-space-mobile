@@ -5,7 +5,7 @@ authenticated BLE or LAN session. This is available in shared Android/iOS UI on
 firmware that supports GET_CONFIG page 1. Legacy firmware shows unsupported.
 
 1. Stand beside the sensor and open Configure location.
-2. Choose a maximum H3 resolution, initially 5, and optionally enter the
+2. Choose a maximum H3 resolution, initially 8, and optionally enter the
    owner-declared assigned ISO alpha-2 country code, such as EG.
 3. Tap Use phone location. Only this tap requests foreground approximate OS
    access and a one-shot fix. Cancel, denial or timeout leaves a failed-fix note.
@@ -21,8 +21,9 @@ Android retains only ACCESS_COARSE_LOCATION. iOS retains When In Use and reduced
 accuracy by default. A small chosen cell cannot improve an approximate OS fix.
 
 Resolution 0 through 15 is configurable. Lower values disclose a larger area;
-resolution 5 averages about 253 km², with variable actual cell area. Finer values
-can expose a particular place. Raising precision after coarsening cannot recover
+resolution 8, the default for every Thing, fixed or moving, averages about 0.74 km² with an edge
+of about 460 m. Actual cell area varies. Finer values can expose a particular place, and the
+app warns above 8. Raising precision after coarsening cannot recover
 the original fix; the app requires a new fix. Firmware applies the maximum again
 before saving and derives the published center from the retained cell. Country
 is declared by the owner, not inferred from the cell or used as NTP residency

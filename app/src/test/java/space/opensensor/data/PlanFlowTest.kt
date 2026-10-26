@@ -28,8 +28,8 @@ import space.opensensor.data.sync.SyncPlanner
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlanFlowTest {
     private val thing = "thing-a"
-    private val name = "station=$thing/year=2026/month=10/day=11/data_0900.parquet"
-    private val second = "station=$thing/year=2026/month=10/day=11/data_0915.parquet"
+    private val name = "thing=$thing/year=2026/month=10/day=11/data_0900.parquet"
+    private val second = "thing=$thing/year=2026/month=10/day=11/data_0915.parquet"
     private val size = 1_000_000L
 
     private fun listing(vararg names: String) = ManifestState.Loaded(names.map { Frame.File(size, it) }, Frame.ListEnd(names.size.toLong(), 0, 0, 0), 0)
