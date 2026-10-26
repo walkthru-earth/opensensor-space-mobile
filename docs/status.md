@@ -69,13 +69,12 @@ build and `verify` only. No phone run against the new firmware yet.
 - Derived days. `derived-v3` writes UTC instants as MICROS under the current names, keeps device
   field ids and renames the estimate to `event_time_utc_estimated_us`. `DERIVE_VERSION` 6 rebuilds
   every cached day once.
-- LIVE. Reviewed profiles resolve by dictionary digest, and a newer schema keeps its profile. An
-  unknown digest reads only the pinned LIVE keys as an unreviewed profile (#153). CoreS3
-  board temperature comes from `imu_t`, Waveshare air temperature from `t`. Particle bins show only
-  the board's keys. Older dictionaries keep a profile because boards in the field run them. Older
-  CoreS3 firmware reads board temperature from `t`. Waveshare v2.7 (`67688d0f…`, PR aq-parquet #24, and its first build `d0d01294…`)
-  adds `bstate`. CoreS3 board temperature falls back to `t` when `imu_t` is missing. `LiveSample`
-  parses `bstate`, and no screen shows it yet (#90).
+- LIVE. Profiles resolve by dictionary digest through the bundled board templates and app profiles
+  (#184), and a newer schema keeps its profile. Only the current digest of each board is bundled,
+  CoreS3 v6.14 (`4f80c26c…`) and Waveshare v2.8 (`6f567b38…`). An unknown or older digest syncs files
+  but has no LIVE profile. CoreS3 board temperature comes from `imu_t`, Waveshare air temperature
+  from `t`. Particle bins show only the board's keys. `LiveSample` parses `bstate`, and no screen
+  shows it yet (#90).
 - Index reopen. Room v11 and the one time iOS receipt import index rows without UTC rows again. A derive pass
   before that back-fill keeps every day a waiting row may fill (`StationDays.held`), on Android and
   iOS. `ArchiveRecord.isIndexed` is the one indexed test, and `withUtcBetween` uses it in SQL.

@@ -80,4 +80,16 @@ class JsonModelsTest {
         val parsed = LiveSample.parse("""{"seq":1,"mono":1,"pms":4,"pm25":3,"pm1":1,"pm10":4,"future_key":true}""")
         assertEquals(3.0, parsed.pm25!!, 0.0)
     }
+
+    @Test
+    fun `live floats with trailing zeros and null keys parse as numbers`() {
+        // aq-parquet #100 prints each float with its field decimals, #97 sends null for no reading.
+        val parsed = LiveSample.parse("""{"seq":1,"mono":1,"pms":4,"pm25":5.00,"t":22.50,"rh":41.0,"imu_t":40.1,"pct":87,"n03":null}""")
+        assertEquals(5.0, parsed.pm25!!, 0.0)
+        assertEquals(22.5, parsed.t!!, 0.0)
+        assertEquals(41.0, parsed.rh!!, 0.0)
+        assertEquals(40.1, parsed.imuT!!, 0.0)
+        assertEquals(87, parsed.pct)
+        assertNull(parsed.n03)
+    }
 }

@@ -30,7 +30,7 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
    shown as board temperature. Waveshare `t` stays air temperature. Profiles list the board's keys,
    and Today shows only those particle bins. Unknown keys are ignored and missing keys are null. LIVE
    `utc` stays nanoseconds. Only the current digest of each board is bundled, so older dictionaries
-   have no LIVE profile. Waveshare v2.7 (`67688d0f…`) adds `bstate`, the battery health code, which
+   have no LIVE profile. Waveshare v2.7 and later add `bstate`, the battery health code, which
    `LiveSample.bstate` parses. Showing it is #90.
 6. Watchdog. `LOG_TAIL` watchdog lines are informational. A storage stall reset ends the link,
    and the existing `RetryPolicy` and a fresh LIST resume the run. No code change.

@@ -521,7 +521,7 @@ class FakeTransport(
     }
 
     private fun infoJson(): String =
-        """{"proto":3,"fw":"idf-cores3-parquet-v6.13 (fake)","schema":"cores3-telemetry-v5","cols":81,""" +
+        """{"proto":3,"fw":"idf-cores3-parquet-v6.14 (fake)","schema":"cores3-telemetry-v5","cols":81,""" +
             """"dict":"$CORES3_DICT","station":"$station","dev":"$deviceId","boot":"$bootId","max_read":$maxRead}"""
 
     private fun statusJson(): String =

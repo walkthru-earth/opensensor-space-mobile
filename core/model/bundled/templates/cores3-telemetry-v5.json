@@ -1277,16 +1277,16 @@
   "links": [
     {
       "rel": "describedby",
-      "href": "https://github.com/walkthru-earth/aq-parquet/blob/ca0397ff9aa7b955f9dd444a95b65a5db44dea9a/firmware/esp-idf-cores3/bringup/telemetry_fields.inc",
+      "href": "https://github.com/walkthru-earth/aq-parquet/blob/ada95144af0cf5191e95a35d0f80768fe58ac73b/firmware/esp-idf-cores3/bringup/telemetry_fields.inc",
       "type": "text/plain",
       "title": "Firmware column dictionary",
-      "file:checksum": "1220e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b"
+      "file:checksum": "12204f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94"
     }
   ],
   "firmware": {
     "schema": "cores3-telemetry-v5",
     "proto_min": 3,
-    "dict": "e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b",
+    "dict": "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94",
     "live_keys": {
       "sequence": "seq",
       "monotonic_us": "mono",

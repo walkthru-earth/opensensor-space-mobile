@@ -1003,16 +1003,16 @@
   "links": [
     {
       "rel": "describedby",
-      "href": "https://github.com/walkthru-earth/aq-parquet/blob/8344adcc37d1dcde8cd4027001f0ed1b232c1d20/firmware/esp-idf-waveshare-sim7670g/logger/telemetry_fields.inc",
+      "href": "https://github.com/walkthru-earth/aq-parquet/blob/ada95144af0cf5191e95a35d0f80768fe58ac73b/firmware/esp-idf-waveshare-sim7670g/logger/telemetry_fields.inc",
       "type": "text/plain",
       "title": "Firmware column dictionary",
-      "file:checksum": "122067688d0fd2e86053c1c66b961a1446ad3c225ee71823e0fadb771b645c7183ff"
+      "file:checksum": "12206f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb"
     }
   ],
   "firmware": {
     "schema": "waveshare-sim7670g-telemetry-v5",
     "proto_min": 3,
-    "dict": "67688d0fd2e86053c1c66b961a1446ad3c225ee71823e0fadb771b645c7183ff",
+    "dict": "6f567b38fecc165f544626168931b3dc3d674482da87ed78cb0bec5bf3dc6ceb",
     "live_keys": {
       "sequence": "seq",
       "monotonic_us": "mono",
