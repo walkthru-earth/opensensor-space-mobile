@@ -256,7 +256,7 @@ class HistorySourcesTest {
         // #92. The Day view and the tiers both correct each row, then average.
         val store = Store()
         val index = Index()
-        val humid = humidPm25Parquet()
+        val humid = humidPm25Parquet(thing)
         val r = ArchiveRecord(thing = thing, name = "thing=$thing/year=2026/month=09/day=17/humid.parquet", bytes = humid.size.toLong(), crc32 = 7, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake")
         store.files[r.key] = humid
         index.put(r)

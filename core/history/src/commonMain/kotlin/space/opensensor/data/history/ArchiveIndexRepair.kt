@@ -78,7 +78,7 @@ class ArchiveIndexRepair(
         } else {
             val index = ParquetFile.open(reader(), record.name).use { file ->
                 val footer = file.metadata.footer
-                require(footer?.thingId == null || footer.thingId == record.thing) { "file metadata belongs to another thing" }
+                require(footer == null || footer.thingId == record.thing) { "file metadata belongs to another thing" }
                 ParquetIndexer.index(file, templates).also { footer?.templateSha256?.let(digest) }
             }
             record.copy(

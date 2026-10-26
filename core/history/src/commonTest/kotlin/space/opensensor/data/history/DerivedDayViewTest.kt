@@ -323,7 +323,7 @@ class DerivedDayViewTest {
         // raw files do, and a row without a valid RH must give no corrected value.
         val thing = "humid-thing"
         val humidDay = HUMID_HOUR_S / 86_400
-        val bytes = humidPm25Parquet()
+        val bytes = humidPm25Parquet(thing)
         val store = Store()
         val index = Index()
         val r = ArchiveRecord(thing, "humid.parquet", bytes.size.toLong(), 1, "s", 1, "fake")

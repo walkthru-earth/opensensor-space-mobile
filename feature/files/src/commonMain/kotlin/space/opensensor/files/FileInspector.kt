@@ -16,11 +16,14 @@ import space.opensensor.data.history.ParquetIndex
 import space.opensensor.data.history.ParquetIndexer
 import space.opensensor.data.history.UtcColumns
 import space.opensensor.data.history.parquet.ColumnValues
+import space.opensensor.data.history.parquet.Geometry
 import space.opensensor.data.history.parquet.ParquetCodec
 import space.opensensor.data.history.parquet.ParquetFile
 import space.opensensor.data.history.parquet.ParquetFormatException
 import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetType
+import space.opensensor.data.history.parquet.Wkb
+import space.opensensor.units.formatFixed
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.TimeSource
 
@@ -115,13 +118,17 @@ object FileInspector {
         }
     }
 
-    /** One page of [pf]. Each column decodes only the row groups the page overlaps, each cell is formatted once with [format]. */
+    /**
+     * One page of [pf]. Each column decodes only the row groups the page overlaps, each cell is formatted
+     * once with [format], or with [formatGeometry] in a geometry column.
+     */
     internal fun page(pf: ParquetFile, from: Long, size: Int, format: (ColumnValues, Int) -> String = ::formatCell): RowPage {
         require(size > 0) { "page size must be positive" }
         val total = pf.numRows
         val start = from.coerceIn(0L, maxOf(0L, total - size))
         val end = minOf(total, start + size)
         val leaves = pf.leaves
+        val geometry = geometryNames(pf)
         val cells = Array((end - start).toInt()) { arrayOfNulls<String>(leaves.size) }
         var groupStart = 0L
         pf.metadata.rowGroups.forEachIndexed { g, rg ->
@@ -131,9 +138,10 @@ object FileInspector {
             if (lo < hi) {
                 leaves.forEachIndexed { c, leaf ->
                     val col = pf.readColumn(leaf, g)
+                    val cell = if (leaf.name in geometry) ::formatGeometry else format
                     for (r in lo until hi) {
                         val i = (r - groupStart).toInt()
-                        cells[(r - start).toInt()][c] = if (col.isNull(i)) NO_VALUE else format(col, i)
+                        cells[(r - start).toInt()][c] = if (col.isNull(i)) NO_VALUE else cell(col, i)
                     }
                 }
             }
@@ -160,6 +168,7 @@ object FileInspector {
                     val s = utcLeaf?.takeIf { scale != null }?.let { rg.columns[it.index].statistics }
                     RowGroupSummary(g, rg.numRows, rg.totalByteSize, s?.minLong(ParquetType.INT64)?.let { UtcColumns.scaleToNs(it, scale!!) }, s?.maxLong(ParquetType.INT64)?.let { UtcColumns.scaleToNs(it, scale!!) })
                 }
+                val geometry = geometryNames(pf)
                 val columns = pf.leaves.map { leaf ->
                     val col = pf.readColumn(leaf)
                     val stats = md.rowGroups.firstOrNull()?.columns?.get(leaf.index)?.statistics?.takeIf { md.rowGroups.size == 1 && it.hasMinMax }
@@ -171,6 +180,7 @@ object FileInspector {
                         col,
                         stats?.let { s -> if (float) s.minFloat()?.toString() else s.minLong(leaf.type)?.toString() },
                         stats?.let { s -> if (float) s.maxFloat()?.toString() else s.maxLong(leaf.type)?.toString() },
+                        if (leaf.name in geometry) ::formatGeometry else ::formatCell,
                     )
                 }
                 FileMetricsState.Loaded(
@@ -254,6 +264,30 @@ object FileInspector {
         ParquetLogicalType.TimeUnit.NANOS -> "ns"
         ParquetLogicalType.TimeUnit.UNKNOWN -> "?"
     }
+
+    /** The names of the WKB geometry columns of [pf], native GEOMETRY or named by a `geo` key. */
+    private fun geometryNames(pf: ParquetFile): Set<String> = pf.geometryColumns.mapTo(HashSet()) { it.name }
+
+    /**
+     * A WKB cell as a reader sees it. A point is `lon … lat …` to five decimals, about a metre, which is
+     * the H3 cell centre the file already holds. Any other geometry shows its type, and bytes that are
+     * not WKB show their size. Shown on screen only, never logged.
+     */
+    internal fun formatGeometry(col: ColumnValues, i: Int): String {
+        if (col !is ColumnValues.Binary) return formatCell(col, i)
+        val g = try {
+            Wkb.decode(col.data, col.offsets[i], col.length(i))
+        } catch (_: ParquetFormatException) {
+            return "${col.length(i)} B"
+        }
+        return when {
+            g.isEmpty -> "${g.typeName} empty"
+            g is Geometry.Point -> "lon ${formatFixed(g.x, COORD_DECIMALS)} lat ${formatFixed(g.y, COORD_DECIMALS)}"
+            else -> g.typeName
+        }
+    }
+
+    private const val COORD_DECIMALS = 5
 
     private fun formatCell(col: ColumnValues, i: Int): String = when (col) {
         is ColumnValues.Float32 -> formatValue(col.values[i].toDouble())

@@ -184,7 +184,7 @@
     <string name="location_permission_settings">اسمح بالموقع التقريبي في الإعدادات لاختيار خلية للمستشعر</string>
     <string name="location_placement">استخدم موقع الهاتف وأنت بجانب المستشعر</string>
     <string name="location_precision">دقة H3 %1$d</string>
-    <string name="location_precision_info">الدقة الأقل تغطي مساحة أكبر. تغطي الدقة 5 حوالي 253 كم² في المتوسط. موقع الهاتف تقريبي.</string>
+    <string name="location_precision_info">الدقة الأقل تغطي مساحة أكبر. الدقة الافتراضية 8 تغطي حوالي 0.74 كم² في المتوسط. موقع الهاتف تقريبي.</string>
     <string name="location_fine_warning">قد تكشف الخلايا الدقيقة عن مكان محدد. الخلية الأصغر لا تجعل موقع الهاتف أدق. للمشاركة العامة حد دقة منفصل.</string>
     <string name="location_country">رمز البلد</string>
     <string name="location_country_info">رمز بلد ISO اختياري تحدده أنت، مثل EG. لا يضمن وجود خادم الوقت داخل البلد.</string>

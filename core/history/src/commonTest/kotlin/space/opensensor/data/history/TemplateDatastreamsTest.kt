@@ -77,7 +77,7 @@ class TemplateDatastreamsTest {
 
     /** An `opensensor` footer naming [dict] and [intervalMs], with no template digest. */
     private fun footer(dict: String, intervalMs: Long? = null): Map<String, String> =
-        mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict, desc = null, intervalMs = intervalMs, board = "soil-probe", schema = "soil-v1"))
+        mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict, desc = null, intervalMs = intervalMs, board = "soil-probe", schema = "soil-v1", thing = thing))
     private val metrics = Metrics.of(soil)
     private fun metric(id: String) = metrics.single { it.id == id }
 

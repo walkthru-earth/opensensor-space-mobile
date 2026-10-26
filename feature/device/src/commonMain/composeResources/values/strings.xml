@@ -180,7 +180,7 @@
     <string name="location_permission_settings">Allow approximate location in Settings to choose a sensor cell</string>
     <string name="location_placement">Use phone location while standing beside the sensor</string>
     <string name="location_precision">H3 resolution %1$d</string>
-    <string name="location_precision_info">Lower resolution covers a larger area. Resolution 5 covers about 253 km² on average. Phone location is approximate.</string>
+    <string name="location_precision_info">Lower resolution covers a larger area. The default, resolution 8, covers about 0.74 km² on average. Phone location is approximate.</string>
     <string name="location_fine_warning">Fine cells can reveal a specific place. A small cell does not make the phone fix more accurate. Public sharing has a separate resolution limit.</string>
     <string name="location_country">Country code</string>
     <string name="location_country_info">Optional ISO country code declared by you, such as EG. It does not guarantee NTP server residency.</string>

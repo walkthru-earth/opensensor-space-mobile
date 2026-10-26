@@ -107,11 +107,11 @@ specs and never name a column. A spec whose column a file lacks yields **no valu
 `0.1.0`, in the style of GeoParquet `geo`). `OpenSensorFooter` reads only `template.sha256`,
 `dictionary.sha256`, `acquisition.sample_interval_ms`, `thing.id`, `thing.mobility` and `file.purpose`
 from it and ignores every other member. The standard GeoParquet 2.0 `geo` key may sit beside it and is
-ignored. A missing key, JSON that is not an object, an unknown major version, a
-digest that is not 64 lowercase hex, an interval that is not an integer, a mobility other than `fixed`
+ignored. A missing key, JSON that is not an object, an unknown major version, a missing
+`thing.id` or `thing.mobility` (so an old `station` footer), a digest that is not 64 lowercase hex, an interval that is not an integer, a mobility other than `fixed`
 or `moving`, or a Thing id or purpose that is not a non-empty string means the file has no footer. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
 unprefixed keys has no footer, so it keeps its rows and has no
-metrics. A rebuilt partial file carries no `opensensor` key either
+metrics. A file with no `opensensor` key is not checked against its Thing. A rebuilt partial file carries no `opensensor` key either
 (stac-opensensor question 30), so it reads the same way. Such files are wiped after the matched reflash (decision 14). The repair checks a file's
 `thing.id` against its archive Thing, and the daily builder checks each source the same way.
 The boot is not read from `firmware.boot_id`. Every row carries `boot_id_hi` and `boot_id_lo`, and
