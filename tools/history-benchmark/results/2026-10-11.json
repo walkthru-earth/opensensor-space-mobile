@@ -1,7 +1,7 @@
 [
     {
         "jmhVersion" : "1.37",
-        "benchmark" : "earth.walkthru.aqsync.data.history.HistoryBenchmark.aggregatorAfter",
+        "benchmark" : "space.opensensor.data.history.HistoryBenchmark.aggregatorAfter",
         "mode" : "avgt",
         "threads" : 1,
         "forks" : 1,
@@ -172,7 +172,7 @@
     },
     {
         "jmhVersion" : "1.37",
-        "benchmark" : "earth.walkthru.aqsync.data.history.HistoryBenchmark.aggregatorBefore",
+        "benchmark" : "space.opensensor.data.history.HistoryBenchmark.aggregatorBefore",
         "mode" : "avgt",
         "threads" : 1,
         "forks" : 1,
@@ -342,7 +342,7 @@
     },
     {
         "jmhVersion" : "1.37",
-        "benchmark" : "earth.walkthru.aqsync.data.history.HistoryBenchmark.dailyAfter",
+        "benchmark" : "space.opensensor.data.history.HistoryBenchmark.dailyAfter",
         "mode" : "avgt",
         "threads" : 1,
         "forks" : 1,
@@ -513,7 +513,7 @@
     },
     {
         "jmhVersion" : "1.37",
-        "benchmark" : "earth.walkthru.aqsync.data.history.HistoryBenchmark.dailyBefore",
+        "benchmark" : "space.opensensor.data.history.HistoryBenchmark.dailyBefore",
         "mode" : "avgt",
         "threads" : 1,
         "forks" : 1,
@@ -684,7 +684,7 @@
     },
     {
         "jmhVersion" : "1.37",
-        "benchmark" : "earth.walkthru.aqsync.data.history.HistoryBenchmark.deriveAfter",
+        "benchmark" : "space.opensensor.data.history.HistoryBenchmark.deriveAfter",
         "mode" : "avgt",
         "threads" : 1,
         "forks" : 1,
@@ -855,7 +855,7 @@
     },
     {
         "jmhVersion" : "1.37",
-        "benchmark" : "earth.walkthru.aqsync.data.history.HistoryBenchmark.deriveBefore",
+        "benchmark" : "space.opensensor.data.history.HistoryBenchmark.deriveBefore",
         "mode" : "avgt",
         "threads" : 1,
         "forks" : 1,
@@ -1026,7 +1026,7 @@
     },
     {
         "jmhVersion" : "1.37",
-        "benchmark" : "earth.walkthru.aqsync.data.history.HistoryBenchmark.fromDerived",
+        "benchmark" : "space.opensensor.data.history.HistoryBenchmark.fromDerived",
         "mode" : "avgt",
         "threads" : 1,
         "forks" : 1,
@@ -1197,7 +1197,7 @@
     },
     {
         "jmhVersion" : "1.37",
-        "benchmark" : "earth.walkthru.aqsync.data.history.HistoryBenchmark.fromRaw",
+        "benchmark" : "space.opensensor.data.history.HistoryBenchmark.fromRaw",
         "mode" : "avgt",
         "threads" : 1,
         "forks" : 1,

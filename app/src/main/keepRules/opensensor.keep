@@ -1,0 +1,60 @@
+# Project keep rules for the release build (R8). The default Android rules
+# (proguard-android-optimize) and library consumer rules (Room, Hilt, WorkManager,
+# kotlinx.serialization, Compose) are applied as well.
+
+# Readable stack traces. Retrace them with the mapping.txt published next to the APK.
+-keepattributes SourceFile,LineNumberTable
+
+# zstd-jni. The native library looks up Java classes, fields and methods by name
+# through JNI (for example Zstd*Ctx.nativePtr), so nothing in the package may be
+# renamed or removed.
+-keep class com.github.luben.zstd.** { *; }
+-dontwarn com.github.luben.zstd.**
+
+# Exception class names are shown to people (e.message ?: e::class.simpleName) and
+# written to diagnostics, so keep the names of every Throwable.
+-keepnames class * extends java.lang.Throwable
+
+# Sealed state and frame types whose simpleName appears in the Debug screen, the
+# frame log and protocol error messages. Class.getSimpleName of a nested class reads
+# the InnerClasses attribute, so keep it explicitly (the default rules keep it too).
+-keepattributes InnerClasses,EnclosingMethod
+-keepnames class space.opensensor.data.ble.ConnectionState
+-keepnames class * implements space.opensensor.data.ble.ConnectionState
+-keepnames class space.opensensor.data.protocol.Frame
+-keepnames class * implements space.opensensor.data.protocol.Frame
+-keepnames class space.opensensor.data.protocol.Request
+-keepnames class * implements space.opensensor.data.protocol.Request
+
+# kotlinx.serialization. The library ships consumer rules for the generated
+# serializers. These rules also keep the companion serializer() of the app's own
+# @Serializable types (device JSON models and Navigation 3 keys), as recommended
+# for classes looked up through serializer<T>().
+-if @kotlinx.serialization.Serializable class space.opensensor.**
+-keepclassmembers class <1> {
+    static <1>$Companion Companion;
+}
+-if @kotlinx.serialization.Serializable class space.opensensor.** {
+    static **$* *;
+}
+-keepclassmembers class <2>$<3> {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-if @kotlinx.serialization.Serializable class space.opensensor.** {
+    public static ** INSTANCE;
+}
+-keepclassmembers class <1> {
+    public static <1> INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Navigation 3 saves the back stack through AppNavConfig (:feature:shell), a polymorphic
+# serializer keyed by serial names, so restore does not depend on class names. Keeping the
+# key names still keeps saved state readable and robust against class merging.
+-keepnames class * implements androidx.navigation3.runtime.NavKey
+
+# com.uber:h3 (Discover map). The JNI library binds com.uber.h3core.NativeMethods by
+# name and constructs LatLng, H3Exception and ArrayList from native code
+# (META-INF/native-image/com.uber/h3/jni-config.json), so the package stays intact.
+-keep class com.uber.h3core.** { *; }
+-dontwarn com.uber.h3core.**

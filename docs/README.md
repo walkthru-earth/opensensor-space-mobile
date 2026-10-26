@@ -27,7 +27,7 @@ before planning new work. Use [architecture.md](architecture.md), [sync-engine.m
 | Understand modules, layers, who depends on whom, "what a change touches" | [architecture.md](architecture.md) | `core/*/build.gradle.kts`, `app/build.gradle.kts` |
 | Change a screen, the nav graph, detail levels | [screens.md](screens.md) | `app/…/ui/`, `data/settings/AppSettings.kt` |
 | Permissions, privacy manifest, Play Data safety and App Store label | [store-compliance.md](store-compliance.md) | `app/src/main/AndroidManifest.xml`, `ui/permissions/`, `ios/App/` |
-| Look up an opcode, frame type, error code, UUID, LAN framing constant | [protocol-quickref.md](protocol-quickref.md) | `core/protocol/…/Frames.kt`, `AqUuids.kt`, `LanFraming.kt` |
+| Look up an opcode, frame type, error code, UUID, LAN framing constant | [protocol-quickref.md](protocol-quickref.md) | `core/protocol/…/Frames.kt`, `DeviceUuids.kt`, `LanFraming.kt` |
 | Touch BLE / LAN pipes, pairing, the LAN token, mDNS, reconnect | [transports.md](transports.md) | `data/ble/`, `data/lan/`, `data/DeviceLinkOwner.kt`, `core/sync/link/` |
 | Touch file download, verification, lost windows, resume, archive paths | [sync-engine.md](sync-engine.md) | `core/sync/`, `data/archive/`, `data/DeviceFacade.kt`, `ios/shared/` |
 | Touch auto-sync, WorkManager, the foreground notification, WifiLock, or the triggers that start a run early (companion presence, advertising flags, Wi-Fi arrival) | [background-sync.md](background-sync.md) | `data/background/`, `data/lan/LanWifiLock.kt`, `core/protocol/.../Advertisement.kt` |
@@ -71,11 +71,10 @@ beside your own devices. `cross-platform-guide` holds the rules that keep both p
 
 ## Conventions in these files
 
-- **Code paths** in Android docs are relative to `app/src/main/java/earth/walkthru/aqsync/`;
+- **Code paths** in Android docs are relative to `app/src/main/java/space/opensensor/`;
   shared KMP rules live in `core/<module>/src/commonMain/`, with JVM adapters in `jvmMain/`;
   iOS app and Apple adapters live under `ios/App/`, with Kotlin presentation code in
-  `ios/shared/`. Android/core packages are `earth.walkthru.aqsync`; the iOS presentation
-  package is `earth.walkthru.opensensor`.
+  `ios/shared/`. All Kotlin packages are under `space.opensensor`.
 - **"Uses → affects"** sections say what a file consumes and what breaks or changes downstream if
   you edit it — search there before editing.
 - Dates are the day a decision was made or a fact was measured; "unverified" means not in

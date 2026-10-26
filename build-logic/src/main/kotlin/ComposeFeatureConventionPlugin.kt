@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
  *
  * - Targets the AGP Kotlin Multiplatform Android library (not `jvm`, because maplibre-compose and
  *   other Compose libraries ship Android artifacts), `iosArm64` and `iosSimulatorArm64`.
- * - Namespace `earth.walkthru.opensensor.<module name>`, SDK levels from [OpenSensorConventions],
+ * - Namespace `space.opensensor.<module name>`, SDK levels from [OpenSensorConventions],
  *   Android resources on, bytecode 17.
  * - Compose runtime, foundation, Material 3, UI and resources in `commonMain`.
  * - Compose resources in the internal `<namespace>.resources` package, always generated.

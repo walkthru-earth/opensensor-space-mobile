@@ -1,9 +1,9 @@
 # Agent map — opensensor.space mobile (Android + iOS)
 
 Mobile companion for `../aq-parquet`. Android and iOS apps live in this repository with
-shared Kotlin modules. The Gradle project is `opensensor-space-mobile`; the Android
-application ID and Android/core package remain `earth.walkthru.aqsync` for install/update
-compatibility; the iOS shared presentation package is `earth.walkthru.opensensor`.
+shared Kotlin modules. The Gradle project is `opensensor-space-mobile`. The Android
+application ID and the iOS bundle ID are `space.opensensor.app`. All Kotlin code lives under
+the `space.opensensor` package.
 Confirm the checkout and GitHub repository names from Git before recording
 them; do not infer them from the directory name. Start with this file, then open only the
 concern you are changing in `docs/README.md`.
@@ -15,9 +15,9 @@ concern you are changing in `docs/README.md`.
 | Device families, sensor-agnostic model, public H3 discover map | `docs/devices-and-discovery.md` | `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/` |
 | iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios.md`, `ios/AGENTS.md` | `core/`, `ios/` |
 | App layers and dependencies | `docs/architecture.md`, `core/AGENTS.md` | `core/`, `app/` |
-| BLE, LAN, sync, pairing, background work | `docs/transports.md`, `docs/sync-engine.md`, `docs/background-sync.md`, `app/src/main/java/earth/walkthru/aqsync/data/AGENTS.md` | `data/` |
+| BLE, LAN, sync, pairing, background work | `docs/transports.md`, `docs/sync-engine.md`, `docs/background-sync.md`, `app/src/main/java/space/opensensor/data/AGENTS.md` | `data/` |
 | Room, history, Parquet | `docs/data-model.md`, `docs/history-pipeline.md`, `docs/parquet.md` | `data/history/`, `data/local/`, `core/` |
-| Screens and interaction | `docs/screens.md`, `app/src/main/java/earth/walkthru/aqsync/ui/AGENTS.md` | `ui/` |
+| Screens and interaction | `docs/screens.md`, `app/src/main/java/space/opensensor/ui/AGENTS.md` | `ui/` |
 | Build, hooks and release | `docs/build-and-release.md` | `tools/`, `.github/` |
 | Store forms, permission timing, privacy manifest | `docs/store-compliance.md` | `ui/permissions/`, `ios/App/` |
 

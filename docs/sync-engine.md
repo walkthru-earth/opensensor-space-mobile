@@ -239,7 +239,7 @@ Timeouts carry `DisconnectCause.Timeout` with the failed phase.
 
 `DeviceSession`, `SyncEngine` and `ArchiveCollector` run on it. Android native
 `TcpLinkDriver` and `BleLinkDriver` feed its `FrameSink`. `TransportLinkDriver` adapts the
-fake and compatibility `AqTransport` paths. iOS uses the connection's `IosLink`.
+fake and compatibility `DeviceTransport` paths. iOS uses the connection's `IosLink`.
 
 - One session per physical connection. A single router coroutine owns every reply frame. A
   request is registered before its write, owns the link until its terminal frame

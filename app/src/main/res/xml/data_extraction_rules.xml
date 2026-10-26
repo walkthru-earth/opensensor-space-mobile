@@ -33,6 +33,6 @@
         <include domain="file" path="datastore/discover.preferences_pb" />
         <include domain="file" path="archive/" />
         <include domain="file" path="clock-anchors/" />
-        <include domain="database" path="aq-sync.db" />
+        <include domain="database" path="opensensor.db" />
     </device-transfer>
 </data-extraction-rules>

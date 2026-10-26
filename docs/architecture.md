@@ -121,7 +121,7 @@ It holds four convention plugins, so a new shared module is one `plugins {}` lin
 | Plugin | Applied by | Sets |
 | --- | --- | --- |
 | `opensensor.kmp.library` | every `:core` module | Kotlin Multiplatform with `jvm` (bytecode 17), `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, a `test` task that runs `jvmTest`. Adds `jvmTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
-| `opensensor.kmp.compose-feature` | `:ui:designsystem`, `:ui:strings`, `:ui:permissions`, `:feature:discover`, `:feature:settings`, `:feature:shell` | the AGP KMP Android library target (namespace `earth.walkthru.opensensor.<module>`, SDK 37, min 31, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, internal resources class in `<namespace>.resources`, `kotlin-test` in `commonTest` (runs in the Android host test and on the simulator), a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
+| `opensensor.kmp.compose-feature` | `:ui:designsystem`, `:ui:strings`, `:ui:permissions`, `:feature:discover`, `:feature:settings`, `:feature:shell` | the AGP KMP Android library target (namespace `space.opensensor.<module>`, SDK 37, min 31, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, internal resources class in `<namespace>.resources`, `kotlin-test` in `commonTest` (runs in the Android host test and on the simulator), a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
 | `opensensor.kmp.ios-framework` | `:ios:shared` | iOS only Kotlin Multiplatform with the static `OpenSensorShared` framework for each iOS target. Adds `iosSimulatorArm64Test` and `linkDebugFrameworkIosSimulatorArm64` to `verifyIos` |
 | `opensensor.jvm.library` | none today (kept for a future JVM-only module) | Kotlin/JVM with Java and Kotlin bytecode 17 |
 
@@ -154,7 +154,7 @@ flowchart LR
   MANAGER --> REPO["DeviceFacade per address<br/>CollectionController state + UI flows"]
   REPO --> OWNER["DeviceLinkOwner<br/>connect, identity, commands, idle watch"]
   OWNER --> SESS["data/ble/DeviceSession<br/>one request at a time"]
-  SESS --> TR{{"AqTransport"}}
+  SESS --> TR{{"DeviceTransport"}}
   TR --> BLE["data/ble/BleLinkDriver"]
   TR --> LAN["data/lan/TcpLinkDriver"]
   TR --> FAKE["data/fake/FakeTransport (debug)"]
@@ -170,7 +170,7 @@ flowchart LR
 
 ## Package map
 
-| Path (under `app/src/main/java/earth/walkthru/aqsync/`) | Holds | Android-only? |
+| Path (under `app/src/main/java/space/opensensor/`) | Holds | Android-only? |
 | --- | --- | --- |
 | `data/DeviceConnectionManager.kt`, `data/DeviceFacade.kt`, `data/DeviceLinkOwner.kt`, `data/TransportFactory.kt` | Process-owned registry; one facade and shared collection controller per address. The link owner owns transport, identity, commands and idle reconnect. The repository name is a compatibility typealias | yes |
 | `data/DeviceIdentityClaims.kt`, `data/DeviceContinuityPolicy.kt` | Shared two-transfer budget; full hardware identity claims and authenticated continuity policy | no (JVM logic with DI bindings) |
@@ -198,7 +198,7 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `units`, `airquality` | Display units, axis ticks, WHO 2021 scales and the PM quality checks (`QcRules`) |
 | `storage` | Durable/Derived/Scratch roots, atomic no-replace commits, free-space budget, quota and memory pressure |
 | `archive` | Layout, verifier, records and store/index ports. Android uses file adapters, iosMain supplies `IosArchiveStore` and `LegacyReceiptImport` |
-| `database` | Room KMP schema v12 (`AppDatabase`, entities, DAOs) on the bundled SQLite driver, `RoomArchiveIndex` and `RoomPrunedFiles` for both phones. iosMain opens `Application Support/database/aq-sync.db` through `IosArchiveDatabase` |
+| `database` | Room KMP schema v12 (`AppDatabase`, entities, DAOs) on the bundled SQLite driver, `RoomArchiveIndex` and `RoomPrunedFiles` for both phones. iosMain opens `Application Support/database/opensensor.db` through `IosArchiveDatabase` |
 | `sync` | `LinkSession`, typed `DeviceSession` views, `SyncEngine`, `ArchiveCollector`, `CollectionController`, policies, progress and `StorageJanitor` |
 | `settings` | Shared DataStore preferences, keys and detail level. iOS supplies its Application Support path and one-time UserDefaults import |
 
@@ -241,7 +241,7 @@ part of the derived tier format once stored, so a bit is never reused or renumbe
 - **Pure modules receive plain records, never entities.** `ArchivedFile.info()` → `IndexedFileInfo`; `HistoryIndexer` wraps `ParquetIndexer`. Room's KSP also refuses an entity implementing an interface from another module ([lessons](lessons-learned.md#build--tooling)).
 - **A new sensor is a registry entry** in `Metrics` (`:core:history`), not code. See [history-pipeline.md](history-pipeline.md#metric-registry).
 - **A new analysis is a pure object in `:core:history`** with a test over the real fixtures, fed by `:app` from Room/files. Never a query inside a composable.
-- **A new transport is a `LinkDriver`** behind `TransportFactory` and one `LinkSession` (`AqTransport` remains a compatibility surface); the session, engine and archive do not change ([transports.md](transports.md)).
+- **A new transport is a `LinkDriver`** behind `TransportFactory` and one `LinkSession` (`DeviceTransport` remains a compatibility surface); the session, engine and archive do not change ([transports.md](transports.md)).
 - **Transport work never lives in a composable or Activity**; manager-owned controllers keep session/sync state through rotation and navigation. Opening another device selects another controller without closing existing connections.
 - **The one native Android library** is `zstd-jni` (`@aar`), registered from `:app` into `:core:parquet`'s codec SPI (`AppParquetCodecs`). Every `:core` module targets JVM and iOS. iOS inflates GZIP with the system zlib and has no ZSTD codec yet.
 
@@ -295,7 +295,7 @@ not phone cold-open latency or a qualified latency improvement.
 | If you change… | It is consumed by… | So re-check… |
 | --- | --- | --- |
 | `core/protocol/Frames.kt` (opcodes, layouts) | `DeviceSession`, `FakeTransport`, `FrameRecorder`, `DebugScreen` raw box | the firmware contract first (owner), `FrameCodec*Test`, the fake |
-| `AqTransport` interface | `BleLinkDriver`, `TcpLinkDriver`, `FakeTransport` (through `TransportLink`), `DeviceSession`, repository | `TcpLinkDriverTest` loopback, `:core:sync` `SyncEngineTest` |
+| `DeviceTransport` interface | `BleLinkDriver`, `TcpLinkDriver`, `FakeTransport` (through `TransportLink`), `DeviceSession`, repository | `TcpLinkDriverTest` loopback, `:core:sync` `SyncEngineTest` |
 | `Metrics` registry | `Aggregator`, `HistoryDeriver`, `DailyDerivedBuilder`, History picker, charts, Now card | `AggregationTest`, `HistoryDeriverTest`, Room `metric_bucket` rows (id strings) |
 | Room entities | `SyncEngine`, `HistoryIndexer/Deriver/Repository`, ViewModels | a new migration + `core/database/schemas/<n>.json`, `DERIVE_VERSION` if tier meaning changed |
 | `ParquetWriter` output | `DailyDerivedBuilder`, `tools/validate_parquet_samples.py` | PyArrow + DuckDB oracle run |
@@ -308,7 +308,7 @@ not phone cold-open latency or a qualified latency improvement.
 
 ## Provenance
 
-Generated from Google's `android/architecture-templates` (`base` branch) with
-`customizer.sh earth.walkthru.aqsync Device "AQ Sync"`; the untouched output is commit `34f2d30`
-(first commit "Generate from android/architecture-templates base"). Keep the template's structure
+Generated from Google's `android/architecture-templates` (`base` branch) with `customizer.sh`.
+The untouched output is commit `34f2d30` (first commit "Generate from android/architecture-templates base").
+Keep the template's structure
 (Hilt, Room, Navigation 3, version catalog). Everything after it is diffable against that.

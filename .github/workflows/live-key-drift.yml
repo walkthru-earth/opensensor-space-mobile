@@ -33,4 +33,4 @@ jobs:
         run: >-
           python3 -I tools/check_live_key_drift.py
           aq-parquet/tools/fixtures/live_keys
-          core/protocol/src/commonTest/kotlin/earth/walkthru/aqsync/data/protocol/LiveKeyFixturesTest.kt
+          core/protocol/src/commonTest/kotlin/space/opensensor/data/protocol/LiveKeyFixturesTest.kt

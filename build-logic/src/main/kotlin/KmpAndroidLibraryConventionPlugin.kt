@@ -10,7 +10,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
  * library that ships separate Android and iOS artifacts (Room). No Compose and no JVM target.
  *
  * - Targets the AGP Kotlin Multiplatform Android library, `iosArm64` and `iosSimulatorArm64`.
- * - Namespace `earth.walkthru.opensensor.<module name>`, SDK levels from [OpenSensorConventions],
+ * - Namespace `space.opensensor.<module name>`, SDK levels from [OpenSensorConventions],
  *   bytecode 17.
  * - `kotlin-test` in `commonTest`. AGP compiles `commonTest` into the Android host test, so shared
  *   tests run on the host in `verify` and on the simulator in `verifyIos`.

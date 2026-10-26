@@ -109,7 +109,7 @@ final class BluetoothCompanion {
     /// An armed pending connect completed. The shared run decides whether that sensor is due.
     var onWake: ((String) -> Void)?
     /// Core Bluetooth state restoration, so pending connects survive the app being ended by iOS.
-    static let restoreId = "earth.walkthru.opensensor.central"
+    static let restoreId = "space.opensensor.app.central"
 
     /// Links keep working off screen only for work already under way.
     private var active: Bool {

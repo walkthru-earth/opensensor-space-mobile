@@ -145,7 +145,7 @@ actor LanSession {
     private static let idleTimeout: TimeInterval = 180
 
     init(endpoint: NWEndpoint) {
-        queue = DispatchSerialQueue(label: "earth.walkthru.opensensor.lan-session")
+        queue = DispatchSerialQueue(label: "space.opensensor.app.lan-session")
         connection = NWConnection(to: endpoint, using: LanPolicy.connectionParameters())
         (events, eventSink) = AsyncStream.makeStream(of: Event.self, bufferingPolicy: .bufferingNewest(64))
     }

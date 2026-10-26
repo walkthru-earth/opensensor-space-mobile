@@ -40,8 +40,8 @@ shared Kotlin, and screens share one design system based on the opensensor.space
 | Android | Multi-device BLE/LAN collection, verified local archive, offline history, and background sync | Host gate passes; phone qualification is tracked separately in [`docs/status.md`](docs/status.md) and the [CoreS3](../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md) and [Waveshare](../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md) records. |
 | iOS | The same shared screens, BLE and LAN collection into a verified local archive, offline history and per-device Auto-sync | Host, simulator and native checks pass. iPhone runs are tracked in [`docs/status.md`](docs/status.md), see [`docs/ios.md`](docs/ios.md) |
 
-Host tests, simulator builds, and phone observations are different evidence. The Android
-application ID and signing identity remain stable for existing installations. Read the
+Host tests, simulator builds, and phone observations are different evidence. The app ID
+is `space.opensensor.app` on Android and iOS. Read the
 [full status record](docs/status.md) for dated results and remaining checks.
 
 ## Documentation map

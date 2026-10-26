@@ -10,50 +10,50 @@ plugins {
 // the defaults. Read through providers so the configuration cache stays valid. A variable that is
 // set but blank (GitHub exports an unset secret as "") counts as absent.
 fun env(name: String): String? = providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
-val ciVersionCode = env("AQSYNC_VERSION_CODE")?.toIntOrNull()
-val ciVersionName = env("AQSYNC_VERSION_NAME")
+val ciVersionCode = env("OPENSENSOR_VERSION_CODE")?.toIntOrNull()
+val ciVersionName = env("OPENSENSOR_VERSION_NAME")
 val releaseSigningVariables = listOf(
-    "AQSYNC_KEYSTORE_FILE",
-    "AQSYNC_KEYSTORE_PASSWORD",
-    "AQSYNC_KEY_ALIAS",
-    "AQSYNC_KEY_PASSWORD",
+    "OPENSENSOR_KEYSTORE_FILE",
+    "OPENSENSOR_KEYSTORE_PASSWORD",
+    "OPENSENSOR_KEY_ALIAS",
+    "OPENSENSOR_KEY_PASSWORD",
 )
 val requestedReleaseTasks = gradle.startParameter.taskNames.any { task ->
     task.substringAfterLast(':').contains("release", ignoreCase = true)
 }
 val missingReleaseSigningVariables = releaseSigningVariables.filter { env(it) == null }
 
-// Local R8 check without the project key. `-Paqsync.localRelease=true` signs the minified release
-// with the debug key so `./gradlew :app:assembleRelease -Paqsync.localRelease=true` works on any
+// Local R8 check without the project key. `-Popensensor.localRelease=true` signs the minified release
+// with the debug key so `./gradlew :app:assembleRelease -Popensensor.localRelease=true` works on any
 // machine. Such an APK cannot update a release install and must never be published, so the flag is
 // refused on CI (GitHub Actions sets CI=true) and the release workflow never passes it.
-val localRelease = providers.gradleProperty("aqsync.localRelease").orNull == "true"
+val localRelease = providers.gradleProperty("opensensor.localRelease").orNull == "true"
 if (localRelease && env("CI") != null) {
-    throw GradleException("aqsync.localRelease is a local check only and is refused on CI")
+    throw GradleException("opensensor.localRelease is a local check only and is refused on CI")
 }
 if (requestedReleaseTasks && !localRelease && missingReleaseSigningVariables.isNotEmpty()) {
     throw GradleException(
         "Release tasks require project signing credentials; missing: ${missingReleaseSigningVariables.joinToString()}" +
-            " (for a local minified build without them pass -Paqsync.localRelease=true)",
+            " (for a local minified build without them pass -Popensensor.localRelease=true)",
     )
 }
-val releaseKeystore = env("AQSYNC_KEYSTORE_FILE")?.let { rootProject.file(it) }
+val releaseKeystore = env("OPENSENSOR_KEYSTORE_FILE")?.let { rootProject.file(it) }
 if (requestedReleaseTasks && !localRelease && releaseKeystore?.isFile != true) {
-    throw GradleException("AQSYNC_KEYSTORE_FILE must name an existing regular file")
+    throw GradleException("OPENSENSOR_KEYSTORE_FILE must name an existing regular file")
 }
 
 android {
-    namespace = "earth.walkthru.aqsync"
+    namespace = "space.opensensor.app"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "earth.walkthru.aqsync"
+        applicationId = "space.opensensor.app"
         minSdk = 31
         targetSdk = 37
         versionCode = ciVersionCode ?: 1
         versionName = ciVersionName ?: "1.0"
 
-        testInstrumentationRunner = "earth.walkthru.aqsync.HiltTestRunner"
+        testInstrumentationRunner = "space.opensensor.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -70,9 +70,9 @@ android {
         if (!localRelease && releaseKeystore != null && missingReleaseSigningVariables.isEmpty()) {
             create("release") {
                 storeFile = releaseKeystore
-                storePassword = env("AQSYNC_KEYSTORE_PASSWORD")
-                keyAlias = env("AQSYNC_KEY_ALIAS")
-                keyPassword = env("AQSYNC_KEY_PASSWORD")
+                storePassword = env("OPENSENSOR_KEYSTORE_PASSWORD")
+                keyAlias = env("OPENSENSOR_KEY_ALIAS")
+                keyPassword = env("OPENSENSOR_KEY_PASSWORD")
             }
         }
     }

@@ -1,0 +1,30 @@
+package space.opensensor.data
+
+import space.opensensor.collection.SyncEndReason
+import space.opensensor.data.sync.FileOutcome
+import space.opensensor.data.sync.FileProgress
+import space.opensensor.data.sync.SyncEndCause
+import space.opensensor.data.sync.failed
+
+/** Progress of one collection run over every planned file, as the screens and notifications show it. */
+data class SyncProgress(
+    val running: Boolean = false,
+    val current: FileProgress? = null,
+    val filesDone: Int = 0,
+    val filesTotal: Int = 0,
+    val bytesDone: Long = 0,
+    val bytesTotal: Long = 0,
+    val bytesPerSecond: Double = 0.0,
+    /** `READ` windows lost to dropped notifications and re-read successfully, over the whole run. */
+    val windowsRecovered: Int = 0,
+    val outcomes: List<FileOutcome> = emptyList(),
+    val startedAtEpochMs: Long? = null,
+    val finishedAtEpochMs: Long? = null,
+    /** Why the last run ended (null while running or before the first run). */
+    val endCause: SyncEndCause? = null,
+    /** The person-facing reason for that ending, shared by every screen and notification. */
+    val endReason: SyncEndReason? = null,
+) {
+    val fraction: Float get() = if (bytesTotal == 0L) 0f else (bytesDone.toFloat() / bytesTotal).coerceIn(0f, 1f)
+    val failures: List<FileOutcome> get() = outcomes.filter { it.failed }
+}

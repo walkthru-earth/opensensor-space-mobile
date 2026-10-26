@@ -33,7 +33,7 @@ milliseconds.
 ### Pass order (`HistoryOrchestrator`, `:core:history`)
 
 Both phones run the same order (#100). The shared `HistoryStartup.start` is called once per process,
-from `AqSyncApplication.onCreate` on Android and `IosArchive.startIndexRepair` on iOS
+from `OpenSensorApplication.onCreate` on Android and `IosArchive.startIndexRepair` on iOS
 (`AppStartupTest`, `IosArchiveStartupTest`). It runs the storage janitor, then the feed block quota,
 then `HistoryOrchestrator.run`.
 
@@ -356,7 +356,7 @@ the user pages back, and opens on the last local day with readings.
 | Tiers | Room `metric_bucket` (`RoomHistoryTiers`) | persisted signature-gated sidecars from the shared day pass (`ArchiveHistoryTiers`) |
 | Current station | the known device's station | the archived station with the latest reading |
 | Chips | the device's authenticated station epochs | every archived station, oldest latest reading first |
-| Index repair | `HistoryStartup.start` from `AqSyncApplication`. The engine indexes each file in the same upsert, so a record waits only after a migration reopens it | `HistoryStartup.start` from `IosArchive.startIndexRepair`. The engine adds records without index columns, so a back-fill follows each new file. On both phones changes during a pass are conflated, and passes repeat until no record is waiting |
+| Index repair | `HistoryStartup.start` from `OpenSensorApplication`. The engine indexes each file in the same upsert, so a record waits only after a migration reopens it | `HistoryStartup.start` from `IosArchive.startIndexRepair`. The engine adds records without index columns, so a back-fill follows each new file. On both phones changes during a pass are conflated, and passes repeat until no record is waiting |
 | Header | device section tabs and the link chip | a back arrow, opened from the History button on My devices |
 
 Repair writes only its own columns. It merges the index and estimate columns onto the latest

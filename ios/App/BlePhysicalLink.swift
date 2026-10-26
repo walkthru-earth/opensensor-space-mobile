@@ -87,7 +87,7 @@ actor BlePhysicalLink {
     }
 
     init(uuids: Uuids, deliver: @escaping @Sendable (UInt64, BleEvent) -> Void) {
-        queue = DispatchSerialQueue(label: "earth.walkthru.opensensor.ble")
+        queue = DispatchSerialQueue(label: "space.opensensor.app.ble")
         self.uuids = uuids
         self.deliver = deliver
         bonded = Set(UserDefaults.standard.stringArray(forKey: Self.bondedKey) ?? [])
