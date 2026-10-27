@@ -105,17 +105,19 @@ object FileItems {
      * The Item of the device file [fileName], whose verified bytes [reader] holds, with its parsed
      * [footer] and the [template] of the board that wrote it. [dataBaseUrl] is the public archive root.
      * A cell finer than [maxRes] is coarsened to its parent at [maxRes] first, so the Item never names
-     * a finer place than its publish policy allows (`PublishGate` in `:core:thing`).
+     * a finer place than its publish policy allows (`PublishGate` in `:core:thing`). [maxRes] has no
+     * default, so every caller states the precision it publishes.
      */
     fun build(
         fileName: String,
         reader: ByteReader,
         footer: OpenSensorFooter?,
         template: BoardTemplate,
+        maxRes: Int,
         h3: H3Grid = platformH3Grid(),
         dataBaseUrl: String = DATA_BASE_URL,
-        maxRes: Int = H3Index.MAX_RES,
     ): FileItemResult {
+        require(maxRes in 0..H3Index.MAX_RES) { "maxRes $maxRes is not an H3 resolution" }
         if (!DATED_FILE.matches(fileName)) return FileItemResult.NotDatedFile
         if (footer == null) return FileItemResult.NoThingId
         val thing = footer.thingId?.takeIf { UUID.matches(it) } ?: return FileItemResult.NoThingId

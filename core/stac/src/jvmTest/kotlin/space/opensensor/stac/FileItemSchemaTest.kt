@@ -10,6 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import space.opensensor.data.history.OpenSensorFooter.Mobility
 import space.opensensor.data.history.parquet.ByteArrayReader
+import space.opensensor.publicfeed.H3Index
 
 /**
  * Items validated against the stac-opensensor v0.1.0 profile and extension schemas, copied from
@@ -29,7 +30,7 @@ class FileItemSchemaTest {
     }
 
     private fun itemJson(rows: List<Row>, mobility: Mobility, template: space.opensensor.model.BoardTemplate): String {
-        val result = FileItems.build(FILE_NAME, ByteArrayReader(deviceFile(rows)), footer(mobility), template, h3)
+        val result = FileItems.build(FILE_NAME, ByteArrayReader(deviceFile(rows)), footer(mobility), template, H3Index.MAX_RES, h3)
         return (result as FileItemResult.Item).json
     }
 

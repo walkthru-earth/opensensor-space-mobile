@@ -59,7 +59,7 @@ final class AppServices {
     private var selectedOpenId: String?
     private var livePage = LivePage()
     /// The app's Thing kinds, first, so their metric providers are in the catalog before the engine starts.
-    let thingKinds = ThingKindsIosKt.launchThingKinds()
+    private let thingKindsLaunched: Void = ThingKindsIosKt.launchThingKinds()
     /// One shared engine, so LAN and Bluetooth save into the same archive and never sync a thing twice at once.
     let engine = IosArchiveKt.sharedSensorSync()
     private(set) lazy var bluetooth = BluetoothCompanion(engine: engine)

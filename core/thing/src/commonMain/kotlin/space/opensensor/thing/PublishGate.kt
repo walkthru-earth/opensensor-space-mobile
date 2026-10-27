@@ -48,7 +48,8 @@ class PublishGate(
 
     /**
      * The Item of one of the ticket's Thing's files ([FileItems.build]), with no cell finer than the
-     * policy's `maxRes`. A file whose footer names another Thing gets [FileItemResult.NoThingId].
+     * policy's `maxRes`, or null once the owner turned upload off for that Thing after the ticket was
+     * issued. A file whose footer names another Thing gets [FileItemResult.NoThingId].
      */
     fun item(
         ticket: PublishTicket,
@@ -58,8 +59,9 @@ class PublishGate(
         template: BoardTemplate,
         h3: H3Grid = platformH3Grid(),
         dataBaseUrl: String = FileItems.DATA_BASE_URL,
-    ): FileItemResult {
+    ): FileItemResult? {
+        if (!consent.optedIn(ticket.thing)) return null
         if (footer?.thingId != ticket.thing) return FileItemResult.NoThingId
-        return FileItems.build(fileName, reader, footer, template, h3, dataBaseUrl, maxRes = ticket.policy.maxRes)
+        return FileItems.build(fileName, reader, footer, template, ticket.policy.maxRes, h3, dataBaseUrl)
     }
 }

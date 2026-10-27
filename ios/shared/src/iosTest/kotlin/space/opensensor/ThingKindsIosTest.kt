@@ -11,10 +11,12 @@ import kotlin.test.assertSame
 class ThingKindsIosTest {
     @Test
     fun theAppListsTheBoardKindOnce() {
-        val kinds = launchThingKinds()
+        launchThingKinds()
+        val kinds = iosThingKinds
         assertEquals(1, kinds.size)
         assertEquals(OpenSensorBoardKind, kinds[OpenSensorBoardKind.id])
-        assertSame(kinds, launchThingKinds())
+        launchThingKinds()
+        assertSame(kinds, iosThingKinds)
         assertNotNull(Metrics.byId(AirDerivedMetrics.PM25_CORRECTED_ID))
     }
 }

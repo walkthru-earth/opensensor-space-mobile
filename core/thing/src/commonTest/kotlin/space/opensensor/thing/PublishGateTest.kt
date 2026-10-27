@@ -63,6 +63,17 @@ class PublishGateTest {
     }
 
     @Test
+    fun optingOutAfterTheTicketBuildsNoItem() {
+        var granted = true
+        val gate = PublishGate(kinds, UploadConsent { granted && it == thing })
+        val ticket = assertNotNull(gate.ticket(OpenSensorBoardKind.id, thing))
+        granted = false
+        val cell = platformH3Grid().latLngToCell(5.6018, -0.1881, 8)
+        assertNull(gate.item(ticket, FILE_NAME, ByteArrayReader(deviceFile(cell)), footer(thing), template))
+        assertNull(gate.ticket(OpenSensorBoardKind.id, thing))
+    }
+
+    @Test
     fun aFileOfAnotherThingGetsNoItem() {
         val ticket = assertNotNull(PublishGate(kinds, optedIn).ticket(OpenSensorBoardKind.id, thing))
         val other = "0b7e0f53-8f5e-4c3a-9d55-1a2b3c4d5e6f"
