@@ -83,6 +83,11 @@ class CollectAllQueue(steps: List<CollectStep>, private val parallel: Int = 1) {
         pending.clear()
     }
 
+    /** Drops the steps for [id] that have not started, ignoring case. A running step still reports [finished]. */
+    fun cancel(id: String) {
+        pending.removeAll { it.id.equals(id, ignoreCase = true) }
+    }
+
     private fun fill(): List<CollectStep> {
         val started = ArrayList<CollectStep>()
         while (running.size < parallel && pending.isNotEmpty()) {

@@ -10,6 +10,7 @@ import space.opensensor.model.Scale
 import space.opensensor.model.ScaleStep
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -54,11 +55,11 @@ class StepScaleTest {
     }
 
     @Test
-    fun aScaleOutOfOrderIsRefused() {
-        assertNull(StepScale.of("x", scale(step(0.3), step(0.1), step(null))))
-        assertNull(StepScale.of("x", scale(step(0.3), step(0.3))))
-        assertNull(StepScale.of("x", scale(step(0.1), step(null), step(0.5))))
-        assertNull(StepScale.of("x", scale(step(Double.NaN), step(null))))
+    fun aScaleOutOfOrderCannotBeBuilt() {
+        assertFailsWith<IllegalArgumentException> { scale(step(0.3), step(0.1), step(null)) }
+        assertFailsWith<IllegalArgumentException> { scale(step(0.3), step(0.3)) }
+        assertFailsWith<IllegalArgumentException> { scale(step(0.1), step(null), step(0.5)) }
+        assertFailsWith<IllegalArgumentException> { scale(step(Double.NaN), step(null)) }
         assertNotNull(StepScale.of("x", scale(step(null))))
     }
 
@@ -69,12 +70,13 @@ class StepScaleTest {
         assertNull(StepScale.of("x", scale(*(1..max).map { step(it.toDouble()) }.plus(step(null)).toTypedArray())))
         val m = StepScale.MAX_MAGNITUDE
         assertNotNull(StepScale.of("x", scale(step(-m), step(m), step(null), guideline = m)))
+        assertNull(StepScale.of("x", scale(step(0.0), step(m * 2), step(null))), "edge above the bound")
+        assertNull(StepScale.of("x", scale(step(-m * 2), step(0.0), step(null))), "edge below the bound")
         for (bad in listOf(m * 2, -m * 2, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
-            assertNull(StepScale.of("x", scale(step(0.0), step(bad), step(null))), "edge $bad")
             assertNull(StepScale.of("x", scale(step(1.0), step(null), guideline = bad)), "guideline $bad")
         }
         // The last step may be closed, and then it is bounded too.
-        assertNull(StepScale.of("x", scale(step(1.0), step(Double.POSITIVE_INFINITY))))
+        assertNull(StepScale.of("x", scale(step(1.0), step(m * 2))))
     }
 
     @Test

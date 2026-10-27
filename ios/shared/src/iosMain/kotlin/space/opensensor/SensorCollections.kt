@@ -141,11 +141,13 @@ class SensorCollections internal constructor(
 
     /**
      * The Stop button for [device], in any letter case. It ends only a run the user started, in every
-     * phase, also while the link is gone and the run waits to retry or a dial is in flight. Collect
-     * all and Auto-sync runs keep their own cancel. Call on the main thread.
+     * phase, also while the link is gone and the run waits to retry or a dial is in flight. A user
+     * run the OS interrupted never resumes after it. Collect all and Auto-sync runs keep their own
+     * cancel. Call on the main thread.
      */
     fun stopUserRun(device: ThingId.BleAddress) {
         locked {
+            interrupted.entries.removeAll { (key, run) -> key.sameBoard(device) && run.origin == RunOrigin.USER }
             requests.entries
                 .filter { (_, request) -> request.origin == RunOrigin.USER && request.device.sameBoard(device) }
                 .mapNotNull { (id, request) -> controllers[request.device]?.let { it to id } }
@@ -162,7 +164,7 @@ class SensorCollections internal constructor(
             val controller = controllers[device] ?: return false
             val id = controller.state.value.intentId ?: return false
             val request = requests[id]?.takeIf { it.origin != RunOrigin.AUTO_SYNC } ?: return false
-            interrupted[device] = InterruptedRun(device, request.onlyName, request.prefer)
+            interrupted[device] = InterruptedRun(device, request.onlyName, request.prefer, request.origin)
             controller to id
         }
         if (controller.keepAliveRefused(KeepAliveKind.PROCESS, id)) return true
@@ -382,7 +384,15 @@ enum class ResumeOutcome {
     SKIPPED,
 }
 
-/** A run the OS interrupted off screen. [onlyName] is set for a one-file sync from Files. */
-class InterruptedRun internal constructor(val device: ThingId.BleAddress, val onlyName: String?, val prefer: LinkPreference) {
+/**
+ * A run the OS interrupted off screen. [onlyName] is set for a one-file sync from Files. [origin]
+ * says whether the Stop button may drop it.
+ */
+class InterruptedRun internal constructor(
+    val device: ThingId.BleAddress,
+    val onlyName: String?,
+    val prefer: LinkPreference,
+    internal val origin: RunOrigin,
+) {
     override fun toString(): String = "InterruptedRun(${prefer.name.lowercase()}, ${if (onlyName == null) "all files" else "one file"})"
 }

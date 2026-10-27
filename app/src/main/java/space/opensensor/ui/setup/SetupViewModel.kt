@@ -14,6 +14,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -57,6 +58,9 @@ class SetupViewModel @AssistedInject constructor(
     private val adverts = NearbyAdverts(touch = { knownDeviceDao.touch(it.address, it.name, it.lastSeenEpochMs) })
     private var scanJob: Job? = null
 
+    /** The failure each accepted connect replaced, by lowercase id, until its [SetupPort.link] skips it. */
+    private val staleFailures = mutableMapOf<String, ConnectionState.Failed>()
+
     private val port = object : SetupPort {
         override val nearby: Flow<List<SetupCandidate>> = combine(adverts.seen, knownDeviceDao.observeAll()) { seen, known ->
             val added = known.mapTo(HashSet()) { it.address }
@@ -87,15 +91,18 @@ class SetupViewModel @AssistedInject constructor(
             val facade = manager.controller(id)
             val state = facade.connectionState.value
             if (state.isReady || state.isBusy) return
-            facade.connect(id, name)
+            if (facade.connect(id, name)) {
+                if (state is ConnectionState.Failed) staleFailures[id.lowercase()] = state else staleFailures.remove(id.lowercase())
+            }
         }
 
         override fun link(id: String): Flow<SetupLink> = flow {
             if (!bluetoothReady()) return@flow emit(SetupLink.NoBluetooth)
             val facade = manager.controller(id)
+            val stale = staleFailures.remove(id.lowercase())
             var bonding = false
             emitAll(
-                combine(facade.connectionState, facade.info) { state, info ->
+                combine(facade.connectionState.skipStale(stale), facade.info) { state, info ->
                     if (state is ConnectionState.Bonding) bonding = true
                     setupLink(state, info?.proto, info != null, bonding)
                 }.distinctUntilChanged(),
@@ -128,6 +135,13 @@ class SetupViewModel @AssistedInject constructor(
         const val TAG = "SetupViewModel"
     }
 }
+
+/**
+ * Drops the leading [stale] failure the shared state still holds after a retry, until the state
+ * moves on. The same instance, never an equal one, so a new failure with the same words still shows.
+ */
+internal fun Flow<ConnectionState>.skipStale(stale: ConnectionState.Failed?): Flow<ConnectionState> =
+    if (stale == null) this else dropWhile { it === stale }
 
 /**
  * What the wizard sees of one Android link. The proto gate fails the link before INFO is kept, so old

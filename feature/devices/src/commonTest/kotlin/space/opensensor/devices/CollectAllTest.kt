@@ -73,6 +73,18 @@ class CollectAllTest {
     }
 
     @Test
+    fun cancelOneIdDropsOnlyItsPendingStep() {
+        val steps = listOf("A", "B", "C").map { CollectStep(it, it, null, CollectRoute.BLUETOOTH) }
+        val queue = CollectAllQueue(steps)
+        queue.start()
+        queue.cancel("b")
+        assertEquals(setOf("C"), queue.plannedIds, "the forgotten step goes, ignoring case")
+        queue.cancel("A")
+        assertEquals(setOf("A"), queue.runningIds, "a running step still reports its end")
+        assertEquals(listOf("C"), queue.finished("A", ok = true).map { it.id })
+    }
+
+    @Test
     fun parallelMustBePositive() {
         assertFailsWith<IllegalArgumentException> { CollectAllQueue(emptyList(), parallel = 0) }
     }

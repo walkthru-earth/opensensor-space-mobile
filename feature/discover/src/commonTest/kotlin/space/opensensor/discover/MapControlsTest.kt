@@ -25,6 +25,19 @@ class MapControlsTest {
     }
 
     @Test
+    fun quickTapsAddUpWhileTheCameraStillMoves() {
+        val steps = ZoomSteps()
+        val first = steps.next(5.0, 1)
+        assertEquals(6.0, first)
+        val second = steps.next(5.3, 1)
+        assertEquals(7.0, second, "a tap during the ease steps from the last target")
+        steps.settled(first)
+        assertEquals(8.0, steps.next(6.2, 1), "an older move ending keeps the newer target")
+        steps.settled(8.0)
+        assertEquals(4.0, steps.next(5.0, -1), "after the last move the camera leads again")
+    }
+
+    @Test
     fun chartMarksReachUiContrastInLightAndDark() {
         for (scheme in listOf(BrandLightScheme, BrandDarkScheme)) {
             val c = chartColors(scheme)

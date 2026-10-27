@@ -177,4 +177,16 @@ class ThingTest {
         }
         assertFailsWith<IllegalArgumentException> { ThingCollection.parse("""{"type": "Feature", "id": "x"}""") }
     }
+
+    @Test
+    fun rejectsScalesWhoseLaterStepsCannotBeReached() {
+        fun scale(vararg uppers: Double?) =
+            Scale("s", "https://example.org", uppers.map { ScaleStep(it, LocalizedText.of("x")) })
+        assertFailsWith<IllegalArgumentException> { scale(null, 10.0) }
+        assertFailsWith<IllegalArgumentException> { scale(10.0, 5.0, null) }
+        assertFailsWith<IllegalArgumentException> { scale(10.0, 10.0) }
+        assertFailsWith<IllegalArgumentException> { scale(Double.NaN, null) }
+        assertEquals(1, scale(5.0, 10.0, null).stepIndexOf(7.0))
+        assertEquals(2, scale(5.0, 10.0, null).stepIndexOf(70.0))
+    }
 }

@@ -23,7 +23,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * The "Sample data" tag on the peek is shown whole at 200 percent font on a 280 dp phone, over the
+ * The sample data tag on the peek is shown whole at 200 percent font on a 280 dp phone, over the
  * chart title and beside the first run peacock, and the chart title beside it is not cut (#116).
  * Rendered headless on the iOS simulator (verifyIos).
  */
@@ -55,17 +55,20 @@ class SampleTagFontScaleTest {
 
     @Test
     fun theTagSitsWholeOverTheChartTitleAndTheTitleIsNotCut() = runComposeUiTest {
-        atLargeFont { ChartTitle(pm25, discoverStrings(), DiscoverUiState(), sample = true) }
-        assertWhole("Sample data")
+        var strings: DiscoverStrings? = null
+        atLargeFont { ChartTitle(pm25, discoverStrings().also { strings = it }, DiscoverUiState(), sample = true) }
+        val sample = strings!!.sampleData
+        assertWhole(sample)
         assertWhole("µg/m³")
-        val tag = onNode(hasText("Sample data"), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val tag = onNode(hasText(sample), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val title = onNode(hasText("µg/m³", substring = true), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue(tag.bottom <= title.top, "the tag $tag is on its own line above the title $title")
     }
 
     @Test
     fun theTagSitsWholeBesideTheFirstRunPeacock() = runComposeUiTest {
-        atLargeFont { FirstRunCard(discoverStrings(), sample = true, onAddSensor = {}, onExplore = {}) }
-        assertWhole("Sample data")
+        var strings: DiscoverStrings? = null
+        atLargeFont { FirstRunCard(discoverStrings().also { strings = it }, sample = true, onAddSensor = {}, onExplore = {}) }
+        assertWhole(strings!!.sampleData)
     }
 }
