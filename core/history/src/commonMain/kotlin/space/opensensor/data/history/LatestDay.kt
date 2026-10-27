@@ -43,7 +43,7 @@ object LatestDays {
 
     /**
      * The latest day of one thing from its day [buckets] by metric id. The newest day with valid rows
-     * of a [candidatesOf] metric wins, and on the same day the earlier candidate wins. Null when no
+     * and a finite mean of a [candidatesOf] metric wins, and on the same day the earlier candidate wins. Null when no
      * candidate has a valid day. [stepOf] gives the display step of the winner.
      */
     fun latest(
@@ -51,10 +51,12 @@ object LatestDays {
         metrics: List<MetricSpec> = Metrics.all,
         stepOf: (MetricSpec) -> Double = { displayStepOf(it) },
     ): LatestDay? {
+        // Candidates come from the metrics with valid rows, as [observe] picks them, and a day still
+        // needs a finite mean to show. So a NaN day of the main metric falls back to its stored column.
         val available = metrics.filter { m -> buckets[m.id].orEmpty().any { it.validRows > 0 } }
         var best: LatestDay? = null
         for (metric in candidatesOf(available)) {
-            val day = buckets[metric.id].orEmpty().filter { it.validRows > 0 }.maxByOrNull { it.startEpochS } ?: continue
+            val day = buckets[metric.id].orEmpty().filter(::shown).maxByOrNull { it.startEpochS } ?: continue
             if (best != null && day.startEpochS <= best.startEpochS) continue
             val expected = Resolution.DAY.expectedRows(day.sampleIntervalMs)
             val coverage = if (expected > 0) (day.validRows.toFloat() / expected).coerceIn(0f, 1f) else null
@@ -62,6 +64,9 @@ object LatestDays {
         }
         return best
     }
+
+    /** A day with valid rows and a finite mean. A NaN or infinite mean is no reading. */
+    private fun shown(bucket: TierBucket): Boolean = bucket.validRows > 0 && bucket.mean.isFinite()
 
     /**
      * The display step of [metric]'s column under [profileOf], from the first of [templates] that

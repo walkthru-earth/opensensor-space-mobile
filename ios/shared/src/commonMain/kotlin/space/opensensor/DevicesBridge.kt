@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -95,12 +96,13 @@ internal object IosKnown {
 
     /**
      * [glances] with each thing's latest day from [latestDay], the line Android fills from Room. The
-     * files show at once and each day joins once its tiers answer.
+     * files show at once and each day joins once its tiers answer. Each thing starts with no day, so
+     * a slow thing never holds back another, and a day that fails to load stays empty.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun withDays(glances: Flow<Map<String, ArchiveGlance>>, latestDay: (String) -> Flow<LatestDay?>): Flow<Map<String, ArchiveGlance>> {
         val days = glances.map { it.keys }.distinctUntilChanged().flatMapLatest { things ->
-            if (things.isEmpty()) flowOf(emptyMap()) else combine(things.map { t -> latestDay(t).map { t to it } }) { it.toMap() }
+            if (things.isEmpty()) flowOf(emptyMap()) else combine(things.map { t -> latestDay(t).onStart { emit(null) }.catch { emit(null) }.map { t to it } }) { it.toMap() }
         }.onStart { emit(emptyMap()) }
         return combine(glances, days) { g, d -> g.mapValues { (thing, glance) -> glance.copy(lastDay = d[thing]) } }
     }
@@ -235,6 +237,9 @@ class DevicesBridge internal constructor(
     /** The pass going now was cancelled, so a failed step takes no fallback attempt. */
     private var collectCancelled = false
 
+    /** Sensors forgotten during the pass going now, lowercase. Their failed step takes no fallback. */
+    private val forgottenCollectIds = HashSet<String>()
+
     internal val known: StateFlow<List<KnownRecord>> get() = records.asStateFlow()
 
     /** The setup wizard's Find runs the same Bluetooth scan as My devices. */
@@ -299,7 +304,7 @@ class DevicesBridge internal constructor(
     /** Whether a failed Wi-Fi step of the pass going now may try again over Bluetooth. */
     fun collectRetries(id: String): Boolean {
         val q = queue ?: return false
-        return !collectCancelled && id in q.runningIds
+        return !collectCancelled && id.lowercase() !in forgottenCollectIds && id in q.runningIds
     }
 
     /** Leaving the foreground ends Collect all. A running step finishes or fails on its own. */
@@ -414,6 +419,7 @@ class DevicesBridge internal constructor(
         val q = CollectAllQueue(plan)
         queue = q
         collectCancelled = false
+        forgottenCollectIds.clear()
         collecting.value = true
         q.start().forEach { collect(it.id, it.wifiName) }
         settle(q)
@@ -431,16 +437,25 @@ class DevicesBridge internal constructor(
     }
 
     /**
-     * A confirmed Forget, run in [forgetScope]. A removal that fails keeps the record, so the sensor
-     * stays listed and Forget can run again. The log names the error class only.
+     * A confirmed Forget, run in [forgetScope]. Collect all drops the sensor's step at once, and a
+     * running step on it finishes without a Bluetooth fallback, while the rest of the pass goes on.
+     * A removal that fails keeps the record, so the sensor stays listed and Forget can run again.
+     * The log names the error class only.
      */
-    internal fun forgetLater(id: String): Job = forgetScope.launch {
-        try {
-            forgetNow(id)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            println("forget kept the record: ${e::class.simpleName}")
+    internal fun forgetLater(id: String): Job {
+        queue?.let { q ->
+            forgottenCollectIds += id.lowercase()
+            q.cancel(id)
+            settle(q)
+        }
+        return forgetScope.launch {
+            try {
+                forgetNow(id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("forget kept the record: ${e::class.simpleName}")
+            }
         }
     }
 

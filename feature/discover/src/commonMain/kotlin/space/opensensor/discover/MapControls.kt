@@ -10,6 +10,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,31 @@ internal const val MAX_ZOOM = 16.0
 internal fun steppedZoom(zoom: Double, step: Int): Double = (zoom + step).coerceIn(minOf(zoom, MIN_ZOOM), maxOf(zoom, MAX_ZOOM))
 
 /**
+ * The zoom each button press aims at. A press while the camera still eases toward an earlier press
+ * steps from that target, not from the zoom the camera passes through, so quick taps add up. Once
+ * the last move ends the next press starts from the camera again.
+ */
+internal class ZoomSteps {
+    private var pending: Double? = null
+    private var latest = 0
+
+    /** One press, the zoom it aims at and the token that names it. */
+    data class Step(val target: Double, val token: Int)
+
+    fun next(current: Double, step: Int): Step {
+        val target = steppedZoom(pending ?: current, step)
+        pending = target
+        latest += 1
+        return Step(target, latest)
+    }
+
+    /** The move of press [token] ended. A newer press keeps its own target, even an equal one. */
+    fun settled(token: Int) {
+        if (token == latest) pending = null
+    }
+}
+
+/**
  * Moves the camera to [center] (kept when null) at [zoom] (kept when null). With reduce motion on it
  * snaps there, otherwise it eases. A map that is not ready yet keeps its view.
  */
@@ -60,7 +86,17 @@ internal suspend fun MapState.moveCamera(center: Position? = null, zoom: Double?
 internal fun ZoomControls(mapState: MapState, zoomIn: String, zoomOut: String, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val reduce = LocalReduceMotion.current
-    fun zoomBy(step: Int) = scope.launch { mapState.moveCamera(zoom = steppedZoom(mapState.cameraPosition.zoom, step), reduceMotion = reduce) }
+    val steps = remember { ZoomSteps() }
+    fun zoomBy(step: Int) {
+        val press = steps.next(mapState.cameraPosition.zoom, step)
+        scope.launch {
+            try {
+                mapState.moveCamera(zoom = press.target, reduceMotion = reduce)
+            } finally {
+                steps.settled(press.token)
+            }
+        }
+    }
     ZoomPair(zoomIn, zoomOut, onZoomIn = { zoomBy(1) }, onZoomOut = { zoomBy(-1) }, modifier = modifier)
 }
 

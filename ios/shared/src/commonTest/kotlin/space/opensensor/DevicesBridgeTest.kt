@@ -2,9 +2,11 @@ package space.opensensor
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -153,6 +155,22 @@ class DevicesBridgeTest {
         assertEquals(day, out.first { it.getValue("s").lastDay != null }.getValue("s").lastDay)
         assertNull(out.first().getValue("t").lastDay)
         assertEquals(emptyMap(), IosKnown.withDays(flowOf(emptyMap())) { error("no thing") }.first { it.isEmpty() })
+    }
+
+    @Test fun aSlowOrFailingDayNeverHoldsBackAnotherThing() = runTest {
+        val day = LatestDay(86_400, 12f, 0.5f, AirMetrics.PM25, 0.1)
+        val glances = MutableStateFlow(mapOf("s" to ArchiveGlance(2, 3, 100), "t" to ArchiveGlance(1, 2, 7), "u" to ArchiveGlance(1, 1, 1)))
+        val out = IosKnown.withDays(glances) {
+            when (it) {
+                "s" -> flowOf(day)
+                "t" -> flow { error("tier failed") }
+                else -> flow { awaitCancellation() }
+            }
+        }
+        val shown = out.first { it.getValue("s").lastDay != null }
+        assertEquals(day, shown.getValue("s").lastDay, "a thing that never answers and one that fails leave the day of s")
+        assertNull(shown.getValue("t").lastDay)
+        assertNull(shown.getValue("u").lastDay)
     }
 
     @Test fun activeLinksCoverBluetoothAndWifi() {
@@ -347,6 +365,38 @@ class DevicesBridgeTest {
         bridge.collectFinished(calls.collected.last().first, ok = false)
         assertEquals(2, calls.collected.size, "a single file sync stops the pass too")
         assertEquals(listOf(b, a), seen)
+    }
+
+    @Test fun forgettingASensorOfThePassSkipsOnlyItsStep() = runTest {
+        val state = CompanionState()
+        val calls = Calls()
+        val c = "33333333-3333-3333-3333-333333333333"
+        val bridge = DevicesBridge(
+            state = state,
+            archive = emptyFlow(),
+            storage = MemoryStorage(),
+            now = { 5 },
+            startScan = {},
+            stopScan = {},
+            forget = { p, d -> calls.forgotten += p to d },
+            collect = { id, wifi -> calls.collected += id to wifi },
+            forgetScope = this,
+        )
+        bridge.sensorOpened(a, "A", "st-a", "aabbccddeeff")
+        bridge.sensorOpened(b, "B", "st-b", "112233445566")
+        bridge.sensorOpened(c, "C", "st-c", "665544332211")
+
+        bridge.startCollectAll()
+        val first = calls.collected.single().first
+        val (planned, other) = listOf(a, b, c).filter { it != first }
+        bridge.forgetLater(planned.lowercase()).join()
+        bridge.forgetLater(first).join()
+        assertFalse(bridge.collectRetries(first), "a forgotten running step takes no Bluetooth fallback")
+        bridge.collectFinished(first, ok = false)
+        assertEquals(listOf(first, other), calls.collected.map { it.first }, "the pass goes on without the forgotten sensor")
+        assertTrue(bridge.collectRetries(other), "another sensor of the pass still takes its fallback")
+        bridge.collectFinished(other, ok = true)
+        assertFalse(bridge.collectAllRunning)
     }
 
     @Test fun aUserActionOnAnotherSensorLeavesThePassGoing() {

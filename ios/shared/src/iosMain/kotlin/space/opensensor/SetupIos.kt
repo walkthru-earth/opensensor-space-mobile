@@ -26,7 +26,7 @@ import space.opensensor.setup.SetupScreen
  * The iOS [SetupPort]. Find runs the My devices scan, Pair opens the sensor through Swift like a tap
  * on My devices, and the known record is written by [DevicesBridge.sensorOpened] only after INFO
  * passed the identity check. iOS reports a refused pairing and an unreachable sensor the same way, so
- * both show as [SetupLink.Unreachable]. INFO below proto 3 closes before that check and shows as
+ * both show as [SetupLink.Unreachable], as does a connection that closed before INFO passed. INFO below proto 3 closes before that check and shows as
  * [SetupLink.UpdateFirmware].
  */
 private class IosSetupPort(private val devices: DevicesBridge, private val openSensor: (String) -> Unit) : SetupPort {
@@ -53,6 +53,7 @@ private class IosSetupPort(private val devices: DevicesBridge, private val openS
             state.bluetoothPoweredOff -> SetupLink.NoBluetooth
             state.outdatedId.equals(id, ignoreCase = true) -> SetupLink.UpdateFirmware
             state.failedId.equals(id, ignoreCase = true) -> SetupLink.Unreachable
+            state.closedId.equals(id, ignoreCase = true) -> SetupLink.Unreachable
             mine && state.connected && info != null -> SetupLink.Ready(info.proto)
             else -> SetupLink.Connecting
         }

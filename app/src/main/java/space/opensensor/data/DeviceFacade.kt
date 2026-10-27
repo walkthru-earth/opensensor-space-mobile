@@ -409,7 +409,8 @@ class DeviceFacade internal constructor(
     val interactiveSessionAddress get() = linkOwner.interactiveSessionAddress
     val currentKnownDevice get() = linkOwner.currentKnownDevice
     val knownDevices get() = linkOwner.knownDevices
-    fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO) = linkOwner.connect(address, name, fake, preference)
+    val connectsRunning get() = linkOwner.connectsRunning
+    fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO): Boolean = linkOwner.connect(address, name, fake, preference)
     fun disconnect() {
         val disconnectClaim = linkOwner.claimDisconnectIntent()
         val intentId = controller.state.value.intentId
@@ -447,7 +448,12 @@ class DeviceFacade internal constructor(
     fun rotateToken() = linkOwner.rotateToken()
     fun clearBonds() = linkOwner.clearBonds()
     suspend fun touchSeen(address: String, name: String?) = linkOwner.touchSeen(address, name)
-    suspend fun forget(address: String) { if (this.address == address) disconnectNow(); linkOwner.forget(address) }
+
+    /** False when the link owner refused the forget because another command held the device. */
+    suspend fun forget(address: String): Boolean {
+        if (this.address == address) disconnectNow()
+        return linkOwner.forget(address)
+    }
 
     private companion object {
         val nextIntent = AtomicLong(0)

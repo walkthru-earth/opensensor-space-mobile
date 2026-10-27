@@ -14,6 +14,7 @@ import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.Metrics
+import space.opensensor.data.history.ServedTemplates
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.history.archiveQueryResults
 import space.opensensor.data.history.localDateOf
@@ -21,7 +22,7 @@ import space.opensensor.data.history.startOfDay
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.designsystem.nowEpochMillis
 import space.opensensor.family.air.AirFamily
-import space.opensensor.family.air.AirMetrics
+import space.opensensor.model.BoardTemplate
 
 /** Epoch second of the current local midnight in [zone]. */
 internal fun currentDayStart(zone: TimeZone, nowS: Long = nowEpochMillis() / 1000): Long = startOfDay(localDateOf(nowS, zone), zone)
@@ -36,15 +37,19 @@ fun localDayStarts(zone: TimeZone, periodMs: Long = 60_000): Flow<Long> = flow {
 
 /**
  * The metrics Today so far averages for [capabilities], in preference order. An air board with
- * particles takes the EPA corrected PM2.5 and falls back to raw. Any other thing takes the metric of
+ * particles takes the EPA corrected PM2.5 and falls back to raw, both resolved from its template. Any other thing takes the metric of
  * its first visible primary column, so a soil board averages its soil reading. Empty when the thing
  * is unknown or shows no primary.
  */
 fun todayMetrics(capabilities: DeviceCapabilities): List<MetricSpec> {
     val thing = capabilities.thing ?: return emptyList()
-    if (AirFamily.PARTICLES in capabilities) return listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25)
+    val specs = Metrics.of(thing.template, thing.profile)
+    if (AirFamily.PARTICLES in capabilities) {
+        val pm = listOf(AirFamily.PM25_CORRECTED_ID, AirFamily.PM25_ATMOSPHERIC).mapNotNull { id -> specs.firstOrNull { it.id == id } }
+        if (pm.isNotEmpty()) return pm
+    }
     val primary = thing.primary.firstOrNull() ?: return emptyList()
-    return listOfNotNull(Metrics.of(thing.template, thing.profile).firstOrNull { it.id == primary.name })
+    return listOfNotNull(specs.firstOrNull { it.id == primary.name })
 }
 
 /** One Today so far read, the day of a thing and the metrics to try in order. */
@@ -54,16 +59,18 @@ private data class TodayQuery(val day: ArchiveDayQuery, val metrics: List<Metric
  * Today so far for the connected device [info], the local calendar day like the History Day view,
  * from the hourly tier of the phone archive. The first of [todayMetrics] that has a mean wins. Null
  * until the archive has a mean for this thing and day. A thing or day change drops the old answer
- * first, so a value never shows under the wrong device. Both apps feed it their own
- * [observeHourlyDay] (the shared `HistorySeriesReader`).
+ * first, so a value never shows under the wrong device. The thing resolves against the [served]
+ * templates as they arrive, so a template the board serves after `INFO` still picks the metrics.
+ * Both apps feed it their own [observeHourlyDay] (the shared `HistorySeriesReader`).
  */
 fun todaySoFar(
     info: Flow<DeviceInfo?>,
     observeHourlyDay: (thing: String, metric: MetricSpec, window: HistoryWindow) -> Flow<HistorySeries>,
     zone: TimeZone = TimeZone.currentSystemDefault(),
     dayStarts: Flow<Long> = localDayStarts(zone),
+    served: Flow<List<BoardTemplate>> = ServedTemplates.shared.all,
 ): Flow<TodaySoFar?> {
-    val things = info.map { it?.thing to todayMetrics(DeviceCapabilities.from(it)) }.distinctUntilChanged()
+    val things = combine(info, served) { i, templates -> i?.thing to todayMetrics(DeviceCapabilities.from(i, templates)) }.distinctUntilChanged()
     return combine(things, dayStarts) { (thing, metrics), start -> TodayQuery(ArchiveDayQuery(thing, start, zone), metrics) }
         .archiveQueryResults { query ->
             val id = query.day.thing

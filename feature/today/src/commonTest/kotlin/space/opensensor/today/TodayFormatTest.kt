@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import space.opensensor.data.history.DeviceCapabilities
@@ -20,6 +23,9 @@ import space.opensensor.data.sync.ClockQuality
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.family.air.Pm25Basis
+import space.opensensor.model.BoardTemplate
+import space.opensensor.model.BundledCatalog
+import space.opensensor.model.TemplateKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -110,6 +116,36 @@ class TodayFormatTest {
         val value = todaySoFar(MutableStateFlow<DeviceInfo?>(WAVESHARE.copy(thing = "st-1")), observe, TimeZone.UTC, flowOf(1_767_225_600L)).filterNotNull().first()
         assertEquals(TodaySoFar(18f, 30, 0.5f, AirMetrics.PM25), value)
         assertEquals(Pm25Basis.RAW, value.metric.basis)
+    }
+
+    @Test
+    fun todaySoFarFollowsATemplateTheBoardServesAfterInfo() = runTest {
+        val bundled = BundledCatalog.template(WAVESHARE.dict!!)!!
+        val desc = "ab".repeat(32)
+        // The board serves a new revision of its dict without the particle columns.
+        val revised = bundled.copy(key = TemplateKey(bundled.dict, desc), datastreams = bundled.datastreams.filterNot { it.name.startsWith("pm") })
+        val served = MutableStateFlow<List<BoardTemplate>>(emptyList())
+        val asked = MutableStateFlow<List<String>>(emptyList())
+        val observe = { _: String, metric: MetricSpec, window: HistoryWindow ->
+            asked.value += metric.id
+            flowOf(
+                HistorySeries(metric, HistoryRange.DAY, window.fromS, window.toS, emptyList(), validRows = 30, expectedRows = 60, mean = 1f, max = 1f, binned = false),
+            ) as Flow<HistorySeries>
+        }
+        val info = MutableStateFlow<DeviceInfo?>(WAVESHARE.copy(thing = "st-1", desc = desc.take(TemplateKey.DESC_PREFIX_HEX)))
+        // One subscription across the template update, so the second value comes from the live flow.
+        val seen = mutableListOf<TodaySoFar>()
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            todaySoFar(info, observe, TimeZone.UTC, flowOf(1_767_225_600L), served).filterNotNull().collect { seen += it }
+        }
+        runCurrent()
+        assertEquals(AirMetrics.PM25_CORRECTED, seen.last().metric)
+        served.value = listOf(revised)
+        runCurrent()
+        job.cancel()
+        val after = seen.last()
+        assertNotEquals(AirMetrics.PM25_CORRECTED, after.metric, "the served template has no particles")
+        assertEquals(todayMetrics(DeviceCapabilities.from(info.value, listOf(revised))).first(), after.metric)
     }
 
     @Test

@@ -321,6 +321,34 @@ class CompanionStateTest {
         assertNull(plain.failedId, "an ordinary loss needs no repair")
     }
 
+    @Test fun aConnectionThatClosesBeforeInfoMarksTheSensorClosedUntilANewConnection() {
+        val state = CompanionState()
+        state.connectionStarted("p1")
+        state.connectionClosedNoticed(CompanionNotice.CONNECT_TIMED_OUT)
+        assertEquals("p1", state.closedId)
+        state.connectionStarted("p1")
+        assertNull(state.closedId)
+
+        state.receiveInfo("{}")
+        assertEquals("p1", state.closedId, "INFO that fails its check closes the connection before it opened")
+        state.sensorForgotten("P1")
+        assertNull(state.closedId)
+
+        val cancelled = CompanionState()
+        cancelled.connectionStarted("p1")
+        cancelled.connectionClosedNoticed(CompanionNotice.DISCONNECTED)
+        assertNull(cancelled.closedId, "the user's own Disconnect is not a failure")
+
+        val open = linked()
+        open.connectionClosedNoticed(CompanionNotice.SENSOR_DISCONNECTED)
+        assertNull(open.closedId, "a link that opened and then dropped is not a failed connect")
+
+        val old = CompanionState()
+        old.connectionStarted("p1")
+        assertFalse(old.receiveInfo("{\"proto\":2,\"dev\":\"112233445566\"}"))
+        assertEquals("p1", old.outdatedId)
+    }
+
     @Test fun oldFirmwareMarksTheSensorOutdatedUntilANewConnection() {
         val state = CompanionState()
         state.connectionStarted("p1")

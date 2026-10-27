@@ -767,6 +767,44 @@ class SensorCollectionsTest {
     }
 
     @Test
+    fun stopDropsAnInterruptedUserRunThatWaitsToResume() = runBlocking {
+        val held = CompletableDeferred<Unit>()
+        val board = stallingBoard(held)
+        val runs = collections(board)
+        val first = interruptedRun(runs, board, held)
+        withTimeout(10_000) { first.done.await() }
+
+        // The first resume finds no transport, so the run waits with no request left.
+        val resume = Resume(runs, ready = false)
+        runs.resumeInterrupted(resume::start)
+        assertEquals(1, resume.tries.load())
+
+        runs.stopUserRun(device.uppercase())
+        resume.ready = true
+        runs.retryInterrupted()
+        repeat(20) { yield() }
+        assertEquals(0, resume.starts.load(), "a run the user stopped never resumes")
+        assertTrue(runs.waiting().isEmpty())
+    }
+
+    @Test
+    fun stopKeepsAnInterruptedCollectAllStep() = runBlocking {
+        val held = CompletableDeferred<Unit>()
+        val board = stallingBoard(held)
+        board.connect()
+        val runs = collections(board)
+        val step = Seen()
+        runs.collect(device, null, LinkPreference.LAN, RunOrigin.COLLECT_ALL, step::progress, step::finished)
+        withTimeout(10_000) { held.await() }
+        assertTrue(runs.interrupt(device))
+        withTimeout(10_000) { step.done.await() }
+        runs.holdInterrupted()
+
+        runs.stopUserRun(device)
+        assertEquals(1, runs.waiting().size, "Collect all keeps its own cancel")
+    }
+
+    @Test
     fun offScreenACleanupThatEndsLeavesTheInterruptedRunWaiting() = runBlocking {
         val held = CompletableDeferred<Unit>()
         val board = stallingBoard(held)

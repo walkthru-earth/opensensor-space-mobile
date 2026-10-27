@@ -15,6 +15,25 @@ Host tests and the iOS simulator only. No phone run is recorded.
   profile has no LIVE view, no hero and no Today so far.
 - To check on phones. Waveshare LIVE labels, History metrics and Today so far on da9bd03 firmware.
 
+## 2026-10-27, Today from the template and Forget on Today (#238)
+
+Host tests and the iOS simulator. One Android phone check, below.
+
+- Today cards come from the template and the app profile `primary` list (#221, #187). The profile
+  `hero` picks the hero through `HeroRegistry`. The bundled air boards name `air-mood`, the peacock
+  with WHO moods. Any other thing gets `GenericMetricHero`, its first primary reading at the
+  profile display step, and a metrics card for the rest. My devices rows show the last day mean of
+  the thing's main metric (`LatestDays`) at its display step, on Android and iOS. Forget moved
+  from the My devices rows to the Today menu, and a Forget confirmed while Collect all holds the
+  link runs once the link frees. The board card shows the battery state from the template
+  classes, Waveshare `bstate` and CoreS3 `chg` (#90).
+- OnePlus 7 Pro, debug install over the stored data. My devices shows OS-7500 PM2.5 corrected and
+  OS-6b40 PM2.5 raw day lines with mood. Today shows the peacock hero, Today so far and the air
+  cards for both, as before. The battery state, the generic hero and Forget were not checked on
+  the phone.
+- To check on phones. Forget from Today during Collect all, the battery state on both boards, and
+  the iPhone day lines.
+
 ## 2026-10-26, Thing contract and dictionary v7 templates (code only)
 
 Host tests and the iOS simulator only. No phone run is recorded.
@@ -108,16 +127,8 @@ build and `verify` only. No phone run against the new firmware yet.
   reading now and shows a dash, as does a declared key missing from a sample. Cards follow the
   template declaration, and an overflow sample clears every live value. CoreS3
   board temperature comes from `imu_t`, Waveshare air temperature from `t`. Particle bins show only
-  the board's keys. Before `INFO` arrives Today waits quietly and never says unsupported (#152). The
-  board card shows the battery state from the template classes, Waveshare `bstate` and CoreS3
-  `chg` (#90).
-- Today cards come from the template and the app profile `primary` list (#221, #187). The profile
-  `hero` picks the hero through `HeroRegistry`. The bundled air boards name `air-mood`, the peacock
-  with WHO moods. Any other thing gets `GenericMetricHero`, its first primary reading at the
-  profile display step, and a metrics card for the rest. My devices rows show the last day mean of
-  the thing's main metric (`LatestDays`) at its display step, on Android and iOS. Forget moved
-  from the My devices rows to the Today menu, and a Forget confirmed while Collect all holds the
-  link runs once the link frees.
+  the board's keys. Before `INFO` arrives Today waits quietly and never says unsupported (#152). No
+  screen shows `bstate` yet (#90).
 - Index reopen. Room v11 and the one time iOS receipt import index rows without UTC rows again. A derive pass
   before that back-fill keeps every day a waiting row may fill (`StationDays.held`), on Android and
   iOS. `ArchiveRecord.isIndexed` is the one indexed test, and `withUtcBetween` uses it in SQL.

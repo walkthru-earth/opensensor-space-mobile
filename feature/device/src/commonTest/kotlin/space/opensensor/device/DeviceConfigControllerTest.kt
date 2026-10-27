@@ -543,6 +543,7 @@ class DeviceConfigControllerTest {
         assertFalse(LocationConfig(cell = "85283083fffffff", resolution = 5, cellResolution = 9).hasCell())
         assertFalse(LocationConfig(cell = "nothex", resolution = 5).hasCell())
         assertFalse(LocationConfig(cell = null, country = "GH").hasCell())
+        assertFalse(LocationConfig(cell = "000000000000000", resolution = 8).hasCell(), "hex that is no H3 cell")
     }
 
     @Test
