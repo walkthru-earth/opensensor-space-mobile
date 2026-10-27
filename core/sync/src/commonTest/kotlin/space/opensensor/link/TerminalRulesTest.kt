@@ -1,6 +1,7 @@
 package space.opensensor.link
 
 import space.opensensor.data.protocol.Frame
+import space.opensensor.data.protocol.ListCursor
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.link.Routing.CONTINUE
 import space.opensensor.link.Routing.FOREIGN
@@ -26,10 +27,11 @@ class TerminalRulesTest {
     private val token = Frame.Token(4242, ByteArray(32))
     private val diag = Frame.Diag(1, List(17) { 0 }, emptyList())
     private val aborted = Frame.Aborted(0)
+    private val listSinceEnd = Frame.ListSinceEnd(1, 0, 0, 0, 0, ListCursor.ZERO)
 
     private val all = listOf(
         file, listEnd, opened, chunk, readEnd, closed, timeSet, flushed, config, wifiAp, scanEnd,
-        rebooting, logLine, logEnd, token, diag, aborted,
+        rebooting, logLine, logEnd, token, diag, aborted, listSinceEnd,
     )
 
     /** Each opcode with the frames that continue its reply and the frame that ends it. */
@@ -49,11 +51,12 @@ class TerminalRulesTest {
         Opcode.GET_TOKEN to (emptyList<Frame>() to token),
         Opcode.GET_DIAG to (emptyList<Frame>() to diag),
         Opcode.ABORT to (emptyList<Frame>() to aborted),
+        Opcode.LIST_SINCE to (listOf<Frame>(file) to listSinceEnd),
     )
 
     @Test
     fun tableCoversEveryOpcodeAndEveryFrame() {
-        assertEquals((Opcode.LIST..Opcode.ABORT).toSet(), table.keys)
+        assertEquals((Opcode.LIST..Opcode.LIST_SINCE).toSet(), table.keys)
         for ((op, rule) in table) {
             val (continues, terminal) = rule
             for (frame in all) {

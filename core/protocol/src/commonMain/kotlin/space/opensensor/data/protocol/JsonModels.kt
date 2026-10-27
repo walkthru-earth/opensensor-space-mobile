@@ -92,6 +92,11 @@ data class DeviceStatus(
     @SerialName("rtc") val rtcState: Int? = null,
     /** 1 when the card is mounted and the output directory exists. */
     val sd: Int? = null,
+    /**
+     * `LIST_SINCE` mount epoch, the FAT volume serial of the mounted card, 0 while no card is
+     * mounted or the serial is unknown. Absent (null) on firmware without `LIST_SINCE`.
+     */
+    @SerialName("ls") val listSinceEpoch: Long? = null,
     @SerialName("sd_kib") val sdKib: Long? = null,
     @SerialName("sd_used_kib") val sdUsedKib: Long? = null,
     val heap: Long? = null,

@@ -16,6 +16,7 @@ import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
 import space.opensensor.data.protocol.Frame
+import space.opensensor.data.protocol.ListCursor
 import space.opensensor.data.protocol.LiveSample
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ProtocolError
@@ -116,8 +117,9 @@ class WindowLostException(val receivedUpTo: Long, reason: String) : Exception(re
 
 /**
  * The typed device API, a thin view over one [LinkSession]. The session owns the reply routing,
- * the drain of abandoned replies and any owed `CLOSE`, so this class holds no protocol state and
- * any number of views on one session share it. Making a view per run is harmless.
+ * the drain of abandoned replies and any owed `CLOSE`, so any number of views on one session share
+ * them. A view keeps only [latestStatus], the last status it asked for, so a view made per run starts
+ * without one and asks again.
  *
  * [transport] still supplies identity, connection state, the GATT reads and the push flows until
  * the Android and iOS drivers land (#57, #58). It is never read for replies. [frames] records raw
@@ -175,6 +177,27 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
             }
         }
         if (files.size.toLong() != end.count) throw ProtocolViolationException("LIST count ${end.count} differs from ${files.size} FILE frames")
+        return files to end
+    }
+
+    /**
+     * `LIST_SINCE cursor` → `FILE` × n, then `LIST_SINCE_END`. Firmware without it answers `ERROR`
+     * 11, thrown as [DeviceErrorException]. A walk that ends early throws, so the caller keeps its
+     * previous cursor. The count is checked as for [list].
+     */
+    suspend fun listSince(cursor: ListCursor): Pair<List<Frame.File>, Frame.ListSinceEnd> {
+        val files = ArrayList<Frame.File>()
+        val end = request(Request.ListSince(cursor)) { frame ->
+            when (frame) {
+                is Frame.File -> {
+                    files += frame
+                    null
+                }
+                is Frame.ListSinceEnd -> frame
+                else -> throw unexpected("LIST_SINCE", frame)
+            }
+        }
+        if (files.size.toLong() != end.count) throw ProtocolViolationException("LIST_SINCE count ${end.count} differs from ${files.size} FILE frames")
         return files to end
     }
 
@@ -269,24 +292,10 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
     suspend fun synchronizeClockIfNeeded(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet? {
         val before = nowMillis()
         val elapsed = TimeSource.Monotonic.markNow()
-        val snapshot = coroutineScope {
-            val waiting = async(start = CoroutineStart.UNDISPATCHED) {
-                withTimeoutOrNull(STATUS_CLOCK_TIMEOUT_MS) { status.first() }
-            }
-            try {
-                requestStatus()
-                waiting.await() ?: try {
-                    // Native characteristic/LAN reads can return cached snapshots. Quality and
-                    // age still guide initialization/maintenance; cached UTC cannot measure drift.
-                    readStatus().copy(utcEpochMillis = null)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    null
-                }
-            } finally {
-                waiting.cancel()
-            }
+        val snapshot = freshStatus()?.let { (status, pushed) ->
+            // Native characteristic/LAN reads can return cached snapshots. Quality and
+            // age still guide initialization/maintenance; cached UTC cannot measure drift.
+            if (pushed) status else status.copy(utcEpochMillis = null)
         }
         val delayMillis = elapsed.elapsedNow().inWholeMilliseconds.coerceAtLeast(0)
         val midpoint = before + delayMillis / 2
@@ -299,6 +308,32 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
 
     /** `STATUS` → a `status` notification only; no `response` frame is defined. */
     suspend fun requestStatus() = link.send(RequestSpec.of(Request.Status))
+
+    /** The last status [freshStatus] got on this session, null before one. */
+    var latestStatus: DeviceStatus? = null
+        private set
+
+    /**
+     * Asks for a `status` push and waits up to 5 s for it, else reads the cached characteristic.
+     * True with a pushed snapshot. Null when neither answered.
+     */
+    suspend fun freshStatus(): Pair<DeviceStatus, Boolean>? = coroutineScope {
+        val waiting = async(start = CoroutineStart.UNDISPATCHED) {
+            withTimeoutOrNull(STATUS_CLOCK_TIMEOUT_MS) { status.first() }
+        }
+        try {
+            requestStatus()
+            waiting.await()?.let { it to true } ?: try {
+                readStatus() to false
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+        } finally {
+            waiting.cancel()
+        }
+    }?.also { latestStatus = it.first }
 
     // ------------------------------------------------------------------------ v2
 

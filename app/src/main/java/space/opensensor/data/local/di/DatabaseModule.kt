@@ -9,11 +9,13 @@ import dagger.hilt.components.SingletonComponent
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.PrunedFiles
 import space.opensensor.data.archive.RoomArchiveIndex
+import space.opensensor.data.archive.RoomListCursors
 import space.opensensor.data.archive.RoomPrunedFiles
 import space.opensensor.data.local.database.AppDatabase
 import space.opensensor.data.local.database.ArchivedFileDao
 import space.opensensor.data.local.database.DerivedDayDao
 import space.opensensor.data.local.database.KnownDeviceDao
+import space.opensensor.data.local.database.ListCursorDao
 import space.opensensor.data.local.database.MetricBucketDao
 import space.opensensor.data.local.database.PrunedFileDao
 import space.opensensor.data.local.database.SensorInstallationDao
@@ -24,6 +26,7 @@ import space.opensensor.data.local.security.LanTokenCipher
 import space.opensensor.data.local.security.LanTokenCipherContract
 import space.opensensor.data.local.security.LanTokenMigration
 import space.opensensor.data.local.security.SecureKnownDeviceDao
+import space.opensensor.data.sync.ListCursors
 import javax.inject.Singleton
 
 @Module
@@ -65,6 +68,9 @@ class DatabaseModule {
     @Provides
     fun providePrunedFileDao(db: AppDatabase): PrunedFileDao = db.prunedFileDao()
 
+    @Provides
+    fun provideListCursorDao(db: AppDatabase): ListCursorDao = db.listCursorDao()
+
     /** The shared index adapter over `archived_file`, the same class iOS uses (#100). */
     @Provides
     @Singleton
@@ -73,6 +79,10 @@ class DatabaseModule {
     @Provides
     @Singleton
     fun providePrunedFiles(dao: PrunedFileDao): PrunedFiles = RoomPrunedFiles(dao)
+
+    @Provides
+    @Singleton
+    fun provideListCursors(dao: ListCursorDao): ListCursors = RoomListCursors(dao)
 
     @Provides
     @Singleton

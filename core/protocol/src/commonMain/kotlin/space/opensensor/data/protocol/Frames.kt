@@ -4,7 +4,7 @@ package space.opensensor.data.protocol
  * Binary `control` requests and `response` frames from docs/ble-sync-protocol.md (protocol v3).
  * Protocol 3 widens `LIST_END.count` to u32 and adds `GET_DIAG`, `ABORT`, `BYE`, `DIAG` and
  * `ABORTED`. A proto 2 `LIST_END` is rejected. `GET_DESCRIPTOR` and `DESCRIPTOR_CHUNK` serve the
- * board template.
+ * board template. `LIST_SINCE` and `LIST_SINCE_END` list only the files new since a saved cursor.
  *
  * Every multi-byte integer is little-endian. Text is UTF-8 with no terminator; its length is
  * implied by the frame length. The first byte of a request is the opcode; the first byte of a
@@ -31,6 +31,9 @@ object Opcode {
     const val GET_DIAG: Int = 0x0E
     const val ABORT: Int = 0x0F
 
+    /** Files new since a [ListCursor]. Older firmware answers `ERROR` 11. Shares its value with frame type `FILE`. */
+    const val LIST_SINCE: Int = 0x10
+
     /** One slice of the board template. */
     const val GET_DESCRIPTOR: Int = 0x11
 
@@ -50,6 +53,7 @@ object Opcode {
         GET_TOKEN -> "GET_TOKEN"
         GET_DIAG -> "GET_DIAG"
         ABORT -> "ABORT"
+        LIST_SINCE -> "LIST_SINCE"
         GET_DESCRIPTOR -> "GET_DESCRIPTOR"
         else -> "0x${op.toString(16).padStart(2, '0')}"
     }
@@ -93,6 +97,9 @@ object FrameType {
     const val DIAG: Int = 0x4C
     const val ABORTED: Int = 0x4D
 
+    /** Ends a `LIST_SINCE` answer with the `LIST_END` body, flags and the next cursor. */
+    const val LIST_SINCE_END: Int = 0x4E
+
     /** Only ever a reply to `GET_DESCRIPTOR`. */
     const val DESCRIPTOR_CHUNK: Int = 0x4F
     const val ERROR: Int = 0x7F
@@ -120,6 +127,7 @@ object FrameType {
         BYE -> "BYE"
         DIAG -> "DIAG"
         ABORTED -> "ABORTED"
+        LIST_SINCE_END -> "LIST_SINCE_END"
         DESCRIPTOR_CHUNK -> "DESCRIPTOR_CHUNK"
         ERROR -> "ERROR"
         else -> "0x${type.toString(16).padStart(2, '0')}"
@@ -284,6 +292,43 @@ sealed interface Request {
         override fun encode(): ByteArray = WireBuffer.allocate(7)
             .put(opcode.toByte()).putInt(offset.toInt()).putShort(length.toShort()).array()
     }
+
+    /** The 32 cursor bytes as an earlier `LIST_SINCE_END` sent them. 33 bytes on the wire. */
+    data class ListSince(val cursor: ListCursor) : Request {
+        override val opcode: Int = Opcode.LIST_SINCE
+        override fun encode(): ByteArray = byteArrayOf(opcode.toByte()) + cursor.bytes
+    }
+}
+
+/**
+ * The opaque `LIST_SINCE` cursor, `mount_epoch` u32, `day` u32, `boot` 16 bytes and `seq` u64.
+ * The phone stores it as it came and sends it back unchanged. [ZERO] is the only cursor it builds,
+ * it asks for a full listing and returns a first cursor.
+ */
+class ListCursor(bytes: ByteArray) {
+    init {
+        require(bytes.size == BYTES) { "cursor must be $BYTES bytes" }
+    }
+
+    private val raw: ByteArray = bytes.copyOf()
+
+    /** A copy of the cursor bytes. */
+    val bytes: ByteArray get() = raw.copyOf()
+
+    /** The FAT volume serial the cursor belongs to, compared with STATUS `ls` before listing. */
+    val mountEpoch: Long
+        get() = (0 until 4).fold(0L) { acc, i -> acc or ((raw[i].toLong() and 0xFF) shl (8 * i)) }
+
+    val isZero: Boolean get() = raw.all { it == 0.toByte() }
+
+    override fun equals(other: Any?): Boolean = other is ListCursor && raw.contentEquals(other.raw)
+    override fun hashCode(): Int = raw.contentHashCode()
+    override fun toString(): String = "ListCursor(mount=${mountEpoch.toString(16)})"
+
+    companion object {
+        const val BYTES: Int = 32
+        val ZERO: ListCursor = ListCursor(ByteArray(BYTES))
+    }
 }
 
 /** `WIFI_AP.auth` values. */
@@ -410,6 +455,33 @@ sealed interface Frame {
     /** `op` u8, the opcode `ABORT` stopped, 0 when nothing was running. */
     data class Aborted(val op: Int) : Frame
 
+    /**
+     * The `LIST_END` body, `flags` u8 and the next [ListCursor]. 48 bytes with the type. [count]
+     * counts the files this walk sent, not the card.
+     */
+    data class ListSinceEnd(
+        val count: Long,
+        val partials: Int,
+        val sdKib: Long,
+        val sdUsedKib: Long,
+        val flags: Int,
+        val next: ListCursor,
+    ) : Frame {
+        /** The cursor did not match this mount, so the board walked everything plain `LIST` walks. */
+        val full: Boolean get() = flags and FLAG_FULL != 0
+
+        /** The board walked the whole unsynced tree of this Thing. */
+        val unsyncedFull: Boolean get() = flags and FLAG_UNSYNCED_FULL != 0
+
+        /** The same counters as a `LIST_END`. */
+        fun toListEnd(): ListEnd = ListEnd(count, partials, sdKib, sdUsedKib)
+
+        companion object {
+            const val FLAG_FULL: Int = 0x01
+            const val FLAG_UNSYNCED_FULL: Int = 0x02
+        }
+    }
+
     /** `total` u32 template bytes, `offset` u32 echoing the request, then a slice of the template. */
     class DescriptorChunk(val total: Long, val offset: Long, val bytes: ByteArray) : Frame {
         override fun toString(): String = "DescriptorChunk(total=$total, offset=$offset, len=${bytes.size})"
@@ -522,6 +594,17 @@ object FrameCodec {
                     if (raw.size != 2) throw FrameDecodeException("invalid ABORTED length ${raw.size}")
                     Frame.Aborted(op = buf.u8())
                 }
+                FrameType.LIST_SINCE_END -> {
+                    if (raw.size != LIST_SINCE_END_BYTES) throw FrameDecodeException("invalid LIST_SINCE_END length ${raw.size}")
+                    Frame.ListSinceEnd(
+                        count = buf.u32(),
+                        partials = buf.u16(),
+                        sdKib = buf.u32(),
+                        sdUsedKib = buf.u32(),
+                        flags = buf.u8(),
+                        next = ListCursor(ByteArray(ListCursor.BYTES).also { buf.get(it) }),
+                    )
+                }
                 FrameType.DESCRIPTOR_CHUNK -> Frame.DescriptorChunk(
                     total = buf.u32(),
                     offset = buf.u32(),
@@ -614,11 +697,18 @@ object FrameCodec {
             is Frame.DescriptorChunk -> le(9 + frame.bytes.size).put(FrameType.DESCRIPTOR_CHUNK.toByte())
                 .putInt(frame.total.toInt()).putInt(frame.offset.toInt()).put(frame.bytes).array()
             is Frame.Aborted -> le(2).put(FrameType.ABORTED.toByte()).put(frame.op.toByte()).array()
+            is Frame.ListSinceEnd -> le(LIST_SINCE_END_BYTES).put(FrameType.LIST_SINCE_END.toByte())
+                .putInt(frame.count.toInt()).putShort(frame.partials.toShort())
+                .putInt(frame.sdKib.toInt()).putInt(frame.sdUsedKib.toInt())
+                .put(frame.flags.toByte()).put(frame.next.bytes).array()
         }
     }
 
     /** `LIST_END` size with the type byte. Proto 2 sent 13. */
     const val LIST_END_BYTES: Int = 15
+
+    /** `LIST_SINCE_END` size with the type byte. */
+    const val LIST_SINCE_END_BYTES: Int = 48
 
     /** `BYE` size with the type byte. The LAN wire adds the two-byte length. */
     const val BYE_BYTES: Int = 14

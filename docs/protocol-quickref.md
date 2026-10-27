@@ -44,12 +44,19 @@ sequenceDiagram
 | `0x05` SET_TIME | → `TIME_SET` | `0x0C` LOG_TAIL | → `LOG`× … `LOG_END(returned)` |
 | `0x06` FLUSH | → `FLUSHED` | `0x0D` GET_TOKEN | → `TOKEN` (BLE only; `ERROR` 13 on LAN) |
 | `0x07` STATUS | no response frame; the `status` push is the ack | `0x11` GET_DESCRIPTOR | → `DESCRIPTOR_CHUNK(total,offset,bytes)` (`ERROR` 17 when none) |
+| | | `0x10` LIST_SINCE(cursor 32 B) | → `FILE`× … `LIST_SINCE_END` (`ERROR` 11 on older firmware, `ERROR` 1 for a cursor it cannot read) |
+
+Opcode `0x10` and frame type `0x10` (FILE) are separate number spaces. `ListCursor` is opaque. The
+phone reads only its first 4 bytes, the `mount_epoch` u32 LE, and sends the rest back as received.
+The zero cursor asks for a whole listing. `LIST_SINCE_END` is 48 bytes, `count` u32, `partials`
+u16, `sd_kib` u32, `sd_used_kib` u32, `flags` u8 (bit 0 `full`, bit 1 `unsynced_full`), then the
+next cursor. See [incremental listing](sync-engine.md#incremental-listing) for when the app sends it.
 
 ## Frame types (`FrameType`)
 
 | v1 | v2 | LAN-only |
 | --- | --- | --- |
-| `0x10` FILE · `0x11` LIST_END · `0x20` OPENED · `0x21` CHUNK · `0x22` READ_END · `0x23` CLOSED · `0x30` TIME_SET · `0x31` FLUSHED | `0x40` CONFIG · `0x41` WIFI_AP · `0x42` WIFI_SCAN_END · `0x43` REBOOTING · `0x44` LOG · `0x45` LOG_END · `0x46` TOKEN · `0x4A` CONFIG_CHUNK (BLE when CONFIG exceeds one notification) · `0x4F` DESCRIPTOR_CHUNK | `0x47` HELLO · `0x48` STATUS push · `0x49` LIVE push |
+| `0x10` FILE · `0x11` LIST_END · `0x20` OPENED · `0x21` CHUNK · `0x22` READ_END · `0x23` CLOSED · `0x30` TIME_SET · `0x31` FLUSHED | `0x40` CONFIG · `0x41` WIFI_AP · `0x42` WIFI_SCAN_END · `0x43` REBOOTING · `0x44` LOG · `0x45` LOG_END · `0x46` TOKEN · `0x4A` CONFIG_CHUNK (BLE when CONFIG exceeds one notification) · `0x4E` LIST_SINCE_END · `0x4F` DESCRIPTOR_CHUNK | `0x47` HELLO · `0x48` STATUS push · `0x49` LIVE push |
 
 ## Error codes (`ProtocolError`)
 
@@ -132,7 +139,9 @@ Complete ⇔ byte count == `OPENED.size` **and** CRC-32 (IEEE, `java.util.zip.CR
 
 `info`, `status`, `live`, `CONFIG` payloads. **No reading is `null`, never `0`.** `bat`/`pct` in
 `live` are shown raw with a "board report, unqualified" label (16,372 → 23 mV seen with no battery).
-Feature gates use `info.proto` / `info.fw`, never guesses.
+Feature gates use `info.proto` / `info.fw`, never guesses. The one exception is `LIST_SINCE`, gated by
+`status.ls` (`DeviceStatus.listSinceEpoch`, the card's FAT serial, 0 with no card, absent on older
+firmware) as the firmware contract says.
 
 `LiveSample` parses LIVE as a map by key name, in any order. `seq`, `mono` and `utc` are typed
 header fields, and `utc` is nanoseconds. Every other key is a number or null. Floats such as `1.00`

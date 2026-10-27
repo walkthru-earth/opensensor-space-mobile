@@ -1,7 +1,7 @@
 # Data model, Room, DataStore, files on disk, backup
 
 **Scope:** what the phone stores, where, and how it moves between phones. Not how it is computed (see history-pipeline) or fetched (see sync-engine).
-**Code:** `core/database` commonMain `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `ThingEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`opensensor.db`); `core/database/schemas/space.opensensor.data.local.database.AppDatabase/1…12.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
+**Code:** `core/database` commonMain `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `ThingEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`, `ListCursor.kt`; `data/local/di/DatabaseModule.kt` (`opensensor.db`); `core/database/schemas/space.opensensor.data.local.database.AppDatabase/1.json`, `2.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
 **Related:** [sync-engine.md](sync-engine.md) (who writes `archived_file`), [history-pipeline.md](history-pipeline.md) (who writes the tiers), [transports.md](transports.md#lan-token-lifecycle) (the token).
 
 ## Finding and exporting the mobile archive
@@ -20,12 +20,12 @@ thing/Hive paths. Partial downloads are not exported. The original archive stays
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
-## Room schema v1 (`opensensor.db`)
+## Room schema v2 (`opensensor.db`)
 
 One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
 keeps the file in its app database directory. iOS keeps it at
-`Application Support/database/opensensor.db`, excluded from backup, and uses only `archived_file` and
-`pruned_file`. Exported schemas live in `core/database/schemas/`.
+`Application Support/database/opensensor.db`, excluded from backup, and uses only `archived_file`,
+`pruned_file` and `list_cursor`. Exported schemas live in `core/database/schemas/`.
 
 ```mermaid
 erDiagram
@@ -106,11 +106,18 @@ erDiagram
     long crc32
     long prunedAtEpochMs
   }
+  list_cursor {
+    string thing PK "one row per station"
+    bytes cursor "32 opaque bytes from LIST_SINCE_END"
+    long wholeAtEpochMs "phone time of the last whole listing"
+    int sinceWhole "incremental runs since then"
+  }
   known_device ||--o{ archived_file : "thing"
   known_device ||--o{ thing_epoch : "address (logical association, no cascade)"
   archived_file }o--o{ metric_bucket : "derived per thing-day"
   archived_file }o--|| derived_day : "signature over sources"
   known_device ||--o{ pruned_file : "thing"
+  known_device ||--o| list_cursor : "thing"
 ```
 
 `metric_bucket` and `derived_day` are **caches**: drop them and derive again → identical rows.
@@ -118,6 +125,10 @@ The EPA corrected PM2.5 (`metricId = pm25_epa`, #92) is one more `metric_bucket`
 from the raw cf1 and RH columns. Archived files and `archived_file` rows never change.
 `archived_file` is the index of the archive, never its source of truth (a file the reader refuses
 keeps its row with `indexError`).
+`list_cursor` keeps where each station's incremental `LIST_SINCE` left off, through `RoomListCursors`
+behind the `ListCursors` port in `:core:sync` ([sync-engine](sync-engine.md#incremental-listing)). A
+lost row only costs one whole listing. Forgetting a station keeps its row, and the next run still
+lists in whole because the phone holds no file of it.
 `pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the
 device lists the same name and size and the phone has no copy. Settings › Storage › Removed files ›
 Download again empties it. Both phones use this table through `RoomPrunedFiles`, behind the `PrunedFiles` port in
@@ -134,8 +145,8 @@ that cannot list the archive writes no marker and imports on the next launch.
 
 ### Migrations
 
-None. The app ID `space.opensensor.app` always starts with an empty database, so the schema is
-version 1. A schema change after release adds an explicit or auto migration and the next
+Version 2 adds `list_cursor` through `AutoMigration(from = 1, to = 2)`, which keeps every other
+table. A schema change adds an explicit or auto migration and the next
 `core/database/schemas/<n>.json`.
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores
