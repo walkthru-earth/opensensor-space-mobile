@@ -34,6 +34,7 @@ import space.opensensor.data.local.database.MetricBucket
 import space.opensensor.data.local.database.MetricBucketDao
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
+import space.opensensor.model.BoardTemplate
 import space.opensensor.storage.AtomicFiles
 import space.opensensor.storage.DerivedQuota
 import space.opensensor.storage.JvmAtomicFiles
@@ -54,8 +55,8 @@ class HistoryDeriverTest {
 
     @Test
     fun `tiers and daily cache of the previous derive version rebuild without a source change`() = runBlocking {
-        // Version 9 writes the app_day entry in the daily file. Installed days must rebuild.
-        assertEquals(9, HistoryDeriver.DERIVE_VERSION)
+        // Version 10 names each file's resolved template in the signature. Installed days must rebuild.
+        assertEquals(10, HistoryDeriver.DERIVE_VERSION)
         val tmp = java.nio.file.Files.createTempDirectory("aq-derive-upgrade").toFile()
         try {
             val archive = FileArchive(tmp)
@@ -98,11 +99,42 @@ class HistoryDeriverTest {
             assertEquals(1, upgraded.daysChecked)
             assertEquals(1, upgraded.daysRebuilt)
             assertEquals(expectedTiers, buckets.rows)
-            assertEquals(HistoryDeriver.signatureOf(originalSources.map { it.toRecord() }), days.rows.single().sourceSignature)
+            assertEquals(HistoryDeriver.signatureOf(originalSources.map { it.toRecord() }, CoreS3Files), days.rows.single().sourceSignature)
             assertEquals(days.rows.single().sourceSignature, Json.decodeFromString<DailyManifest>(manifest.readText()).sourceSignature)
             space.opensensor.data.history.parquet.ParquetFile.open(daily).use { assertEquals(105L, it.numRows) }
             assertEquals(originalSources, files.rows)
             assertTrue(originalBytes.contentEquals(raw.readBytes()))
+            assertEquals(0, deriver.deriveStale().daysRebuilt)
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    /** A day derived before its template resolved gains its metrics on the next derive, with no index pass. */
+    @Test
+    fun `a template that resolves after a day was derived rebuilds that day`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-derive-template").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val files = InMemoryFiles()
+            val buckets = InMemoryBuckets()
+            var served: BoardTemplate? = null
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), FileTemplates { _, _ -> served })
+            val deriver = HistoryDeriver(archive, files, buckets, InMemoryDays(), DerivedStore(tmp), indexer, derivedQuota(tmp), indexer.passes(files))
+            val name = "thing=$thing/day=2026-09-17/raw.parquet"
+            val raw = archive.fileFor(thing, name).apply {
+                parentFile!!.mkdirs()
+                writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
+            }
+            files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            val indexed = files.rows.toList()
+            assertEquals(1, deriver.deriveStale().daysRebuilt)
+            assertTrue(buckets.rows.none { it.metricId == AirMetrics.PM25.id })
+
+            served = CoreS3Files.template(null, null)
+            assertEquals(1, deriver.deriveStale().daysRebuilt)
+            assertTrue(buckets.rows.any { it.metricId == AirMetrics.PM25.id })
+            assertEquals(indexed, files.rows)
             assertEquals(0, deriver.deriveStale().daysRebuilt)
         } finally {
             tmp.deleteRecursively()
@@ -165,7 +197,7 @@ class HistoryDeriverTest {
             }
             files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
             deriver.deriveStale()
-            val reader = RoomDerivedDayFiles(store, days)
+            val reader = RoomDerivedDayFiles(store, days, CoreS3Files)
             val sources = files.rows.map { it.toRecord() }
             val manifest = store.manifestFile(thing, 20713)
             val validReceipt = manifest.readText()

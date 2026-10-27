@@ -4,6 +4,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import space.opensensor.net.BlockCache
 import space.opensensor.storage.StorageJanitor
@@ -19,6 +21,8 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * 2. The feed [blocks] quota applies, even when the janitor failed (#94).
  * 3. [HistoryOrchestrator.run], the backfill and the platform derive, so a file the janitor adopted is
  *    indexed in the same start.
+ * 4. Beside it, the platform derive again on every change of [templates], so a template the cache loads or a
+ *    board serves after a day was derived rebuilds the days of its files (their signatures name it).
  *
  * [log] gets step names, counts and class names only, never paths or thing ids.
  */
@@ -28,6 +32,7 @@ class HistoryStartup(
     private val janitor: StorageJanitor,
     private val blocks: BlockCache,
     private val log: (String) -> Unit = {},
+    private val templates: StateFlow<Any?> = FileTemplates.SERVED.changes,
 ) {
     private val job = AtomicReference<Job?>(null)
 
@@ -35,9 +40,9 @@ class HistoryStartup(
     val started: Boolean get() = job.load() != null
 
     /**
-     * Launches the steps above in [scope] and returns their job. [deriveAll] is the platform's derive
-     * entry point, which takes [HistoryOrchestrator.derivePass] itself. A second call returns the
-     * first job and starts nothing.
+     * Launches the steps above in [scope] and returns their job, which lives as long as [scope] to watch
+     * [templates]. [deriveAll] is the platform's derive entry point, which takes
+     * [HistoryOrchestrator.derivePass] itself. A second call returns the first job and starts nothing.
      */
     fun start(scope: CoroutineScope, deriveAll: suspend () -> Unit): Job {
         job.load()?.let { return it }
@@ -47,7 +52,17 @@ class HistoryStartup(
             } finally {
                 step("feed block quota") { blocks.enforce() }
             }
-            orchestrator.run(deriveAll)
+            // Read before the first derive, so a template that lands while it runs derives once more.
+            var seen = templates.value
+            coroutineScope {
+                launch { orchestrator.run(deriveAll) }
+                templates.collect { now ->
+                    if (now != seen) {
+                        seen = now
+                        step("template derive") { deriveAll() }
+                    }
+                }
+            }
         }
         if (!job.compareAndSet(null, launched)) {
             launched.cancel()

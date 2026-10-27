@@ -148,8 +148,8 @@ class LegacyReceiptImport(
         private const val RECEIPT_MAX_BYTES = 16_384L
 
         /**
-         * The record of one receipt, or null for anything without a valid `size` and `crc`. A receipt
-         * from an older index layout with no UTC rows reads as never indexed, so repair indexes it again.
+         * The record of one receipt, or null for anything without a valid `size` and `crc`. No receipt
+         * kept the footer digests, so every record reads as never indexed and repair indexes it again.
          */
         fun decode(thing: String, name: String, text: String): ArchiveRecord? {
             val o = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
@@ -158,7 +158,7 @@ class LegacyReceiptImport(
             fun text(key: String): String? = o[key]?.let { runCatching { it.jsonPrimitive.contentOrNull }.getOrNull() }
             val size = long("size")?.takeIf { it >= 0 } ?: return null
             val crc = long("crc")?.takeIf { it in 0..0xFFFF_FFFFL } ?: return null
-            val record = ArchiveRecord(
+            return ArchiveRecord(
                 thing = thing,
                 name = name,
                 bytes = size,
@@ -166,7 +166,7 @@ class LegacyReceiptImport(
                 sha256 = text("sha256").orEmpty(),
                 syncedAtEpochMs = long("syncedAtEpochMs") ?: 0L,
                 sourceDevice = text("sourceDevice").orEmpty(),
-                indexedAtEpochMs = long("indexedAtEpochMs"),
+                indexedAtEpochMs = null,
                 indexError = text("indexError"),
                 rows = long("rows"),
                 rowGroups = int("rowGroups"),
@@ -183,8 +183,6 @@ class LegacyReceiptImport(
                 estLastUtcNs = long("estLastUtcNs"),
                 estAnchorFile = text("estAnchorFile"),
             )
-            val stale = (int("indexLayout") ?: 1) < ArchiveRecord.INDEX_LAYOUT && record.needsUtcReindex
-            return if (stale) record.copy(indexedAtEpochMs = null) else record
         }
     }
 }

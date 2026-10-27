@@ -38,6 +38,9 @@ data class ArchiveRecord(
     val estFirstUtcNs: Long? = null,
     val estLastUtcNs: Long? = null,
     val estAnchorFile: String? = null,
+    /** The footer `dictionary.sha256` and `template.sha256`, index columns. History resolves the file's template from them at each derive. */
+    val dictionarySha256: String? = null,
+    val templateSha256: String? = null,
 ) {
     val key: ArchiveKey get() = ArchiveKey(thing, name)
 
@@ -82,20 +85,8 @@ data class ArchiveRecord(
         return last >= fromNs && first < toNs
     }
 
-    /**
-     * Indexed without error but with no UTC rows, which is all an index written before
-     * [INDEX_LAYOUT] 2 could give a `*_utc_us` file. Such a record is indexed again once.
-     */
-    val needsUtcReindex: Boolean get() = isIndexed && (utcRows ?: 0L) == 0L
-
     companion object {
         const val TELEMETRY: String = "telemetry"
-
-        /**
-         * The index layout this build writes. 2 reads `event_time_utc_us` (CoreS3 v6.12, Waveshare
-         * v2.6). An index from layout 1 knew only `event_time_utc_ns`, so a newer file got no UTC rows.
-         */
-        const val INDEX_LAYOUT: Int = 2
 
         /** The order [ArchiveIndex.timeline] returns, by real or estimated first time, unplaced last. */
         val TIMELINE_ORDER: Comparator<ArchiveRecord> = compareBy(nullsLast()) { it.timelineFirstNs }

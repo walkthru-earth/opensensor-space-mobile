@@ -35,7 +35,9 @@ milliseconds.
 Both phones run the same order (#100). The shared `HistoryStartup.start` is called once per process,
 from `OpenSensorApplication.onCreate` on Android and `IosArchive.startIndexRepair` on iOS
 (`AppStartupTest`, `IosArchiveStartupTest`). It runs the storage janitor, then the feed block quota,
-then `HistoryOrchestrator.run`.
+then `HistoryOrchestrator.run`. Beside it, every change of `FileTemplates.SERVED.changes` (a template
+the cache loads at start or a board serves) runs the platform derive again, so the days of the files it
+resolves rebuild with their metrics. No file is indexed again for it.
 
 ```mermaid
 flowchart LR
@@ -72,6 +74,7 @@ flowchart LR
 
 Derived from the **file**, never its name: rows, row groups, `file.purpose` from the `opensensor`
 footer JSON, the boot from the first row's `boot_id_hi` and `boot_id_lo`, then the UTC row count + span, monotonic span, sequence span, the valid rows of the headline metric (the template's primary column through its gate and settle time, null when no bundled template knows the file or the column cannot be read),
+the footer `dictionary.sha256` and `template.sha256` as they are,
 `indexedAt`/`indexError`. The repair hands the footer `template.sha256` of each file that indexes to
 `BoardDescriptors.confirm`, which evicts a served template with the same 16 hex prefix and another
 full digest (see `protocol-quickref.md`). v6 footers answer spans from statistics without decoding
@@ -83,9 +86,9 @@ error) is the one test of whether a row's index columns can be read, and `withUt
 same test in SQL. `ArchiveRecord.awaitsIndex` (never indexed, or reopened) marks a row the back-fill
 still has to read.
 
-The one time iOS receipt import (`ArchiveRecord.INDEX_LAYOUT`) reopen every indexed row without UTC
-rows or an error, so a file whose `event_time_utc_us` an older build could not read is indexed again
-once. Until the back-fill reaches it, such a row awaits its index.
+Room schema 4 (`Migration3To4`) added the two footer digests and reopens every row indexed without an
+error, and the one time iOS receipt import reads every receipt as never indexed, since neither knew
+the digests. Until the back-fill reaches it, such a row awaits its index.
 
 ## Metric registry
 
@@ -131,8 +134,9 @@ The template (`FileTemplates.SERVED`) is the one whose exact bytes hash to `temp
 template a board served and the app verified (`ServedTemplates`) first, then the bundled one (the build
 precomputes that digest for every bundled file). Else it is the newest served one for
 `dictionary.sha256`, then the bundled one. A template digest whose dict disagrees with the footer's is
-not used. A file indexed before its board served a template it needs keeps no metrics until it is
-indexed again. The bundled bytes are the firmware's own, so a
+not used. History resolves a file's template from its stored footer digests at each derive, and the
+result is part of the day signature, so a file indexed before its board served a template it needs
+gains its metrics at the next derive, with no index pass. The bundled bytes are the firmware's own, so a
 real footer resolves by `template.sha256` alone, with no dictionary member needed. The catalog refuses
 to load when an `index.json` desc is not the build digest of its file. The footer interval wins. Without it
 the template's default interval is used, and without both the interval is 0 and expected rows are 0.
@@ -173,7 +177,8 @@ Both PM2.5 specs carry `property = "pm25"` for the WHO scale and a `basis` (`COR
 for the label. Daily files keep the raw `pm25_cf1_ug_m3` and RH columns, so they need no change.
 Template metrics came with `HistoryDeriver.DERIVE_VERSION` 8 on Android and `TierCodec.VERSION` 4
 on iOS, so installed days rebuild once. The `app_day` entry came with `DERIVE_VERSION` 9 and
-builder `derived-v4`, which both platforms check, so cached day files rebuild once more.
+builder `derived-v4`, which both platforms check, so cached day files rebuild once more. The resolved
+template in the signature came with `DERIVE_VERSION` 10 and `TierCodec.VERSION` 5.
 
 ### Sensor warm-up and settling (2026-09-17)
 
@@ -257,8 +262,13 @@ picker of the old format cleanup offers the same span plus one day (`StorageCont
 ### When a day is rebuilt
 
 `derived_day.sourceSignature` = SHA-256 over `derive-v<DERIVE_VERSION>` + the day's sorted
-`name:crc32` sources + anchors. `deriveStale()` rebuilds exactly the days whose set changed (late
-file, re-synced mismatch, deleted file, new anchor) and drops days with no sources. A day with no
+`ArchiveHistoryTiers.sourceLine`s, `name:crc32`, the anchor of an estimated file and `t<template>`,
+the full desc (or `dict:<dict>` for a bundled one without) that `FileTemplates.digestOf` resolves now,
+`-` for none. iOS tiers and day files use the same lines. `deriveStale()` rebuilds exactly the days
+whose set changed (late file, re-synced mismatch, deleted file, new anchor, a template that starts or
+stops resolving) and drops days with no sources. `ArchiveHistoryTiers` checks its days again on every
+template change, and the Android derived day reader (`RoomDerivedDayFiles`) uses the deriver's
+templates, so a reader never takes a day file built under another template. A day with no
 source is kept while a row of that thing awaits its index and may place itself there
 (`ThingDays.held`). A waiting row that kept a span holds the days of that span, one without a span
 holds every day of its thing, and a row with an index error holds nothing. Android's

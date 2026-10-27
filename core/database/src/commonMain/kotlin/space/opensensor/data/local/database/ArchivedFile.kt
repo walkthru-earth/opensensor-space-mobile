@@ -8,6 +8,9 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.execSQL
 import kotlinx.coroutines.flow.Flow
 import space.opensensor.data.history.IndexedFileInfo
 
@@ -61,6 +64,11 @@ data class ArchivedFile(
     val estFirstUtcNs: Long? = null,
     val estLastUtcNs: Long? = null,
     val estAnchorFile: String? = null,
+
+    // ---- Footer digests (schema v4). The `dictionary.sha256` and `template.sha256` the file names, so
+    // History resolves its template at each derive and a newly served template rebuilds its days.
+    val dictionarySha256: String? = null,
+    val templateSha256: String? = null,
 ) {
     /** The same test as [space.opensensor.archive.ArchiveRecord.isIndexed]. */
     val isIndexed: Boolean get() = indexedAtEpochMs != null && indexError == null
@@ -204,4 +212,17 @@ interface ArchivedFileDao {
 
     @Query("DELETE FROM archived_file WHERE thing = :thing AND name = :name")
     suspend fun delete(thing: String, name: String)
+}
+
+/**
+ * Version 3 to 4 adds the footer `dictionary.sha256` and `template.sha256` to `archived_file`. Only
+ * the file's footer has them, so every row indexed without error is reopened and the back-fill reads
+ * each footer once. Until then a row awaits its index and holds its days in History.
+ */
+object Migration3To4 : Migration(3, 4) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `archived_file` ADD COLUMN `dictionarySha256` TEXT")
+        connection.execSQL("ALTER TABLE `archived_file` ADD COLUMN `templateSha256` TEXT")
+        connection.execSQL("UPDATE `archived_file` SET `indexedAtEpochMs` = NULL WHERE `indexedAtEpochMs` IS NOT NULL AND `indexError` IS NULL")
+    }
 }

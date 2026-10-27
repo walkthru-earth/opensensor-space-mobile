@@ -13,8 +13,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * A version 2 database file, written as version 2 wrote it, opened by the app at version 3
- * ([Migration2To3]). Every Thing it knew gets a board source, a blank Thing gets none and no stored row is lost.
+ * A version 2 database file, written as version 2 wrote it, opened by the app at version 4
+ * ([Migration2To3], then [Migration3To4]). Every Thing it knew gets a board source, a blank Thing gets
+ * none and no stored row is lost. A version 3 file reopens its indexed rows to read their footer digests.
  */
 class ThingSourceMigrationTest {
     private val dir = newTempDir()
@@ -81,7 +82,36 @@ class ThingSourceMigrationTest {
             assertEquals(7L to 3, cursor.wholeAtEpochMs to cursor.sinceWhole)
             assertEquals(listOf("day=03/data.parquet"), db.prunedFileDao().forThing("thing-a").map { it.name })
             val version = db.useReaderConnection { c -> c.usePrepared("PRAGMA user_version") { it.step(); it.getLong(0) } }
-            assertEquals(3L, version)
+            assertEquals(4L, version)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun version4ReopensEveryIndexedFileSoRepairReadsItsFooterDigests() = runTest {
+        val connection = BundledSQLiteDriver().open(path)
+        try {
+            V2_SCHEMA.forEach { connection.execSQL(it) }
+            Migration2To3.migrate(connection)
+            val columns = "(thing, name, bytes, crc32, sha256, syncedAtEpochMs, sourceDevice, indexedAtEpochMs, indexError, rows)"
+            connection.execSQL("INSERT INTO archived_file $columns VALUES ('thing-a', 'indexed.parquet', 10, 1, 'ab', 5, 'dev', 9, NULL, 90)")
+            connection.execSQL("INSERT INTO archived_file $columns VALUES ('thing-a', 'refused.parquet', 10, 2, 'ab', 5, 'dev', 9, 'not parquet', NULL)")
+            connection.execSQL("INSERT INTO archived_file $columns VALUES ('thing-a', 'waiting.parquet', 10, 3, 'ab', 5, 'dev', NULL, NULL, NULL)")
+            connection.execSQL("PRAGMA user_version = 3")
+        } finally {
+            connection.close()
+        }
+
+        val db = fileAppDatabase(path)
+        try {
+            val dao = db.archivedFileDao()
+            val indexed = dao.get("thing-a", "indexed.parquet")!!
+            assertEquals(null, indexed.indexedAtEpochMs)
+            assertEquals(90L, indexed.rows)
+            assertEquals(null to null, indexed.dictionarySha256 to indexed.templateSha256)
+            assertEquals(9L to "not parquet", dao.get("thing-a", "refused.parquet")!!.let { it.indexedAtEpochMs to it.indexError })
+            assertEquals(null, dao.get("thing-a", "waiting.parquet")!!.indexedAtEpochMs)
         } finally {
             db.close()
         }

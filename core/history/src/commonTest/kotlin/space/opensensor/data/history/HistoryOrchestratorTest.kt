@@ -20,6 +20,7 @@ import space.opensensor.archive.PartialWriter
 import space.opensensor.data.history.parquet.ByteArrayReader
 import space.opensensor.data.history.parquet.ByteReader
 import space.opensensor.data.history.parquet.ParquetFile
+import space.opensensor.model.TemplateKey
 import space.opensensor.net.BlockCache
 import space.opensensor.net.MemoryBlockStore
 import space.opensensor.storage.StorageEntry
@@ -382,6 +383,28 @@ class HistoryOrchestratorTest {
         runCurrent()
         assertEquals(listOf("janitor", "feed quota", "derive 1"), events)
         assertTrue(blockStore.list().isEmpty())
+        job.cancel()
+    }
+
+    @Test
+    fun aNewTemplateDerivesAgainAndAnUnchangedOneDoesNot() = runTest {
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val startup = HistoryStartup(history, janitor { }, cache, templates = FileTemplates.over(served).changes)
+        var derives = 0
+
+        val job = startup.start(this) { history.derivePass { derives++ } }
+        runCurrent()
+        assertEquals(1, derives)
+
+        served.add(coreS3Template.copy(key = TemplateKey("ab".repeat(32), "cd".repeat(32))))
+        runCurrent()
+        assertEquals(2, derives, "a template the cache loads or a board serves derives again")
+
+        served.add(coreS3Template.copy(key = TemplateKey("ab".repeat(32), "cd".repeat(32))))
+        runCurrent()
+        assertEquals(2, derives, "a template already held changes nothing")
         job.cancel()
     }
 }

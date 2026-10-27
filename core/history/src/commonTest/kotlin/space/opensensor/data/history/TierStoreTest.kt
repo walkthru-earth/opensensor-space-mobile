@@ -113,9 +113,8 @@ class TierStoreTest {
 
     @Test
     fun tiersSavedByAnOlderVersionAreRebuilt() = runTest {
-        // Version 4 keys metrics by template column and keeps each bucket's sample interval (#186).
-        // Saved days must rebuild to gain them.
-        assertEquals(4, TierCodec.VERSION)
+        // Version 5 names each file's resolved template in the signature. Saved days must rebuild to gain it.
+        assertEquals(5, TierCodec.VERSION)
         val (store, index, thing) = archive()
         val tierStore = MemoryTierStore()
         ArchiveHistoryTiers(store, index, tierStore = tierStore, templates = CoreS3Files).observeDays(thing).first()

@@ -122,14 +122,14 @@ fun opensensorFooter(template: space.opensensor.model.BoardTemplate, intervalMs:
 fun coreS3Footer(extra: Map<String, String> = emptyMap(), thing: String = "thing-a"): Map<String, String> = opensensorFooter(coreS3Template, thing = thing) + extra
 
 /**
- * [bytes] rewritten with a firmware footer naming the bundled CoreS3 dict, template digest [desc] and a
+ * [bytes] rewritten with a firmware footer naming [dict], the bundled CoreS3 one by default, template digest [desc] and a
  * 10 s cadence. The device fixtures predate them, and a derived day file without a dict gives way to the raw
  * files. The thing and purpose of the file's own footer are kept.
  */
-fun withCoreS3Dict(bytes: ByteArray, desc: String? = coreS3Template.key.desc): ByteArray = ParquetFile.wrap(bytes).use { file ->
+fun withCoreS3Dict(bytes: ByteArray, desc: String? = coreS3Template.key.desc, dict: String = coreS3Template.dict): ByteArray = ParquetFile.wrap(bytes).use { file ->
     val sink = MemorySink()
     val own = file.metadata.footer
-    val json = opensensorFooterJson(coreS3Template.dict, desc, 10_000, thing = own?.thingId ?: "thing-a", purpose = own?.purpose)
+    val json = opensensorFooterJson(dict, desc, 10_000, thing = own?.thingId ?: "thing-a", purpose = own?.purpose)
     val w = ParquetWriter(
         sink,
         file.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) },
