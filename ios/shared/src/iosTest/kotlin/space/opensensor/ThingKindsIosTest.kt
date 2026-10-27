@@ -2,6 +2,7 @@ package space.opensensor
 
 import space.opensensor.data.history.Metrics
 import space.opensensor.family.air.AirFamily
+import space.opensensor.publicfeed.DiscoverCollection
 import space.opensensor.thing.OpenSensorBoardKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -9,8 +10,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 
 class ThingKindsIosTest {
+    // Starts from an empty catalog and no bundled scales, so only launchThingKinds can fill them.
     init {
-        AirFamily.install()
+        Metrics.install(emptyList())
+        DiscoverCollection.installBundled("""{"type":"Collection","id":"discover-cells-bundled"}""")
     }
 
     @Test
@@ -22,5 +25,6 @@ class ThingKindsIosTest {
         launchThingKinds()
         assertSame(kinds, iosThingKinds)
         assertNotNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
+        assertNotNull(DiscoverCollection.BUNDLED.scale(AirFamily.PM25_SCALE))
     }
 }

@@ -3,6 +3,7 @@ package space.opensensor.data.di
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Before
 import org.junit.Test
 import space.opensensor.OpenSensorApplication
 import space.opensensor.data.history.Metrics
@@ -13,6 +14,13 @@ import space.opensensor.thing.ThingKinds
 import javax.inject.Inject
 
 class ThingModuleTest {
+    /** Starts from an empty catalog and no bundled scales, so only ThingModule can fill them. */
+    @Before
+    fun clear() {
+        Metrics.install(emptyList())
+        DiscoverCollection.installBundled("""{"type":"Collection","id":"discover-cells-bundled"}""")
+    }
+
     @After
     fun restore() = AirFamily.install()
 
