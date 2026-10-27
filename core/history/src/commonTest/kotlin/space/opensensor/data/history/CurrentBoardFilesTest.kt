@@ -72,9 +72,9 @@ class CurrentBoardFilesTest {
                 ParquetWriter.Column(UtcColumns.EVENT_US, ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.MICROS),
                 ParquetWriter.Column("pms_status", ParquetType.INT32),
                 ParquetWriter.Column("pm1_atmospheric_ug_m3", ParquetType.INT32),
-                ParquetWriter.Column(Metrics.PM25.column, ParquetType.INT32),
+                ParquetWriter.Column(AirMetrics.PM25.column, ParquetType.INT32),
                 ParquetWriter.Column("pm10_atmospheric_ug_m3", ParquetType.INT32),
-                ParquetWriter.Column(Metrics.PM25_CORRECTED.column, ParquetType.INT32),
+                ParquetWriter.Column(AirMetrics.PM25_CORRECTED.column, ParquetType.INT32),
                 ParquetWriter.Column("particles_gt03_per_01l", ParquetType.INT32),
                 ParquetWriter.Column("ambient_temperature_c", ParquetType.FLOAT),
                 ParquetWriter.Column("relative_humidity_percent", ParquetType.FLOAT),
@@ -141,17 +141,17 @@ class CurrentBoardFilesTest {
         val settling = pmsValid.count { monoUs(it) < 180_000_000L }
         fun pms(f: (Int) -> Int) = Want(pmsValid.map { f(it).toFloat() }, settling).agg
         return when (metric.id) {
-            Metrics.PM25.id -> pms(::pm25)
-            Metrics.PM1.id -> pms(::pm1)
-            Metrics.PM10.id -> pms(::pm10)
+            AirMetrics.PM25.id -> pms(::pm25)
+            AirMetrics.PM1.id -> pms(::pm1)
+            AirMetrics.PM10.id -> pms(::pm10)
             "pm25_cf1_ug_m3" -> pms(::cf1)
-            Metrics.PARTICLES_GT03.id -> pms(::gt03)
-            Metrics.PM25_CORRECTED.id -> {
-                val ok = pmsValid.mapNotNull { i -> humidity(i).takeIf { it.isFinite() }?.let { rh -> Metrics.PM25_CORRECTED.valueOf(cf1(i).toDouble(), rh.toDouble()) }?.let { i to it.toFloat() } }
+            AirMetrics.PARTICLES_GT03.id -> pms(::gt03)
+            AirMetrics.PM25_CORRECTED.id -> {
+                val ok = pmsValid.mapNotNull { i -> humidity(i).takeIf { it.isFinite() }?.let { rh -> AirMetrics.PM25_CORRECTED.valueOf(cf1(i).toDouble(), rh.toDouble()) }?.let { i to it.toFloat() } }
                 Want(ok.map { it.second }, ok.count { monoUs(it.first) < 180_000_000L }).agg
             }
-            Metrics.AMBIENT_TEMP.id -> Want(picked.map(::ambient), 0).agg
-            Metrics.HUMIDITY.id -> Want(picked.map(::humidity).filter { it.isFinite() }, 0).agg
+            AirMetrics.AMBIENT_TEMP.id -> Want(picked.map(::ambient), 0).agg
+            AirMetrics.HUMIDITY.id -> Want(picked.map(::humidity).filter { it.isFinite() }, 0).agg
             "battery_percent" -> Want(picked.map { battery(it).toFloat() }, 0, point = true).agg
             else -> null
         }
@@ -182,7 +182,7 @@ class CurrentBoardFilesTest {
         assertBucketsMatchTheRows(got, 10_000)
         // The fixture exercises the gate, the settle window and a point column.
         val day = got.single { it.resolution == Resolution.DAY }
-        assertTrue(day.agg(Metrics.PM25)!!.n < rows && day.agg(Metrics.PM25)!!.settling > 0)
+        assertTrue(day.agg(AirMetrics.PM25)!!.n < rows && day.agg(AirMetrics.PM25)!!.settling > 0)
         assertEquals(battery(rows - 1).toFloat(), day.metrics.getValue("battery_percent").mean)
     }
 
@@ -262,7 +262,7 @@ class CurrentBoardFilesTest {
         val h3 = daily.readColumn(daily.leaf("h3_cell_id"))
         assertEquals(rows, h3.nullCount)
         assertNull(daily.metadata.leaf("geometry"))
-        val pm = daily.readColumn(daily.leaf(Metrics.PM25.column))
+        val pm = daily.readColumn(daily.leaf(AirMetrics.PM25.column))
         assertEquals(0, pm.nullCount)
         assertEquals((0 until rows).map { pm25(it).toLong() }, (0 until rows).map { pm.asLong(it) })
     }

@@ -30,7 +30,7 @@ class AggregationTest {
         // 09:30 bucket holds 09:42:35–09:44:55 (15 rows), 09:45 bucket holds 09:45:05–09:59:55 (90 rows).
         assertEquals(listOf(1_789_637_400L, 1_789_638_300L), q.map { it.startEpochS })
         assertEquals(listOf(15, 90), q.map { it.rows })
-        assertEquals(listOf(15L, 90L), q.map { it.agg(Metrics.PM25)!!.n.toLong() })
+        assertEquals(listOf(15L, 90L), q.map { it.agg(AirMetrics.PM25)!!.n.toLong() })
         assertEquals(1, h.size)
         assertEquals(1_789_635_600L, h[0].startEpochS) // 09:00Z
         assertEquals(105, h[0].rows)
@@ -38,20 +38,20 @@ class AggregationTest {
         assertEquals(1_789_603_200L, d[0].startEpochS) // 2026-09-17T00:00Z
         assertEquals(105, d[0].rows)
         // Means agree with PyArrow (pm25 mean 27.9333, imu temperature mean 41.4009 over the file).
-        assertEquals(27.9333, d[0].agg(Metrics.PM25)!!.mean.toDouble(), 0.001)
-        assertEquals(41.4009, d[0].agg(Metrics.BOARD_TEMP)!!.mean.toDouble(), 0.001)
-        assertTrue(d[0].agg(Metrics.PM25)!!.min <= d[0].agg(Metrics.PM25)!!.max)
-        assertEquals(105f / 8640f, d[0].coverage(Metrics.PM25), 1e-6f)
-        assertEquals(1f, q[1].coverage(Metrics.PM25), 1e-6f)
+        assertEquals(27.9333, d[0].agg(AirMetrics.PM25)!!.mean.toDouble(), 0.001)
+        assertEquals(41.4009, d[0].agg(AirMetrics.BOARD_TEMP)!!.mean.toDouble(), 0.001)
+        assertTrue(d[0].agg(AirMetrics.PM25)!!.min <= d[0].agg(AirMetrics.PM25)!!.max)
+        assertEquals(105f / 8640f, d[0].coverage(AirMetrics.PM25), 1e-6f)
+        assertEquals(1f, q[1].coverage(AirMetrics.PM25), 1e-6f)
         // Registry entries whose column is null on this board (SHT20) simply have no aggregate — never a zero.
-        assertNull(d[0].agg(Metrics.HUMIDITY))
+        assertNull(d[0].agg(AirMetrics.HUMIDITY))
         // No RH on this board, so no corrected PM2.5. The cards fall back to raw, labelled raw.
-        assertNull(d[0].agg(Metrics.PM25_CORRECTED))
-        assertNull(d[0].agg(Metrics.AMBIENT_TEMP))
-        assertNotNull(d[0].agg(Metrics.BATTERY))
+        assertNull(d[0].agg(AirMetrics.PM25_CORRECTED))
+        assertNull(d[0].agg(AirMetrics.AMBIENT_TEMP))
+        assertNotNull(d[0].agg(AirMetrics.BATTERY))
         // The board booted 38 s before its first row: the first 180 s of uptime are "settling" — 15 rows (38 s → 180 s).
-        assertEquals(15, d[0].agg(Metrics.PM25)!!.settling)
-        assertEquals(0, d[0].agg(Metrics.BOARD_TEMP)!!.settling) // no settle window on the IMU
+        assertEquals(15, d[0].agg(AirMetrics.PM25)!!.settling)
+        assertEquals(0, d[0].agg(AirMetrics.BOARD_TEMP)!!.settling) // no settle window on the IMU
     }
 
     @Test
@@ -83,13 +83,13 @@ class AggregationTest {
         val b = agg.buckets().single()
         assertEquals(3600L, b.startEpochS)
         assertEquals(3, b.rows) // the UTC-less row is not on the timeline at all
-        val pm = b.agg(Metrics.PM25)!!
+        val pm = b.agg(AirMetrics.PM25)!!
         assertEquals(2, pm.n) // the stale row counts as a row but not as a reading
         assertEquals(15f, pm.mean)
         assertEquals(10f, pm.min)
         assertEquals(20f, pm.max)
-        assertEquals(40.5f, b.agg(Metrics.BOARD_TEMP)!!.mean) // NaN skipped
-        assertNull(b.agg(Metrics.BATTERY)) // column absent from this file
+        assertEquals(40.5f, b.agg(AirMetrics.BOARD_TEMP)!!.mean) // NaN skipped
+        assertNull(b.agg(AirMetrics.BATTERY)) // column absent from this file
     }
 
     @Test
@@ -98,7 +98,7 @@ class AggregationTest {
         agg.add(ParquetFile.wrap(humidPm25Parquet()))
         val b = agg.buckets().single()
         assertEquals(HUMID_HOUR_S, b.startEpochS)
-        val epa = b.agg(Metrics.PM25_CORRECTED)!!
+        val epa = b.agg(AirMetrics.PM25_CORRECTED)!!
         // Row 3 has a null RH, row 4 an RH of 120 and row 5 a stale sensor, so two rows count.
         assertEquals(2, epa.n)
         val a = EpaPm25Correction.correct(10.0, 50.0)!!
@@ -109,7 +109,7 @@ class AggregationTest {
         val ofMean = EpaPm25Correction.correct(130.0, 65.0)!!
         assertTrue("corrected rows $epa, corrected mean $ofMean", abs(epa.mean - ofMean) > 5)
         // Stored values never change, the raw aggregate still reads the atmospheric column.
-        val raw = b.agg(Metrics.PM25)!!
+        val raw = b.agg(AirMetrics.PM25)!!
         assertEquals(4, raw.n)
         assertEquals(60f, raw.mean)
     }
@@ -119,8 +119,8 @@ class AggregationTest {
         val summary = FileSummary.of("humid.parquet", ParquetFile.wrap(humidPm25Parquet()), templates = CoreS3Files)
         val a = EpaPm25Correction.correct(10.0, 50.0)!!
         val c = EpaPm25Correction.correct(250.0, 80.0)!!
-        assertEquals(((a + c) / 2).toFloat(), summary.metrics.getValue(Metrics.PM25_CORRECTED.id).mean, 1e-3f)
-        assertEquals(60f, summary.metrics.getValue(Metrics.PM25.id).mean)
+        assertEquals(((a + c) / 2).toFloat(), summary.metrics.getValue(AirMetrics.PM25_CORRECTED.id).mean, 1e-3f)
+        assertEquals(60f, summary.metrics.getValue(AirMetrics.PM25.id).mean)
     }
 
     @Test

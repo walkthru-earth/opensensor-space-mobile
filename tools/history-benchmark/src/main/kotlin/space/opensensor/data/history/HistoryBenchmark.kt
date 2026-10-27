@@ -50,8 +50,8 @@ open class HistoryBenchmark {
                     ParquetWriter.Column("boot_id_lo", ParquetType.INT64),
                     ParquetWriter.Column(ParquetIndexer.SEQ, ParquetType.INT64),
                     ParquetWriter.Column("pms_status", ParquetType.INT32),
-                    ParquetWriter.Column(Metrics.PM25.column, ParquetType.INT32),
-                    ParquetWriter.Column(Metrics.BOARD_TEMP.column, ParquetType.FLOAT),
+                    ParquetWriter.Column(AirMetrics.PM25.column, ParquetType.INT32),
+                    ParquetWriter.Column(AirMetrics.BOARD_TEMP.column, ParquetType.FLOAT),
                 ),
                 keyValueMetadata = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = null, intervalMs = null, thing = thing))
             )
@@ -93,8 +93,8 @@ open class HistoryBenchmark {
         )
         window = HistoryWindow.endingAt((day + 1) * 86_400, HistoryRange.DAY, TimeZone.UTC)
         check(
-            runBlocking { raw.observe(thing, Metrics.PM25, HistoryRange.DAY, window).first() } ==
-                runBlocking { derived.observe(thing, Metrics.PM25, HistoryRange.DAY, window).first() }
+            runBlocking { raw.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first() } ==
+                runBlocking { derived.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first() }
         )
     }
 
@@ -117,10 +117,10 @@ open class HistoryBenchmark {
     open fun deriveAfter(): Any = DayPass.run(thing, day, sources, Sink(), nowEpochS = (day + 2) * 86_400)
 
     @Benchmark
-    open fun fromRaw(): Any = runBlocking { raw.observe(thing, Metrics.PM25, HistoryRange.DAY, window).first() }
+    open fun fromRaw(): Any = runBlocking { raw.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first() }
 
     @Benchmark
-    open fun fromDerived(): Any = runBlocking { derived.observe(thing, Metrics.PM25, HistoryRange.DAY, window).first() }
+    open fun fromDerived(): Any = runBlocking { derived.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first() }
 
     private class Sink : ParquetSink {
         private val out = ByteArrayOutputStream()

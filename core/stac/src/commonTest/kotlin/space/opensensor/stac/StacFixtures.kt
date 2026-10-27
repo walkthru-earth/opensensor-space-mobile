@@ -23,8 +23,9 @@ const val HOUR_S = 1_792_846_800L
 
 const val FILE_NAME = "data_1300_0f3a9c2e5b7d41e8a6c3f0b2d9e4a713_2881-3240-0.parquet"
 
-val coreS3Template: BoardTemplate = BundledCatalog.templates.single { it.id.startsWith("cores3-") }
-val waveshareTemplate: BoardTemplate = BundledCatalog.templates.single { it.id.startsWith("waveshare-") }
+/** The bundled CoreS3 and Waveshare templates, pinned by dictionary. */
+val coreS3Template: BoardTemplate = checkNotNull(BundledCatalog.template("3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"))
+val waveshareTemplate: BoardTemplate = checkNotNull(BundledCatalog.template("50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7"))
 
 val h3: H3Grid = platformH3Grid()
 

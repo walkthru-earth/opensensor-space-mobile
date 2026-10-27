@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import space.opensensor.airquality.Pm25Basis
-import space.opensensor.data.history.Metrics
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.local.database.MetricBucket
 
 class LatestPm25DaysTest {
@@ -15,12 +15,12 @@ class LatestPm25DaysTest {
 
     @Test
     fun `the devices line shows the corrected day when it is the newest and raw labelled raw otherwise`() {
-        val corrected = listOf(day("humid", Metrics.PM25_CORRECTED.id, 172_800, 8f), day("old-rh", Metrics.PM25_CORRECTED.id, 0, 7f))
+        val corrected = listOf(day("humid", AirMetrics.PM25_CORRECTED.id, 172_800, 8f), day("old-rh", AirMetrics.PM25_CORRECTED.id, 0, 7f))
         val raw = listOf(
-            day("humid", Metrics.PM25.id, 172_800, 11f),
-            day("cores3", Metrics.PM25.id, 172_800, 20f),
-            day("old-rh", Metrics.PM25.id, 86_400, 12f),
-            day("empty", Metrics.PM25.id, 86_400, 0f, valid = 0),
+            day("humid", AirMetrics.PM25.id, 172_800, 11f),
+            day("cores3", AirMetrics.PM25.id, 172_800, 20f),
+            day("old-rh", AirMetrics.PM25.id, 86_400, 12f),
+            day("empty", AirMetrics.PM25.id, 86_400, 0f, valid = 0),
         )
         val out = latestPm25Days(corrected, raw)
         assertEquals(8f to Pm25Basis.CORRECTED, out.getValue("humid").let { it.first.mean to it.second })

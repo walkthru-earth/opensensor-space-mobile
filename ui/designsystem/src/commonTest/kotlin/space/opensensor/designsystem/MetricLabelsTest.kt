@@ -1,7 +1,7 @@
 package space.opensensor.designsystem
 
 import space.opensensor.airquality.Pm25Basis
-import space.opensensor.data.history.Metrics
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.designsystem.resources.Res
 import space.opensensor.designsystem.resources.pm25_corrected
 import space.opensensor.designsystem.resources.pm25_raw
@@ -19,14 +19,14 @@ class MetricLabelsTest {
 
     @Test
     fun thePm25MetricsSayCorrectedOrRaw() {
-        assertEquals(Res.string.pm25_corrected, metricLabelRes(Metrics.PM25_CORRECTED))
-        assertEquals(Res.string.pm25_raw, metricLabelRes(Metrics.PM25))
+        assertEquals(Res.string.pm25_corrected, metricLabelRes(AirMetrics.PM25_CORRECTED))
+        assertEquals(Res.string.pm25_raw, metricLabelRes(AirMetrics.PM25))
     }
 
     @Test
     fun otherMetricsKeepTheirRegistryLabel() {
-        assertNull(metricLabelRes(Metrics.PM10))
-        assertNull(metricLabelRes(Metrics.HUMIDITY))
-        assertNull(metricLabelRes(Metrics.PM25_BATCH_ESTIMATE))
+        assertNull(metricLabelRes(AirMetrics.PM10))
+        assertNull(metricLabelRes(AirMetrics.HUMIDITY))
+        assertNull(metricLabelRes(AirMetrics.PM25_BATCH_ESTIMATE))
     }
 }

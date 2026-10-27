@@ -278,7 +278,7 @@ class HistorySeriesReader(
             val spec = file.template?.let(metric::inTemplate)
             val gate = spec?.gate?.let { g -> GateColumn(g, md.leaf(g.column)?.let { pf.readColumn(it) }) }
             val col = spec?.let { md.leaf(it.column) }?.let { DoubleColumn.of(pf.readColumn(it)) }
-            val rh = spec?.humidityColumn?.let { name -> md.leaf(name)?.let { DoubleColumn.of(pf.readColumn(it)) } }
+            val rh = spec?.auxColumn?.let { name -> md.leaf(name)?.let { DoubleColumn.of(pf.readColumn(it)) } }
             val staged = StagedRows(utc.size, file.sampleIntervalMs)
             for (i in 0 until utc.size) {
                 var est = false
@@ -337,7 +337,7 @@ class HistorySeriesReader(
                 // Both scales come from the TIMESTAMP unit, so a file in another unit is read right or refused.
                 val utcScale = UtcColumns.nanosPerUnit(utcLeaf)
                 val estScale = estLeaf?.let(UtcColumns::nanosPerUnit) ?: 1L
-                val wanted = listOfNotNull(utcLeaf.name, estLeaf?.name, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, spec?.gate?.column, spec?.column, spec?.humidityColumn).filter { it in names }
+                val wanted = listOfNotNull(utcLeaf.name, estLeaf?.name, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, spec?.gate?.column, spec?.column, spec?.auxColumn).filter { it in names }
                 // Rows dated by an estimate have a null UTC, so only a file without them can prune by UTC.
                 val range = UtcColumns.nsToUnit(fromNs, utcScale) until UtcColumns.nsToUnitCeil(toNs, utcScale)
                 val batch = reader.scan(
@@ -350,7 +350,7 @@ class HistorySeriesReader(
                 val seq = batch[ParquetIndexer.SEQ]
                 val gate = spec?.gate?.let { g -> GateColumn(g, batch[g.column]?.toColumnValues()) }
                 val col = spec?.let { batch[it.column] }
-                val rh = spec?.humidityColumn?.let { batch[it] }
+                val rh = spec?.auxColumn?.let { batch[it] }
                 val staged = StagedRows(batch.rowCount, file.sampleIntervalMs)
                 for (i in 0 until batch.rowCount) {
                     val real = !utc.isNull(i)

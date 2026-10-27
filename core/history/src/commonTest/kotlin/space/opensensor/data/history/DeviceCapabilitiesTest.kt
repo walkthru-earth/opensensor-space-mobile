@@ -4,6 +4,7 @@ import space.opensensor.data.history.LiveFixtures.cores3
 import space.opensensor.data.history.LiveFixtures.waveshare
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
+import space.opensensor.model.Capability
 import space.opensensor.model.Family
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -81,5 +82,17 @@ class DeviceCapabilitiesTest {
         val caps = DeviceCapabilities.from(DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v4", dict = v4))
         assertNull(caps.thing)
         assertFalse(caps.batchEstimate)
+    }
+
+    @Test
+    fun `the air boards carry the particles capability and CoreS3 has no config`() {
+        assertEquals(
+            setOf(Capability.LIVE, Capability.CONFIG, Capability.SENSOR_IDENTITY, Capability.BATCH_ESTIMATE, Capability.PARTICLES),
+            DeviceCapabilities.from(waveshare).capabilities,
+        )
+        val coreS3 = DeviceCapabilities.from(cores3)
+        assertTrue(Capability.PARTICLES in coreS3)
+        assertFalse(Capability.CONFIG in coreS3)
+        assertEquals(emptySet(), DeviceCapabilities.NONE.capabilities)
     }
 }

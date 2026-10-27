@@ -17,9 +17,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlinx.datetime.TimeZone
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.HistoryColumn
 import space.opensensor.data.history.HistoryRange
-import space.opensensor.data.history.Metrics
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -46,7 +46,7 @@ class BandColumnChartSemanticsTest {
     fun simpleReadsEachBarWithItsMoodAndNeverNamesWho() = runComposeUiTest {
         setContent {
             MaterialTheme {
-                BandColumnChart(day, Metrics.PM25, HistoryRange.DAY, 0, 24 * HOUR, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
+                BandColumnChart(day, AirMetrics.PM25, HistoryRange.DAY, 0, 24 * HOUR, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
             }
         }
         onNodeWithContentDescription("00:00, 22.0 µg/m³, Fair").assertExists()
@@ -63,7 +63,7 @@ class BandColumnChartSemanticsTest {
         val hours = listOf(hour(0, 3f), hour(1, 12f), hour(2, null), hour(3, 22f), hour(4, 40f), hour(5, 60f), hour(6, 120f)) + (7 until 24).map { hour(it, null) }
         setContent {
             MaterialTheme {
-                BandColumnChart(hours, Metrics.PM25, HistoryRange.DAY, 0, 24 * HOUR, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
+                BandColumnChart(hours, AirMetrics.PM25, HistoryRange.DAY, 0, 24 * HOUR, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
             }
         }
         val spoken = ArrayList<String>()
@@ -91,7 +91,7 @@ class BandColumnChartSemanticsTest {
     fun detailedAddsTheWhoStepAfterTheMood() = runComposeUiTest {
         setContent {
             MaterialTheme {
-                BandColumnChart(day, Metrics.PM25, HistoryRange.DAY, 0, 24 * HOUR, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.DETAILED)
+                BandColumnChart(day, AirMetrics.PM25, HistoryRange.DAY, 0, 24 * HOUR, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.DETAILED)
             }
         }
         onNodeWithContentDescription("00:00, 22.0 µg/m³, Fair, Within WHO interim target 4").assertExists()
@@ -103,7 +103,7 @@ class BandColumnChartSemanticsTest {
         var picked: HistoryColumn? = null
         setContent {
             MaterialTheme {
-                BandColumnChart(day, Metrics.PM25, HistoryRange.DAY, 0, 24 * HOUR, selected = day[2], onSelect = { picked = it }, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
+                BandColumnChart(day, AirMetrics.PM25, HistoryRange.DAY, 0, 24 * HOUR, selected = day[2], onSelect = { picked = it }, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
             }
         }
         onNodeWithContentDescription("02:00, 40.0 µg/m³, Poor, estimated time").assertIsSelected()
@@ -117,7 +117,7 @@ class BandColumnChartSemanticsTest {
         setContent {
             MaterialTheme {
                 BandColumnChart(
-                    files, Metrics.PM25, HistoryRange.DAY, 0, 2, selected = null, onSelect = {}, zone = TimeZone.UTC,
+                    files, AirMetrics.PM25, HistoryRange.DAY, 0, 2, selected = null, onSelect = {}, zone = TimeZone.UTC,
                     xLabels = listOf(0L to "first"), level = DetailLevel.SIMPLE, barSlot = { c -> "file ${c.startS + 1}" },
                 )
             }

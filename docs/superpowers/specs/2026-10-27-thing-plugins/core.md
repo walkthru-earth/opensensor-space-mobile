@@ -12,12 +12,10 @@ Ready for plugins.
 
 Tied to boards or air quality.
 - The family registry and capabilities named in `docs/devices-and-discovery.md` do not exist as types.
-- `Metrics.kt` (`core/history/.../data/history/Metrics.kt`) holds air only scales (pm25, pm10, lines 115-116), fixed EPA correction columns, and named PM constants through `requireNotNull` (line 222). The catalog fails to build if a bundled template drops one of those columns.
-- `DeviceCapabilities.showsAirCards` checks `Family.AIR` and the `pm25` scale. `configurable` is `proto >= 2`.
-- `LiveReading.PMS_STATUS` sits in `:core:protocol`. `TodayCards.kt` lists CF1 columns by name. `TodaySoFarFlow.kt` asks for PM2.5 directly. `LiveColumns` picks temperature and humidity by unit.
+- Done in #220. `Metrics.kt` takes scales from `WhoGuidelines.forProperty` and derived metrics from `DerivedMetricProvider`s (`:core:model`), with `AirDerivedMetrics` in `:core:airquality`. A template without PM columns builds the catalog. `DeviceCapabilities` holds a `Capability` set (`live`, `config`, `sensor-identity`, `batch-estimate`, `particles`). `PMS_STATUS` moved to `AirMetrics` in `:core:history`.
+- `TodayCards.kt` lists CF1 columns by name. `TodaySoFarFlow.kt` asks for PM2.5 directly. `LiveColumns` picks temperature and humidity by unit.
 - `KnownDevice` is keyed by Bluetooth address. `TransportKind` is a closed enum (`BLE`, `LAN`, `FAKE`). `CollectionLink` wraps a wire `DeviceSession`, so `CollectionController` and `SyncEngine` only speak the firmware protocol.
 - `FileItems` assumes the `data_HHMM_` file name and one source.coop root.
-- Test fixtures select templates with `startsWith("cores3-")`.
 
 ## 2. Contract
 
@@ -25,7 +23,7 @@ New module `:core:thing`, commonMain only.
 
 ```kotlin
 @JvmInline value class KindId(val id: String)      // "opensensor-board", "phone", "health", "public-feed"
-@JvmInline value class Capability(val id: String)  // "ble-sync", "live", "config", "record"
+@JvmInline value class Capability(val id: String)  // in :core:model since #220. "ble-sync", "live", "config", "record"
 
 interface ThingKind {
     val id: KindId

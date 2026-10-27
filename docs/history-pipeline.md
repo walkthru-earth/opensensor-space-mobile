@@ -98,6 +98,15 @@ its warm-up from `opensensor:settle_s`, its rollup from `opensensor:aggregate`, 
 one becomes `point` (the last value), so counters stay point. The profile's primary columns come
 first, and `Metrics.defaultOf` opens History on the first of them.
 
+**Derived metrics come from providers.** A `DerivedMetricProvider` (`:core:model`) reads a template
+and returns `DerivedMetric`s, each a derived `Datastream` with a label, a `RowFormula` over its
+`derived.from` columns and an optional stored column it is a view of. `Metrics.providers` lists them,
+today only `AirDerivedMetrics` in `:core:airquality`, which derives `pm25_epa` when the template
+stores `pm25_cf1_ug_m3` and `relative_humidity_percent`. Scales come from
+`WhoGuidelines.forProperty`, so a template without PM columns builds its metrics and the catalog
+(`Metrics.catalogOf`) with no air metric. The named air specs (`AirMetrics.PM25` and the rest in
+`:core:history`) resolve from the catalog on first use, never while it is built.
+
 `Metrics.all` is the union of the bundled templates. Where two boards describe one column, the first
 keeps its unit and aggregate. Tiers, daily files, the History picker and the charts iterate these
 specs and never name a column. A spec whose column a file lacks yields **no values, never zeros**.
@@ -150,9 +159,9 @@ data, held inside the plausible range, and with no data it is the plausible rang
 
 PMS concentrations are **INT32** µg/m³ in the files; only IMU/temperature/humidity are FLOAT.
 
-**Corrected PM2.5 (#92).** `pm25_epa` is a view of the same rows, not a stored column. A spec with
-a `humidityColumn` passes every row through `MetricSpec.valueOf(raw, rh)`, which calls
-`EpaPm25Correction.correct(cf1, rh)` from `:core:airquality`. The `Aggregator` (Android and iOS
+**Corrected PM2.5 (#92).** `pm25_epa` is a view of the same rows, not a stored column. A derived spec
+(`MetricSpec.derived`) passes every row and its `auxColumn` through `MetricSpec.valueOf(raw, aux)`,
+whose `formula` for `pm25_epa` calls `EpaPm25Correction.correct(cf1, rh)` from `:core:airquality`. The `Aggregator` (Android and iOS
 tiers), `FileSummary` and both `HistorySeriesReader` paths (raw rows and daily files) correct each
 row before any mean, min or max. A row without a valid RH yields no corrected value, so a thing
 without humidity has no `pm25_epa` buckets and every screen falls back to `pm25`, labelled raw.

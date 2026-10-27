@@ -143,7 +143,7 @@ class HistorySourcesTest {
         val tiers = ArchiveHistoryTiers(store, index, clockAnchors = receipts, templates = CoreS3Files)
         val reader = HistorySeriesReader(store, index, tiers, clockAnchors = receipts, templates = CoreS3Files)
         val midnight = utc / 1_000_000_000L
-        val previousDay = reader.observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, midnight)).first()
+        val previousDay = reader.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, midnight)).first()
         assertTrue(previousDay.estimatedRows > 0)
         assertTrue(tiers.observeDays(thing).first().count > 0)
         assertEquals(0, ArchiveIndexRepair(store, index, clockAnchors = receipts, templates = CoreS3Files).estimateTimes())
@@ -239,7 +239,7 @@ class HistorySourcesTest {
             "thing=$thing/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet",
         )
         val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index), templates = CoreS3Files)
-        val day = reader.observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        val day = reader.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertFalse(day.binned)
         // The two copies share boot and sequence, so each row counts once.
         assertEquals(105, day.points.size)
@@ -247,7 +247,7 @@ class HistorySourcesTest {
         assertEquals(27.93f, day.mean!!, 0.01f)
         assertEquals(105f / 8640f, day.coverage, 1e-6f)
 
-        val empty = reader.observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart)).first()
+        val empty = reader.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart)).first()
         assertTrue(empty.isEmpty)
     }
 
@@ -264,23 +264,23 @@ class HistorySourcesTest {
         val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val reader = HistorySeriesReader(store, index, tiers, templates = CoreS3Files)
         val expected = ((EpaPm25Correction.correct(10.0, 50.0)!! + EpaPm25Correction.correct(250.0, 80.0)!!) / 2).toFloat()
-        val day = reader.observe(thing, Metrics.PM25_CORRECTED, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        val day = reader.observe(thing, AirMetrics.PM25_CORRECTED, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(2L, day.validRows)
         assertEquals(expected, day.mean!!, 1e-3f)
-        val raw = reader.observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        val raw = reader.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(4L, raw.validRows)
         assertEquals(60f, raw.mean!!, 1e-3f)
-        val week = reader.observe(thing, Metrics.PM25_CORRECTED, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
+        val week = reader.observe(thing, AirMetrics.PM25_CORRECTED, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
         assertEquals(expected, week.mean!!, 1e-3f)
-        assertTrue(Metrics.PM25_CORRECTED.id in tiers.observeMetricsWithData(thing).first())
+        assertTrue(AirMetrics.PM25_CORRECTED.id in tiers.observeMetricsWithData(thing).first())
 
         // A real CoreS3 file. Its RH column is all null, so it has no corrected PM2.5 at all and the cards show raw.
         val (boardStore, boardIndex) = archive("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         val boardTiers = ArchiveHistoryTiers(boardStore, boardIndex, templates = CoreS3Files)
         val none = HistorySeriesReader(boardStore, boardIndex, boardTiers, templates = CoreS3Files)
-            .observe(thing, Metrics.PM25_CORRECTED, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+            .observe(thing, AirMetrics.PM25_CORRECTED, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(0L, none.validRows)
-        assertFalse(Metrics.PM25_CORRECTED.id in boardTiers.observeMetricsWithData(thing).first())
+        assertFalse(AirMetrics.PM25_CORRECTED.id in boardTiers.observeMetricsWithData(thing).first())
     }
 
     @Test
@@ -291,21 +291,21 @@ class HistorySourcesTest {
         val reader = HistorySeriesReader(store, index, tiers, nowEpochS = { noon }, templates = CoreS3Files)
 
         // The day ends at midnight, but only the twelve hours before noon could have readings.
-        val day = reader.observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        val day = reader.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(105L, day.validRows)
         assertEquals(105f / 4320f, day.coverage, 1e-6f)
 
         // The hourly Today path and the tier windows use the same denominator.
-        val today = reader.observeHourlyDay(thing, Metrics.PM25, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        val today = reader.observeHourlyDay(thing, AirMetrics.PM25, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(today.validRows.toFloat() / 4320f, today.coverage, 1e-6f)
-        val week = reader.observe(thing, Metrics.PM25, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
+        val week = reader.observe(thing, AirMetrics.PM25, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
         assertEquals(week.validRows.toFloat() / ((noon - week.fromS) / 10), week.coverage, 1e-6f)
 
         // A past window keeps its whole span, and a window not yet started covers nothing.
         val past = HistorySeriesReader(store, index, tiers, nowEpochS = { dayStart + 10 * 86_400 }, templates = CoreS3Files)
-        assertEquals(105f / 8640f, past.observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first().coverage, 1e-6f)
+        assertEquals(105f / 8640f, past.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first().coverage, 1e-6f)
         val before = HistorySeriesReader(store, index, tiers, nowEpochS = { dayStart - 1 }, templates = CoreS3Files)
-        assertEquals(0f, before.observe(thing, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first().coverage)
+        assertEquals(0f, before.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first().coverage)
     }
 
     @Test
@@ -313,7 +313,7 @@ class HistorySourcesTest {
         val (store, index) = archive("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val reader = HistorySeriesReader(store, index, tiers, templates = CoreS3Files)
-        val week = reader.observe(thing, Metrics.PM25, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
+        val week = reader.observe(thing, AirMetrics.PM25, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
         assertEquals(2, week.points.size)
         assertEquals(27.93f, week.mean!!, 0.01f)
         assertTrue(week.points.all { it.min != null && it.max != null })
@@ -322,8 +322,8 @@ class HistorySourcesTest {
 
         assertEquals(DaySpan(1, dayStart, dayStart), tiers.observeDays(thing).first())
         val metrics = tiers.observeMetricsWithData(thing).first()
-        assertTrue(Metrics.PM25.id in metrics)
-        assertTrue(Metrics.BOARD_TEMP.id in metrics)
+        assertTrue(AirMetrics.PM25.id in metrics)
+        assertTrue(AirMetrics.BOARD_TEMP.id in metrics)
         assertEquals(DaySpan(), tiers.observeDays("nobody").first())
     }
 
@@ -358,7 +358,7 @@ class HistorySourcesTest {
      */
     private fun damagedPm25(): ByteArray {
         val bytes = fixtureBytes("parquet/device/v1-none-90rows-dated.parquet").copyOf()
-        val chunk = ParquetFile.wrap(bytes).metadata.rowGroups[0].columns.first { it.name == Metrics.PM25.column }
+        val chunk = ParquetFile.wrap(bytes).metadata.rowGroups[0].columns.first { it.name == AirMetrics.PM25.column }
         val at = chunk.firstPageOffset.toInt()
         bytes[at] = (bytes[at].toInt() xor 0xFF).toByte()
         return bytes
@@ -386,37 +386,37 @@ class HistorySourcesTest {
 
     @Test
     fun aDamagedMetricPageSkipsOnlyItsFileAndTheRestStillCharts() = runTest {
-        assertFailsWith<Exception> { ParquetFile.wrap(damagedPm25()).readColumn(Metrics.PM25.column) }
+        assertFailsWith<Exception> { ParquetFile.wrap(damagedPm25()).readColumn(AirMetrics.PM25.column) }
         val (alone, aloneIndex) = archiveOf(healthyName to healthy)
-        val expected = day(alone, aloneIndex, Metrics.PM25, sept8)
+        val expected = day(alone, aloneIndex, AirMetrics.PM25, sept8)
         assertTrue(expected.validRows > 0)
         assertEquals(0, expected.unreadableSources)
 
         val (store, index) = archiveOf(damagedName to damagedPm25(), healthyName to healthy)
         assertTrue("the damaged copy still indexes", index.rows.value.all { it.isIndexed })
-        val mixed = day(store, index, Metrics.PM25, sept8)
+        val mixed = day(store, index, AirMetrics.PM25, sept8)
         assertEquals("the healthy file charts as if alone", expected.points, mixed.points)
         assertEquals(expected.validRows, mixed.validRows)
         assertEquals("the damaged file is counted, not fatal", 1, mixed.unreadableSources)
 
         // The damage is in one column only, so another metric of the same file still reads.
-        val pm10 = day(store, index, Metrics.PM10, sept8)
+        val pm10 = day(store, index, AirMetrics.PM10, sept8)
         assertEquals(0, pm10.unreadableSources)
-        assertTrue(pm10.validRows > day(alone, aloneIndex, Metrics.PM10, sept8).validRows)
+        assertTrue(pm10.validRows > day(alone, aloneIndex, AirMetrics.PM10, sept8).validRows)
     }
 
     @Test
     fun aFileThatFailsToCloseLeavesNoRowsBehind() = runTest {
         val (store, index) = archive("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         store.closeFailure = IllegalStateException("close failed")
-        val failed = day(store, index, Metrics.PM25)
+        val failed = day(store, index, AirMetrics.PM25)
         // Every row decoded before close threw, none may chart from a source that did not read through.
         assertEquals(0L, failed.validRows)
         assertTrue(failed.isEmpty)
         assertEquals(1, failed.unreadableSources)
 
         store.closeFailure = null
-        val ok = day(store, index, Metrics.PM25)
+        val ok = day(store, index, AirMetrics.PM25)
         assertEquals(105L, ok.validRows)
         assertEquals(0, ok.unreadableSources)
     }
@@ -427,7 +427,7 @@ class HistorySourcesTest {
         val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index), templates = CoreS3Files)
 
         // Read the rows directly, a flow would end a cancelled read quietly and hide which way it went.
-        suspend fun read() = reader.fromRows(thing, Metrics.PM25, HistoryRange.DAY, dayStart, dayStart + 86_400)
+        suspend fun read() = reader.fromRows(thing, AirMetrics.PM25, HistoryRange.DAY, dayStart, dayStart + 86_400)
         store.closeFailure = CancellationException("closing")
         assertFailsWith<CancellationException> { read() }
         store.closeFailure = null

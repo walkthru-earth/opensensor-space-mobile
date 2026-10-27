@@ -15,11 +15,11 @@ import space.opensensor.archive.ArchiveRecord
 import space.opensensor.archive.ArchiveStore
 import space.opensensor.archive.PartialMeta
 import space.opensensor.archive.PartialWriter
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.DaySpan
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeriesReader
 import space.opensensor.data.history.HistoryTiers
-import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.Resolution
 import space.opensensor.data.history.TierBucket
 import space.opensensor.data.history.parquet.ByteReader
@@ -96,7 +96,7 @@ class HistoryControllerTest {
     )
 
     private fun TestScope.controller(
-        metricIds: Set<String> = setOf(Metrics.AMBIENT_TEMP.id, Metrics.HUMIDITY.id),
+        metricIds: Set<String> = setOf(AirMetrics.AMBIENT_TEMP.id, AirMetrics.HUMIDITY.id),
         index: Index = Index(listOf(record("s1"))),
         current: String = "s1",
         things: List<String> = listOf("s1"),
@@ -120,22 +120,22 @@ class HistoryControllerTest {
     @Test
     fun opensOnTheLastDayWithReadingsAndAMetricThatHasData() = runTest {
         val c = controller()
-        val s = c.state.first { !it.initializing && it.toS == lastDayEndS && it.metric == Metrics.AMBIENT_TEMP }
+        val s = c.state.first { !it.initializing && it.toS == lastDayEndS && it.metric == AirMetrics.AMBIENT_TEMP }
         assertEquals("s1", s.thing)
         assertEquals(HistoryRange.DAY, s.range)
         assertEquals(todayEndS, s.nowToS)
         assertTrue(s.canPageForward)
         assertEquals(1, s.files.withTime)
         assertEquals(1, s.days.count)
-        assertTrue(Metrics.PM25 !in s.availableMetrics)
+        assertTrue(AirMetrics.PM25 !in s.availableMetrics)
     }
 
     @Test
     fun opensOnCorrectedPm25WhenTheArchiveHasIt() = runTest {
-        val c = controller(metricIds = setOf(Metrics.PM25_CORRECTED.id, Metrics.PM25.id, Metrics.HUMIDITY.id))
+        val c = controller(metricIds = setOf(AirMetrics.PM25_CORRECTED.id, AirMetrics.PM25.id, AirMetrics.HUMIDITY.id))
         val s = c.state.first { !it.initializing && it.toS == lastDayEndS }
-        assertEquals(Metrics.PM25_CORRECTED, s.metric)
-        assertEquals(listOf(Metrics.PM25_CORRECTED, Metrics.PM25), s.availableMetrics.take(2))
+        assertEquals(AirMetrics.PM25_CORRECTED, s.metric)
+        assertEquals(listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25), s.availableMetrics.take(2))
     }
 
     @Test

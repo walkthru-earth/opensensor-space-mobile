@@ -27,7 +27,7 @@ class CalendarWindowTest {
     @Test
     fun local_days_and_monday_weeks_follow_the_zone() {
         val week = HistoryWindow.endingOn(LocalDate(2026, 3, 12), HistoryRange.WEEK, newYork) // Thu 5 to Thu 12 March
-        val series = HistorySeries(Metrics.PM25, HistoryRange.WEEK, week.fromS, week.toS, emptyList(), validRows = 0, expectedRows = 0, mean = null, max = null, binned = false)
+        val series = HistorySeries(AirMetrics.PM25, HistoryRange.WEEK, week.fromS, week.toS, emptyList(), validRows = 0, expectedRows = 0, mean = null, max = null, binned = false)
         val days = Columns.rebinLocalDays(series, newYork)
         assertEquals(7, days.size)
         assertEquals(listOf(24, 24, 24, 23, 24, 24, 24), days.map { ((it.endS - it.startS) / 3_600).toInt() })

@@ -46,13 +46,13 @@ import kotlinx.datetime.TimeZone
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.Columns
 import space.opensensor.data.history.HistoryColumn
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
-import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.localDateOf
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.Eyebrow
@@ -317,7 +317,7 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
 internal fun pickerMetrics(available: List<MetricSpec>, level: DetailLevel): List<MetricSpec> {
     if (level.detailed) return available
     val shown = available.filter { it.primary }.ifEmpty { available }
-    return if (Metrics.PM25_CORRECTED in shown) shown - Metrics.PM25 else shown
+    return if (AirMetrics.PM25_CORRECTED in shown) shown - AirMetrics.PM25 else shown
 }
 
 /** The archive info line about PM colours. Simple never names WHO. */

@@ -21,10 +21,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.TimeZone
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.HistoryColumn
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.MetricSpec
-import space.opensensor.data.history.Metrics
 import space.opensensor.settings.DetailLevel
 import space.opensensor.units.UnitFormatter
 import space.opensensor.units.UnitSystem
@@ -45,11 +45,11 @@ class BandColumnChartFontScaleTest {
     private class Locale(val name: String, val direction: LayoutDirection, val labels: (DetailLevel) -> List<String>)
 
     private val cases = listOf(
-        Case("PM2.5 day", Metrics.PM25, HistoryRange.DAY, DAY, 40f),
-        Case("PM2.5 week, off scale", Metrics.PM25, HistoryRange.WEEK, 7 * DAY, 180f),
-        Case("PM10 month", Metrics.PM10, HistoryRange.MONTH, 30 * DAY, 60f),
-        Case("particle count year", Metrics.PARTICLES_GT03, HistoryRange.YEAR, 365 * DAY, 12_000f),
-        Case("temperature in °F", Metrics.AMBIENT_TEMP, HistoryRange.DAY, DAY, 38f, UnitFormatter(UnitSystem.IMPERIAL)),
+        Case("PM2.5 day", AirMetrics.PM25, HistoryRange.DAY, DAY, 40f),
+        Case("PM2.5 week, off scale", AirMetrics.PM25, HistoryRange.WEEK, 7 * DAY, 180f),
+        Case("PM10 month", AirMetrics.PM10, HistoryRange.MONTH, 30 * DAY, 60f),
+        Case("particle count year", AirMetrics.PARTICLES_GT03, HistoryRange.YEAR, 365 * DAY, 12_000f),
+        Case("temperature in °F", AirMetrics.AMBIENT_TEMP, HistoryRange.DAY, DAY, 38f, UnitFormatter(UnitSystem.IMPERIAL)),
     )
 
     // The guideline labels as values and values-ar hold them, the Arabic Detailed one is the widest.
@@ -101,7 +101,7 @@ class BandColumnChartFontScaleTest {
         xRects.zipWithNext().forEach { (a, b) -> if (a.right + gap > b.left + slack) add("x label $b is closer than the gap to $a") }
         if (yRects.size < 2) add("only ${yRects.size} y labels")
         if (xRects.size < 2) add("only ${xRects.size} x labels")
-        val hasGuideline = setup.case.metric == Metrics.PM25 || setup.case.metric == Metrics.PM10
+        val hasGuideline = setup.case.metric == AirMetrics.PM25 || setup.case.metric == AirMetrics.PM10
         if (hasGuideline && byKind(LabelKind.GUIDE).size != 1) add("the guideline line has no label")
     }.map { "$setup: $it" }
 
@@ -172,7 +172,7 @@ class BandColumnChartFontScaleTest {
             ) {
                 MaterialTheme {
                     BandColumnChart(
-                        columns(cases[0]), Metrics.PM25, HistoryRange.DAY, 0, DAY, selected = null, onSelect = {},
+                        columns(cases[0]), AirMetrics.PM25, HistoryRange.DAY, 0, DAY, selected = null, onSelect = {},
                         modifier = Modifier.width(320.dp), zone = TimeZone.UTC, level = DetailLevel.DETAILED, guideLabels = ar.labels(DetailLevel.DETAILED),
                     )
                 }
@@ -213,7 +213,7 @@ class BandColumnChartFontScaleTest {
             val base = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(base.density, 2f)) {
                 MaterialTheme {
-                    BandColumnChart(day, Metrics.PM25, HistoryRange.DAY, 0, DAY, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
+                    BandColumnChart(day, AirMetrics.PM25, HistoryRange.DAY, 0, DAY, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
                 }
             }
         }

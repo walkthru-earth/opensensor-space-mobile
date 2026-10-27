@@ -33,8 +33,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.AirMood
-import space.opensensor.data.history.Metrics
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoButton
@@ -226,7 +226,7 @@ private fun ArchiveLine(glance: ArchiveGlance?, level: DetailLevel) {
     val syncedTemplate = stringResource(Res.string.scan_synced)
     val ago = agoFormatter()
     if (mean != null && mood != null && dayStart != null) {
-        val metric = Metrics.PM25
+        val metric = AirMetrics.PM25
         val (day, month) = DeviceText.utcDayMonth(dayStart)
         val base = stringResource(
             Res.string.scan_archive_day,

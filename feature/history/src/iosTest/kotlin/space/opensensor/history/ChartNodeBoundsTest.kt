@@ -20,9 +20,9 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.HistoryColumn
 import space.opensensor.data.history.HistoryRange
-import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.startOfDay
 import space.opensensor.settings.DetailLevel
 import kotlin.math.abs
@@ -59,22 +59,22 @@ class ChartNodeBoundsTest {
 
     @Test
     fun dayBarNodesCentreOnTheirDrawnBars() = checkBars(day.size) {
-        BandColumnChart(day, Metrics.PM25, HistoryRange.DAY, 0, DAY, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
+        BandColumnChart(day, AirMetrics.PM25, HistoryRange.DAY, 0, DAY, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
     }
 
     @Test
     fun weekBarNodesCentreOnTheirDrawnBars() = checkBars(week.size) {
-        BandColumnChart(week, Metrics.PM25, HistoryRange.WEEK, 0, 7 * DAY, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
+        BandColumnChart(week, AirMetrics.PM25, HistoryRange.WEEK, 0, 7 * DAY, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
     }
 
     @Test
     fun monthBarNodesCentreOnTheirDrawnBars() = checkBars(march.size) {
-        BandColumnChart(march, Metrics.PM25, HistoryRange.MONTH, marchFrom, marchTo, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
+        BandColumnChart(march, AirMetrics.PM25, HistoryRange.MONTH, marchFrom, marchTo, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
     }
 
     @Test
     fun calendarDayNodesCentreOnTheirDrawnCells() = check(march.size, vertical = true) {
-        CalendarHeatmap(march, Metrics.PM25, marchFrom, marchTo, onPickDay = {}, zone = TimeZone.UTC)
+        CalendarHeatmap(march, AirMetrics.PM25, marchFrom, marchTo, onPickDay = {}, zone = TimeZone.UTC)
     }
 
     /** A bar node spans the plot height, so only its horizontal centre is the bar's. */

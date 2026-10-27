@@ -91,7 +91,7 @@ data class FileSummary(
             for ((k, spec) in bound.withIndex()) {
                 if (spec == null) continue
                 val stored = double(spec.column) ?: continue
-                val colv = spec.humidityColumn?.let { stored.correctedBy(spec, double(it)) } ?: stored
+                val colv = if (spec.derived) stored.correctedBy(spec, spec.auxColumn?.let(::double)) else stored
                 val gate = spec.gate?.let { g -> gates.getOrPut(g) { GateColumn(g, col(g.column)) } }
                 val rollup = Rollup(spec.aggregate)
                 for (i in 0 until rows) {

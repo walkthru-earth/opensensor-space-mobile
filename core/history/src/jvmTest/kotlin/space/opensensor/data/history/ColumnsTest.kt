@@ -62,13 +62,13 @@ class ColumnsTest {
     }
 
     private fun series(points: List<HistoryPoint>, fromS: Long, toS: Long) =
-        HistorySeries(Metrics.PM25, HistoryRange.DAY, fromS, toS, points, validRows = 0, expectedRows = 0, mean = null, max = null, binned = true)
+        HistorySeries(AirMetrics.PM25, HistoryRange.DAY, fromS, toS, points, validRows = 0, expectedRows = 0, mean = null, max = null, binned = true)
 
     @Test
     fun `a day is 24 hourly columns, a week 168, a month 30, a year 53 weeks`() {
         // 365 days aligned to weeks span 53 week slots.
         for ((range, n) in listOf(HistoryRange.DAY to 24, HistoryRange.WEEK to 168, HistoryRange.MONTH to 30, HistoryRange.YEAR to 53)) {
-            val s = HistorySeries(Metrics.PM25, range, 0, range.seconds, emptyList(), validRows = 0, expectedRows = 0, mean = null, max = null, binned = false)
+            val s = HistorySeries(AirMetrics.PM25, range, 0, range.seconds, emptyList(), validRows = 0, expectedRows = 0, mean = null, max = null, binned = false)
             assertEquals(range.name, n, Columns.rebin(s, Columns.slotSeconds(range)).size)
         }
     }

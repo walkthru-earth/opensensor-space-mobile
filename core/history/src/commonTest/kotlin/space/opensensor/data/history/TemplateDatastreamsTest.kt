@@ -145,9 +145,9 @@ class TemplateDatastreamsTest {
         val profile = AppProfile(soil.dict, Family.GENERIC, primary = listOf("soil_temperature_c"))
         assertEquals("soil_temperature_c", Metrics.defaultOf(Metrics.of(soil, profile))?.id)
         // A bundled air board opens on PM2.5, its corrected view where the board stores RH (#92).
-        assertEquals(Metrics.PM25_CORRECTED.id, Metrics.default.id)
-        assertEquals(Metrics.PM25_CORRECTED.id, Metrics.defaultOf(Metrics.of(coreS3Template))?.id)
-        assertEquals(Metrics.PM25.id, Metrics.defaultOf(Metrics.of(coreS3Template).filter { it.humidityColumn == null })?.id)
+        assertEquals(AirMetrics.PM25_CORRECTED.id, Metrics.default.id)
+        assertEquals(AirMetrics.PM25_CORRECTED.id, Metrics.defaultOf(Metrics.of(coreS3Template))?.id)
+        assertEquals(AirMetrics.PM25.id, Metrics.defaultOf(Metrics.of(coreS3Template).filter { it.auxColumn == null })?.id)
     }
 
     @Test

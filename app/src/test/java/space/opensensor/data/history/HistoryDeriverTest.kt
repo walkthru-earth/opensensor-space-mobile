@@ -227,7 +227,7 @@ class HistoryDeriverTest {
                 files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
 
                 assertEquals(1, deriver.deriveStale().daysRebuilt)
-                assertEquals(105, buckets.rows.first { it.metricId == Metrics.PM25.id && it.resolution == 86_400L }.rows)
+                assertEquals(105, buckets.rows.first { it.metricId == AirMetrics.PM25.id && it.resolution == 86_400L }.rows)
                 assertEquals(null, days.rows.single().dailyFile)
                 assertTrue(days.rows.single().sourceSignature.endsWith(":no-daily-file"))
                 failing = false
@@ -265,7 +265,7 @@ class HistoryDeriverTest {
         assertEquals(1, first.daysRebuilt)
         assertEquals(105L, first.rowsAggregated)
         assertEquals(4, buckets.rows.map { it.resolution to it.startEpochS }.distinct().size) // 2 × 15 min + 1 h + 1 day, one row per metric each
-        assertTrue(buckets.rows.any { it.metricId == Metrics.PM25.id } && buckets.rows.any { it.metricId == Metrics.BOARD_TEMP.id } && buckets.rows.none { it.metricId == Metrics.HUMIDITY.id })
+        assertTrue(buckets.rows.any { it.metricId == AirMetrics.PM25.id } && buckets.rows.any { it.metricId == AirMetrics.BOARD_TEMP.id } && buckets.rows.none { it.metricId == AirMetrics.HUMIDITY.id })
         assertEquals(1, days.rows.size)
         // The derived daily file exists, is read back by our own reader, and carries the manifest index column.
         val dayFile = store.dayFile(thing, 20713)
@@ -307,7 +307,7 @@ class HistoryDeriverTest {
         val third = deriver.deriveStale()
         assertEquals(1, third.daysRebuilt)
         assertEquals(210L, third.rowsAggregated) // rows read
-        assertEquals(105, buckets.rows.first { it.resolution == 86_400L && it.metricId == Metrics.PM25.id }.rows) // rows counted: duplicates (same boot + sequence) skipped, like the daily file
+        assertEquals(105, buckets.rows.first { it.resolution == 86_400L && it.metricId == AirMetrics.PM25.id }.rows) // rows counted: duplicates (same boot + sequence) skipped, like the daily file
         assertEquals(2, days.rows.single().sourceFiles)
         // Same rows under two names: the daily file de-duplicates on (boot, sequence) — 105 rows, 2 sources in the manifest.
         assertEquals(105L, space.opensensor.data.history.parquet.ParquetFile.open(store.dayFile(thing, 20713)).numRows)
@@ -323,7 +323,7 @@ class HistoryDeriverTest {
         assertEquals(listOf(105L, 180L), twoWindows.metadata.rowGroups.map { it.numRows })
         val seq = twoWindows.readColumn("sequence") as space.opensensor.data.history.parquet.ColumnValues.Int64
         for (i in 1 until seq.size) assertEquals("contiguous across the two device files", seq.values[i - 1] + 1, seq.values[i])
-        assertEquals(285, buckets.rows.first { it.resolution == 86_400L && it.metricId == Metrics.PM25.id }.rows)
+        assertEquals(285, buckets.rows.first { it.resolution == 86_400L && it.metricId == AirMetrics.PM25.id }.rows)
         File("build/parquet-samples").apply { mkdirs() }.let { dir ->
             store.dayFile(thing, 20713).copyTo(File(dir, "derived-day-two-windows.parquet"), overwrite = true)
             store.manifestFile(thing, 20713).copyTo(File(dir, "derived-day-two-windows.manifest.json"), overwrite = true)

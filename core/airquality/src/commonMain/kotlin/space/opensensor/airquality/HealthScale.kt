@@ -32,6 +32,9 @@ data class HealthScale(
     /** The guideline value itself, the one line every chart draws. */
     val guideline: Double get() = edges.first()
 
+    /** The interim target 3 edge, the lowest top a chart axis takes, so a normal day keeps the guideline readable. */
+    val axisFloor: Double get() = edges[WhoStep.IT3.ordinal]
+
     /** The step [value] falls in. Non-finite values have no step. */
     fun stepOf(value: Double): WhoStep? {
         if (!value.isFinite()) return null

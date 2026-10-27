@@ -31,7 +31,7 @@ import space.opensensor.data.ble.BluetoothStatus
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.ScannedDevice
 import space.opensensor.data.fake.FakeTransport
-import space.opensensor.data.history.Metrics
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.Resolution
 import space.opensensor.data.local.database.ArchivedFileDao
 import space.opensensor.data.local.database.KnownDeviceDao
@@ -86,8 +86,8 @@ class ScanViewModel @Inject constructor(
     /** Per-thing totals come from one grouped query, so the list never loads every archived row (#63). */
     private val summaries: Flow<Map<String, ArchiveGlance>> = combine(
         archivedFileDao.observeThingGlances(),
-        bucketDao.observeAllDays(Metrics.PM25_CORRECTED.id),
-        bucketDao.observeAllDays(Metrics.PM25.id),
+        bucketDao.observeAllDays(AirMetrics.PM25_CORRECTED.id),
+        bucketDao.observeAllDays(AirMetrics.PM25.id),
     ) { glances, corrected, raw ->
         val latestDay = latestPm25Days(corrected, raw)
         glances.associate { g ->

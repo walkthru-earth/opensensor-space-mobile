@@ -24,15 +24,7 @@ class LiveReading(val sample: LiveSample, val thing: Thing) {
     /** [value] as an integer code, for a code column such as `pms_status`. */
     fun code(column: String): Int? = value(column)?.takeIf { it == kotlin.math.floor(it) }?.toInt()
 
-    /** The PM sensor state, null when the sample has no reading of [PMS_STATUS]. */
-    val pmsStatus: PmsStatus? get() = PmsStatus.fromCode(code(PMS_STATUS))
-
-    val pmValid: Boolean get() = pmsStatus == PmsStatus.VALID
-
     companion object {
-        /** The PM sensor state column, `0` absent to `4` valid. */
-        const val PMS_STATUS = "pms_status"
-
         /** [sample] read through [thing], or null when either is missing, as for an unknown dictionary. */
         fun of(sample: LiveSample?, thing: Thing?): LiveReading? =
             if (sample == null || thing == null) null else LiveReading(sample, thing)

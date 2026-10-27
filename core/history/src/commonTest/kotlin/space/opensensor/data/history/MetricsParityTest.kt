@@ -30,7 +30,7 @@ class MetricsParityTest {
 
     @Test
     fun everyStoredMetricHasTheSameLabelUnitGateSettleAndScaleOnEveryBoardThatShowsIt() {
-        Metrics.all.filter { it.humidityColumn == null }.forEach { spec ->
+        Metrics.all.filter { it.auxColumn == null }.forEach { spec ->
             val shown = showing(spec.column)
             assertTrue(shown.isNotEmpty(), "no bundled board shows ${spec.id}")
             shown.forEach { (thing, ds) ->
@@ -47,9 +47,9 @@ class MetricsParityTest {
 
     @Test
     fun theCorrectedPm25ReadsColumnsABundledBoardShows() {
-        val spec = Metrics.PM25_CORRECTED
-        val boards = things.filter { s -> listOf(spec.column, spec.humidityColumn!!).all { c -> showing(c).any { it.first === s } } }
-        assertTrue(boards.isNotEmpty(), "no bundled board shows both ${spec.column} and ${spec.humidityColumn}")
+        val spec = AirMetrics.PM25_CORRECTED
+        val boards = things.filter { s -> listOf(spec.column, spec.auxColumn!!).all { c -> showing(c).any { it.first === s } } }
+        assertTrue(boards.isNotEmpty(), "no bundled board shows both ${spec.column} and ${spec.auxColumn}")
         boards.forEach { thing ->
             assertTrue(gateMatches(spec, thing.datastream(spec.column)!!.datastream.validWhen), thing.template.id)
             assertEquals(spec.settleSeconds.toDouble(), thing.datastream(spec.column)!!.datastream.settleSeconds, thing.template.id)
@@ -59,8 +59,8 @@ class MetricsParityTest {
     @Test
     fun thePrimaryReadingIsTheMetricsPrimaryOnEveryBoard() {
         things.forEach { thing ->
-            assertEquals(Metrics.PM25.column, thing.primary.first().name, thing.template.id)
-            assertEquals(Metrics.PM25.label, thing.primary.first().label("en"), thing.template.id)
+            assertEquals(AirMetrics.PM25.column, thing.primary.first().name, thing.template.id)
+            assertEquals(AirMetrics.PM25.label, thing.primary.first().label("en"), thing.template.id)
         }
     }
 

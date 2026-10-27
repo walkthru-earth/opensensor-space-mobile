@@ -162,7 +162,7 @@ class HistoryMemoryTest {
         val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index), templates = CoreS3Files)
         val toS = (firstDay + 1) * 86_400L
 
-        val day = reader.observe(thing, Metrics.PM25, HistoryRange.DAY, HistoryWindow.endingAt(toS, HistoryRange.DAY, TimeZone.UTC)).first()
+        val day = reader.observe(thing, AirMetrics.PM25, HistoryRange.DAY, HistoryWindow.endingAt(toS, HistoryRange.DAY, TimeZone.UTC)).first()
 
         assertTrue(day.points.isNotEmpty())
         assertTrue(store.opened.isNotEmpty())

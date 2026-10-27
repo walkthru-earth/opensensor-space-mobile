@@ -128,7 +128,7 @@ class DerivedDayViewTest {
             val toNs = window.toS * 1_000_000_000L
             val expectedEstimated = estimatedTimes.count { it in fromNs until toNs }
             val expectedReal = if (includeRealRows) estimatedTimes.count { it + 5_000_000_000L in fromNs until toNs } else 0
-            for (metric in listOf(Metrics.PM25, Metrics.BOARD_TEMP)) {
+            for (metric in listOf(AirMetrics.PM25, AirMetrics.BOARD_TEMP)) {
                 val raw = rawReader.observe(thing, metric, HistoryRange.DAY, window).first()
                 store.reads = 0
                 val fromDerived = derivedReader.observe(thing, metric, HistoryRange.DAY, window).first()
@@ -166,7 +166,7 @@ class DerivedDayViewTest {
                 ParquetWriter.Column("boot_id_hi", ParquetType.INT64),
                 ParquetWriter.Column("boot_id_lo", ParquetType.INT64),
                 ParquetWriter.Column(ParquetIndexer.SEQ, ParquetType.INT64),
-                ParquetWriter.Column(Metrics.BOARD_TEMP.column, ParquetType.FLOAT),
+                ParquetWriter.Column(AirMetrics.BOARD_TEMP.column, ParquetType.FLOAT),
             )
             val writer = ParquetWriter(sink, columns, keyValueMetadata = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = null, intervalMs = null, thing = thing)))
             writer.begin()
@@ -193,10 +193,10 @@ class DerivedDayViewTest {
         val sources = index.rows.value.map { record -> DailyParquetSource(record) { ParquetFile.wrap(store.files.getValue(record.key)) } }
         val legacy = LegacyAggregator(thing)
         for (source in sources) source.open().use { legacy.add(it) }
-        assertEquals(94.5f, legacy.buckets().first { it.resolution == Resolution.DAY }.metrics.getValue(Metrics.BOARD_TEMP.id).mean)
+        assertEquals(94.5f, legacy.buckets().first { it.resolution == Resolution.DAY }.metrics.getValue(AirMetrics.BOARD_TEMP.id).mean)
         val sink = MemorySink()
         val pass = DayPass.run(thing, day, sources, sink, nowEpochS = 0, templates = CoreS3Files)
-        assertEquals(15f, pass.buckets.first { it.resolution == Resolution.DAY }.metrics.getValue(Metrics.BOARD_TEMP.id).mean)
+        assertEquals(15f, pass.buckets.first { it.resolution == Resolution.DAY }.metrics.getValue(AirMetrics.BOARD_TEMP.id).mean)
         val derived = DerivedDayFiles { _, _, _, _ -> MemoryRangeSource(sink.toByteArray(), "duplicates") }
         val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val rawReader = HistorySeriesReader(store, index, tiers, templates = CoreS3Files)
@@ -206,12 +206,12 @@ class DerivedDayViewTest {
             HistoryWindow(day * 86_400 + 9_000, day * 86_400 + 12_600, TimeZone.UTC),
         )
         for (window in windows) {
-            val raw = rawReader.observe(thing, Metrics.BOARD_TEMP, HistoryRange.DAY, window).first()
-            val fromDerived = derivedReader.observe(thing, Metrics.BOARD_TEMP, HistoryRange.DAY, window).first()
+            val raw = rawReader.observe(thing, AirMetrics.BOARD_TEMP, HistoryRange.DAY, window).first()
+            val fromDerived = derivedReader.observe(thing, AirMetrics.BOARD_TEMP, HistoryRange.DAY, window).first()
             assertEquals(raw, fromDerived)
         }
-        assertEquals(15f, rawReader.observe(thing, Metrics.BOARD_TEMP, HistoryRange.DAY, windows.first()).first().mean)
-        assertTrue(rawReader.observe(thing, Metrics.BOARD_TEMP, HistoryRange.DAY, windows.last()).first().points.isEmpty())
+        assertEquals(15f, rawReader.observe(thing, AirMetrics.BOARD_TEMP, HistoryRange.DAY, windows.first()).first().mean)
+        assertTrue(rawReader.observe(thing, AirMetrics.BOARD_TEMP, HistoryRange.DAY, windows.last()).first().points.isEmpty())
     }
 
     private class Store : ArchiveStore {
@@ -300,7 +300,7 @@ class DerivedDayViewTest {
         for (zone in listOf(TimeZone.UTC, TimeZone.of("Asia/Kolkata"))) {
             for (end in ends) {
                 val window = HistoryWindow.endingAt(end, HistoryRange.DAY, zone)
-                for (metric in listOf(Metrics.PM25, Metrics.BOARD_TEMP)) {
+                for (metric in listOf(AirMetrics.PM25, AirMetrics.BOARD_TEMP)) {
                     val expected = raw.observe(thing, metric, HistoryRange.DAY, window).first()
                     store.reads = 0
                     val actual = fromDerived.observe(thing, metric, HistoryRange.DAY, window).first()
@@ -342,14 +342,14 @@ class DerivedDayViewTest {
         val first = EpaPm25Correction.correct(10.0, 50.0)!!.toFloat()
         val second = EpaPm25Correction.correct(250.0, 80.0)!!.toFloat()
         store.reads = 0
-        val corrected = derivedReader.observe(thing, Metrics.PM25_CORRECTED, HistoryRange.DAY, window).first()
+        val corrected = derivedReader.observe(thing, AirMetrics.PM25_CORRECTED, HistoryRange.DAY, window).first()
         assertEquals(0, store.reads, "the corrected day comes from the daily file")
         assertEquals(2L, corrected.validRows)
         assertEquals(listOf(first, second), corrected.points.mapNotNull { it.mean })
         assertEquals((first + second) / 2, corrected.mean!!, 1e-3f)
-        assertEquals(rawReader.observe(thing, Metrics.PM25_CORRECTED, HistoryRange.DAY, window).first(), corrected)
+        assertEquals(rawReader.observe(thing, AirMetrics.PM25_CORRECTED, HistoryRange.DAY, window).first(), corrected)
         // The raw view of the same daily file stays the stored atmospheric value.
-        val raw = derivedReader.observe(thing, Metrics.PM25, HistoryRange.DAY, window).first()
+        val raw = derivedReader.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first()
         assertEquals(listOf(9f, 170f, 30f, 31f), raw.points.mapNotNull { it.mean })
     }
 
@@ -372,7 +372,7 @@ class DerivedDayViewTest {
         val new = reader(micros)
         // Both sides of midnight, so both UTC days of the file are read raw.
         val window = HistoryWindow(day * 86_400 + 9 * 3_600, (day + 1) * 86_400 + 9 * 3_600, TimeZone.UTC)
-        for (metric in listOf(Metrics.PM25, Metrics.BOARD_TEMP)) {
+        for (metric in listOf(AirMetrics.PM25, AirMetrics.BOARD_TEMP)) {
             val expected = old.observe(thing, metric, HistoryRange.DAY, window).first()
             val actual = new.observe(thing, metric, HistoryRange.DAY, window).first()
             assertTrue(expected.points.isNotEmpty())
@@ -393,9 +393,9 @@ class DerivedDayViewTest {
         ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
         val tiers = ArchiveHistoryTiers(store, index, templates = CoreS3Files)
         val window = HistoryWindow.endingAt((day + 1) * 86_400 + 9 * 3_600, HistoryRange.DAY, TimeZone.UTC)
-        val expected = HistorySeriesReader(store, index, tiers, templates = CoreS3Files).observe(thing, Metrics.PM25, HistoryRange.DAY, window).first()
+        val expected = HistorySeriesReader(store, index, tiers, templates = CoreS3Files).observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first()
         val broken = DerivedDayFiles { _, _, _, _ -> MemoryRangeSource(ByteArray(64), "broken") }
-        val actual = HistorySeriesReader(store, index, tiers, derived = broken, templates = CoreS3Files).observe(thing, Metrics.PM25, HistoryRange.DAY, window).first()
+        val actual = HistorySeriesReader(store, index, tiers, derived = broken, templates = CoreS3Files).observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first()
         assertEquals(expected.points, actual.points)
         assertTrue(actual.points.isNotEmpty())
 
@@ -414,7 +414,7 @@ class DerivedDayViewTest {
                 }
             }
         }
-        val recovered = HistorySeriesReader(store, index, tiers, derived = failsAfterReading, templates = CoreS3Files).observe(thing, Metrics.PM25, HistoryRange.DAY, window).first()
+        val recovered = HistorySeriesReader(store, index, tiers, derived = failsAfterReading, templates = CoreS3Files).observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first()
         assertTrue(failedCloses > 0)
         assertEquals(expected, recovered)
     }
@@ -455,16 +455,16 @@ class DerivedDayViewTest {
         val footers = FooterCache(4)
         val reader = HistorySeriesReader(store, index, tiers, derived = derived, footers = footers, templates = CoreS3Files)
         store.reads = 0
-        val expected = reader.observe(thing, Metrics.PM25, HistoryRange.DAY, window).first()
+        val expected = reader.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first()
         assertTrue(expected.points.isNotEmpty())
         assertEquals(2, footers.size)
 
         corrupt = true
         store.reads = 0
-        val cold = HistorySeriesReader(store, index, tiers, derived = derived, templates = CoreS3Files).observe(thing, Metrics.BOARD_TEMP, HistoryRange.DAY, window).first()
+        val cold = HistorySeriesReader(store, index, tiers, derived = derived, templates = CoreS3Files).observe(thing, AirMetrics.BOARD_TEMP, HistoryRange.DAY, window).first()
         assertTrue(store.reads > 0, "without the footer the damaged tail falls back to the raw file")
         store.reads = 0
-        val warm = reader.observe(thing, Metrics.BOARD_TEMP, HistoryRange.DAY, window).first()
+        val warm = reader.observe(thing, AirMetrics.BOARD_TEMP, HistoryRange.DAY, window).first()
         assertEquals(0, store.reads, "the cached footer serves the second read")
         assertEquals(cold, warm)
         assertEquals(2, footers.size)
