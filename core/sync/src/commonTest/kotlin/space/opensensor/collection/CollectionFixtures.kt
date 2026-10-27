@@ -35,6 +35,9 @@ class FakeLinks(
     val devices: MutableList<FakeArchiveDevice> = mutableListOf()
     val links: MutableList<CollectionLink> = mutableListOf()
     val preferences: MutableList<LinkPreference> = mutableListOf()
+
+    /** The device each connect was asked for, as the controller names it. */
+    val dialled: MutableList<String> = mutableListOf()
     var connects: Int = 0
         private set
     var releases: Int = 0
@@ -65,6 +68,7 @@ class FakeLinks(
 
     override suspend fun connect(device: String, prefer: LinkPreference): CollectionLink {
         preferences += prefer
+        dialled += device
         val n = ++connects
         refuse(n)?.let { throw LinkClosedException(it) }
         fail(n)?.let { throw it }

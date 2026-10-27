@@ -1,6 +1,7 @@
 package space.opensensor.thing
 
 import space.opensensor.data.protocol.DeviceInfo
+import space.opensensor.data.sync.ThingSource
 import space.opensensor.model.Capability
 import space.opensensor.model.DerivedMetricProvider
 import space.opensensor.publicfeed.PublicFeed
@@ -36,6 +37,13 @@ interface ThingKind {
     /** The phone derived metrics of the families this kind measures, which History adds to its catalog. */
     val derivedMetrics: List<DerivedMetricProvider>
 }
+
+/**
+ * The `thing_source` row of [thing] recorded by this kind, at its [ThingKind.contractVersion], with
+ * the kind's own settings in [configJson] (#223).
+ */
+fun ThingKind.sourceFor(thing: String, configJson: String = ThingSource.EMPTY_CONFIG): ThingSource =
+    ThingSource(thing, id.id, contractVersion, configJson)
 
 /** What the phone saw of a Thing, which [ThingKind.recognize] reads. */
 sealed interface Evidence {

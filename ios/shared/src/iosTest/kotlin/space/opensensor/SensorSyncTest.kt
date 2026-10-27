@@ -30,6 +30,7 @@ import space.opensensor.data.protocol.ListCursor
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ParquetVerify
 import space.opensensor.data.protocol.ProtocolError
+import space.opensensor.data.sync.ThingSource
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkClosedException
 import space.opensensor.link.TimeoutPhase
@@ -164,6 +165,20 @@ class SensorSyncTest {
             assertContentEquals(bytes, saved)
         }
         assertFalse(Opcode.SET_CONFIG in requests || Opcode.REBOOT in requests)
+    }
+
+    @Test
+    fun aSyncRecordsTheBoardAsTheSourceOfItsThing() {
+        val recording = SensorSync(store, database.index, Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget(), sources = database.sources)
+        val result = runBlocking {
+            val done = CompletableDeferred<SyncResult>()
+            recording.start(sensor(), thing, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
+            withTimeout(20_000) { done.await() }
+        }
+
+        assertEquals(SyncEnd.COMPLETE, result.end)
+        val sources = runBlocking { database.sources.all() }
+        assertEquals(listOf(ThingSource(thing, "opensensor-board", 1)), sources)
     }
 
     @Test

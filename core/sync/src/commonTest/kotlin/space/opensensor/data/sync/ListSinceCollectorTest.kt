@@ -69,6 +69,33 @@ class ListSinceCollectorTest {
     private fun finalBytes(thing: String, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(thing, name))]
 
     @Test
+    fun everyListingRecordsTheThingSourceAndAFailedWriteNeverStopsTheRun() = runTest {
+        val fake = newBoard()
+        val recorded = mutableListOf<String>()
+        val recording = ArchiveCollector(
+            store,
+            index,
+            SyncEngine(store, index, windowRetryBackoffMs = 5, clock = { 1_000L }, io = StandardTestDispatcher(testScheduler)),
+            FakeStorageBudget(),
+            testTimeSource,
+            recordSource = { recorded += it },
+        )
+        collect(fake, recording)
+        assertEquals(listOf(fake.thing), recorded)
+
+        val failing = ArchiveCollector(
+            store,
+            index,
+            SyncEngine(store, index, windowRetryBackoffMs = 5, clock = { 1_000L }, io = StandardTestDispatcher(testScheduler)),
+            FakeStorageBudget(),
+            testTimeSource,
+            recordSource = { error("database unavailable") },
+        )
+        fake.addDay(20, 9)
+        assertEquals(1, collect(fake, failing).newFiles)
+    }
+
+    @Test
     fun theFirstRunTakesAWholeListingAndSavesTheCursor() = runTest {
         val fake = newBoard()
 

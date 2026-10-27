@@ -16,8 +16,11 @@ import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.data.sync.ListCursors
 import space.opensensor.data.sync.SyncEngine
+import space.opensensor.data.sync.ThingSources
 import space.opensensor.data.toIdentity
 import space.opensensor.storage.StorageBudget
+import space.opensensor.thing.OpenSensorBoardKind
+import space.opensensor.thing.sourceFor
 import javax.inject.Singleton
 
 /**
@@ -36,6 +39,7 @@ object SyncEngineModule {
         budget: StorageBudget,
         files: ArchivedFileDao,
         cursors: ListCursors,
+        sources: ThingSources,
         clock: WallClock,
     ): ArchiveCollector = ArchiveCollector(
         store,
@@ -45,6 +49,8 @@ object SyncEngineModule {
         archivedIdentities = { thing -> files.identitiesForThing(thing).map { it.toIdentity() } },
         cursors = cursors,
         clock = clock::nowEpochMs,
+        // Every Thing this collector lists is an opensensor board.
+        recordSource = { thing -> sources.recordIfAbsent(OpenSensorBoardKind.sourceFor(thing)) },
     )
 
     /**
