@@ -45,6 +45,10 @@ include(":core:storage")
 include(":core:settings")
 // One STAC File Item per synced device file, the sidecar the upload will publish (#190).
 include(":core:stac")
+// The Thing kinds each app lists, the opensensor board kind and the PublishGate in front of FileItems (#219).
+include(":core:thing")
+// The ThingKindContract every kind passes from its own tests.
+include(":core:thing:testkit")
 // The Discover map, shared Compose for Android and iOS.
 include(":ui:designsystem")
 // The shared English copy and the repository copy lint (docs/screens.md, Copy).
