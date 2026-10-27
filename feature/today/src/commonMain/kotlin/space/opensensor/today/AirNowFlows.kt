@@ -1,9 +1,12 @@
 package space.opensensor.today
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -12,7 +15,6 @@ import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
-import space.opensensor.data.history.archiveQueryResults
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.designsystem.nowEpochMillis
 import space.opensensor.family.air.AirFamily
@@ -30,18 +32,17 @@ fun utcHourStarts(periodMs: Long = 60_000): Flow<Long> = flow {
     }
 }.distinctUntilChanged()
 
-/** One NowCast read, the thing, the hour it ends at and the metrics to try in order. */
-private data class NowCastQuery(val thing: String?, val hourStartS: Long, val metrics: List<MetricSpec>)
-
 /**
  * The PM2.5 NowCast (#93) of the connected device [info], from the 12 complete UTC hours of the
  * phone archive's hourly tier before the running hour. An air board with particles tries the EPA
  * corrected PM2.5 first and falls back to raw, the first with a NowCast wins. Null for any other
- * thing, and until two of the three latest hours are in the archive. A thing or hour change drops
- * the old answer first, so a value never shows under the wrong device. Both apps feed it their own
- * [observeHourlyDay] (the shared `HistorySeriesReader`), the window is hour aligned so only whole
- * hourly buckets are read.
+ * thing, and until two of the three latest hours are in the archive. A thing change drops the old
+ * answer first, so a value never shows under the wrong device. A new hour keeps the last answer
+ * until the new window is read, so the hero does not flip to the live value at each hour. Both apps
+ * feed it their own [observeHourlyDay] (the shared `HistorySeriesReader`), the window is hour
+ * aligned so only whole hourly buckets are read.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 fun pm25NowCast(
     info: Flow<DeviceInfo?>,
     observeHourlyDay: (thing: String, metric: MetricSpec, window: HistoryWindow) -> Flow<HistorySeries>,
@@ -51,23 +52,32 @@ fun pm25NowCast(
         val particles = AirFamily.PARTICLES in DeviceCapabilities.from(device)
         device?.thing to if (particles) listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25) else emptyList()
     }.distinctUntilChanged()
-    return combine(things, hourStarts) { (thing, metrics), hour -> NowCastQuery(thing, hour, metrics) }
-        .archiveQueryResults { query ->
-            val id = query.thing
-            if (id == null || query.metrics.isEmpty()) {
-                flowOf(null)
-            } else {
-                val window = HistoryWindow(query.hourStartS - PmNowCast.HOURS * 3_600L, query.hourStartS, TimeZone.UTC)
-                combine(query.metrics.map { observeHourlyDay(id, it, window) }) { all ->
-                    all.firstNotNullOfOrNull { series ->
-                        PmNowCast.of(PmNowCast.hourlySlots(series.points, query.hourStartS))?.let { value ->
-                            Pm25NowCast(value, if (series.metric.id == AirFamily.PM25_CORRECTED_ID) Pm25Basis.CORRECTED else Pm25Basis.RAW)
-                        }
-                    }
-                }
+    return things.flatMapLatest { (thing, metrics) ->
+        if (thing == null || metrics.isEmpty()) {
+            flowOf(null)
+        } else {
+            flow {
+                emit(null)
+                emitAll(hourStarts.flatMapLatest { hour -> nowCastAt(thing, metrics, hour, observeHourlyDay) })
             }
         }
-        .map { it.value }
+    }
+}
+
+private fun nowCastAt(
+    thing: String,
+    metrics: List<MetricSpec>,
+    hourStartS: Long,
+    observeHourlyDay: (thing: String, metric: MetricSpec, window: HistoryWindow) -> Flow<HistorySeries>,
+): Flow<Pm25NowCast?> {
+    val window = HistoryWindow(hourStartS - PmNowCast.HOURS * 3_600L, hourStartS, TimeZone.UTC)
+    return combine(metrics.map { observeHourlyDay(thing, it, window) }) { all ->
+        all.firstNotNullOfOrNull { series ->
+            PmNowCast.of(PmNowCast.hourlySlots(series.points, hourStartS))?.let { value ->
+                Pm25NowCast(value, if (series.metric.id == AirFamily.PM25_CORRECTED_ID) Pm25Basis.CORRECTED else Pm25Basis.RAW)
+            }
+        }
+    }
 }
 
 /**

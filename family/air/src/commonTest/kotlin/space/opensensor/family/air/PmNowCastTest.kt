@@ -55,6 +55,16 @@ class PmNowCastTest {
         assertNowCast(49.0, PmNowCast.of(listOf(55.7, 40.0), PmNowCast.PM10_STEP))
     }
 
+    /** Every tenth from 0 to 100 comes back as the exact decimal, so a WHO edge such as 15 stays FRESH. */
+    @Test
+    fun aTruncatedValueIsTheExactDecimal() {
+        (0..1_000).forEach { k ->
+            val tenth = k / 10.0
+            assertEquals(tenth, PmNowCast.of(listOf(tenth, tenth)), "$tenth")
+        }
+        assertEquals(AirMood.FRESH, AirMood.of(PmNowCast.of(listOf(15.0, 15.0))!!))
+    }
+
     @Test
     fun cleanAirOfZeroStaysZero() {
         assertNowCast(0.0, PmNowCast.of(listOf(0.0, 0.0, 0.0)))

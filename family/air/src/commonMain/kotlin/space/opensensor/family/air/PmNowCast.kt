@@ -57,7 +57,10 @@ object PmNowCast {
             factor *= weight
         }
         // A tiny nudge keeps a value that is exactly on a step, such as 28.4, from flooring to 28.3.
-        return floor(top / bottom / step + 1e-9) * step
+        // Dividing by the whole number of steps per µg/m³ keeps the result the exact decimal, where
+        // 284 times 0.1 is 28.400000000000002.
+        val perUnit = 1.0 / step
+        return floor(top / bottom * perUnit + 1e-9) / perUnit
     }
 
     /**

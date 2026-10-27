@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
@@ -75,6 +76,26 @@ class AirNowFlowsTest {
         assertEquals(Pm25Basis.RAW, pm25NowCast(info, observe, flowOf(hour)).filterNotNull().first().basis)
         val empty = { _: String, metric: MetricSpec, window: HistoryWindow -> flowOf(series(metric, window, emptyList())) as Flow<HistorySeries> }
         assertNull(pm25NowCast(info, empty, flowOf(hour)).take(2).toList().last())
+    }
+
+    /** A new hour keeps the last NowCast until its window is read, a new thing drops it first. */
+    @Test
+    fun aNewHourKeepsTheLastAnswerAndANewThingDropsIt() = runTest {
+        val observe = { _: String, metric: MetricSpec, window: HistoryWindow ->
+            // The next hour's window reads the same twelve means, shifted by one hour.
+            val shift = window.toS - hour
+            flowOf(series(metric, window, airNowHours().map { it.copy(startS = it.startS + shift, endS = it.endS + shift) })) as Flow<HistorySeries>
+        }
+        val info = MutableStateFlow<DeviceInfo?>(WAVESHARE.copy(thing = "st-1"))
+        val hours = MutableStateFlow(hour)
+        val seen = mutableListOf<Pm25NowCast?>()
+        val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+        scope.launch { pm25NowCast(info, observe, hours).collect { seen += it } }
+        assertEquals(listOf(null, 28.4), seen.map { it?.value })
+        hours.value = hour + 3_600
+        assertEquals(listOf(null, 28.4, 28.4), seen.map { it?.value }, "no null between two hours")
+        info.value = WAVESHARE.copy(thing = "st-2")
+        assertEquals(listOf(null, 28.4, 28.4, null, 28.4), seen.map { it?.value }, "a new thing starts empty")
     }
 
     @Test
