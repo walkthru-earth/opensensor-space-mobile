@@ -41,7 +41,7 @@ class EnvironmentCardTest {
             MaterialTheme {
                 unsupported = stringResource(Res.string.board_temp_unsupported)
                 waiting = stringResource(Res.string.now_waiting)
-                BoardCard(state.liveSupport, state.reading, state.capabilities, state.level)
+                BoardCard(state.liveSupport, state.reading, state.capabilities, state.power, showTemperature = true, level = state.level)
             }
         }
         onAllNodesWithText(unsupported).assertCountEquals(expectUnsupported)

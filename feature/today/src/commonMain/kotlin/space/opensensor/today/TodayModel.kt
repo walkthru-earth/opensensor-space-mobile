@@ -138,6 +138,12 @@ data class TodayUiState(
     /** The board opted in to the unvalidated batch estimate and its dictionary is reviewed. */
     val showsBatchEstimate: Boolean get() = capabilities.showsBatchEstimate(snapshot.config?.config?.sensor?.batchCandidate)
 
+    /** The family presenter the app profile's `hero` names, see [HeroRegistry]. */
+    val presenter: FamilyPresenter = HeroRegistry.presenterFor(capabilities.thing?.profile?.hero)
+
+    /** The board's power columns, found by observed property. */
+    val power: BoardPower = BoardPower.of(capabilities.thing)
+
     val cards: List<TodayCard> get() = todayCards(this)
 }
 
@@ -149,8 +155,8 @@ enum class LiveSupport { PENDING, UNSUPPORTED, READY }
 
 /** The cards of Today, in screen order. Each one is a stable list key. */
 enum class TodayCard(val key: String) {
-    NOW_AIR("now"),
-    NOW_ENVIRONMENT("now"),
+    /** The hero slot, drawn by the [FamilyPresenter]. */
+    NOW("now"),
     TODAY_SO_FAR("today"),
     ENVIRONMENT("environment"),
     SMART_SYNC("smart-sync"),
@@ -158,31 +164,33 @@ enum class TodayCard(val key: String) {
     BATCH_ESTIMATE("batch-estimate"),
     READINGS("readings"),
     PARTICLES("particles"),
+
+    /** The thing's other primary and measured columns, for a family without its own cards. */
+    METRICS("metrics"),
     BOARD("board"),
     STORAGE("storage"),
     DEVICE_INFO("info"),
 }
 
 /**
- * Which cards Today shows, the same on both platforms. Simple has the hero reading, today so far,
- * Smart Sync and the clock. Detailed adds the other measurements, board, storage, the batch estimate
- * and the device card. Conditional cards sit after the first one, so a level change never moves the
+ * Which cards Today shows, the same on both platforms. Simple has the hero, today so far, Smart Sync
+ * and the clock. Detailed adds the board, storage, the batch estimate and the device card. The
+ * [FamilyPresenter] adds its own cards after today so far and after the batch estimate, so the air
+ * family keeps its environment, readings and particle cards and any other thing gets one card of
+ * its other readings. Conditional cards sit after the first one, so a level change never moves the
  * top of the list.
  */
 fun todayCards(state: TodayUiState): List<TodayCard> = buildList {
-    val particles = state.showsAirCards
-    add(if (particles) TodayCard.NOW_AIR else TodayCard.NOW_ENVIRONMENT)
+    val presenter = state.presenter
+    add(TodayCard.NOW)
     add(TodayCard.TODAY_SO_FAR)
-    if (particles && state.capabilities.ambientTemperature) add(TodayCard.ENVIRONMENT)
+    addAll(presenter.simpleCards(state))
     add(TodayCard.SMART_SYNC)
     add(TodayCard.CLOCK)
     if (state.level.detailed) {
         if (state.showsBatchEstimate) add(TodayCard.BATCH_ESTIMATE)
-        if (particles) {
-            add(TodayCard.READINGS)
-            add(TodayCard.PARTICLES)
-        }
-        add(TodayCard.BOARD)
+        addAll(presenter.detailedCards(state))
+        if (presenter.boardTemperature(state) || state.power.battery != null) add(TodayCard.BOARD)
         add(TodayCard.STORAGE)
         if (state.snapshot.info != null) add(TodayCard.DEVICE_INFO)
     }

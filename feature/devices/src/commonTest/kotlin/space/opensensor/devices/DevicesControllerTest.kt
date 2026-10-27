@@ -7,18 +7,12 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DevicesControllerTest {
     private class FakeStore(initial: List<KnownSensor>) : KnownDeviceStore {
         override val devices = MutableStateFlow(initial)
-        val forgotten = mutableListOf<String>()
-        override suspend fun forget(id: String) {
-            forgotten += id
-            devices.value = devices.value.filterNot { it.id == id }
-        }
     }
 
     private class FakeRadio : DeviceRadio {
@@ -83,29 +77,6 @@ class DevicesControllerTest {
         assertFalse(controller.state.value.scanning)
         assertEquals(1, radio.starts)
         assertEquals(1, radio.stops)
-    }
-
-    @Test
-    fun forgetNeedsAConfirmation() = runTest(UnconfinedTestDispatcher()) {
-        val store = FakeStore(listOf(a, b))
-        val controller = DevicesController(backgroundScope, store, FakeRadio(), MutableStateFlow(emptyMap()), FakeCollect())
-
-        controller.onAction(DevicesAction.RequestForget("A", "Kitchen"))
-        assertEquals(ForgetTarget("A", "Kitchen"), controller.state.value.forget)
-        assertTrue(store.forgotten.isEmpty(), "asking is not forgetting")
-
-        controller.onAction(DevicesAction.CancelForget)
-        assertNull(controller.state.value.forget)
-        assertTrue(store.forgotten.isEmpty())
-
-        controller.onAction(DevicesAction.RequestForget("A", "Kitchen"))
-        controller.onAction(DevicesAction.ConfirmForget)
-        assertEquals(listOf("A"), store.forgotten)
-        assertNull(controller.state.value.forget)
-        assertEquals(listOf("B"), controller.state.value.list.known.map { it.id })
-
-        controller.onAction(DevicesAction.ConfirmForget)
-        assertEquals(listOf("A"), store.forgotten, "a second confirm without a target does nothing")
     }
 
     @Test

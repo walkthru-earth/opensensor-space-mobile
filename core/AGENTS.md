@@ -78,7 +78,7 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by
   `template.sha256` first and then `dictionary.sha256`. The old unprefixed footer
   keys are not read. A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic
-  names (for example `Reading`, or a future `MetricCard`), never `Air*`.
+  names (for example `Reading` or `GenericMetricHero`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and
   the privacy rules. The phone uses H3 (`publicfeed`, `H3Grid`) for geometry, viewport cover, descendant
   ranges and explicit private device provisioning. Provisioning converts a

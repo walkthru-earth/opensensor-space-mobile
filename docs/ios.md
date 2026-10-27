@@ -85,9 +85,10 @@ A force quit stops everything. Downloaded bytes and index records stay for the n
 
 - **My devices.** `DevicesBridge` feeds the shared list from `CompanionState`, known records in
   UserDefaults (never a credential), the Keychain credential list (ids only) and the Room
-  index. Forget, after confirmation, drops the record, the Keychain access and Auto-sync, and
-  says the bond is removed in iOS Settings.
-- **Today.** `CompanionTodaySource` reads INFO, STATUS and LIVE for the open link. Today so far
+  index.
+- **Today.** `CompanionTodaySource` reads INFO, STATUS and LIVE for the open link. Forget, in
+  the Today menu after confirmation, drops the record, the Keychain access and Auto-sync
+  (`DevicesBridge.forgetNow`), and says the bond is removed in iOS Settings. Today so far
   reads the hourly tier. Sync and Finalize use a ready LAN session first, then Bluetooth. The
   engine sets the device clock automatically from phone UTC.
 - **Device settings.** `IosDeviceConfigSource` borrows a short LAN or Bluetooth link per request.
