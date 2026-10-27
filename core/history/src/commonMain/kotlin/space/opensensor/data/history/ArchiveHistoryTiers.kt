@@ -57,7 +57,7 @@ class ArchiveHistoryTiers(
     /** Runs after the prepared tiers were loaded, for deferred derived quota enforcement on iOS. */
     private val afterBuild: suspend () -> Unit = {},
     /** Resolves each file's board template, so its metrics read with that template's gates and units. */
-    private val templates: FileTemplates = FileTemplates.BUNDLED,
+    private val templates: FileTemplates = FileTemplates.SERVED,
 ) : HistoryTiers,
     MemoryTrimmable {
     internal class Day(val signature: String, val buckets: DayTiers, val cacheable: Boolean = true)

@@ -76,7 +76,7 @@ class CopyRulesTest {
     @Test
     fun `Today owns the warming hint`() {
         // Today (`:feature:today`) owns the warming hint on both apps.
-        val waveshare = DeviceInfo(dict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7")
+        val waveshare = DeviceInfo(dict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809")
         val sample = LiveSample.parse("""{"pms":${PmsStatus.WARMING.code}}""")
         val warming = NowReading.of(DeviceCapabilities.from(waveshare).reading(sample)) as NowReading.SensorNotReady
         assertEquals(sharedStrings().getValue("today").getValue("pms_warming_hint"), warming.hint)

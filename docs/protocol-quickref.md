@@ -161,11 +161,13 @@ under `core/model/bundled/templates/` with the app profile under `core/model/bun
 byte, `<board>/<dict>.json` and `index.json`, and their `live_keys` list the keys in board LIVE order.
 Only the current digest of each board is bundled, at the firmware version the bundled templates name. CoreS3 (`3b4d8500…`)
 sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
-because they are always null on CoreS3. Waveshare (`50a53393…`) sends `t`, ambient air
+because they are always null on CoreS3. Waveshare (`a8605aaf…`) sends `t`, ambient air
 temperature, `rh` and `bstate`, the battery health code. A new firmware digest is a copy of the
 published templates, a profile file swap and a fixture refresh, with no code change. Any other digest, older ones included,
-has no LIVE view, and Today says so only after `INFO` arrived. The thing join (`BundledCatalog.thing`) still shows such a board from a
-served template, with raw column names and raw units and no guessed label. `LiveKeyFixturesTest`
+has no LIVE view, and Today says so only after `INFO` arrived. A board whose template it served
+but whose dict has no reviewed profile has no LIVE view either, because the derived profile only
+names raw columns (`DeviceCapabilities.from`). History still reads its files through the served
+template. `LiveKeyFixturesTest`
 holds every digest from opensensor-space-firmware `tools/fixtures/live_keys/`, checks the bundled template live keys
 against the current ones and lists the retired ones, and the weekly `live-key-drift` workflow fails
 when opensensor-space-firmware main has a digest missing there. LIVE is a snapshot, not archive data.

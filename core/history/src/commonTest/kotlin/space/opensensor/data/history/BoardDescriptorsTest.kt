@@ -10,8 +10,10 @@ import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ParquetVerify
 import space.opensensor.data.protocol.ProtocolError
 import space.opensensor.data.protocol.sha256Hex
+import space.opensensor.model.AppProfile
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
+import space.opensensor.model.Family
 import space.opensensor.net.BlockStore
 import space.opensensor.net.MemoryBlockStore
 import kotlin.test.Test
@@ -56,9 +58,16 @@ class BoardDescriptorsTest {
         assertEquals(sha, fetched.template.key.desc)
         assertEquals(listOf("$sha.json"), h.store.list().map { it.name })
         assertEquals(listOf(fetched.template), h.served.all.value)
-        // The capabilities resolve the unbundled dict through the served template.
-        assertNotNull(DeviceCapabilities.from(info, h.served.all.value).thing)
+        // The capabilities resolve the unbundled dict through the served template, with LIVE only for a reviewed profile.
+        val reviewed = AppProfile(dict = dict, family = Family.GENERIC, primary = listOf("event_time_utc_us"))
+        assertNotNull(DeviceCapabilities.from(info, h.served.all.value) { reviewed.takeIf { p -> p.dict == it } }.thing)
+        assertEquals(null, DeviceCapabilities.from(info, h.served.all.value).thing)
         assertEquals(null, DeviceCapabilities.from(info, emptyList()).thing)
+        // History binds a synced file of that dict through the served template too (#182).
+        assertEquals(fetched.template, FileTemplates.over(h.served).template(dict, sha))
+        assertEquals(fetched.template, FileTemplates.over(h.served).template(dict, null))
+        assertEquals(null, FileTemplates.over(h.served).template("ab".repeat(32), sha))
+        assertEquals(null, FileTemplates.BUNDLED.template(dict, sha))
     }
 
     @Test

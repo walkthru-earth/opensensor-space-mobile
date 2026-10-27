@@ -40,7 +40,7 @@ class ArchiveIndexRepair(
     /** The archive's one coordinator. Each row update runs under its thing gate. */
     private val coordinator: DeviceCoordinator = DeviceCoordinator(),
     /** Resolves each file's board template for its valid row count. */
-    private val templates: FileTemplates = FileTemplates.BUNDLED,
+    private val templates: FileTemplates = FileTemplates.SERVED,
     /**
      * Gets the footer `template.sha256` of each file that indexes, [BoardDescriptors.confirm] in the
      * app. Its failure is logged and never fails the index.

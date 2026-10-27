@@ -68,7 +68,7 @@ object DayPass {
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long,
         tiers: Boolean = true,
-        templates: FileTemplates = FileTemplates.BUNDLED,
+        templates: FileTemplates = FileTemplates.SERVED,
     ): DayPassResult = DailyParquetBuilder.pass(
         thing,
         epochDay,

@@ -125,7 +125,7 @@ class DailyDerivedPass(val pass: DayPassResult, val daily: DailyBuildResult?)
 /** Android atomic-file adapter for the shared Android/iOS UTC-day writer. */
 class DailyDerivedBuilder(
     private val store: DerivedStore,
-    private val templates: FileTemplates = FileTemplates.BUNDLED,
+    private val templates: FileTemplates = FileTemplates.SERVED,
     private val fileFor: (thing: String, name: String) -> File,
 ) {
     /** The daily file alone, as the export's rebuild of an evicted file needs it. Throws when a source fails. */

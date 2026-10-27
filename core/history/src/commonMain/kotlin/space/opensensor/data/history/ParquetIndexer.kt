@@ -54,7 +54,7 @@ object ParquetIndexer {
     const val MONO = "monotonic_us"
     const val SEQ = "sequence"
 
-    fun index(file: ParquetFile, templates: FileTemplates = FileTemplates.BUNDLED): ParquetIndex {
+    fun index(file: ParquetFile, templates: FileTemplates = FileTemplates.SERVED): ParquetIndex {
         val md = file.metadata
         val utcLeaf = UtcColumns.eventLeaf(md)
         val utcScale = utcLeaf?.let(UtcColumns::nanosPerUnit)

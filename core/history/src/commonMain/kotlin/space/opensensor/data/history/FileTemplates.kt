@@ -19,8 +19,8 @@ data class FileTemplate(val template: BoardTemplate?, val sampleIntervalMs: Long
 }
 
 /**
- * Resolves a file's board template from its footer. The default reads the bundled templates. Tests
- * and served templates pass their own.
+ * Resolves a file's board template from its footer. The app reads [SERVED], the templates boards
+ * served and then the bundled ones. Tests pass [BUNDLED] or their own.
  */
 fun interface FileTemplates {
     /**
@@ -52,6 +52,22 @@ fun interface FileTemplates {
         val BUNDLED: FileTemplates = FileTemplates { dict, desc ->
             val byDesc = desc?.let { BundledCatalog.templateByDesc(it) }?.takeIf { dict == null || it.dict == dict }
             byDesc ?: dict?.let { BundledCatalog.template(it) }
+        }
+
+        /** [over] the app's [ServedTemplates.shared]. */
+        val SERVED: FileTemplates = over(ServedTemplates.shared)
+
+        /**
+         * The templates in [served], as boards served them over `GET_DESCRIPTOR` (#191), then the bundled
+         * ones, both by template digest first and then by dict. [served] is read at each call, so a file
+         * synced after its board served a template binds its metrics even when no bundled template has
+         * its dict. A desc match whose dict differs from the footer's is not used.
+         */
+        fun over(served: ServedTemplates): FileTemplates = FileTemplates { dict, desc ->
+            val held = served.all.value
+            val byDesc = desc?.let { d -> held.firstOrNull { it.key.desc == d } ?: BundledCatalog.templateByDesc(d) }
+                ?.takeIf { dict == null || it.dict == dict }
+            byDesc ?: dict?.let { d -> held.lastOrNull { it.dict == d } ?: BundledCatalog.template(d) }
         }
     }
 }
