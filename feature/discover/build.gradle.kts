@@ -37,5 +37,9 @@ kotlin {
             // DiscoverControllerTest drives the controller on a test scheduler.
             implementation(libs.kotlinx.coroutines.test)
         }
+        iosTest.dependencies {
+            // The map controls semantics tests render on the iOS simulator.
+            implementation(libs.compose.ui.test)
+        }
     }
 }

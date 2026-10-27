@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,28 +29,32 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.FloatingSurface
 import space.opensensor.publicfeed.FeedWindow
 import kotlin.math.roundToInt
 
-private val STOP = 44.dp
-private const val COLLAPSE_MS = 2200L
+// One stop per window, a full touch target each.
+private val STOP = FloatingControl.Size
 
 /**
  * The time window as a compact pill on the map's left edge. At rest it shows only the chosen
  * window. Touching it grows it into one snap stop per window, shortest at the top, with a tinted
- * thumb that follows a vertical drag. It folds back shortly after the last touch. Screen readers
- * get one control whose state is the window name and whose actions pick the other windows.
+ * thumb that follows a vertical drag. It stays open until a window is picked, by a tap or the end of
+ * a drag, so a slow reach never lands on the map. Tapping the chosen stop folds it without a change.
+ * Screen readers get one button whose state is the window name and whose actions pick the other
+ * windows, and a double tap opens or folds it.
  * [windows] are the ones the feed on screen offers, so the real feed shows no last hour stop.
  */
 @Composable
@@ -78,28 +81,27 @@ internal fun WindowSlider(
     // Collapsed, the column scrolls so the chosen stop sits inside the pill.
     val shift by animateFloatAsState(if (expanded) 0f else index.toFloat(), spring(dampingRatio = 0.8f))
 
-    LaunchedEffect(expanded, drag, window) {
-        if (expanded && drag == null) {
-            delay(COLLAPSE_MS)
-            expanded = false
-        }
-    }
-
     // The window on screen is always reported too, so choosing a coerced one (24 hours standing in
     // for a saved last hour in Real) saves it. The controller ignores a repeat.
     fun pick(w: FeedWindow) {
         if (w != current) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
         onWindow(w)
+        expanded = false
     }
 
     val title = strings.timeWindow
     val state = windowLabel(window, strings, daily)
-    val actions = windows.filter { it != window }.map { w -> CustomAccessibilityAction(windowLabel(w, strings, daily)) { onWindow(w); true } }
+    val actions = windows.filter { it != window }.map { w -> CustomAccessibilityAction(windowLabel(w, strings, daily)) { pick(w); true } }
     FloatingSurface(
         modifier = modifier.width(STOP).height(height).clearAndSetSemantics {
             contentDescription = title
             stateDescription = state
+            role = Role.Button
             customActions = actions
+            onClick {
+                expanded = !expanded
+                true
+            }
         },
     ) {
         Box(
