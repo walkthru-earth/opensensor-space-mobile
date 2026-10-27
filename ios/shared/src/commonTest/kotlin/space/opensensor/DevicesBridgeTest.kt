@@ -225,6 +225,17 @@ class DevicesBridgeTest {
         assertTrue(bridge(storage = storage).knownNow().isEmpty(), "forgotten stays forgotten after a restart")
     }
 
+    @Test fun forgettingASensorRemovesTheCellsOfItsOlderThingsToo() {
+        val calls = Calls()
+        val bridge = bridge(calls = calls)
+        bridge.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff")
+        assertTrue(bridge.sensorOpened(a, "Kitchen", "st-a2", "aabbccddeeff").accepted, "a new Thing on the same hardware")
+        bridge.credentialsChanged(listOf(a), listOf("st-c"), listOf("aabbccddeeff"))
+
+        bridge.forgetNow(a)
+        assertEquals(setOf("st-a2", "st-a", "st-c"), calls.placesForgotten.single().toSet(), "the current, older and credential Things all lose their cell")
+    }
+
     @Test fun collectAllRunsOneSensorAtATime() {
         val state = CompanionState()
         val calls = Calls()

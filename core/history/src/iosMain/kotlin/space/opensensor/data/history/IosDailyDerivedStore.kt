@@ -67,7 +67,7 @@ class IosDailyDerivedStore(
     private val atomic: AtomicFiles = IosAtomicFiles("${root.trimEnd('/')}/${AtomicFiles.TEMP_DIR}"),
     private val tierStore: TierStore = TierStore.NONE,
     /** Resolves each file's board template, so the saved tiers read its metrics with that template's gates. */
-    private val templates: FileTemplates = FileTemplates.BUNDLED,
+    private val templates: FileTemplates = FileTemplates.SERVED,
 ) : DerivedDayFiles {
     private val root = root.trimEnd('/')
     private val mutex = Mutex()

@@ -749,8 +749,9 @@ extension BluetoothCompanion {
     }
 
     private func sensorOpened(json: String, name: String?, mtu: Int32, canSync: Bool) {
+        // Old firmware closes here, before onSensorOpened writes a known record.
         guard let id = current, let observed = wire.identity(json: json) else {
-            disconnect(notice: .infoInvalid)
+            disconnect(notice: wire.outdated(json: json) ? .firmwareUpdate : .infoInvalid)
             return
         }
         guard let result = onSensorOpened?(id, name, observed.thing, observed.device) else {

@@ -412,7 +412,7 @@ class FakeTransport(
     private fun configJson(): String {
         val effectivePin = pendingPin ?: pin
         val mac = "e0:5a:1b:f6:6b:40"
-        return """{"ble":{"pair":"${pendingPairMode ?: pairMode}","pin":$effectivePin,"pin_default":${if (effectivePin == 123_456) 1 else 0},"bonds":$bonds,"display":$display},""" +
+        return """{"ble":{"pair":"${pendingPairMode ?: pairMode}","pin_set":1,"pin_default":${if (effectivePin == 123_456) 1 else 0},"bonds":$bonds,"display":$display},""" +
             """"wifi":{"on":${if (wifiOn) 1 else 0},"ssid":"${ssid.replace("\"", "\\\"")}","psk_set":${if (pskSet) 1 else 0},"state":"$wifiState","ip":"$wifiIp","rssi":$wifiRssi,"mac":"$mac"},""" +
             """"lan":{"on":${if (lanOn) 1 else 0},"port":$LAN_PORT,"host":"os-6b40","clients":$lanClients}}"""
     }

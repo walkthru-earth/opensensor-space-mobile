@@ -119,5 +119,8 @@ sealed interface DevicesAction {
 
     /** Open the sensor. [connect] is false when Bluetooth is not ready, so it opens on its archive. */
     data class Open(val id: String, val name: String?, val connect: Boolean) : DevicesAction
+
+    /** A nearby sensor this phone has not added yet. It opens the Add sensor wizard with it picked, never Today. */
+    data class Add(val id: String, val name: String?) : DevicesAction
     data object CollectAll : DevicesAction
 }

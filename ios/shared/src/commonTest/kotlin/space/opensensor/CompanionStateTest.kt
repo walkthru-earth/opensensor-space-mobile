@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 
 class CompanionStateTest {
     /** The bundled Waveshare dictionary, so LIVE has a thing to read through. */
-    private val dict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7"
+    private val dict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809"
 
     private fun lanConnected(state: CompanionState, name: String, thing: String = "thing-$name") {
         state.lanSessionChanged(name, true, false, "connected", 0, 0, 0)
@@ -319,6 +319,16 @@ class CompanionStateTest {
         val plain = linked()
         plain.bluetoothSyncClosed(SyncResult(SyncEnd.LINK_LOST, 0, 0, 0))
         assertNull(plain.failedId, "an ordinary loss needs no repair")
+    }
+
+    @Test fun oldFirmwareMarksTheSensorOutdatedUntilANewConnection() {
+        val state = CompanionState()
+        state.connectionStarted("p1")
+        state.connectionClosedNoticed(CompanionNotice.FIRMWARE_UPDATE)
+        assertEquals("p1", state.outdatedId)
+        assertNull(state.failedId)
+        state.connectionStarted("p1")
+        assertNull(state.outdatedId)
     }
 
     @Test fun arrivalTimesComeFromTheMessagesNotFromLooking() {

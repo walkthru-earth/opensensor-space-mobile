@@ -90,7 +90,7 @@ class TabNavigatorTest {
     }
 
     @Test
-    fun `the bar hides only on the full screen inspectors`() {
+    fun `the bar hides only on the full screen inspectors and the wizard`() {
         nav.select(TopTab.MY_DEVICES)
         nav.push(TodayKey("A"))
         assertTrue(nav.showsBottomBar)
@@ -99,6 +99,27 @@ class TabNavigatorTest {
         nav.popIfTop { it is DebugKey }
         nav.openSection(FilesKey("A"))
         nav.push(FileMetricsKey("s", "f"))
+        assertFalse(nav.showsBottomBar)
+        nav.pop()
+        assertTrue(nav.showsBottomBar)
+    }
+
+    @Test
+    fun `a new sensor tapped on My devices opens the wizard and not Today`() {
+        nav.select(TopTab.MY_DEVICES)
+        nav.openSetup(pick = "A", pickName = "OS-1")
+        assertEquals(listOf(ScanKey, SetupKey(pick = "A", pickName = "OS-1")), stack(TopTab.MY_DEVICES))
+        assertTrue(stack(TopTab.MY_DEVICES).none { it is TodayKey })
+    }
+
+    @Test
+    fun `add sensor opens the wizard full screen over the My devices root`() {
+        nav.select(TopTab.MY_DEVICES)
+        nav.push(TodayKey("A"))
+        nav.select(TopTab.DISCOVER)
+        nav.openSetup()
+        assertEquals(TopTab.MY_DEVICES, nav.tab)
+        assertEquals(listOf(ScanKey, SetupKey()), stack(TopTab.MY_DEVICES))
         assertFalse(nav.showsBottomBar)
         nav.pop()
         assertTrue(nav.showsBottomBar)

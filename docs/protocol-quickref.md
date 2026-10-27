@@ -116,8 +116,12 @@ serves. No `desc` means the board serves none, and the phone never asks.
 
 ## CONFIG keys (`DeviceConfig`)
 
-`ble.pair` (random / fixed / none) · `ble.pin` (six ASCII digits; arrives as a number, shown
-zero-padded) · `ble.clear_bonds=1` · `wifi.on` · `wifi.ssid` (1–32 bytes) · `wifi.psk` (≤ 63 bytes,
+Every key the app writes is a row of `ConfigFields` (`core/protocol`) with its secret flag and
+confirm gate. `SECRET_KEYS` and the Device settings confirmations come from that table, and a
+schema may only make a known key stricter.
+
+`ble.pair` (random / fixed / none) · `ble.pin` (six ASCII digits, **write-only**. `CONFIG.ble`
+reports only `pin_set` and `pin_default`) · `ble.clear_bonds=1` · `wifi.on` · `wifi.ssid` (1–32 bytes) · `wifi.psk` (≤ 63 bytes,
 **write-only, never echoed or logged**) · `lan.on` · `lan.rotate_token=1` · Waveshare
 `sensor.vendor=Plantower`, `sensor.model=PMS5003T`, `sensor.serial=PMS5003T-YYYYMMDD` plus 1–9 unit digits,
 `sensor.batch_candidate=0|1`. `CONFIG.sensor` echoes these four fields. A mismatched physical
@@ -161,11 +165,13 @@ under `core/model/bundled/templates/` with the app profile under `core/model/bun
 byte, `<board>/<dict>.json` and `index.json`, and their `live_keys` list the keys in board LIVE order.
 Only the current digest of each board is bundled, at the firmware version the bundled templates name. CoreS3 (`3b4d8500…`)
 sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
-because they are always null on CoreS3. Waveshare (`50a53393…`) sends `t`, ambient air
+because they are always null on CoreS3. Waveshare (`a8605aaf…`) sends `t`, ambient air
 temperature, `rh` and `bstate`, the battery health code. A new firmware digest is a copy of the
 published templates, a profile file swap and a fixture refresh, with no code change. Any other digest, older ones included,
-has no LIVE view, and Today says so only after `INFO` arrived. The thing join (`BundledCatalog.thing`) still shows such a board from a
-served template, with raw column names and raw units and no guessed label. `LiveKeyFixturesTest`
+has no LIVE view, and Today says so only after `INFO` arrived. A board whose template it served
+but whose dict has no reviewed profile has no LIVE view either, because the derived profile only
+names raw columns (`DeviceCapabilities.from`). History still reads its files through the served
+template. `LiveKeyFixturesTest`
 holds every digest from opensensor-space-firmware `tools/fixtures/live_keys/`, checks the bundled template live keys
 against the current ones and lists the retired ones, and the weekly `live-key-drift` workflow fails
 when opensensor-space-firmware main has a digest missing there. LIVE is a snapshot, not archive data.
@@ -187,8 +193,7 @@ that selector. A missing location object is not an unset supported location.
 `ConfigPatch.location` sends only `location.cell`, `location.resolution` and
 `location.country`. SET_CONFIG acknowledges the legacy page; the app then reads
 page 1 and checks its saved values. No raw GPS coordinates cross this API.
-`ConfigPatch.Builder.thingMobility` sends `thing.mobility`, and the firmware splits the file on a
-change. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
+The app does not send `thing.mobility` yet. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
 board keeps in RAM and writes with `location_source` 3. No released firmware accepts it, so the
 app names the key and never sends it.
 Pages 2–4 are firmware time policy/status and server configuration; this app

@@ -20,7 +20,6 @@ import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
 import space.opensensor.data.protocol.Opcode
-import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.data.sync.ThingPlace
 import space.opensensor.data.sync.ThingPlaces
 import kotlin.test.AfterTest
@@ -109,7 +108,7 @@ class IosDevicePlaceTest {
             assertEquals(cell, reading.await()?.cell)
             assertEquals(listOf(thing to cell), places.all.map { it.thing to it.cell }, "a read records the pin")
 
-            val moving = async { source.writeLocation(ConfigPatch.build { thingMobility(ThingMobility.MOVING) }) }
+            val moving = async { source.writeLocation(ConfigPatch.build { location(cell, 8, "") }) }
             runCurrent()
             link.reply(Frame.Config(0, "{}"))
             runCurrent()
@@ -118,7 +117,7 @@ class IosDevicePlaceTest {
             moving.await()
             assertTrue(places.all.isEmpty(), "a moving page drops the pin")
 
-            val fixed = async { source.writeLocation(ConfigPatch.build { thingMobility(ThingMobility.FIXED) }) }
+            val fixed = async { source.writeLocation(ConfigPatch.build { location(cell, 8, "") }) }
             runCurrent()
             link.reply(Frame.Config(0, "{}"))
             runCurrent()

@@ -53,13 +53,13 @@ class DevicesController(
         DevicesUiState(list = l, scanning = s, scanProblem = p, collecting = c)
     }.stateIn(scope, SharingStarted.Eagerly, DevicesUiState())
 
-    /** Handles the actions that need no platform. The route handles [DevicesAction.Open]. */
+    /** Handles the actions that need no platform. The route handles [DevicesAction.Open] and [DevicesAction.Add]. */
     fun onAction(action: DevicesAction) {
         when (action) {
             DevicesAction.StartScan -> radio.startScan()
             DevicesAction.StopScan -> radio.stopScan()
             DevicesAction.CollectAll -> if (!state.value.collecting) collect.collectAll()
-            is DevicesAction.Open -> Unit
+            is DevicesAction.Open, is DevicesAction.Add -> Unit
         }
     }
 }

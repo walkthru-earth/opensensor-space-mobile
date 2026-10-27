@@ -19,7 +19,7 @@ class LiveKeyFixturesTest {
 
     private val current = listOf(
         FixtureBuild("cores3", "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "n5", "n10", "imu_t", "als", "vbus", "bat", "pct", "chg", "t", "rh")),
-        FixtureBuild("waveshare", "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
+        FixtureBuild("waveshare", "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
     )
 
     /** Released digests the app no longer bundles. Boards on them get no LIVE view until reflashed. */

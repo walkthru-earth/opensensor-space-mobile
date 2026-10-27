@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 
 /**
  * The storage contract. Android has written these names since before the shared module existed, so
@@ -39,6 +40,18 @@ object SettingsKeys {
     /** The [DiscoverSource] name. Missing or unknown reads as [DiscoverSource.SAMPLE]. */
     val DISCOVER_SOURCE: Preferences.Key<String> = stringPreferencesKey("discover_source")
 
+    /**
+     * Sensors added through setup whose wizard has not reached Done, by lowercase id (an Android
+     * address or an iOS peripheral). The card offers Finish setup for them.
+     */
+    val SETUP_PENDING: Preferences.Key<Set<String>> = stringSetPreferencesKey("setup_pending")
+
+    /** One phone only nickname per sensor, `nickname:<lowercase id>`. Never sent to the sensor. */
+    const val NICKNAME_PREFIX: String = "nickname:"
+
+    fun nickname(id: String): Preferences.Key<String> = stringPreferencesKey(NICKNAME_PREFIX + id.lowercase())
+
+    /** The app wide keys. [SETUP_PENDING] and the per sensor nicknames are not in it. */
     val ALL: List<Preferences.Key<*>> =
         listOf(DETAIL_LEVEL, ADVANCED_MODE, SHOW_PUBLIC_SENSORS, UNIT_SYSTEM, DERIVED_QUOTA_BYTES, MAP_CACHE_BYTES, DISCOVER_SOURCE)
 }

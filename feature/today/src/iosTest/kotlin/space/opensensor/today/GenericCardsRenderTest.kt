@@ -22,7 +22,7 @@ import kotlin.test.Test
 class GenericCardsRenderTest {
     private val soilSample = LiveSample.parse("""{"sm":0.31,"st":21.5,"pct":80}""")
 
-    private fun soil(level: DetailLevel) = TodayUiState(TodaySnapshot(name = "Soil", info = SoilFixture.info, live = soilSample), level)
+    private fun soil(level: DetailLevel) = TodayUiState(TodaySnapshot(name = "Soil", info = SoilFixture.info, live = soilSample), level, SoilFixture.capabilities())
 
     private fun label(state: TodayUiState, column: String) = state.capabilities.thing!!.datastreams.first { it.name == column }.label("en")
 

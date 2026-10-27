@@ -68,8 +68,8 @@ object BundledCatalog {
     fun live(dict: String): LiveColumns? = template(dict)?.let { LiveColumns.of(it, AppProfile.select(it, profile(dict))) }
 
     /**
-     * The thing for [dict] and [desc], joined with the bundled profile. Null when neither the bundled
-     * nor the [served] templates resolve the key.
+     * The thing for [dict] and [desc], joined with [profile], the bundled one by default. Null when
+     * neither the bundled nor the [served] templates resolve the key.
      */
     fun thing(
         uuid: String,
@@ -80,8 +80,9 @@ object BundledCatalog {
         deviceId: Long? = null,
         h3Cell: String? = null,
         runtimeSampleIntervalS: Double? = null,
+        profile: AppProfile? = BundledCatalog.profile(dict),
     ): Thing? {
         val template = index(served).resolve(dict, desc) ?: return null
-        return Thing.join(uuid, template, profile(dict), collection, deviceId, h3Cell, runtimeSampleIntervalS)
+        return Thing.join(uuid, template, profile, collection, deviceId, h3Cell, runtimeSampleIntervalS)
     }
 }

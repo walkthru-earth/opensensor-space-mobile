@@ -84,7 +84,6 @@ import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.LanFraming
 import space.opensensor.data.protocol.Opcode
-import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.data.sync.ArchiveCollector
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
@@ -373,8 +372,9 @@ class DeviceFacadeTest {
         val saved = h.repo.writeLocation(ConfigPatch.build { location("85283473fffffff", 8, "") })
         assertEquals("85283473fffffff", saved?.cell)
         assertEquals(listOf(h.device.thing to "85283473fffffff"), h.places.all.map { it.thing to it.cell })
-        h.repo.writeLocation(ConfigPatch.build { thingMobility(ThingMobility.MOVING) })
-        assertTrue("a Thing saved as moving shows no pin", h.places.all.isEmpty())
+        h.device.mobility = "moving"
+        h.repo.writeLocation(ConfigPatch.build { location("85283473fffffff", 8, "") })
+        assertTrue("a save that reads back a moving Thing shows no pin", h.places.all.isEmpty())
     }
 
     @Test
@@ -387,6 +387,19 @@ class DeviceFacadeTest {
         h.repo.forget(ADDRESS)
         assertNull(h.knownDao.get(ADDRESS))
         assertTrue("no cell of a forgotten Thing stays on the phone", h.places.all.isEmpty())
+    }
+
+    @Test
+    fun `forgetting a Thing removes the saved cells of its older epochs`() = harnessTest { h ->
+        h.device.locationCell = "85283473fffffff"
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        h.repo.readLocation()
+        h.thingEpochs.recordIfAbsent(ThingEpoch(ADDRESS, "older-thing", null, 1L, observedFromAuthenticatedBle = true))
+        h.places.put(ThingPlace("older-thing", "85283472fffffff", 1L))
+        assertEquals(2, h.places.all.size)
+        h.repo.forget(ADDRESS)
+        assertTrue("no cell of an older epoch stays on the phone", h.places.all.isEmpty())
     }
 
     /** [ThingPlaces] in memory. */
@@ -828,6 +841,15 @@ class DeviceFacadeTest {
         assertEquals(h.device.thing, row.thing)
         assertEquals(h.device.deviceId, row.deviceId)
         assertNotNull(row.lastConnectedEpochMs)
+    }
+
+    @Test
+    fun `a failed pairing leaves no known row`() = harnessTest { h ->
+        h.factory.unavailable = UnavailableKind.PERMISSION_MISSING
+        h.repo.connect(ADDRESS, "OS-6b40")
+        h.until { h.events.isNotEmpty() && !h.repo.busy.value }
+        assertNull(h.repo.session.value)
+        assertNull("no ghost row before enrollment", h.knownDao.get(ADDRESS))
     }
 
     @Test

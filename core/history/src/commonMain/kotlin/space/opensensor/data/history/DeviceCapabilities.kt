@@ -4,6 +4,7 @@ import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveReading
 import space.opensensor.data.protocol.LiveSample
 import space.opensensor.data.protocol.PmsStatus
+import space.opensensor.model.AppProfile
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
 import space.opensensor.model.Capability
@@ -18,9 +19,10 @@ import space.opensensor.model.ThingDatastream
  * bundled template and app profile of `info.dict`, or from the template the board served (#191), so a
  * new board is a template and a profile, not a code change. Pure and shared by Android and iOS.
  *
- * - [thing] is the served or bundled template joined with its app profile. It reads LIVE
- *   ([reading]). Null without `INFO`, without a dictionary or for a board whose template is neither
- *   served nor bundled, which has no LIVE view.
+ * - [thing] is the served or bundled template joined with its reviewed app profile. It reads LIVE
+ *   ([reading]). Null without `INFO`, without a dictionary, for a board whose template is neither
+ *   served nor bundled, or for a dictionary with no reviewed profile. Such a board has no LIVE view,
+ *   the LIVE key stability rule of `ble-sync-protocol.md`, so a derived profile never names a hero.
  * - [Capability.LIVE] is a resolved [thing].
  * - [Capability.CONFIG] is protocol v2 or later: pairing, Wi-Fi, LAN and bonds can be edited.
  * - [Capability.SENSOR_IDENTITY] is a template with the `sensor_serial_code` column, a board that
@@ -75,19 +77,30 @@ data class DeviceCapabilities(
         /** Nothing known yet (no `INFO`): no live interpretation, no configuration. */
         val NONE = DeviceCapabilities(thing = null, capabilities = emptySet())
 
-        /** Resolves `info.dict` and `info.desc` against [served] templates first, then the bundled ones. */
-        fun from(info: DeviceInfo?, served: List<BoardTemplate> = ServedTemplates.shared.all.value): DeviceCapabilities {
+        /**
+         * Resolves `info.dict` and `info.desc` against [served] templates first, then the bundled ones,
+         * and joins the reviewed profile [profiles] gives for the dict. A template without one keeps
+         * [Capability.SENSOR_IDENTITY] but has no [thing] and no LIVE.
+         */
+        fun from(
+            info: DeviceInfo?,
+            served: List<BoardTemplate> = ServedTemplates.shared.all.value,
+            profiles: (String) -> AppProfile? = BundledCatalog::profile,
+        ): DeviceCapabilities {
             if (info == null) return NONE
-            val thing = info.dict?.let { BundledCatalog.thing(info.thing.orEmpty(), it, desc = info.desc, served = served) }
-            return DeviceCapabilities(thing, capabilitiesOf(thing, proto = info.proto ?: 1))
+            val joined = info.dict?.let { BundledCatalog.thing(info.thing.orEmpty(), it, desc = info.desc, served = served, profile = profiles(it)) }
+            val thing = joined?.takeUnless { it.profile.isDerived }
+            return DeviceCapabilities(thing, capabilitiesOf(joined, proto = info.proto ?: 1))
         }
 
         /** The capabilities of [thing] on a board speaking sync protocol [proto]. */
         fun capabilitiesOf(thing: Thing?, proto: Int): Set<Capability> = buildSet {
             if (proto >= 2) add(Capability.CONFIG)
             if (thing == null) return@buildSet
-            add(Capability.LIVE)
             if (thing.datastream(SENSOR_SERIAL_COLUMN) != null) add(Capability.SENSOR_IDENTITY)
+            // LIVE and what it shows need a reviewed profile, a derived one only names columns.
+            if (thing.profile.isDerived) return@buildSet
+            add(Capability.LIVE)
             if (thing.datastream(AirMetrics.BATCH_ESTIMATE_COLUMN) != null) add(Capability.BATCH_ESTIMATE)
             if (thing.profile.family == Family.AIR && thing.showsPm25Live()) add(Capability.PARTICLES)
         }

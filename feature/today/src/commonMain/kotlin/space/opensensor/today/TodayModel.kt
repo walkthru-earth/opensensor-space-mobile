@@ -117,11 +117,11 @@ interface TodaySource {
 data class TodayUiState(
     val snapshot: TodaySnapshot = TodaySnapshot(),
     val level: DetailLevel = DetailLevel.SIMPLE,
-) {
     /** What this device can do, from `INFO` and LIVE (shared mapping, no schema strings in the UI). */
-    val capabilities: DeviceCapabilities = DeviceCapabilities.from(snapshot.info)
+    val capabilities: DeviceCapabilities = DeviceCapabilities.from(snapshot.info),
+) {
 
-    /** The live sample read through the bundled template and profile, null before both exist. */
+    /** The live sample read through the template and reviewed profile, null before both exist. */
     val reading: LiveReading? = capabilities.reading(snapshot.live)
 
     /** Whether the live values can show yet, see [LiveSupport]. */
@@ -149,7 +149,7 @@ data class TodayUiState(
 
 /**
  * Whether Today can read LIVE. [PENDING] while `INFO` has not arrived, a quiet wait. [UNSUPPORTED]
- * only once `INFO` arrived with a dictionary the app does not bundle. [READY] otherwise.
+ * only once `INFO` arrived with a dictionary the app has no reviewed profile for. [READY] otherwise.
  */
 enum class LiveSupport { PENDING, UNSUPPORTED, READY }
 

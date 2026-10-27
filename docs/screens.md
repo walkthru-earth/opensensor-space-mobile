@@ -19,7 +19,8 @@ flowchart LR
   Today <--> Device["DeviceKey"]
   Today -. Developer .-> Debug["DebugKey"]
   Files -. Detailed .-> Metrics["FileMetricsKey(thing, name)"]
-  Discover -. Add your sensor .-> Scan
+  Discover -. Add your sensor .-> Setup["SetupKey(resume)<br/>Add sensor wizard"]
+  Setup --> Today
 ```
 
 **One bottom bar (owner decision 2026-10-08).** Both apps host the shared `AppShell`
@@ -41,10 +42,15 @@ device, and nothing is asked at launch.
 - Inside a device, Today, History, Files and Device are a tab row under the top bar
   (`DeviceSectionTabs` in the shared `ThingChrome`, with the thing header and link banner), siblings that replace each other. The bottom bar stays visible with My
   devices selected.
-- The bottom bar is hidden only on Debug and Metrics, the full-screen inspectors with their own
-  back arrow.
-- "Add your sensor" on Discover opens the My devices root. A device screen that loses its session
-  returns there too. Settings is reached only from the bottom bar.
+- The bottom bar is hidden only on Debug, Metrics and the Add sensor wizard, full-screen pages
+  with their own back arrow.
+- "Add your sensor" on Discover opens the Add sensor wizard over the My devices root, so closing it
+  lands on My devices. A device screen that loses its session returns there too. Settings is reached only from the bottom bar.
+  The wizard's Location page has no Skip. Next waits until the sensor confirms a saved H3 cell, and a
+  setup left before Done resumes at Location. After pairing, the close arrow and system back both ask
+  "Leave setup?" first, and old firmware fails on Find with the update message. A sensor under Nearby
+  on My devices that this phone has not added opens the wizard with it picked, never Today, so setup
+  always comes first on both platforms.
 - Each thing action has one home. Today holds Smart Sync, its Stop, Reconnect or Disconnect in the
   header, Forget in the header menu, and Debug at Developer. Files holds the archive list and Sync all. Device holds the sensor
   settings, Wi-Fi access, paired phones and Auto-sync. Every thing page reads one

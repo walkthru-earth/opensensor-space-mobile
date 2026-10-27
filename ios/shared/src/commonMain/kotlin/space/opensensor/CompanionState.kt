@@ -93,6 +93,10 @@ class CompanionState {
     internal var failedId by mutableStateOf<String?>(null)
         private set
 
+    /** The sensor whose INFO reported a `proto` below 3, until a new connection starts. */
+    internal var outdatedId by mutableStateOf<String?>(null)
+        private set
+
     /** True while an Auto-sync step owns the Bluetooth link. */
     internal var bluetoothBackground by mutableStateOf(false)
         private set
@@ -482,6 +486,7 @@ class CompanionState {
 
     fun connectionStarted(id: String) {
         failedId = null
+        outdatedId = null
         if (reconnectingId != id) reconnectingId = null
         selectedId = id
         connected = false
@@ -545,6 +550,7 @@ class CompanionState {
         val id = selectedId ?: reconnectingId
         close(notice.text)
         if (notice == CompanionNotice.PAIRING_REMOVED) failedId = id
+        if (notice == CompanionNotice.FIRMWARE_UPDATE) outdatedId = id
     }
 
     /** The user forgot this sensor, so nothing is left to repair or reconnect. */
