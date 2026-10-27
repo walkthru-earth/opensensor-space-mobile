@@ -1,6 +1,8 @@
 package space.opensensor.data.history
 
-import space.opensensor.airquality.WhoGuidelines
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.WhoGuidelines
 import space.opensensor.model.PlausibleRange
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -10,6 +12,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ChartAxisTest {
+    init {
+        AirFamily.install()
+    }
+
     private fun column(mean: Float?, max: Float? = mean) = HistoryColumn(0, 3600, mean, max, 1f, 0f)
 
     /** A neutral metric with a known plausible range, so these cases do not follow the bundled templates. */

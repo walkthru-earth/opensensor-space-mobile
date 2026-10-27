@@ -15,6 +15,8 @@ import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
 import space.opensensor.data.protocol.LiveReading
 import space.opensensor.data.protocol.LiveSample
+import space.opensensor.family.air.showsAirCards
+import space.opensensor.family.air.showsBatchEstimate
 import space.opensensor.settings.DetailLevel
 
 /** How the phone archive places this device's readings in time, for the Smart Sync card. */

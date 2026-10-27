@@ -33,8 +33,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
-import space.opensensor.airquality.MoodBlock
-import space.opensensor.airquality.WhoStep
+import space.opensensor.family.air.MoodBlock
+import space.opensensor.family.air.WhoStep
 import kotlin.test.Test
 
 /**

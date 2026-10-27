@@ -25,6 +25,7 @@ import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetSink
 import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.history.parquet.ParquetWriter
+import space.opensensor.family.air.AirMetrics
 import java.io.ByteArrayOutputStream
 
 /** A synthetic UTC day of 8,640 rows in 96 files, fixed across before and after runs. */

@@ -1,7 +1,7 @@
 package space.opensensor.designsystem
 
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

@@ -1,6 +1,6 @@
 package space.opensensor.data.history
 
-import space.opensensor.airquality.HealthScale
+import space.opensensor.model.HealthScale
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -16,8 +16,8 @@ data class ChartAxis(val min: Float, val max: Float, val step: Float) {
 object ChartAxes {
     /**
      * Banded quantities start at zero and keep the 95th percentile cap (spikes above it get a
-     * labelled cap), then snap up to the next WHO edge so the guideline is always in view and two
-     * days on the same scale read alike. Above the loosest interim target the top is a round number.
+     * labelled cap), then snap up to the next scale edge so the guideline is always in view and two
+     * days on the same scale read alike. Above the loosest edge the top is a round number.
      * Neutral quantities use the finite mean and peak range, with room below a negative minimum, held
      * inside the metric's plausible range so one suspect row cannot flatten the chart. With no data
      * the axis is the plausible range. Both signs share a zero baseline.
@@ -47,7 +47,7 @@ object ChartAxes {
     /** The top of a neutral axis with neither data nor a plausible range. */
     private const val DEFAULT_TOP = 10f
 
-    /** A zero-based axis whose top is the first WHO edge at or above [raw], with a step that divides it. */
+    /** A zero-based axis whose top is the first scale edge at or above [raw], with a step that divides it. */
     internal fun snapped(raw: Float, scale: HealthScale): ChartAxis {
         val edge = scale.edges.firstOrNull { it >= raw }?.toFloat()
         if (edge == null) {

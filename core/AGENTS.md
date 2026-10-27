@@ -4,8 +4,9 @@
 `docs/shared/ble-sync-protocol.md`; `parquet/`
 implements the reader/writer and codec SPI; `history/` owns metrics, indexing,
 aggregation and presentation-ready analysis; `publicfeed/` owns the Discover feed
-port, H3 and the viewport cover; `units/` owns display units; `airquality/` owns
-the WHO 2021 scales and palette. `net/` owns HTTP range reads (`HttpRangeSource`, OkHttp
+port, H3 and the viewport cover; `units/` owns display units. No core module
+names air quality. The WHO 2021 scales, the EPA correction, the moods and the air metrics live in
+`:family:air` (`family/air/`, pinned by `CoreStaysAirFreeTest`). `net/` owns HTTP range reads (`HttpRangeSource`, OkHttp
 on Android and the JVM, `NSURLSession` on iOS) and the disk block cache (`CachedRangeSource`,
 `BlockCache`, #94). `archive/` owns the archive layout, verifier,
 records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `StorageClass`,
@@ -74,7 +75,7 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   `rsync -a --delete ../opensensor-space-firmware/docs/shared/templates/ core/model/bundled/templates/`. LIVE (`LiveReading`, #185), the batch estimate and
   History read them. History builds each `MetricSpec` from a template datastream
   and the profile (`Metrics.of`), plus the derived metrics of each
-  `DerivedMetricProvider` (`AirDerivedMetrics` for corrected PM2.5), and reads each file by the template of its
+  `DerivedMetricProvider` (`AirFamily` for corrected PM2.5), and reads each file by the template of its
   `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by
   `template.sha256` first and then `dictionary.sha256`. The old unprefixed footer
   keys are not read. A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic

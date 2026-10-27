@@ -1,10 +1,10 @@
 package space.opensensor.thing
 
-import space.opensensor.airquality.AirDerivedMetrics
 import space.opensensor.data.history.Metrics
 import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LanProtocol
+import space.opensensor.family.air.AirFamily
 import space.opensensor.model.Capability
 import space.opensensor.model.DerivedMetricProvider
 import space.opensensor.publicfeed.BundledSampleFeed
@@ -33,6 +33,10 @@ val feedKind = FakeKind("public-feed", DataSource.RemoteFeed(BundledSampleFeed {
 val localOnlyKind = FakeKind("local-only", DataSource.PullSync(PublishPolicy.Never))
 
 class ThingKindsTest {
+    init {
+        AirFamily.install()
+    }
+
     /** The CoreS3 dictionary, pinned. */
     private val coreS3Dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
 
@@ -85,16 +89,19 @@ class ThingKindsTest {
 
     @Test
     fun theKindsFeedTheMetricCatalog() {
-        val kinds = ThingKinds(listOf(OpenSensorBoardKind, FakeKind("air-again", DataSource.PullSync(PublishPolicy.Never), listOf(AirDerivedMetrics))))
-        assertEquals(listOf<DerivedMetricProvider>(AirDerivedMetrics), kinds.metricProviders)
+        val kinds = ThingKinds(listOf(OpenSensorBoardKind, FakeKind("air-again", DataSource.PullSync(PublishPolicy.Never), listOf(AirFamily))))
+        assertEquals(listOf<DerivedMetricProvider>(AirFamily), kinds.metricProviders)
+        assertEquals(emptyList(), OpenSensorBoardKind.derivedMetrics)
         try {
             ThingKinds(listOf(healthKind)).installMetrics()
-            assertNull(Metrics.byId(AirDerivedMetrics.PM25_CORRECTED_ID))
+            assertNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
             kinds.installMetrics()
-            assertEquals(listOf<DerivedMetricProvider>(AirDerivedMetrics), Metrics.providers)
-            assertNotNull(Metrics.byId(AirDerivedMetrics.PM25_CORRECTED_ID))
+            assertEquals(listOf<DerivedMetricProvider>(AirFamily), Metrics.providers)
+            assertNotNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
+            ThingKinds(listOf(OpenSensorBoardKind)).installMetrics(families = listOf(AirFamily))
+            assertEquals(listOf<DerivedMetricProvider>(AirFamily), Metrics.providers)
         } finally {
-            Metrics.install(Metrics.DEFAULT_PROVIDERS)
+            Metrics.install(emptyList())
         }
     }
 }

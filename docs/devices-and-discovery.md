@@ -41,7 +41,7 @@ Rules.
 2. **Unknown is fine.** A column that is not in the dictionary still shows with its raw name and
    no scale, at Detailed level. It is never hidden, coerced or given a default.
 3. **Scales are optional and scientific.** A `Scale` names its source (for example US EPA AQI or
-   WHO 2021). PM2.5 and PM10 use the WHO 2021 Air Quality Guidelines (`:core:airquality`,
+   WHO 2021). PM2.5 and PM10 use the WHO 2021 Air Quality Guidelines (`:family:air`,
    `WhoGuidelines`), six fixed steps from "meets the guideline" through interim targets 4 to 1
    to "above all targets", 24-hour means, in one colour-blind checked palette. A fixed step
    means a colour says the same thing in every place, viewport and window. Properties without

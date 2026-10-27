@@ -9,7 +9,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
-/** Phone-local record of which replaceable PM module was fitted to a logger and when. */
+/** Phone-local record of which replaceable sensor module was fitted to a logger and when. */
 @Entity(tableName = "sensor_installation", indices = [Index("address"), Index("thing")])
 data class SensorInstallation(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

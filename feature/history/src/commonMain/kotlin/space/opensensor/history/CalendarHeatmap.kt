@@ -39,8 +39,6 @@ import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
 import space.opensensor.data.history.HistoryColumn
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.localDateOf
@@ -48,6 +46,10 @@ import space.opensensor.data.history.startOfDay
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.metricLabel
 import space.opensensor.designsystem.spokenList
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
+import space.opensensor.family.air.moodOf
+import space.opensensor.family.air.stepOf
 import space.opensensor.history.resources.Res
 import space.opensensor.history.resources.chart_calendar_title
 import space.opensensor.history.resources.chart_days_with_readings

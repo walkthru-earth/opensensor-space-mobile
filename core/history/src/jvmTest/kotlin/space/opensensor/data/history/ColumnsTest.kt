@@ -6,12 +6,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 
 class ColumnsTest {
+    init {
+        AirFamily.install()
+    }
+
     /** java.time builds the inputs and stays the oracle; the API under test is kotlinx-datetime. */
     private fun endingOn(date: LocalDate, range: HistoryRange, zone: ZoneId) = HistoryWindow.endingOn(date.toKotlinLocalDate(), range, zone.toKotlinTimeZone())
 

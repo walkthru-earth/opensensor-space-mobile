@@ -4,10 +4,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.w3c.dom.Element
 import space.opensensor.data.history.DeviceCapabilities
-import space.opensensor.data.history.NowReading
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
-import space.opensensor.data.protocol.PmsStatus
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.NowReading
+import space.opensensor.family.air.PmsStatus
 import space.opensensor.publicfeed.DiscoverCollection
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
@@ -19,6 +20,10 @@ import javax.xml.parsers.DocumentBuilderFactory
  * without this module.
  */
 class CopyRulesTest {
+    init {
+        AirFamily.install()
+    }
+
     /** The repository root, whether Gradle runs this from `app/` or from the root. */
     private val root: File = listOf(File(".."), File(".")).first { File(it, "settings.gradle.kts").isFile }
 

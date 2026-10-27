@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     implementation(project(":core:history"))
+    implementation(project(":family:air"))
     implementation(libs.kotlinx.benchmark.runtime)
 }
 

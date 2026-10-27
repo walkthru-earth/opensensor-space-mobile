@@ -53,8 +53,6 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
 import space.opensensor.data.history.ChartAxes
 import space.opensensor.data.history.ChartAxis
 import space.opensensor.data.history.HistoryColumn
@@ -65,6 +63,10 @@ import space.opensensor.data.history.startOfDay
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.metricLabel
 import space.opensensor.designsystem.spokenList
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
+import space.opensensor.family.air.moodOf
+import space.opensensor.family.air.stepOf
 import space.opensensor.history.resources.Res
 import space.opensensor.history.resources.chart_bars_title
 import space.opensensor.history.resources.chart_guideline_24h

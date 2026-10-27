@@ -24,9 +24,13 @@ class ThingKinds(val kinds: List<ThingKind>) {
     /** Every kind's derived metric providers, each once, in list order. */
     val metricProviders: List<DerivedMetricProvider> get() = kinds.flatMap { it.derivedMetrics }.distinct()
 
-    /** Makes [metricProviders] the ones History's catalog applies ([Metrics.install]). Call once at launch. */
-    fun installMetrics(): ThingKinds {
-        Metrics.install(metricProviders)
+    /**
+     * Makes the app's [families] and then [metricProviders] the ones History's catalog applies
+     * ([Metrics.install]). A family (`:family:*`) names the scales, capabilities and derived metrics
+     * of the sensors any kind may carry. Call once at launch.
+     */
+    fun installMetrics(families: List<DerivedMetricProvider> = emptyList()): ThingKinds {
+        Metrics.install(families + metricProviders)
         return this
     }
 }

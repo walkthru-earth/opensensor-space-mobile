@@ -1,7 +1,13 @@
 package space.opensensor.publicfeed
 
-/** Feed properties as a feed describes them, PM with the scales the app ships, the rest neutral. */
+import space.opensensor.family.air.AirFamily
+
+/** Feed properties as a feed describes them, PM with the air family's scales, the rest neutral. */
 internal object TestProperties {
+    init {
+        AirFamily.install()
+    }
+
     private fun described(p: FeedProperty) = DiscoverCollection.BUNDLED.describe(listOf(p)).single()
 
     val PM25 = described(FeedProperty("pm25", "PM2.5", "µg/m³", "Air"))

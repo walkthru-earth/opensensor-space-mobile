@@ -4,6 +4,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.model.AppProfile
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.Datastream
@@ -15,6 +17,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class LatestDayTest {
+    init {
+        AirFamily.install()
+    }
+
     private fun day(startS: Long, mean: Float, valid: Int = 8_640) = TierBucket(startS, 8_640, valid, 0, mean, mean, mean, sampleIntervalMs = 10_000)
 
     private val corrected = AirMetrics.PM25_CORRECTED.id

@@ -1,5 +1,10 @@
 package space.opensensor.publicfeed
 
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.colorOf
+import space.opensensor.family.air.rangeOf
+import space.opensensor.family.air.stepOf
+import space.opensensor.family.air.who
 import space.opensensor.model.LocalizedText
 import space.opensensor.model.Scale
 import space.opensensor.model.ScaleStep
@@ -11,6 +16,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class StepScaleTest {
+    init {
+        AirFamily.install()
+    }
+
     private fun step(upper: Double?, en: String = "s$upper", hint: String? = null) =
         ScaleStep(upper, LocalizedText(mapOf("en" to en, "ar" to "ع$en")), hint)
 

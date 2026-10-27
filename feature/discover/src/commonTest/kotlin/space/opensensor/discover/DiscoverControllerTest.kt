@@ -10,7 +10,8 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
-import space.opensensor.airquality.WhoStep
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.WhoStep
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.CellStat
 import space.opensensor.publicfeed.CellsFileInfo
@@ -33,6 +34,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DiscoverControllerTest {
+    init {
+        AirFamily.install()
+    }
+
     private val cellA = 0x85283473fffffffL
     private val cellB = 0x8528347bfffffffL
 

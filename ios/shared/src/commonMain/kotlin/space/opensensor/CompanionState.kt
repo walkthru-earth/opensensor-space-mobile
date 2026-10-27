@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import space.opensensor.collection.SyncEndReason
 import space.opensensor.data.history.DeviceCapabilities
-import space.opensensor.data.history.NowReading
 import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
@@ -13,6 +12,7 @@ import space.opensensor.data.protocol.LanProtocol
 import space.opensensor.data.protocol.LiveSample
 import space.opensensor.data.protocol.ProtoGate
 import space.opensensor.data.protocol.requireProto3
+import space.opensensor.family.air.NowReading
 import space.opensensor.permissions.AccessStatus
 import space.opensensor.permissions.IosAuthorization
 import space.opensensor.strings.UiText

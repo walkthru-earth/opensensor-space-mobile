@@ -50,13 +50,11 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.data.SensorLabel
 import space.opensensor.data.WifiScanState
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.PairMode
-import space.opensensor.data.protocol.PlantowerBatchCandidate
 import space.opensensor.data.protocol.WifiState
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BrandCard
@@ -187,6 +185,8 @@ import space.opensensor.device.resources.wifi_secured
 import space.opensensor.device.resources.wifi_show_passphrase
 import space.opensensor.device.resources.wifi_title
 import space.opensensor.device.resources.wifi_unknown
+import space.opensensor.family.air.PlantowerBatchCandidate
+import space.opensensor.family.air.SensorLabel
 
 /** Shown for a value the device did not report. Never a made up default. */
 internal const val NO_VALUE = "n/a"

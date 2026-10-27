@@ -20,8 +20,6 @@ import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
 import space.opensensor.designsystem.resources.Res
 import space.opensensor.designsystem.resources.peacock
 import space.opensensor.designsystem.resources.peacock_calm
@@ -32,6 +30,8 @@ import space.opensensor.designsystem.resources.peacock_happy
 import space.opensensor.designsystem.resources.peacock_masked
 import space.opensensor.designsystem.resources.peacock_sleeping
 import space.opensensor.designsystem.resources.peacock_working
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
 
 /** One reference character, with compact portraits for small icons and full artwork for welcome. */
 enum class PeacockExpression {

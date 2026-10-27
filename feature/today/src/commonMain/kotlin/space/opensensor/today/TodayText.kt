@@ -6,11 +6,12 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
-import space.opensensor.data.history.AirMood
-import space.opensensor.data.protocol.PmsStatus
 import space.opensensor.data.sync.ClockQuality
 import space.opensensor.designsystem.moodLineRes
 import space.opensensor.designsystem.moodWord
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.PmsStatus
+import space.opensensor.family.air.formatPm
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.resources.Res
 import space.opensensor.today.resources.ago_days
@@ -61,7 +62,6 @@ import space.opensensor.today.resources.transport_ble
 import space.opensensor.today.resources.transport_fake
 import space.opensensor.today.resources.transport_lan
 import space.opensensor.units.formatFixed
-import space.opensensor.units.formatPm
 
 /** Shown where a value is missing or not read yet. Never a long dash (copy rules). */
 internal const val NO_VALUE = "n/a"

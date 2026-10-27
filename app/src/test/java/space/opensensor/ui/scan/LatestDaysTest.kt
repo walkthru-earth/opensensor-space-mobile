@@ -3,11 +3,16 @@ package space.opensensor.ui.scan
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.Metrics
 import space.opensensor.data.local.database.MetricBucket
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 
 class LatestDaysTest {
+    init {
+        AirFamily.install()
+    }
+
     private fun day(thing: String, metric: String, startS: Long, mean: Float, valid: Int = 100) = MetricBucket(
         thing = thing, metricId = metric, resolution = 86_400L, startEpochS = startS,
         rows = 100, validRows = valid, estimatedRows = 0, mean = mean, min = mean, max = mean, sampleIntervalMs = 10_000,

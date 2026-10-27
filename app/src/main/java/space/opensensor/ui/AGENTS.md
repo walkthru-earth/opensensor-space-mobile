@@ -42,7 +42,7 @@ app types or `R.string`.
   and its components (`BrandCard`, `PillButton`, `CardHeader`, `StatLine`, ...). Icons come from
   `AppIcons` (vendored Material vectors), never `material-icons-extended`. No raw colours or font families in screens.
   Values come from the website's `lib/brand.ts` (`sensing`), pinned by `BrandTokensTest`.
-- Band colours are the WHO 2021 steps from `:core:airquality` (`WhoStep.color()` in `theme/Color.kt`,
+- Band colours are the WHO 2021 steps from `:family:air` (`WhoStep.color()` in `theme/Color.kt`,
   the one mapping). Never restyle them. Put text on a band with `onColor()` and band-coloured text
   with `textColorOnSurface()`.
 - Design Simple first. Gate technical facts with `level.detailed` or `level.developer` and list

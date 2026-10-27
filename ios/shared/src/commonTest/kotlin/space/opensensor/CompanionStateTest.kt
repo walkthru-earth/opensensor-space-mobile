@@ -1,7 +1,7 @@
 package space.opensensor
 
 import space.opensensor.collection.SyncEndReason
-import space.opensensor.data.history.NowReading
+import space.opensensor.family.air.NowReading
 import space.opensensor.permissions.AccessStatus
 import space.opensensor.permissions.PermissionFlow
 import space.opensensor.strings.UiText

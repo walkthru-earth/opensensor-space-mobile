@@ -1,11 +1,20 @@
 package space.opensensor.data.history
 
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.NowReading
+import space.opensensor.family.air.moodOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 class PortableSensorTest {
+    init {
+        AirFamily.install()
+    }
+
     @Test fun invalidSensorDoesNotBecomeZero() {
         assertEquals(NowReading.Waiting, NowReading.of(LiveFixtures.waveshare("""{"pms":4}""")))
         assertIs<NowReading.SensorNotReady>(NowReading.of(LiveFixtures.waveshare("""{"pms":1,"pm25":0.0}""")))

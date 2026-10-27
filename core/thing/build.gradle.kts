@@ -18,11 +18,11 @@ kotlin {
             api(project(":core:stac"))
             // The public feed a RemoteFeed kind reads.
             api(project(":core:publicfeed"))
-            // The air family's derived metrics, which the board kind contributes.
-            implementation(project(":core:airquality"))
         }
         commonTest.dependencies {
             implementation(project(":core:thing:testkit"))
+            // The air family as a real provider the kinds feed into the catalog, test only.
+            implementation(project(":family:air"))
             implementation(libs.kotlinx.serialization.json)
         }
     }

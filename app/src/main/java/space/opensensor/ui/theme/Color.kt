@@ -2,9 +2,10 @@ package space.opensensor.ui.theme
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
 import space.opensensor.data.history.MetricSpec
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
+import space.opensensor.family.air.stepOf
 import space.opensensor.designsystem.color as designSystemColor
 import space.opensensor.designsystem.contrastRatio as designSystemContrastRatio
 import space.opensensor.designsystem.onBand as designSystemOnBand
@@ -16,7 +17,7 @@ import space.opensensor.designsystem.textColorOnSurface as designSystemTextColor
  * The one mapping from a WHO step to its colour, delegating to `:ui:designsystem`
  * (`ColorContrast.kt`). Every air-quality colour in the app (bars, the calendar, the day ring, the
  * mood face and pill) goes through here, so a value can never be named one step and painted
- * another. The ARGB values and their colour-blind checks live in `:core:airquality` (`WhoStep`).
+ * another. The ARGB values and their colour-blind checks live in `:family:air` (`WhoStep`).
  */
 fun WhoStep.color(): Color = designSystemColor()
 

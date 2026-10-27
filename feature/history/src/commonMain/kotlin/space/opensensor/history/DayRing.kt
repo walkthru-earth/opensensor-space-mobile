@@ -34,8 +34,6 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
 import space.opensensor.data.history.HistoryColumn
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.MetricSpec
@@ -44,6 +42,10 @@ import space.opensensor.designsystem.AirQualityPeacock
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.metricLabel
 import space.opensensor.designsystem.spokenList
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
+import space.opensensor.family.air.moodOf
+import space.opensensor.family.air.stepOf
 import space.opensensor.history.resources.Res
 import space.opensensor.history.resources.chart_average_value
 import space.opensensor.history.resources.chart_ring_title

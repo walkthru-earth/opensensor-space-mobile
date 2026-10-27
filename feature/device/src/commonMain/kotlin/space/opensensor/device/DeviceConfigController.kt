@@ -18,12 +18,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import space.opensensor.data.SensorLabel
 import space.opensensor.data.WifiScanState
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.ConfigValidationException
 import space.opensensor.data.protocol.PairMode
 import space.opensensor.data.protocol.WifiState
+import space.opensensor.family.air.SensorLabel
+import space.opensensor.family.air.sensorIdentity
 import space.opensensor.settings.DetailLevel
 
 /** A question the Device section asks before it changes the device. Only one is open at a time. */

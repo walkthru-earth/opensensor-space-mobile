@@ -20,10 +20,11 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.HistoryColumn
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.startOfDay
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.settings.DetailLevel
 import kotlin.math.abs
 import kotlin.test.Test
@@ -41,6 +42,10 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalTestApi::class)
 class ChartNodeBoundsTest {
+    init {
+        AirFamily.install()
+    }
+
     private fun column(startS: Long, endS: Long, mean: Float) = HistoryColumn(startS, endS, mean = mean, max = mean, coverage = 1f, estimatedShare = 0f)
 
     /** The day as 24 hourly bars with a gap at 05:00, about 13 dp wide each on a 360 dp chart. */

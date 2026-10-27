@@ -19,6 +19,8 @@ import space.opensensor.archive.PartialWriter
 import space.opensensor.data.history.parquet.ByteArrayReader
 import space.opensensor.data.history.parquet.ByteReader
 import space.opensensor.data.history.parquet.ParquetFile
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.storage.MemoryPressure
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,6 +30,10 @@ import kotlin.test.assertTrue
 
 /** #63. Saved tiers decode back exactly, refuse damage, and spare a new process every Parquet decode. */
 class TierStoreTest {
+    init {
+        AirFamily.install()
+    }
+
     private class Store : ArchiveStore {
         val files = HashMap<ArchiveKey, ByteArray>()
         var reads = 0

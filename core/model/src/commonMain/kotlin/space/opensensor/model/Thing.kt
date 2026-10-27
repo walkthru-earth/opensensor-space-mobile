@@ -38,7 +38,7 @@ data class ThingDatastream(
     val scale: Scale?,
     /** Unit text from the profile, else the template's raw unit, null for a unitless column. */
     val displayUnit: String? = datastream.unit,
-    /** Health scale id from the profile, such as `pm25`, or null for a neutral column. */
+    /** Health scale id from the profile, or null for a neutral column. */
     val scaleId: String? = null,
 ) {
     val name: String get() = datastream.name

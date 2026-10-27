@@ -1,11 +1,16 @@
 package space.opensensor.data.history
 
+import space.opensensor.family.air.AirFamily
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 
 class OpenSensorFooterTest {
+    init {
+        AirFamily.install()
+    }
+
     private val dict = coreS3Template.dict
     private val desc = coreS3Template.key.desc!!
 

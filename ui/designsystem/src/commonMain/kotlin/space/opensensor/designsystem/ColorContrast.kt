@@ -5,8 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -28,7 +28,7 @@ val BandInkLight = Color(0xFFFFFFFF)
 
 /**
  * The one mapping from a WHO step to its Compose [Color]. The ARGB values and colour-blind checks
- * live in `:core:airquality` ([WhoStep]).
+ * live in `:family:air` ([WhoStep]).
  */
 fun WhoStep.color(): Color = Color(color)
 

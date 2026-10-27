@@ -85,7 +85,6 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.maplibre.spatialk.geojson.Position
-import space.opensensor.airquality.HealthScale
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.FloatingSurface
@@ -105,12 +104,16 @@ import space.opensensor.designsystem.peacockExpressionFor
 import space.opensensor.designsystem.spokenList
 import space.opensensor.designsystem.swatchBorderColor
 import space.opensensor.designsystem.touchTarget
+import space.opensensor.family.air.PublicSummary
+import space.opensensor.family.air.rangeOf
+import space.opensensor.family.air.stepOf
+import space.opensensor.family.air.who
+import space.opensensor.model.HealthScale
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.CellScale
 import space.opensensor.publicfeed.FeedProperty
 import space.opensensor.publicfeed.FeedWindow
 import space.opensensor.publicfeed.H3Index
-import space.opensensor.publicfeed.PublicSummary
 import space.opensensor.publicfeed.SequentialRamp
 import space.opensensor.publicfeed.StepScale
 import space.opensensor.settings.DetailLevel

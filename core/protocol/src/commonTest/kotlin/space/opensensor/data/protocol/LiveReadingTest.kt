@@ -25,7 +25,7 @@ class LiveReadingTest {
         assertFalse(reading.declares("ambient_temperature_c"))
         assertNull(reading.value("ambient_temperature_c"))
         assertEquals(5.5, reading.value("pm25_atmospheric_ug_m3")!!, 0.0)
-        assertEquals(PmsStatus.VALID.code, reading.code("pms_status"))
+        assertEquals(4, reading.code("pms_status"))
     }
 
     @Test

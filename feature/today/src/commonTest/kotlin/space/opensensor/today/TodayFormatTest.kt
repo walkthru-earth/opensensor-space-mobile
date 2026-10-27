@@ -9,8 +9,6 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
-import space.opensensor.airquality.Pm25Basis
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeries
@@ -19,12 +17,19 @@ import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.sync.ClockQuality
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.Pm25Basis
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
 class TodayFormatTest {
+    init {
+        AirFamily.install()
+    }
+
     @Test
     fun readingsDropATrailingZeroAndMissingStaysMissing() {
         assertEquals("21", fmt(21.0))

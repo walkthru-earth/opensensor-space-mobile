@@ -219,6 +219,8 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:parquet"))
     implementation(project(":core:history"))
+    // The air family the app installs at launch (ThingModule), and its WHO scales and moods.
+    implementation(project(":family:air"))
     // Request session, sync policies, planner and progress maths, shared with iOS.
     implementation(project(":core:sync"))
     implementation(project(":core:storage"))

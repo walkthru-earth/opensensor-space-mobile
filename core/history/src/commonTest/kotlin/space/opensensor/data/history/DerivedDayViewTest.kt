@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
-import space.opensensor.airquality.EpaPm25Correction
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveKey
 import space.opensensor.archive.ArchiveRecord
@@ -25,6 +24,9 @@ import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.history.parquet.ParquetWriter
 import space.opensensor.data.history.parquet.RangeSource
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.EpaPm25Correction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -35,6 +37,10 @@ import kotlin.test.assertTrue
  * raw files, across midnight, in a zone whose day spans two UTC days, with a later sync of the same rows.
  */
 class DerivedDayViewTest {
+    init {
+        AirFamily.install()
+    }
+
     private val day = 20_000L
 
     @Test

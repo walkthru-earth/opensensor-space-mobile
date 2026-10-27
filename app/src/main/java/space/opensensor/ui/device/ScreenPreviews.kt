@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import space.opensensor.data.SyncProgress
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
@@ -12,6 +11,7 @@ import space.opensensor.data.protocol.LiveSample
 import space.opensensor.data.settings.DetailLevel
 import space.opensensor.designsystem.OpenSensorTheme
 import space.opensensor.device.DeviceConfigUiState
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.today.TodayArchive
 import space.opensensor.today.TodayContent
 import space.opensensor.today.TodaySnapshot

@@ -1,11 +1,12 @@
 package space.opensensor.designsystem
 
-import space.opensensor.airquality.Pm25Basis
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.designsystem.resources.Res
 import space.opensensor.designsystem.resources.pm25_corrected
 import space.opensensor.designsystem.resources.pm25_raw
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.Pm25Basis
 import space.opensensor.model.Basis
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,6 +14,10 @@ import kotlin.test.assertNull
 
 /** #92. Every PM2.5 chart and card says corrected or raw. Other metrics keep their registry label. */
 class MetricLabelsTest {
+    init {
+        AirFamily.install()
+    }
+
     @Test
     fun eachBasisHasItsOwnLabel() {
         assertEquals(Res.string.pm25_corrected, pm25LabelRes(Pm25Basis.CORRECTED))

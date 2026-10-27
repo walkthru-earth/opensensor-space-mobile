@@ -7,6 +7,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import space.opensensor.data.history.parquet.RangePolicy
+import space.opensensor.family.air.WhoGuidelines
+import space.opensensor.family.air.who
 import space.opensensor.net.BlockCache
 import space.opensensor.net.BodyLimit
 import space.opensensor.net.HttpRangeEngine
@@ -190,7 +192,7 @@ class OpenAqAggregatesFeedTest {
         val soilScale = CellScale.of(soil, table.rows.mapNotNull { it.mean("soil_moisture") })
         assertTrue(soilScale is CellScale.Relative)
         val pmScale = CellScale.of(pm25, table.rows.mapNotNull { it.mean("pm25") })
-        assertTrue(pmScale is CellScale.Steps && pmScale.scale.who == space.opensensor.airquality.WhoGuidelines.PM25)
+        assertTrue(pmScale is CellScale.Steps && pmScale.scale.who == space.opensensor.family.air.WhoGuidelines.PM25)
     }
 
     @Test

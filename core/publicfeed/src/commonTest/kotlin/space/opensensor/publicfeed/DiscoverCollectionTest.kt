@@ -1,8 +1,12 @@
 package space.opensensor.publicfeed
 
 import kotlinx.datetime.LocalDate
-import space.opensensor.airquality.WhoGuidelines
-import space.opensensor.airquality.WhoStep
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.WhoGuidelines
+import space.opensensor.family.air.WhoStep
+import space.opensensor.family.air.rangeOf
+import space.opensensor.family.air.stepOf
+import space.opensensor.family.air.who
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -12,6 +16,10 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
 
 class DiscoverCollectionTest {
+    init {
+        AirFamily.install()
+    }
+
     private val root = "https://example.test/discover"
 
     private fun collection(assets: String, extra: String = "") = """

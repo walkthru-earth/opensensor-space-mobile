@@ -1,5 +1,7 @@
 package space.opensensor.data.history
 
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.model.BundledCatalog
 import space.opensensor.model.GateValue
 import space.opensensor.model.Thing
@@ -16,6 +18,10 @@ import kotlin.test.assertTrue
  * health scale. Plausible ranges come only from the templates.
  */
 class MetricsParityTest {
+    init {
+        AirFamily.install()
+    }
+
     private val things: List<Thing> = BundledCatalog.templates.map { assertNotNull(BundledCatalog.thing("parity", it.dict)) }
 
     /** The things that show [column], a column a profile hides is never shown. */

@@ -2,12 +2,12 @@ package space.opensensor.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
-import space.opensensor.airquality.WhoStep
 import space.opensensor.app.R
-import space.opensensor.data.protocol.PmsStatus
+import space.opensensor.family.air.PmsStatus
+import space.opensensor.family.air.WhoStep
 
 /**
- * App copy for sensor states and the WHO step names. The WHO edges stay in `:core:airquality`, only
+ * App copy for sensor states and the WHO step names. The WHO edges stay in `:family:air`, only
  * the words come from `strings.xml`, so they follow the app's copy rules and can be translated. The
  * mood words and lines live in `:ui:designsystem`.
  */

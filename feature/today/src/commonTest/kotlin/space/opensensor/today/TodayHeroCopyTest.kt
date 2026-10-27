@@ -1,6 +1,6 @@
 package space.opensensor.today
 
-import space.opensensor.data.history.AirMood
+import space.opensensor.family.air.AirMood
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals

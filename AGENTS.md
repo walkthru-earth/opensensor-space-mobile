@@ -48,11 +48,13 @@ concern you are changing in `docs/README.md`.
   require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
 - `:core:*` stays reusable without Android or Hilt. Room lives only in `:core:database`,
   one Room KMP schema on the bundled SQLite driver for both phones. Every other `:core` module
-  (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`, `archive`,
+  (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `archive`,
   `storage`, `net`, `sync`, `settings`, `stac`, `thing`) compiles for JVM and iOS from `commonMain`.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
   H3). `:ui:designsystem`, `:ui:permissions` and `:feature:discover` are Compose
-  for Android and iOS.
+  for Android and iOS. A sensor family (`:family:air`) holds its own science and plugs in through
+  `DerivedMetricProvider`. No `:core` source names PM, WHO, EPA, Plantower or the moods, and
+  `CoreStaysAirFreeTest` fails the gate if one does.
   `:ios:shared` is iOS only. Common code cannot import `java.*`; platform
   source sets may depend on common code, never the reverse.
   Transport and storage work stays out of composables. Sensor semantics come

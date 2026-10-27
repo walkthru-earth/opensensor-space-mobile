@@ -19,9 +19,10 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.TimeZone
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.HistoryColumn
 import space.opensensor.data.history.HistoryRange
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,6 +36,10 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalTestApi::class)
 class BandColumnChartGestureTest {
+    init {
+        AirFamily.install()
+    }
+
     private val day = (0 until 24).map { i ->
         HistoryColumn(startS = i * HOUR, endS = (i + 1) * HOUR, mean = 10f + i, max = 10f + i, coverage = 1f, estimatedShare = 0f)
     }

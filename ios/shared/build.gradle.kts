@@ -19,6 +19,8 @@ kotlin {
             implementation(project(":core:archive"))
             // The Thing kinds the app lists at launch (ThingKindsIos.kt).
             implementation(project(":core:thing"))
+            // The air family the app installs at launch next to the kinds (ThingKindsIos.kt).
+            implementation(project(":family:air"))
             // The Room index and removed-file marks, shared with Android (IosArchiveDatabase).
             implementation(project(":core:database"))
             implementation(project(":feature:discover"))

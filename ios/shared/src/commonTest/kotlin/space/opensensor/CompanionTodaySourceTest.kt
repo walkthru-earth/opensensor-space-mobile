@@ -14,8 +14,9 @@ import kotlinx.coroutines.test.runTest
 import space.opensensor.collection.SyncEndReason
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.TodaySoFar
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.today.SyncMood
 import space.opensensor.today.TodayArchive
 import space.opensensor.today.TodayNotice
@@ -28,6 +29,10 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CompanionTodaySourceTest {
+    init {
+        AirFamily.install()
+    }
+
     private class Calls {
         val list = mutableListOf<String>()
         val actions = CompanionLinkActions(

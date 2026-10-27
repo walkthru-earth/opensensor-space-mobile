@@ -3,7 +3,6 @@ package space.opensensor.discover
 import androidx.compose.runtime.Composable
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.airquality.Pm25Basis
 import space.opensensor.designsystem.pm25LabelRes
 import space.opensensor.discover.resources.Res
 import space.opensensor.discover.resources.discover_category_air
@@ -16,6 +15,7 @@ import space.opensensor.discover.resources.discover_property_pm10
 import space.opensensor.discover.resources.discover_property_pressure
 import space.opensensor.discover.resources.discover_property_temperature
 import space.opensensor.discover.resources.discover_property_um003
+import space.opensensor.family.air.Pm25Basis
 import space.opensensor.publicfeed.FeedProperty
 
 /**
