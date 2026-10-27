@@ -385,17 +385,22 @@ class DeviceLinkOwner @Inject constructor(
      * discovered on the network *and* a token is stored, else BLE; if the LAN connect fails for any
      * reason fall back to BLE and say so. [preference] = [TransportPreference.BLE_ONLY] skips LAN
      * (needed for `GET_TOKEN`, which is BLE-only by contract). [TransportPreference.LAN_ONLY]
-     * never falls back to Bluetooth when that permission is unavailable.
+     * never falls back to Bluetooth when that permission is unavailable. False when a collection
+     * holds the device and the connect was refused. An accepted connect clears the last failure.
      */
-    fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO) {
+    fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO): Boolean {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
         var previous: Job? = null
         val job = stateLock.withLock {
-            if (_collectionActive.value) return refuseBusy()
+            if (_collectionActive.value) {
+                refuseBusy()
+                return false
+            }
             val claim = connectionIntent.claim()
             uiConnectionWanted.set(true)
             uiClaim = claim
             uiPreference = preference
+            connectionFailure.value = null
             scope.launch(start = CoroutineStart.LAZY) {
                 connectMutex.withLock {
                     if (!connectionIntent.owns(claim) || collectionActive.value) return@withLock
@@ -411,6 +416,7 @@ class DeviceLinkOwner @Inject constructor(
         previous?.cancel()
         job.invokeOnCompletion { stateLock.withLock { if (connectJob === job) connectJob = null } }
         job.start()
+        return true
     }
 
     private fun cancelPendingConnect() {
@@ -1716,9 +1722,13 @@ class DeviceLinkOwner @Inject constructor(
         knownDeviceDao.touch(address, name, clock.nowEpochMs())
     }
 
-    suspend fun forget(address: String) = withContext(io) {
+    /** Forgets [address]. False when another command held the device and the forget was refused. */
+    suspend fun forget(address: String): Boolean = withContext(io) {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
-        if (!tryBeginCommand()) return@withContext refuseBusy()
+        if (!tryBeginCommand()) {
+            refuseBusy()
+            return@withContext false
+        }
         try {
             uiConnectionWanted.set(false)
             val claim = connectionIntent.claim()
@@ -1735,6 +1745,7 @@ class DeviceLinkOwner @Inject constructor(
                 (listOfNotNull(known?.thing) + thingEpochDao.forDevice(address).map { it.thing }).distinct().forEach { places.remove(it) }
                 knownDeviceDao.delete(address)
             }
+            true
         } finally {
             endCommand()
         }

@@ -51,6 +51,17 @@ class LatestDayTest {
     }
 
     @Test
+    fun `a day whose mean is not finite never stands for the thing`() {
+        assertNull(LatestDays.latest(mapOf(raw to listOf(day(86_400, Float.NaN)))))
+        // The newer corrected day has no finite mean, so the older finite raw day shows.
+        val out = LatestDays.latest(mapOf(corrected to listOf(day(172_800, Float.POSITIVE_INFINITY)), raw to listOf(day(86_400, 6f))))
+        assertEquals(raw to 6f, out?.let { it.metric.id to it.mean })
+        // The newest raw day is NaN, the day before it shows.
+        val older = LatestDays.latest(mapOf(raw to listOf(day(172_800, Float.NaN), day(86_400, 4f))))
+        assertEquals(86_400L to 4f, older?.let { it.startEpochS to it.mean })
+    }
+
+    @Test
     fun `a non air thing shows its primary metric with its profile display step`() {
         val metrics = Metrics.of(probe, profile)
         val out = LatestDays.latest(

@@ -85,7 +85,8 @@ Bluetooth link that drops under a run is dialled again by the shared controller,
 shows it reconnecting with the run's progress. A paused Wi-Fi run shows the same way. Stop calls
 `SensorCollections.stopUserRun`, which finds the run by its sensor in any letter case and ends it in
 every phase, also while it waits to retry or dials again before INFO named the sensor. It ends only
-a run the user started (`RunOrigin.USER`). Collect all and Auto-sync keep their own cancel. Each
+a run the user started (`RunOrigin.USER`), and drops that sensor's interrupted user run so it
+never resumes. Collect all and Auto-sync keep their own cancel. Each
 transport keeps the sensor of its run (`OwnedRun`) from start to result, so Disconnect and Forget
 close a run with no connection. They also call `SensorCollections.stop`, which ends every run of
 that sensor in any phase and leaves other sensors alone. `SensorCollections.isActive` matches the

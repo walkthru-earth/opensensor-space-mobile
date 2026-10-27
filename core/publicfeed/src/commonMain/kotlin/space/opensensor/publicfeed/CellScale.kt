@@ -100,17 +100,14 @@ class StepScale private constructor(val propertyId: String, val scale: Scale) {
         const val MAX_MAGNITUDE: Double = 1e9
 
         /**
-         * [scale] for [propertyId], or null when the app cannot read it. It needs at most [MAX_STEPS]
-         * steps, finite upper bounds ascending strictly with only the last step open, and every edge
-         * and the guideline finite and within [MAX_MAGNITUDE].
+         * [scale] for [propertyId], or null when the app cannot read it. [Scale] already holds finite
+         * upper bounds ascending strictly with only the last step open. This also needs at most
+         * [MAX_STEPS] steps, and every edge and the guideline finite and within [MAX_MAGNITUDE].
          */
         fun of(propertyId: String, scale: Scale): StepScale? {
             if (scale.steps.size > MAX_STEPS) return null
             if (scale.guideline?.let { !it.isFinite() || abs(it) > MAX_MAGNITUDE } == true) return null
-            val uppers = scale.steps.map { it.upper }
-            if (uppers.dropLast(1).any { it == null || !it.isFinite() }) return null
-            val edges = uppers.filterNotNull()
-            if (edges.any { !it.isFinite() || abs(it) > MAX_MAGNITUDE } || edges.zipWithNext().any { (a, b) -> a >= b }) return null
+            if (scale.steps.any { step -> step.upper?.let { abs(it) > MAX_MAGNITUDE } == true }) return null
             return StepScale(propertyId, scale)
         }
 
