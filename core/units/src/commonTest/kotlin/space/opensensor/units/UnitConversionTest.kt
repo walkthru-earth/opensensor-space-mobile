@@ -99,4 +99,12 @@ class UnitConversionTest {
         assertEquals("29.92", formatFixed(29.921, 2))
         assertEquals("0", formatFixed(-0.01, 0))
     }
+
+    @Test
+    fun formatRoundsToTheDisplayStepUnlessTheSystemConverts() {
+        assertEquals("0.32", UnitFormatter.Metric.format(0.3151, "m3/m3", step = 0.01, stepDecimals = 2))
+        assertEquals("25", UnitFormatter.Metric.format(24.6, "°C", step = 5.0, stepDecimals = 0))
+        // Imperial converts Celsius and keeps the converted unit's own decimal.
+        assertEquals("76.3", UnitFormatter(imperial).format(24.6, "°C", step = 5.0, stepDecimals = 0))
+    }
 }

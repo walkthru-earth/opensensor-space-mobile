@@ -1,7 +1,20 @@
 package space.opensensor.files
 
+import androidx.compose.runtime.Composable
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.compose.resources.stringResource
+import space.opensensor.files.resources.Res
+import space.opensensor.files.resources.unit_bytes
+import space.opensensor.files.resources.unit_bytes_per_second
+import space.opensensor.files.resources.unit_gigabytes
+import space.opensensor.files.resources.unit_kilobytes
+import space.opensensor.files.resources.unit_kilobytes_per_second
+import space.opensensor.files.resources.unit_megabytes
+import space.opensensor.files.resources.unit_megabytes_per_second
+import space.opensensor.units.ByteUnit
+import space.opensensor.units.byteRate
+import space.opensensor.units.byteSize
 import space.opensensor.units.formatFixed
 import kotlin.math.abs
 import kotlin.math.floor
@@ -13,17 +26,34 @@ import kotlin.time.Instant
 /** Shown where a value is missing or not read yet. Never a long dash (copy rules). */
 internal const val NO_VALUE = "n/a"
 
-/** Byte counts as the Android app always printed them, binary units with a dot separator. */
-internal fun formatBytes(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> formatFixed(bytes / 1024.0, 1) + " KiB"
-    bytes < 1024L * 1024 * 1024 -> formatFixed(bytes / 1048576.0, 2) + " MiB"
-    else -> formatFixed(bytes / 1073741824.0, 2) + " GiB"
+/** A byte count in plain words, `1.5 KB` or `1.5 كيلوبايت`, through the shared [byteSize]. */
+@Composable
+internal fun formatBytes(bytes: Long): String {
+    val size = byteSize(bytes)
+    return stringResource(
+        when (size.unit) {
+            ByteUnit.B -> Res.string.unit_bytes
+            ByteUnit.KB -> Res.string.unit_kilobytes
+            ByteUnit.MB -> Res.string.unit_megabytes
+            ByteUnit.GB -> Res.string.unit_gigabytes
+        },
+        size.number,
+    )
 }
 
-internal fun formatRate(bytesPerSecond: Double): String = when {
-    bytesPerSecond < 1024 -> formatFixed(bytesPerSecond, 0) + " B/s"
-    else -> formatFixed(bytesPerSecond / 1024.0, 1) + " KiB/s"
+/** A transfer rate in plain words, `12.5 KB/s`, through the shared [byteRate]. */
+@Composable
+internal fun formatRate(bytesPerSecond: Double): String {
+    val rate = byteRate(bytesPerSecond)
+    return stringResource(
+        when (rate.unit) {
+            ByteUnit.B -> Res.string.unit_bytes_per_second
+            ByteUnit.KB -> Res.string.unit_kilobytes_per_second
+            // A rate stops at MB, byteRate never returns GB.
+            ByteUnit.MB, ByteUnit.GB -> Res.string.unit_megabytes_per_second
+        },
+        rate.number,
+    )
 }
 
 private fun pad(v: Int, width: Int = 2) = v.toString().padStart(width, '0')

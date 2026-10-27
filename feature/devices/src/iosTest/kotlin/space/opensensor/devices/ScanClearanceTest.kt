@@ -99,7 +99,7 @@ class ScanClearanceTest {
                             state = state(setup),
                             level = DetailLevel.SIMPLE,
                             bluetooth = RuntimeAccess(AccessKind.BLUETOOTH),
-                            platform = DevicesPlatform(collectInBackground = true, explainSystemBond = false),
+                            platform = DevicesPlatform(collectInBackground = true),
                             onAction = {},
                         )
                     }

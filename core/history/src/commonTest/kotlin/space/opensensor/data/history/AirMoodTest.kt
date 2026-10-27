@@ -77,7 +77,7 @@ class AirMoodTest {
         val valid = LiveFixtures.waveshare("""{"seq":2,"mono":2,"pms":4,"pm25":22}""")
         val v = NowReading.of(valid) as NowReading.Reading
         assertEquals(AirMood.FAIR, v.mood)
-        assertEquals(22.0, v.pm25, 0.0)
+        assertEquals(22.0, v.primary, 0.0)
         // pms 4 with a null pm25 is no reading now, so nothing to show.
         assertEquals(NowReading.Waiting, NowReading.of(LiveFixtures.waveshare("""{"seq":3,"mono":3,"pms":4,"pm25":null}""")))
         // An overflow sample has every key null, so the last reading is cleared.
@@ -91,7 +91,7 @@ class AirMoodTest {
         // #92. CF=1 40 at 50 percent RH corrects to 27.64, from atmospheric 30.
         val humid = NowReading.of(LiveFixtures.waveshare("""{"seq":4,"mono":4,"pms":4,"pm25":30,"c25":40,"rh":50}""")) as NowReading.Reading
         assertEquals(Pm25Basis.CORRECTED, humid.basis)
-        assertEquals(27.64, humid.pm25, 1e-6)
+        assertEquals(27.64, humid.primary, 1e-6)
         assertEquals(30.0, humid.raw!!, 0.0)
         assertEquals(AirMood.HAZY, humid.mood)
         // No RH (CoreS3 hides rh), a null RH, or an RH outside 0 to 100, shows raw labelled raw.
@@ -103,7 +103,7 @@ class AirMoodTest {
         for (live in dryReadings) {
             val dry = NowReading.of(live) as NowReading.Reading
             assertEquals(Pm25Basis.RAW, dry.basis)
-            assertEquals(30.0, dry.pm25, 0.0)
+            assertEquals(30.0, dry.primary, 0.0)
         }
     }
 }

@@ -83,14 +83,14 @@ class SyncNotifications @Inject constructor(
         val name = deviceName ?: context.getString(R.string.notif_device)
         val title = when {
             reconnecting != null -> context.getString(R.string.notif_reconnecting, name, reconnecting.attempt, reconnecting.maxAttempts)
-            progress.filesTotal > 0 -> context.resources.getQuantityString(R.plurals.notif_progress, progress.filesTotal, name, progress.filesDone, progress.filesTotal, formatBytes(progress.bytesDone))
+            progress.filesTotal > 0 -> context.resources.getQuantityString(R.plurals.notif_progress, progress.filesTotal, name, progress.filesDone, progress.filesTotal, formatBytes(progress.bytesDone, context.resources))
             else -> context.getString(R.string.notif_preparing, name)
         }
         val current = progress.current
         val text = when {
             reconnecting != null -> context.getString(R.string.notif_link_lost)
-            current != null -> current.name.substringAfterLast('/') + " · ${formatBytes(current.bytesDone)} / ${formatBytes(current.bytesTotal)}"
-            progress.bytesTotal > 0 -> context.getString(R.string.files_bytes_of, formatBytes(progress.bytesDone), formatBytes(progress.bytesTotal))
+            current != null -> current.name.substringAfterLast('/') + " · ${formatBytes(current.bytesDone, context.resources)} / ${formatBytes(current.bytesTotal, context.resources)}"
+            progress.bytesTotal > 0 -> context.getString(R.string.files_bytes_of, formatBytes(progress.bytesDone, context.resources), formatBytes(progress.bytesTotal, context.resources))
             else -> context.getString(R.string.notif_listing)
         }
         val builder = NotificationCompat.Builder(context, CHANNEL_PROGRESS)
@@ -123,7 +123,7 @@ class SyncNotifications @Inject constructor(
         ensureChannels()
         val name = deviceName ?: context.getString(R.string.notif_device)
         val res = context.resources
-        val title = if (newFiles > 0) res.getQuantityString(R.plurals.notif_synced, newFiles, newFiles, name, formatBytes(newBytes)) else context.getString(R.string.notif_problems, name)
+        val title = if (newFiles > 0) res.getQuantityString(R.plurals.notif_synced, newFiles, newFiles, name, formatBytes(newBytes, context.resources)) else context.getString(R.string.notif_problems, name)
         val text = if (failures > 0) res.getQuantityString(R.plurals.notif_failures, failures, failures) else context.getString(R.string.notif_verified)
         val n = NotificationCompat.Builder(context, CHANNEL_SUMMARY)
             .setSmallIcon(R.drawable.ic_stat_peacock)

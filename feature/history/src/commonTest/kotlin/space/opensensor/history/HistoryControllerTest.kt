@@ -167,4 +167,22 @@ class HistoryControllerTest {
         assertTrue(opened.canPageForward)
         assertEquals(nowS, c.nowS())
     }
+
+    @Test
+    fun earlierStopsAtTheFirstArchivedDayAndShowNowReturnsToToday() = runTest {
+        val c = controller()
+        // The tiers hold one day, 2026-09-20, the day History opens on.
+        val first = c.state.first { !it.initializing && it.toS == lastDayEndS && it.days.count == 1 }
+        assertFalse(first.canPageBack)
+        c.page(1)
+        assertTrue(c.state.first { it.toS == lastDayEndS + day }.canPageBack)
+
+        c.showNow()
+        val now = c.state.first { it.toS == todayEndS }
+        assertFalse(now.canPageForward)
+        assertTrue(now.canPageBack)
+        // A Year that already reaches back past the first day cannot page earlier.
+        c.setRange(HistoryRange.YEAR)
+        assertFalse(c.state.first { it.range == HistoryRange.YEAR }.canPageBack)
+    }
 }

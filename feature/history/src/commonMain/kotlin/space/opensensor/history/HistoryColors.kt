@@ -1,5 +1,6 @@
 package space.opensensor.history
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import org.jetbrains.compose.resources.stringResource
@@ -29,6 +30,21 @@ internal fun AirMood.color(): Color = step.color()
 
 /** The step colour of [value] on this metric's scale, or [neutral] for a metric without one. */
 internal fun MetricSpec.valueColor(value: Double, neutral: Color): Color = stepOf(value)?.color() ?: neutral
+
+/** The colours under a WHO mark. [track] sits under the see-through step colour, [border] outlines it with 3 to 1 on the card. */
+internal data class MarkColors(val border: Color, val track: Color)
+
+internal fun markColors(scheme: ColorScheme): MarkColors = MarkColors(border = scheme.outline, track = scheme.surfaceContainerHighest)
+
+/**
+ * How much of a mark a WHO step fills, the cue that does not rely on colour. The cleanest step fills
+ * a little over a third, each step after it more, the last step all of it. A metric without a WHO
+ * scale (null) fills the whole mark.
+ */
+internal fun whoStepShare(step: WhoStep?): Float =
+    if (step == null) 1f else MIN_STEP_SHARE + (1f - MIN_STEP_SHARE) * step.ordinal / (WhoStep.entries.size - 1)
+
+private const val MIN_STEP_SHARE = 0.35f
 
 /** Ink drawn on a band colour, whichever of dark or light contrasts more. */
 internal fun onBand(band: Color): Color = designSystemOnBand(band)

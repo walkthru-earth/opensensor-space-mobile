@@ -126,8 +126,9 @@ properties, the metric registry gets a dictionary entry with `commonTest` covera
 pick it up through capabilities. Never a schema string check in a screen. Today the registry is
 `Metrics` and `DeviceCapabilities` in `:core:history`. `:core:model` holds the board template, app
 profile and datastream model that replaces them (#183), with the bundled templates and profiles
-that LIVE already reads (#184). A generic `MetricCard`
-is planned ([devices-and-discovery.md](devices-and-discovery.md)).
+that LIVE already reads (#184). Today picks its hero by the profile `hero` through
+`HeroRegistry`, else the generic `GenericMetricHero`
+([devices-and-discovery.md](devices-and-discovery.md)).
 
 ## Design parity
 
@@ -326,7 +327,9 @@ The rules for a new screen or component.
    step (Simple leaves the step out). Each is a button, and activating a bar selects it, as a touch
    does. These nodes are semantics only, laid over the canvas, each exactly its bar slot or day cell.
    `ExactTouchBounds` turns off the 48 dp minimum touch target for them, since a grown node would be
-   covered by the next one and shift a bar to the left (#141). Axis margins are measured from the
+   covered by the next one and shift a bar to the left (#141). A touch picks a bar when it lifts, a
+   sideways drag past the touch slop scrubs the bars, and a vertical drag is left to the page so it
+   scrolls (`dragIntent`). Axis margins are measured from the
    labels with a `TextMeasurer`, so a large font never clips them. `layoutChartLabels` measures and
    places every label once and the canvas draws exactly those. `placeAxisLabels` keeps each axis
    label inside the canvas and skips one closer than the gap to its neighbour (its gridline stays).
@@ -351,7 +354,15 @@ in `iosTest` renders bottom bar labels, section tabs, titles and body text at fo
 less than their 1.0 size and body text breaks only between words. It also sweeps a label from 24 to
 360 dp and checks that no line ends inside a word, and that a display numeral wraps at its token floor
 at font scale 2.0 and 3.1. `BandColumnChartSemanticsTest` in
-`:feature:history` `iosTest` walks the bar chart node by node, and `SettingsRowSemanticsTest` in
+`:feature:history` `iosTest` walks the bar chart node by node, `BandColumnChartGestureTest` checks
+that a vertical swipe over it scrolls the page while a sideways drag scrubs and a tap picks one bar,
+`DayRingSemanticsTest` walks the Day ring one hour at a time after its summary, with the WHO step
+only above Simple and every hour node on the ring at font scale 2.0, `ChartNodeBoundsTest` also checks
+that every Month calendar day is a 48 dp target, `ThingChipsSemanticsTest` checks that only Developer
+reads the full thing id, and `WhoCueTest` in `commonTest` pins the WHO step fill share and the 3 to 1
+mark border. `FileRowSemanticsTest` in `:feature:files` `iosTest` checks that a file row has no tap of
+its own and offers Share, Sync and Metrics as 48 dp buttons that name the file, `ListFailedCardTest`
+checks that Try again asks the sensor to list again, and `SettingsRowSemanticsTest` in
 `:feature:settings` `iosTest` checks the merged Storage rows, their 48 dp height and the button
 names (`verifyIos`). Host tests cannot render
 Compose without Robolectric, so the Android check is the phone walk below.

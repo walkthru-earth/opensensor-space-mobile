@@ -50,6 +50,14 @@ data class HistoryUiState(
 ) {
     val window: HistoryWindow get() = HistoryWindow.endingAt(toS, range, zone)
     val canPageForward: Boolean get() = toS < nowToS
+
+    /**
+     * True while the visible span starts after the first archived day, so "Earlier" can still reach
+     * a reading. [DaySpan.firstDayS] is a UTC midnight, the earliest a reading can be. It comes
+     * from the derived day tiers, so while the tiers still catch up after a big sync Earlier can stay
+     * off for a moment, and it turns on once they reach the first archived day.
+     */
+    val canPageBack: Boolean get() = days.firstDayS?.let { window.fromS > it } ?: false
 }
 
 /**
@@ -181,6 +189,14 @@ class HistoryController(
         nowToS.value = now
         toS.value = minOf(next, now)
         followsNow.value = toS.value == now
+    }
+
+    /** Back to the span that holds "now", which then follows the clock again. */
+    fun showNow() {
+        val now = nowRounded(range.value)
+        nowToS.value = now
+        toS.value = now
+        followsNow.value = true
     }
 
     /** From a calendar cell, show its complete local day. */

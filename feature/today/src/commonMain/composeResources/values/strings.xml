@@ -89,7 +89,7 @@
     <string name="today_so_far">Today so far</string>
     <string name="today_none">No timed readings yet today.</string>
     <string name="today_none_clock">No timed readings yet. Set the sensor time, then sync.</string>
-    <string name="today_average">Average %1$s µg/m³</string>
+    <string name="today_average">Average %1$s %2$s</string>
     <string name="today_of_the_day">covered so far</string>
     <plurals name="today_readings_since_midnight">
         <item quantity="one">%1$d reading since midnight</item>
@@ -204,4 +204,21 @@
     <string name="device_payload">payload %1$d B</string>
     <string name="device_config_read">settings read</string>
     <string name="clock_network">Time from network</string>
+    <string name="now_no_main_reading">No main reading</string>
+    <string name="metrics_title">Other readings</string>
+    <string name="board_title">Sensor board</string>
+    <string name="board_discharging">on battery</string>
+    <string name="board_external_power">on external power</string>
+    <string name="board_battery_ok">battery ok</string>
+    <string name="board_battery_low">battery low</string>
+    <string name="board_battery_critical">battery critical</string>
+    <string name="board_battery_settling">battery reading settles</string>
+    <string name="storage_problem">needs attention</string>
+    <string name="today_more">More options</string>
+    <string name="today_forget">Forget sensor</string>
+    <string name="today_forget_title">Forget %1$s?</string>
+    <string name="today_forget_body">Removes it from this app. Collected files stay. To unpair it fully, also forget it in Bluetooth settings on your phone.</string>
+    <string name="today_forget_bond_ios">iOS keeps the Bluetooth pairing. Remove it in Settings, Bluetooth.</string>
+    <string name="today_forget_button">Forget sensor</string>
+    <string name="today_forget_unnamed">this sensor</string>
 </resources>

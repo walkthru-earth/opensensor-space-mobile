@@ -8,7 +8,7 @@ Part of [Thing plugins](README.md). Proposal, 2026-10-27.
 - `AppProfile` carries `family`, `primary`, `hero`, `display_step`, `scales` and `hidden`, and `Thing.primary` respects the profile order.
 - Hardcoded to air.
   - Only `GENERIC` and `AIR` families exist (`Vocabulary.kt`).
-  - The device row reads `lastDayPm25Mean`, `AirMood` and `Metrics.PM25` (`feature/devices/.../DeviceRows.kt:222`, `DeviceModels.kt:60`).
+  - The device row reads `ArchiveGlance.lastDay`, a `LatestDay` of the thing's main metric from `LatestDays` (`core/history/.../LatestDay.kt`). Only a banded metric such as PM2.5 shows a WHO mood, any other shows a neutral line at its display step. Day tiers still bucket only the bundled `Metrics.all` catalog, so a served soil board has no day line yet.
   - The Today hero is PM2.5 only (`feature/today/.../TodayCards.kt`). Mood words are tied to WHO steps.
   - `profile.hero` is parsed (`ModelJson.kt:91`) and read by no screen.
 - Stations cards and the shared Station page are spec only ([2026-10-12-stations-ux-design.md](../2026-10-12-stations-ux-design.md) slice 2).
@@ -18,7 +18,7 @@ Part of [Thing plugins](README.md). Proposal, 2026-10-27.
 - `ThingCard(thing)` shows the profile label, the first `primary` value at `display_step`, the unit, the scale step name beside its colour, freshness and one action.
 - `Thing.primary` can be empty when every primary name is hidden or missing from the template. The card and Station page then show the name, freshness and a "No main reading" line, with the full metric list one tap away. Catalog validation warns about a bundled profile with no visible primary.
 - The Station page has a hero, a Day, Week and Month strip for `primary`, and rows that unlock with the detail level. All of it reads `ThingDatastream`.
-- `lastDayPm25Mean` becomes `lastDayPrimaryMean` plus a property id.
+- The device row shows the last day of the thing's main metric (`LatestDay`), the same rule on both phones.
 
 Hero slot, the same on Android and iOS, in `commonMain`.
 

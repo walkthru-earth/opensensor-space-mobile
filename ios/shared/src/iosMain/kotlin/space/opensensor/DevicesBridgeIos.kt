@@ -3,6 +3,7 @@ package space.opensensor
 import platform.Foundation.NSDate
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.timeIntervalSince1970
+import space.opensensor.data.history.LatestDays
 
 /** The known records in UserDefaults. Names, things and ids only, never a credential. */
 private class UserDefaultsKnownRecords(private val defaults: NSUserDefaults) : KnownRecordStorage {
@@ -18,7 +19,7 @@ private class UserDefaultsKnownRecords(private val defaults: NSUserDefaults) : K
  * Builds the My devices bridge over the app's [state] and the shared [sync] engine's receipt
  * index. Swift passes its adapter calls. [forget] receives the peripheral id and, when known, the
  * hardware id whose Keychain credential to remove. [collect] receives the sensor id and the Wi-Fi
- * service name when the step goes over Wi-Fi.
+ * service name when the step goes over Wi-Fi. Each card's day comes from the History tiers.
  */
 fun devicesBridge(
     state: CompanionState,
@@ -36,4 +37,5 @@ fun devicesBridge(
     stopScan = stopScan,
     forget = forget,
     collect = collect,
+    latestDay = { LatestDays.observe(IosArchive.tiers, it) },
 )

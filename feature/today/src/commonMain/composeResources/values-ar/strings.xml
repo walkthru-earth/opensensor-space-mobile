@@ -93,7 +93,7 @@
     <string name="today_so_far">اليوم حتى الآن</string>
     <string name="today_none">لا قراءات مؤرخة اليوم بعد.</string>
     <string name="today_none_clock">لا قراءات مؤرخة بعد. اضبط وقت المستشعر ثم زامِن.</string>
-    <string name="today_average">المتوسط %1$s µg/m³</string>
+    <string name="today_average">المتوسط %1$s %2$s</string>
     <string name="today_of_the_day">مغطّى حتى الآن</string>
     <plurals name="today_readings_since_midnight">
         <item quantity="zero">%1$d قراءة منذ منتصف الليل</item>
@@ -236,4 +236,21 @@
     <string name="device_payload">الحمولة %1$d B</string>
     <string name="device_config_read">قراءة الإعدادات</string>
     <string name="clock_network">الوقت من الشبكة</string>
+    <string name="now_no_main_reading">لا توجد قراءة رئيسية</string>
+    <string name="metrics_title">قراءات أخرى</string>
+    <string name="board_title">لوحة المستشعر</string>
+    <string name="board_discharging">على البطارية</string>
+    <string name="board_external_power">على طاقة خارجية</string>
+    <string name="board_battery_ok">البطارية جيدة</string>
+    <string name="board_battery_low">البطارية منخفضة</string>
+    <string name="board_battery_critical">البطارية حرجة</string>
+    <string name="board_battery_settling">قراءة البطارية تستقر</string>
+    <string name="storage_problem">يحتاج إلى انتباه</string>
+    <string name="today_more">خيارات أخرى</string>
+    <string name="today_forget">إزالة المستشعر</string>
+    <string name="today_forget_title">هل تريد نسيان %1$s؟</string>
+    <string name="today_forget_body">يزيله من هذا التطبيق. تبقى الملفات التي جُمعت. لإلغاء الاقتران تمامًا، انسَه أيضًا من إعدادات Bluetooth في هاتفك.</string>
+    <string name="today_forget_bond_ios">يحتفظ iOS بإقران Bluetooth. أزله من الإعدادات ثم Bluetooth.</string>
+    <string name="today_forget_button">إزالة المستشعر</string>
+    <string name="today_forget_unnamed">هذا المستشعر</string>
 </resources>

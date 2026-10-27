@@ -11,11 +11,13 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import space.opensensor.airquality.Pm25Basis
 import space.opensensor.data.history.AirMetrics
+import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.TodaySoFar
+import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.sync.ClockQuality
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -75,7 +77,7 @@ class TodayFormatTest {
     @Test
     fun todaySoFarComesFromTheHourlyDayAndIsNullWithoutAThing() = runTest {
         val zone = TimeZone.UTC
-        val thing = MutableStateFlow<String?>(null)
+        val info = MutableStateFlow<DeviceInfo?>(null)
         val seen = mutableListOf<String>()
         val observe = { id: String, metric: MetricSpec, window: HistoryWindow ->
             seen += id
@@ -83,11 +85,12 @@ class TodayFormatTest {
                 HistorySeries(metric, HistoryRange.DAY, window.fromS, window.toS, emptyList(), validRows = 30, expectedRows = 60, mean = 12.5f, max = 20f, binned = false),
             ) as Flow<HistorySeries>
         }
-        assertNull(todaySoFar(thing, observe, zone, flowOf(1_767_225_600L)).take(1).toList().single())
+        assertNull(todaySoFar(info, observe, zone, flowOf(1_767_225_600L)).take(1).toList().single())
 
-        thing.value = "st-1"
-        val value = todaySoFar(thing, observe, zone, flowOf(1_767_225_600L)).filterNotNull().first()
-        assertEquals(TodaySoFar(12.5f, 30, 0.5f, Pm25Basis.CORRECTED), value)
+        info.value = WAVESHARE.copy(thing = "st-1")
+        val value = todaySoFar(info, observe, zone, flowOf(1_767_225_600L)).filterNotNull().first()
+        assertEquals(TodaySoFar(12.5f, 30, 0.5f, AirMetrics.PM25_CORRECTED), value)
+        assertEquals(Pm25Basis.CORRECTED, value.metric.basis)
         assertEquals(listOf("st-1", "st-1"), seen)
     }
 
@@ -99,7 +102,20 @@ class TodayFormatTest {
                 HistorySeries(metric, HistoryRange.DAY, window.fromS, window.toS, emptyList(), validRows = if (mean == null) 0 else 30, expectedRows = 60, mean = mean, max = mean, binned = false),
             ) as Flow<HistorySeries>
         }
-        val value = todaySoFar(MutableStateFlow<String?>("st-1"), observe, TimeZone.UTC, flowOf(1_767_225_600L)).filterNotNull().first()
-        assertEquals(TodaySoFar(18f, 30, 0.5f, Pm25Basis.RAW), value)
+        val value = todaySoFar(MutableStateFlow<DeviceInfo?>(WAVESHARE.copy(thing = "st-1")), observe, TimeZone.UTC, flowOf(1_767_225_600L)).filterNotNull().first()
+        assertEquals(TodaySoFar(18f, 30, 0.5f, AirMetrics.PM25), value)
+        assertEquals(Pm25Basis.RAW, value.metric.basis)
+    }
+
+    @Test
+    fun todaySoFarOfAThingWithoutParticlesAveragesItsFirstPrimary() {
+        val soil = SoilFixture.capabilities()
+        assertEquals(listOf(SoilFixture.MOISTURE), todayMetrics(soil).map { it.id })
+        assertEquals(listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25), todayMetrics(DeviceCapabilities.from(WAVESHARE)))
+        assertEquals(emptyList(), todayMetrics(DeviceCapabilities.NONE))
+    }
+
+    private companion object {
+        val WAVESHARE = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7")
     }
 }

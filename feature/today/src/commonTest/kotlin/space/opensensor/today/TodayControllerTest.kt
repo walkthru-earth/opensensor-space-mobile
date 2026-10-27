@@ -82,6 +82,18 @@ class TodayControllerTest {
     }
 
     @Test
+    fun forgetAsksFirstAndNeedsNoLink() = runTest {
+        val source = FakeSource(connection = ConnectionState.Connecting)
+        val c = controller(source)
+        c.requestForget()
+        assertEquals(TodayDialog.Forget, c.dialog.value)
+        c.confirm()
+        assertNull(c.dialog.value)
+        // The host forgets, the controller sends nothing to the device.
+        assertEquals(emptyList(), source.calls)
+    }
+
+    @Test
     fun commandsWaitForAReadyLink() = runTest {
         val source = FakeSource(connection = ConnectionState.Connecting)
         val c = controller(source)

@@ -28,7 +28,7 @@
     <string name="files_none_detailed">لا ملفات مكتملة بعد. استخدم الإنهاء في شاشة اليوم لإنشاء ملف.</string>
     <string name="files_connect_to_list">اتصل لعرض الملفات على المستشعر.</string>
     <string name="files_listing">جارٍ قراءة قائمة الملفات…</string>
-    <string name="files_list_failed_simple">تعذّرت قراءة قائمة الملفات. حاول مرة أخرى.</string>
+    <string name="files_list_failed_simple">تعذّرت قراءة قائمة الملفات.</string>
     <string name="files_in_archive">%1$d في الأرشيف، %2$s</string>
     <string name="files_refresh">تحديث القائمة</string>
     <string name="files_more">المزيد</string>
@@ -99,13 +99,13 @@
     <string name="file_mismatch">غير مطابق</string>
     <string name="file_invalid">اسم غير صالح</string>
     <string name="file_removed">حُذف من الهاتف</string>
-    <string name="file_metrics">المقاييس</string>
-    <string name="file_share">مشاركة</string>
+    <string name="file_metrics_named">مقاييس %1$s</string>
+    <string name="file_share_named">مشاركة %1$s</string>
     <string name="files_no_daily">لا توجد ملفات يومية بعد. تحتاج إلى ملفات متزامنة فيها وقت.</string>
     <string name="history_of">%1$d من %2$d</string>
     <string name="files_group_count">%1$d/%2$d · %3$s</string>
     <string name="files_group_utc_day">%1$s، يوم بتوقيت UTC</string>
-    <string name="files_group_unsynced">غير متزامنة، بلا UTC</string>
+    <string name="files_group_unsynced">الوقت غير معروف</string>
     <string name="files_group_benchmarks">اختبارات الأداء</string>
     <string name="files_group_legacy">Parquet قديمة</string>
     <string name="files_group_root">جذر الأرشيف</string>
@@ -199,12 +199,25 @@
     </plurals>
     <!-- File metrics screen, spoken by the screen reader on the loading spinner. -->
     <string name="fm_loading">جارٍ قراءة هذا الملف…</string>
-    <!-- Files screen, the click label of a device file row that syncs it. -->
-    <string name="file_sync_one">مزامنة الملف</string>
+    <!-- Files screen, a device file row button that syncs that one file. The value is the file local time or name. -->
+    <string name="file_sync_named">مزامنة %1$s</string>
     <string name="fm_rows_page">الصفوف</string>
     <string name="fm_rows_range">الصفوف %1$d إلى %2$d من %3$d</string>
     <string name="fm_rows_previous">الصفوف السابقة</string>
     <string name="fm_rows_next">الصفوف التالية</string>
     <string name="fm_rows_unavailable">تعذّرت قراءة الصفوف</string>
     <string name="fm_rows_retry">أعد المحاولة</string>
+    <!-- Files screen, the button on the failed file list that asks the sensor again. -->
+    <string name="files_retry">أعد المحاولة</string>
+    <!-- Files screen, shown when the phone keeps no files yet. -->
+    <string name="files_empty_title">لا توجد ملفات بعد</string>
+    <string name="files_empty_body">صِل مستشعرًا وزامنه لتُحفظ ملفاته هنا.</string>
+    <!-- Byte counts and transfer rates. The value is the number. -->
+    <string name="unit_bytes">%1$s بايت</string>
+    <string name="unit_kilobytes">%1$s كيلوبايت</string>
+    <string name="unit_megabytes">%1$s ميغابايت</string>
+    <string name="unit_gigabytes">%1$s غيغابايت</string>
+    <string name="unit_bytes_per_second">%1$s بايت/ث</string>
+    <string name="unit_kilobytes_per_second">%1$s كيلوبايت/ث</string>
+    <string name="unit_megabytes_per_second">%1$s ميغابايت/ث</string>
 </resources>

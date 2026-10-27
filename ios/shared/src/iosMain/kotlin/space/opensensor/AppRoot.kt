@@ -148,8 +148,8 @@ private class DevicesHolder(bridge: DevicesBridge) : ViewModel() {
     val controller = bridge.controller(viewModelScope)
 }
 
-/** iOS collects while the app is open and cannot remove the system Bluetooth bond. */
-private val IosDevices = DevicesPlatform(collectInBackground = false, explainSystemBond = true)
+/** iOS collects while the app is open. */
+private val IosDevices = DevicesPlatform(collectInBackground = false)
 
 /** Holds the Debug controller for one Debug entry, cleared when the entry leaves the back stack. */
 private class DebugHolder(address: String, state: CompanionState, openLink: (String) -> IosLink?) : ViewModel() {
@@ -217,6 +217,7 @@ internal fun AppRoot(
                     MyDevicesEntry(
                         bridge = devices,
                         level = level,
+                        units = units,
                         requestBluetooth = requestBluetooth,
                         onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
                         onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
@@ -395,6 +396,7 @@ internal fun rememberIosBluetoothAccess(companion: CompanionState, requestBlueto
 private fun MyDevicesEntry(
     bridge: DevicesBridge,
     level: DetailLevel,
+    units: UnitSystem,
     requestBluetooth: () -> Unit,
     onFiles: () -> Unit,
     onHistory: () -> Unit,
@@ -407,6 +409,7 @@ private fun MyDevicesEntry(
     MyDevicesScreen(
         state = state,
         level = level,
+        units = remember(units) { UnitFormatter(units) },
         bluetooth = access,
         platform = IosDevices,
         onOpenLocalNetworkSettings = openSettings,
