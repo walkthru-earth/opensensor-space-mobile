@@ -1,8 +1,12 @@
 package space.opensensor
 
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,6 +17,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.launch
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.data.DeviceContinuityPolicy
 import space.opensensor.data.history.LatestDay
@@ -219,6 +224,8 @@ class DevicesBridge internal constructor(
     private val latestDay: (thing: String) -> Flow<LatestDay?> = { flowOf(null) },
     /** Drops the saved Discover cells of a forgotten sensor's things, current and older. */
     private val forgetPlaces: suspend (things: List<String>) -> Unit = {},
+    /** Outlives every screen, as Android's app scope does, so leaving Today never cancels a Forget. */
+    private val forgetScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
 ) {
     private val records = MutableStateFlow(IosKnown.decode(storage.load()))
     private val credentials = MutableStateFlow<List<KnownRecord>>(emptyList())
@@ -420,6 +427,20 @@ class DevicesBridge internal constructor(
             queue = null
             collecting.value = false
             collectAllChanged?.invoke(0, 0)
+        }
+    }
+
+    /**
+     * A confirmed Forget, run in [forgetScope]. A removal that fails keeps the record, so the sensor
+     * stays listed and Forget can run again. The log names the error class only.
+     */
+    internal fun forgetLater(id: String): Job = forgetScope.launch {
+        try {
+            forgetNow(id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            println("forget kept the record: ${e::class.simpleName}")
         }
     }
 

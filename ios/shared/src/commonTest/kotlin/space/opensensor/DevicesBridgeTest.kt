@@ -1,6 +1,7 @@
 package space.opensensor
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
@@ -239,7 +240,9 @@ class DevicesBridgeTest {
         assertEquals(setOf("st-a2", "st-a", "st-c"), calls.placesForgotten.single().toSet(), "the current, older and credential Things all lose their cell")
     }
 
-    @Test fun theRecordStaysUntilItsCellsAreGone() = runTest {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun theRecordStaysUntilItsCellsAreGone() = runTest {
         val storage = MemoryStorage()
         val removed = CompletableDeferred<Unit>()
         val bridge = DevicesBridge(
@@ -264,6 +267,30 @@ class DevicesBridgeTest {
         forgetting.join()
         assertTrue(bridge.knownNow().isEmpty())
         assertTrue(IosKnown.decode(storage.text).isEmpty())
+    }
+
+    @Test fun aFailedRemovalKeepsTheRecordAndEndsQuietly() = runTest {
+        val storage = MemoryStorage()
+        val calls = Calls()
+        // The Forget runs in the test scope, so an error that escapes it fails the test.
+        val bridge = DevicesBridge(
+            state = CompanionState(),
+            archive = emptyFlow(),
+            storage = storage,
+            now = { 5 },
+            startScan = {},
+            stopScan = {},
+            forget = { p, d -> calls.forgotten += p to d },
+            collect = { _, _ -> },
+            forgetPlaces = { error("disk full") },
+            forgetScope = this,
+        )
+        bridge.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff")
+
+        bridge.forgetLater(a).join()
+        assertEquals(listOf(a), bridge.knownNow().map { it.id }, "Forget can run again")
+        assertEquals("st-a", IosKnown.decode(storage.text).single().thing)
+        assertTrue(calls.forgotten.isEmpty(), "the Wi-Fi access stays with the record")
     }
 
     @Test fun collectAllRunsOneSensorAtATime() {
