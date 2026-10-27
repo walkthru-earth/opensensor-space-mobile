@@ -218,7 +218,7 @@ class DevicesBridge internal constructor(
     private val collect: (id: String, wifiName: String?) -> Unit,
     private val latestDay: (thing: String) -> Flow<LatestDay?> = { flowOf(null) },
     /** Drops the saved Discover cells of a forgotten sensor's things, current and older. */
-    private val forgetPlaces: (things: List<String>) -> Unit = {},
+    private val forgetPlaces: suspend (things: List<String>) -> Unit = {},
 ) {
     private val records = MutableStateFlow(IosKnown.decode(storage.load()))
     private val credentials = MutableStateFlow<List<KnownRecord>>(emptyList())
@@ -423,7 +423,11 @@ class DevicesBridge internal constructor(
         }
     }
 
-    internal fun forgetNow(id: String) {
+    /**
+     * The cells go before the record. A record kept while they are removed lets a Forget that
+     * stopped halfway run again, so no cell outlives its sensor.
+     */
+    internal suspend fun forgetNow(id: String) {
         val device = (records.value + credentials.value).firstOrNull { it.peripheral.equals(id, ignoreCase = true) }?.device
         val credentialThings = credentials.value.filter { it.peripheral.equals(id, ignoreCase = true) }.map { it.thing }
         forgetPlaces((thingsFor(id) + credentialThings).distinct())

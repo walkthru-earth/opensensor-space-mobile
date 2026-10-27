@@ -2,10 +2,12 @@ package space.opensensor
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import space.opensensor.settings.SettingsRepository
 import space.opensensor.today.TodayAction
 import space.opensensor.today.TodayController
@@ -61,6 +63,7 @@ internal fun TodayEntry(
 ) {
     val controller = viewModel(key = "today-$address") { TodayHolder(today, devices, address, settings) }.controller
     val bluetooth = rememberIosBluetoothAccess(devices.state, requestBluetooth)
+    val scope = rememberCoroutineScope()
     TodayScreen(
         controller = controller,
         units = remember(units) { UnitFormatter(units) },
@@ -77,11 +80,13 @@ internal fun TodayEntry(
                     controller.disconnect()
                     onNavigate(TodayAction.OpenDevices)
                 }
-                // Drops the record and its Wi-Fi access, then closes the links through Swift.
+                // Drops the cells, then the record and its Wi-Fi access, then closes the links through Swift.
                 TodayAction.Forget -> {
                     controller.disconnect()
-                    devices.forgetNow(address)
-                    onNavigate(TodayAction.OpenDevices)
+                    scope.launch {
+                        devices.forgetNow(address)
+                        onNavigate(TodayAction.OpenDevices)
+                    }
                 }
                 else -> onNavigate(action)
             }
