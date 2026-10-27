@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -324,7 +325,12 @@ internal fun SpreadChart(
         }
         // A pinned bar keeps the map and the list filtered, so letting go is a visible button too.
         if (pinned != null) {
-            TextButton(onClick = { pinned = null }, modifier = Modifier.touchTarget()) { Text(clearLabel) }
+            // Ink, not brand blue, which marks only what is chosen.
+            TextButton(
+                onClick = { pinned = null },
+                modifier = Modifier.touchTarget(),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
+            ) { Text(clearLabel) }
         }
     }
 }
@@ -452,18 +458,46 @@ internal fun PositionedLabels(labels: List<Pair<Float, String>>, style: TextStyl
         modifier = modifier.fillMaxWidth(),
     ) { measurables, constraints ->
         val width = constraints.maxWidth
-        // One label may use the whole width. Several share it, so a large font shrinks each one to
-        // its slot instead of letting neighbours overlap.
-        val slot = if (measurables.size > 1 && constraints.hasBoundedWidth) width / measurables.size else width
+        // One label may use the whole width. Several share it. Each gets no more than the closest gap
+        // between two marks and its share of the width, so a large font shrinks each one instead of
+        // letting neighbours overlap.
+        val slot = if (measurables.size > 1 && constraints.hasBoundedWidth) labelSlot(labels.map { it.first }, width) else width
         val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0, maxWidth = slot)) }
         val height = placeables.maxOfOrNull { it.height } ?: 0
+        val xs = labelPositions(labels.map { it.first }, placeables.map { it.width }, width)
         layout(width, height) {
-            placeables.forEachIndexed { i, p ->
-                val x = (labels[i].first * width - p.width / 2f).roundToInt().coerceIn(0, (width - p.width).coerceAtLeast(0))
-                p.place(x, 0)
-            }
+            placeables.forEachIndexed { i, p -> p.place(xs[i], 0) }
         }
     }
+}
+
+/** The widest a label may be among [fractions] on [width], at most the closest gap and an even share. */
+internal fun labelSlot(fractions: List<Float>, width: Int): Int {
+    val sorted = fractions.sorted()
+    val gap = sorted.zipWithNext { a, b -> (b - a) * width }.minOrNull() ?: width.toFloat()
+    return minOf(gap, width.toFloat() / fractions.size).toInt().coerceAtLeast(0)
+}
+
+/**
+ * Where each label starts, centred on its fraction when there is room. Labels left to right never
+ * overlap and stay inside [width]. A label pushed off its mark moves only as far as its neighbour
+ * needs, which [labelSlot] keeps small. [fractions] are in drawing order, left to right.
+ */
+internal fun labelPositions(fractions: List<Float>, widths: List<Int>, width: Int): List<Int> {
+    val order = fractions.indices.sortedBy { fractions[it] }
+    val xs = IntArray(fractions.size)
+    var end = 0
+    for (i in order) {
+        val wanted = (fractions[i] * width - widths[i] / 2f).roundToInt().coerceIn(0, (width - widths[i]).coerceAtLeast(0))
+        xs[i] = maxOf(wanted, end)
+        end = xs[i] + widths[i]
+    }
+    var start = width
+    for (i in order.reversed()) {
+        xs[i] = minOf(xs[i], start - widths[i]).coerceAtLeast(0)
+        start = xs[i]
+    }
+    return xs.toList()
 }
 
 /**

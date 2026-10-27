@@ -293,25 +293,29 @@ private fun DiscoverContent(
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = FloatingControl.Margin),
                     daily = state.daily,
                 )
-                Row(
+                Column(
                     Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = PEEK_HEIGHT + 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Bottom,
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(MinTouchSpacing),
                 ) {
-                    val property = state.property
-                    val scale = state.scale
-                    // The legend takes what the map controls leave, so a large font never pushes them off.
-                    Box(Modifier.weight(1f)) {
-                        if (property != null && scale != null) {
-                            // Simple shows mood words for the WHO scale. Any other property keeps its steps or gradient.
-                            if (simple && scale.who != null) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton, state.daily)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                        val property = state.property
+                        val scale = state.scale
+                        // The legend takes all but the one control wide column, so a large font never
+                        // pushes the controls off and the attribution never narrows the legend.
+                        Box(Modifier.weight(1f)) {
+                            if (property != null && scale != null) {
+                                // Simple shows mood words for the WHO scale. Any other property keeps its steps or gradient.
+                                if (simple && scale.who != null) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton, state.daily)
+                            }
+                        }
+                        Column(Modifier.padding(end = 8.dp).width(FloatingControl.Size), verticalArrangement = Arrangement.spacedBy(MinTouchSpacing)) {
+                            ZoomControls(mapState, strings.zoomIn, strings.zoomOut)
+                            NearMeButton(nearMe, mapState, controller::nearMeTarget, strings.nearMe, strings.nearMeNone, strings.nearMeAccess)
                         }
                     }
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(MinTouchSpacing)) {
-                        ZoomControls(mapState, strings.zoomIn, strings.zoomOut, Modifier.padding(end = 8.dp))
-                        NearMeButton(nearMe, mapState, controller::nearMeTarget, strings.nearMe, strings.nearMeNone, strings.nearMeAccess, Modifier.padding(end = 8.dp))
-                        if (networkAllowed) Attribution(strings, attributionOpen, real = !state.isSample, infoButton)
-                    }
+                    // Under the legend and the controls, on its own line, at the end.
+                    if (networkAllowed) Attribution(strings, attributionOpen, real = !state.isSample, infoButton)
                 }
             }
         }
@@ -654,8 +658,8 @@ private fun SheetContent(
             SheetBody.SIMPLE_CELL -> SimpleCellDetail(state, strings, infoButton, reference, onShowProperty, onRetry)
             SheetBody.CELL -> CellDetail(state.selected!!, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
             SheetBody.LOAD_FAILED -> LoadFailed(strings, onRetryLoad)
-            SheetBody.FIRST_RUN -> FirstRunCard(strings, state.isSample, infoButton, onAddSensor, onExplore)
-            SheetBody.IN_VIEW -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, infoButton, onHighlight, onPickCell)
+            SheetBody.FIRST_RUN -> FirstRunCard(strings, state.isSample, onAddSensor, onExplore)
+            SheetBody.IN_VIEW -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
         }
     }
 }
@@ -687,11 +691,14 @@ private fun LoadFailed(strings: DiscoverStrings, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun FirstRunCard(strings: DiscoverStrings, sample: Boolean, infoButton: @Composable (InfoText, Modifier) -> Unit, onAddSensor: () -> Unit, onExplore: () -> Unit) {
-    if (sample) SampleBadge(strings, infoButton)
+private fun FirstRunCard(strings: DiscoverStrings, sample: Boolean, onAddSensor: () -> Unit, onExplore: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Peacock(size = 80.dp, expression = PeacockExpression.WELCOME)
-        Text(strings.firstRunLine, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
+        // The tag sits beside the peacock, so the actions below stay inside the peek.
+        Column(Modifier.weight(1f)) {
+            if (sample) SampleTag(strings)
+            Text(strings.firstRunLine, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+        }
     }
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -700,7 +707,16 @@ private fun FirstRunCard(strings: DiscoverStrings, sample: Boolean, infoButton: 
     }
 }
 
-/** "Sample data" in the tertiary tone with its info button, over any sheet that shows the sample. */
+/**
+ * "Sample data" as one short line in the tertiary tone, for the peek, where a 48 dp row would push
+ * the chart or the first run actions out of sight. The cell sheets carry the full badge and its info.
+ */
+@Composable
+private fun SampleTag(strings: DiscoverStrings, modifier: Modifier = Modifier) {
+    Text(strings.sampleData, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary, maxLines = 1, modifier = modifier)
+}
+
+/** "Sample data" in the tertiary tone with its info button, over a cell sheet that shows the sample. */
 @Composable
 private fun SampleBadge(strings: DiscoverStrings, infoButton: @Composable (InfoText, Modifier) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -727,12 +743,16 @@ private fun InView(
     reference: Long,
     highlight: ValueBand?,
     clearSignal: Int,
-    infoButton: @Composable (InfoText, Modifier) -> Unit,
     onHighlight: (ValueBand?) -> Unit,
     onPickCell: (String) -> Unit,
 ) {
-    // Bundled preview data says so before anything else, so it is never taken for local air.
-    if (state.isSample) SampleBadge(strings, infoButton)
+    // Bundled preview data says so before anything else, so it is never taken for local air. Over a
+    // chart the tag rides in the chart title, so the chart stays inside the peek.
+    val property = state.property
+    val values = property?.let { p -> state.rows.mapNotNull { it.mean(p.id) } }.orEmpty()
+    val health = state.scale.who
+    val charted = property != null && values.size >= 2 && (!simple || health != null)
+    if (state.isSample && !charted) SampleTag(strings, Modifier.padding(bottom = 4.dp))
     if (state.loading && state.rows.isEmpty()) {
         // Read out when the areas arrive or fail to, while the user waits.
         DiscoverStateMessage(strings.loading, PeacockExpression.WORKING, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
@@ -747,19 +767,16 @@ private fun InView(
         return
     }
     // The chart comes first, so the peeking sheet shows it while the map is explored. Text follows.
-    val property = state.property
     val units = LocalDiscoverUnits.current
-    val values = property?.let { p -> state.rows.mapNotNull { it.mean(p.id) } }.orEmpty()
-    val health = state.scale.who
     if (property != null && values.size >= 2) {
         if (!simple) {
-            ChartTitle(property, strings, state)
+            ChartTitle(property, strings, state, sample = state.isSample)
             Spacer(Modifier.height(8.dp))
             SpreadChart(values, property, state.scale, strings, clearSignal = clearSignal, onHighlight = onHighlight)
             Spacer(Modifier.height(12.dp))
         } else if (health != null) {
             // Simple. Areas per mood, no axis. A property without the WHO scale shows no chart, no mood is invented.
-            ChartTitle(property, strings, state)
+            ChartTitle(property, strings, state, sample = state.isSample)
             Spacer(Modifier.height(8.dp))
             SimpleSpread(values, health, strings, highlight, onHighlight)
             Spacer(Modifier.height(12.dp))
@@ -831,9 +848,9 @@ private fun DiscoverStateMessage(text: String, expression: PeacockExpression, mo
     }
 }
 
-/** Label, unit and window over a chart, with an optional [trailing] note at the end. */
+/** Label, unit and window over a chart, with an optional [trailing] note and the [sample] tag at the end. */
 @Composable
-private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: DiscoverUiState, trailing: String? = null) {
+private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: DiscoverUiState, trailing: String? = null, sample: Boolean = false) {
     // One heading for the chart below, read as label, unit, window and the trailing note.
     Row(Modifier.semantics(mergeDescendants = true) { heading() }, verticalAlignment = Alignment.Bottom) {
         FitText("${property.shownLabel()}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)
@@ -845,6 +862,7 @@ private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: 
             modifier = Modifier.weight(1f),
         )
         if (trailing != null) Text(trailing, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (sample) SampleTag(strings, Modifier.padding(start = 8.dp))
     }
 }
 

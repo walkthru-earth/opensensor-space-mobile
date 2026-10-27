@@ -178,8 +178,9 @@ an info button.
   and says "No health scale published". Practice followed, Mazama Science "Qualitative display
   of air quality data", the South Coast AQMD accessible AQI scale, and the EPA Fire and Smoke
   map (`CellScale` and `StepScale` in `:core:publicfeed`).
-- **Legend size.** Both legends are at most 270 dp wide and shrink beside the zoom and Near me
-  controls, so they fit at 200 percent text.
+- **Legend size.** Both legends are at most 270 dp wide. They take all the width but the one
+  48 dp column of zoom and Near me beside them, and the attribution sits on its own line below,
+  so it never narrows them.
 - **Legend (Simple, 2026-10-12).** For a WHO scale the floating card shows the six mood
   words with their colours, titled with the property, and no numbers. Its info sheet explains
   the moods without naming the guideline body and points to Detailed in Settings. A property
@@ -220,19 +221,20 @@ an info button.
   touch target. Choosing 24 hours in Real saves it even while a saved last hour is shown as
   24 hours. "Sample data" still
   heads every cell sheet while the feed on screen is the sample, and the info button explains the
-  feed on screen. `DiscoverController.onSourceSettings`, `chooseSource` and `retry`.
+  feed on screen. At peek the area list shows it as a one line tag in the chart title, so the
+  chart stays in sight. `DiscoverController.onSourceSettings`, `chooseSource` and `retry`.
 - **Zoom.** A compact floating pair of Zoom in and Zoom out buttons bottom right, above Near me,
-  each a 48 dp target with its own spoken name, so the map never needs a pinch. One step per tap
-  within zoom 1 to 16. With Reduce Motion on, zoom, place search and Near me move the camera
+  each a 48 dp target with its own spoken name, so the map never needs a pinch. One step per tap.
+  The map holds pinch and the buttons to the same zoom 1 to 16. With Reduce Motion on, zoom, place search and Near me move the camera
   without an animation.
-- **Attribution.** "© OpenStreetMap" bottom right, visible at launch. It collapses to an info
+- **Attribution.** "© OpenStreetMap" bottom right under the map controls, visible at launch. It collapses to an info
   button after the first pan or after 5 seconds, as the OSMF guidelines allow. In Real mode it
   also shows "Data OpenAQ", which stays while Real is on screen and opens
   https://docs.openaq.org/resources/licenses.
 - **First run.** The peek area holds one card instead of the summary. A 48 dp peacock, one line
   "Public sensors near you, shown as areas", and two actions "Add your sensor" and "Explore".
-  On the sample feed it starts with the "Sample data" badge and its info button, as the area
-  list does.
+  On the sample feed a one line "Sample data" tag sits over the heading beside the peacock, so
+  the actions stay inside the peek.
   Either action dismisses it for good. The card carries no numbers. The mascot stays away from
   charts and numbers at Detailed and Developer. At Simple the cell sheet places it beside the
   mood word and its one value, the only exception.
@@ -441,8 +443,8 @@ allow it cleanly. Precise location is never requested on either platform.
   `requestWhenInUseAuthorization`). No provider exists before the tap. After a grant the camera
   moves to the centre of the resolution 6 cell holding the first fix (`nearMeTarget`), at zoom
   10.5, and the puck follows the fix while the map is open. A fix that does not arrive within
-  15 seconds leaves the map where it is, and the button says "Location not found" as a polite
-  live region. `DiscoverPrefs` saves only the
+  15 seconds leaves the map where it is. A "Location not found" note shows beside the button
+  until the next tap, and screen readers hear it as the button's state in a polite live region. `DiscoverPrefs` saves only the
   camera, and the camera never holds the fix, so the saved view is at most a coarse cell centre.
 
 - Decline. The map stays where it is and search remains. Asking again happens only on the next

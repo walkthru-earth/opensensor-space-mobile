@@ -1,6 +1,9 @@
 package space.opensensor.discover
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -10,10 +13,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -25,8 +32,11 @@ import org.maplibre.compose.location.rememberLocationState
 import org.maplibre.compose.map.MapState
 import org.maplibre.spatialk.geojson.Position
 import org.maplibre.spatialk.units.extensions.meters
+import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.FloatingIconButton
+import space.opensensor.designsystem.FloatingSurface
 import space.opensensor.designsystem.LocalReduceMotion
+import space.opensensor.designsystem.MinTouchSpacing
 import space.opensensor.permissions.AccessDialogTexts
 import space.opensensor.permissions.AccessDialogs
 import space.opensensor.permissions.RuntimeAccess
@@ -119,17 +129,39 @@ internal fun NearMeButton(
         val centre = target(fix.position.latitude, fix.position.longitude) ?: return@LaunchedEffect
         mapState.moveCamera(Position(longitude = centre.lng, latitude = centre.lat), NEAR_ME_ZOOM, reduce)
     }
-    FloatingIconButton(
-        onClick = nearMe.onTap,
-        contentDescription = label,
-        modifier = modifier.semantics {
-            if (missed) stateDescription = none
-            liveRegion = LiveRegionMode.Polite
+    // The miss is shown beside the button as well as spoken. The note takes no width of its own, so
+    // the legend beside the controls never shrinks for it. It goes on the next tap.
+    Layout(
+        content = {
+            FloatingIconButton(
+                onClick = nearMe.onTap,
+                contentDescription = label,
+                modifier = Modifier.semantics {
+                    if (missed) stateDescription = none
+                    liveRegion = LiveRegionMode.Polite
+                },
+            ) {
+                Icon(DiscoverIcons.MyLocation, contentDescription = null)
+            }
+            if (missed) {
+                FloatingSurface(Modifier.clearAndSetSemantics {}, shape = FloatingControl.SmallShape) {
+                    Text(none, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                }
+            }
         },
-    ) {
-        Icon(DiscoverIcons.MyLocation, contentDescription = null)
+        modifier = modifier,
+    ) { measurables, constraints ->
+        val button = measurables[0].measure(constraints.copy(minWidth = 0, minHeight = 0))
+        val note = measurables.getOrNull(1)?.measure(Constraints(maxWidth = NOTE_MAX.roundToPx()))
+        layout(button.width, button.height) {
+            button.placeRelative(0, 0)
+            // To the start of the button, over the map. placeRelative mirrors it in right to left.
+            note?.placeRelative(-note.width - MinTouchSpacing.roundToPx(), (button.height - note.height) / 2)
+        }
     }
 }
+
+private val NOTE_MAX = 240.dp
 
 // Long enough for a cold coarse fix indoors. Past it the map stays and the button says so.
 private val NEAR_ME_WAIT = 15.seconds

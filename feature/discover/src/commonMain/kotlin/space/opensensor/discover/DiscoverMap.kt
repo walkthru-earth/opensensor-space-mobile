@@ -36,6 +36,7 @@ import org.maplibre.compose.layers.FillLayer
 import org.maplibre.compose.layers.LineLayer
 import org.maplibre.compose.layers.LocationIndicatorLayer
 import org.maplibre.compose.location.LocationState
+import org.maplibre.compose.map.CameraConstraints
 import org.maplibre.compose.map.MapState
 import org.maplibre.compose.map.MaplibreMap
 import org.maplibre.compose.map.rememberMapState
@@ -156,6 +157,11 @@ internal fun DiscoverMap(
         modifier = modifier,
         state = state,
         viewportInsets = viewportInsets,
+        // The zoom buttons step inside the same range.
+        cameraConstraints = CameraConstraints {
+            minZoom = MIN_ZOOM
+            maxZoom = MAX_ZOOM
+        },
         interactions = MapInteractions {
             camera {
                 rotate { enabled = false }

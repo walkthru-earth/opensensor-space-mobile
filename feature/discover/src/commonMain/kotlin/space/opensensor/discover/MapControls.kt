@@ -26,12 +26,16 @@ import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.FloatingSurface
 import space.opensensor.designsystem.LocalReduceMotion
 
-// Basemap tiles run from zoom 0 to about 16. Past that the H3 cells are all the map shows.
+// Basemap tiles run from zoom 0 to about 16. Past that the H3 cells are all the map shows. The map
+// holds pinch to the same range (DiscoverMap), so pinch and the buttons agree.
 internal const val MIN_ZOOM = 1.0
 internal const val MAX_ZOOM = 16.0
 
-/** The zoom a button press lands on, one step from [zoom] and inside the basemap's range. */
-internal fun steppedZoom(zoom: Double, step: Int): Double = (zoom + step).coerceIn(MIN_ZOOM, MAX_ZOOM)
+/**
+ * The zoom a button press lands on, one step from [zoom] toward the basemap's range and never past
+ * it. A camera already outside the range, from an older saved view, only moves the way pressed.
+ */
+internal fun steppedZoom(zoom: Double, step: Int): Double = (zoom + step).coerceIn(minOf(zoom, MIN_ZOOM), maxOf(zoom, MAX_ZOOM))
 
 /**
  * Moves the camera to [center] (kept when null) at [zoom] (kept when null). With reduce motion on it
