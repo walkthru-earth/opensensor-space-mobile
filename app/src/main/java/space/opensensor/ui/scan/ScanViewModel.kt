@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import space.opensensor.airquality.Pm25Basis
 import space.opensensor.app.BuildConfig
 import space.opensensor.data.DeviceConnectionManager
 import space.opensensor.data.DeviceOwnership
@@ -31,8 +30,11 @@ import space.opensensor.data.ble.BluetoothStatus
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.ScannedDevice
 import space.opensensor.data.fake.FakeTransport
-import space.opensensor.data.history.AirMetrics
-import space.opensensor.data.history.Resolution
+import space.opensensor.data.history.LatestDay
+import space.opensensor.data.history.LatestDays
+import space.opensensor.data.history.MetricSpec
+import space.opensensor.data.history.Metrics
+import space.opensensor.data.history.TierBucket
 import space.opensensor.data.local.database.ArchivedFileDao
 import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.local.database.MetricBucket
@@ -57,19 +59,18 @@ import space.opensensor.ui.permissions.hasBluetoothPermissions
 import javax.inject.Inject
 
 /**
- * The newest PM2.5 day of each thing, both lists newest first. The corrected day wins when it is
- * the newest day with readings, otherwise the raw day shows, labelled raw (#92).
+ * The [LatestDays.latest] day of each thing, from every thing's day buckets of each of [metrics]
+ * (one list per metric, in that order), so My devices shows each thing's main metric (#221).
  */
-internal fun latestPm25Days(corrected: List<MetricBucket>, raw: List<MetricBucket>): Map<String, Pair<MetricBucket, Pm25Basis>> {
-    val out = HashMap<String, Pair<MetricBucket, Pm25Basis>>()
-    for (b in raw) if (b.validRows > 0 && b.thing !in out) out[b.thing] = b to Pm25Basis.RAW
-    val seen = HashSet<String>()
-    for (b in corrected) {
-        if (b.validRows <= 0 || !seen.add(b.thing)) continue
-        val rawDay = out[b.thing]?.first
-        if (rawDay == null || b.startEpochS >= rawDay.startEpochS) out[b.thing] = b to Pm25Basis.CORRECTED
+internal fun latestDays(rows: List<List<MetricBucket>>, metrics: List<MetricSpec> = Metrics.all): Map<String, LatestDay> {
+    val byThing = HashMap<String, MutableMap<String, MutableList<TierBucket>>>()
+    for (list in rows) {
+        for (b in list) {
+            byThing.getOrPut(b.thing) { HashMap() }.getOrPut(b.metricId) { ArrayList() } +=
+                TierBucket(b.startEpochS, b.rows, b.validRows, b.estimatedRows, b.mean, b.min, b.max, b.sampleIntervalMs)
+        }
     }
-    return out
+    return byThing.mapNotNull { (thing, buckets) -> LatestDays.latest(buckets, metrics)?.let { thing to it } }.toMap()
 }
 
 @HiltViewModel
@@ -86,22 +87,9 @@ class ScanViewModel @Inject constructor(
     /** Per-thing totals come from one grouped query, so the list never loads every archived row (#63). */
     private val summaries: Flow<Map<String, ArchiveGlance>> = combine(
         archivedFileDao.observeThingGlances(),
-        bucketDao.observeAllDays(AirMetrics.PM25_CORRECTED.id),
-        bucketDao.observeAllDays(AirMetrics.PM25.id),
-    ) { glances, corrected, raw ->
-        val latestDay = latestPm25Days(corrected, raw)
-        glances.associate { g ->
-            val (day, basis) = latestDay[g.thing] ?: (null to Pm25Basis.RAW)
-            g.thing to ArchiveGlance(
-                files = g.files,
-                lastSyncedMs = g.lastSyncedMs,
-                lastDataUtcNs = g.lastDataUtcNs,
-                lastDayStartS = day?.startEpochS,
-                lastDayPrimaryMean = day?.mean,
-                lastDayCoverage = day?.let { d -> Resolution.DAY.expectedRows(d.sampleIntervalMs).takeIf { it > 0 }?.let { (d.validRows.toFloat() / it).coerceIn(0f, 1f) } },
-                lastDayMetric = day?.let { if (basis == Pm25Basis.CORRECTED) AirMetrics.PM25_CORRECTED.id else AirMetrics.PM25.id },
-            )
-        }
+        combine(Metrics.all.map { bucketDao.observeAllDays(it.id) }) { latestDays(it.toList()) },
+    ) { glances, latestDay ->
+        glances.associate { g -> g.thing to ArchiveGlance(g.files, g.lastSyncedMs, g.lastDataUtcNs, latestDay[g.thing]) }
     }
 
     private val scanning = MutableStateFlow(false)

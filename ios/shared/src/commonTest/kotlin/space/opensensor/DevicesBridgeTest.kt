@@ -1,8 +1,15 @@
 package space.opensensor
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
 import space.opensensor.archive.ArchiveRecord
+import space.opensensor.data.history.AirMetrics
+import space.opensensor.data.history.LatestDay
 import space.opensensor.devices.ActiveLink
+import space.opensensor.devices.ArchiveGlance
 import space.opensensor.devices.KnownSensor
 import space.opensensor.devices.LinkPhase
 import space.opensensor.strings.UiText
@@ -121,8 +128,20 @@ class DevicesBridgeTest {
         assertEquals(2, glance.getValue("s").files)
         assertEquals(3L, glance.getValue("s").lastSyncedMs)
         assertEquals(100L, glance.getValue("s").lastDataUtcNs)
-        assertNull(glance.getValue("s").lastDayPrimaryMean, "iOS has no day mean yet")
+        assertNull(glance.getValue("s").lastDay, "the index alone has no day")
         assertEquals(1, glance.getValue("t").files)
+    }
+
+    @Test fun glancesJoinEachThingsLatestDay() = runTest {
+        val day = LatestDay(86_400, 12f, 0.5f, AirMetrics.PM25, 0.1)
+        val glances = MutableStateFlow(mapOf("s" to ArchiveGlance(2, 3, 100), "t" to ArchiveGlance(1, 2, 7)))
+        val days = mapOf("s" to MutableStateFlow<LatestDay?>(null), "t" to MutableStateFlow<LatestDay?>(null))
+        val out = IosKnown.withDays(glances) { days.getValue(it) }
+        assertNull(out.first().getValue("s").lastDay, "files show before the tiers answer")
+        days.getValue("s").value = day
+        assertEquals(day, out.first { it.getValue("s").lastDay != null }.getValue("s").lastDay)
+        assertNull(out.first().getValue("t").lastDay)
+        assertEquals(emptyMap(), IosKnown.withDays(flowOf(emptyMap())) { error("no thing") }.first { it.isEmpty() })
     }
 
     @Test fun activeLinksCoverBluetoothAndWifi() {

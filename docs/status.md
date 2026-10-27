@@ -103,7 +103,9 @@ build and `verify` only. No phone run against the new firmware yet.
   `hero` picks the hero through `HeroRegistry`. The bundled air boards name `air-mood`, the peacock
   with WHO moods. Any other thing gets `GenericMetricHero`, its first primary reading at the
   profile display step, and a metrics card for the rest. My devices rows show the last day mean of
-  any metric `Metrics.byId` resolves. Forget moved from the My devices rows to the Today menu.
+  the thing's main metric (`LatestDays`) at its display step, on Android and iOS. Forget moved
+  from the My devices rows to the Today menu, and a Forget confirmed while Collect all holds the
+  link runs once the link frees.
 - Index reopen. Room v11 and the one time iOS receipt import index rows without UTC rows again. A derive pass
   before that back-fill keeps every day a waiting row may fill (`StationDays.held`), on Android and
   iOS. `ArchiveRecord.isIndexed` is the one indexed test, and `withUtcBetween` uses it in SQL.

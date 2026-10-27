@@ -1,6 +1,8 @@
 package space.opensensor.devices
 
 import androidx.compose.runtime.Immutable
+import space.opensensor.data.history.LatestDay
+import space.opensensor.data.history.LatestDays
 
 /**
  * A Bluetooth advertisement seen in the current scan. [id] is the platform's peripheral id (the
@@ -47,22 +49,16 @@ data class ActiveLink(
 )
 
 /**
- * What the archive on this phone says about one thing, never a live link. The last UTC day with
- * valid readings, the mean of its main metric and coverage when the platform computes them.
+ * What the archive on this phone says about one thing, never a live link. [lastDay] is the last UTC
+ * day with valid readings of its main metric, from the day tiers ([LatestDays]). For air that metric
+ * is the EPA corrected PM2.5 or the raw sensor value, so the line labels which.
  */
 @Immutable
 data class ArchiveGlance(
     val files: Int,
     val lastSyncedMs: Long?,
     val lastDataUtcNs: Long?,
-    val lastDayStartS: Long? = null,
-    val lastDayPrimaryMean: Float? = null,
-    val lastDayCoverage: Float? = null,
-    /**
-     * The metric id of that mean, resolved with `Metrics.byId` for its label, unit and health scale.
-     * For air it is the EPA corrected PM2.5 or the raw sensor value, so the line labels which.
-     */
-    val lastDayMetric: String? = null,
+    val lastDay: LatestDay? = null,
 )
 
 /** Why the last scan stopped early. */

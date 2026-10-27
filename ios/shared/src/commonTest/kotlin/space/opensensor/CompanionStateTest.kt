@@ -122,10 +122,10 @@ class CompanionStateTest {
         state.lanReadingReceived("b", "{\"pms\":4,\"pm25\":22.0}")
         assertTrue(state.lanSessions.getValue("a").busy)
         assertFalse(state.lanSessions.getValue("b").busy)
-        assertEquals(12.0, (state.lanReadings.getValue("a") as NowReading.Reading).pm25)
+        assertEquals(12.0, (state.lanReadings.getValue("a") as NowReading.Reading).primary)
         state.lanReadingExpired("a")
         assertFalse("a" in state.lanReadings)
-        assertEquals(22.0, (state.lanReadings.getValue("b") as NowReading.Reading).pm25)
+        assertEquals(22.0, (state.lanReadings.getValue("b") as NowReading.Reading).primary)
         state.lanReadingReceived("b", "bad JSON")
         assertEquals(NowReading.Waiting, state.lanReadings["b"])
     }

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -92,12 +93,21 @@ class TodayViewModel @AssistedInject constructor(
         detailLevel = settings.detailLevel,
     )
 
-    /** Forgets this device. It runs in the app scope, so leaving Today never cancels it. */
+    /**
+     * Forgets this device. It runs in the app scope, so leaving Today never cancels it, and it waits
+     * while Collect all or a command holds the link, so a confirmed Forget is never dropped as busy.
+     */
     fun forget() {
-        appScope.launch { repository.forget(deviceAddress) }
+        appScope.launch { forgetWhenFree(repository.busy) { repository.forget(deviceAddress) } }
     }
 
     fun reconnectLanOnly() = repository.connect(deviceAddress, controller.state.value.snapshot.name, preference = TransportPreference.LAN_ONLY)
+}
+
+/** Runs [forget] once [busy] is false. The link owner refuses a forget while the link is held. */
+internal suspend fun forgetWhenFree(busy: Flow<Boolean>, forget: suspend () -> Unit) {
+    busy.first { !it }
+    forget()
 }
 
 /** [DeviceFacade] as the shared Today port. Every verb is a call the old screen made. */

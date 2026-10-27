@@ -328,7 +328,7 @@ internal fun MetricHeroCard(
                 when (reading) {
                     // Value, unit and metric name read as one element ("12, µg/m³, PM2.5").
                     is NowReading.Reading -> Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-                        val value = fmtPm(reading.pm25)
+                        val value = fmtPm(reading.primary)
                         FitText(
                             value,
                             style = if (value.length > 2 || portraitSize < 176.dp) MaterialTheme.typography.displayMedium else MaterialTheme.typography.displayLarge,

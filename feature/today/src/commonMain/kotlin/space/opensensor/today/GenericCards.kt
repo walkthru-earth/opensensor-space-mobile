@@ -33,8 +33,6 @@ import space.opensensor.today.resources.now_no_main_reading
 import space.opensensor.today.resources.now_right_now
 import space.opensensor.today.resources.now_waiting
 import space.opensensor.units.UnitFormatter
-import space.opensensor.units.formatFixed
-import kotlin.math.round
 
 /**
  * [value] in [column]'s display units, rounded to the profile's display step. A unit the reader's
@@ -46,9 +44,7 @@ internal fun formatReading(value: Double?, column: ThingDatastream, units: UnitF
     column.datastream.classes.takeIf { it.isNotEmpty() }?.let { _ ->
         return column.datastream.classOf(shown.toLong())?.takeUnless { it.nodata }?.name ?: NO_VALUE
     }
-    val decimals = units.decimals(unit) ?: AppProfile.decimalsOf(column.displayStep)
-    val step = column.displayStep
-    return formatFixed(if (units.converts(unit)) shown else round(shown / step) * step, decimals)
+    return units.format(value!!, unit, column.displayStep, AppProfile.decimalsOf(column.displayStep))
 }
 
 /** The ARGB of a `#RRGGBB` colour hint, or null for any other text. */
@@ -86,7 +82,7 @@ internal fun GenericMetricHero(state: TodayUiState, modifier: Modifier = Modifie
 }
 
 @Composable
-private fun HeroValue(column: ThingDatastream, reading: LiveReading?, fresh: Boolean, onCard: Color, quiet: Color) {
+internal fun HeroValue(column: ThingDatastream, reading: LiveReading?, fresh: Boolean, onCard: Color, quiet: Color) {
     val raw = reading?.value(column.name)
     val units = LocalTodayUnits.current
     // Label, value and unit read as one element ("Soil moisture, 31, %").

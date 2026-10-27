@@ -16,6 +16,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,7 +29,8 @@ import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.data.history.Metrics
+import space.opensensor.airquality.WhoStep
+import space.opensensor.data.history.LatestDay
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoButton
@@ -75,10 +77,11 @@ import space.opensensor.devices.resources.scan_tag_on_lan
 import space.opensensor.devices.resources.scan_tag_on_lan_no_token
 import space.opensensor.devices.resources.scan_tag_paired
 import space.opensensor.devices.resources.scan_unnamed
+import space.opensensor.model.AppProfile
 import space.opensensor.settings.DetailLevel
 import space.opensensor.strings.resources.conn_connecting
 import space.opensensor.strings.resources.conn_ready
-import space.opensensor.units.formatFixed
+import space.opensensor.units.UnitFormatter
 import space.opensensor.strings.resources.Res as SharedRes
 
 /** A link open now, its phase and, while a sync runs, the file count. */
@@ -205,6 +208,23 @@ internal fun WifiOnlyRow(sensor: WifiSensor, level: DetailLevel) {
 private fun wifiTagText(tag: WifiTag): String =
     stringResource(if (tag == WifiTag.WITH_ACCESS) Res.string.scan_tag_on_lan else Res.string.scan_tag_on_lan_no_token)
 
+/** The unit system the archive lines show day means in, from [MyDevicesScreen]. */
+internal val LocalArchiveUnits = staticCompositionLocalOf { UnitFormatter.Metric }
+
+/**
+ * How the archive line shows [day]. The mean rounds to the profile's display step in [units], and a
+ * unit [units] converts keeps its own decimals. [step] is the WHO step of a metric with a health
+ * scale. Null when such a metric's mean has no step, so the line never shows a banded value unjudged.
+ */
+internal data class DayLine(val value: String, val unit: String, val step: WhoStep?)
+
+internal fun dayLine(day: LatestDay, units: UnitFormatter): DayLine? {
+    val metric = day.metric
+    val mean = day.mean.toDouble()
+    val step = if (metric.banded) metric.stepOf(mean) ?: return null else null
+    return DayLine(units.format(mean, metric.unit, day.displayStep, AppProfile.decimalsOf(day.displayStep)), units.unit(metric.unit), step)
+}
+
 /**
  * From the archive on this phone, never from a live link. The last UTC day with valid readings,
  * with its WHO mood when the metric has a health scale and a neutral dot otherwise, or the file
@@ -214,24 +234,23 @@ private fun wifiTagText(tag: WifiTag): String =
 @Composable
 private fun ArchiveLine(glance: ArchiveGlance?, level: DetailLevel) {
     glance ?: return
-    val mean = glance.lastDayPrimaryMean
-    val dayStart = glance.lastDayStartS
-    val metric = glance.lastDayMetric?.let(Metrics::byId)
-    val step = metric?.takeIf { it.banded }?.let { m -> mean?.let { m.stepOf(it.toDouble()) } }
+    val day = glance.lastDay
+    val line = day?.let { dayLine(it, LocalArchiveUnits.current) }
     val files = pluralStringResource(Res.plurals.scan_files, glance.files, glance.files)
     val syncedTemplate = stringResource(Res.string.scan_synced)
     val ago = agoFormatter()
-    if (mean != null && metric != null && dayStart != null && (!metric.banded || step != null)) {
-        val (day, month) = DeviceText.utcDayMonth(dayStart)
+    if (day != null && line != null) {
+        val metric = day.metric
+        val step = line.step
+        val (dayOfMonth, month) = DeviceText.utcDayMonth(day.startEpochS)
         val label = metric.basis?.let { pm25Label(it) } ?: metric.label(Locale.current.language)
-        val value = formatFixed(mean.toDouble(), if (metric.banded) 0 else 1)
-        val date = "$day ${stringResource(MONTHS[month - 1])}"
+        val date = "$dayOfMonth ${stringResource(MONTHS[month - 1])}"
         val base = if (step != null) {
-            stringResource(Res.string.scan_archive_day, moodWord(step), label, value, metric.unit, date)
+            stringResource(Res.string.scan_archive_day, moodWord(step), label, line.value, line.unit, date)
         } else {
-            stringResource(Res.string.scan_archive_day_plain, label, value, metric.unit, date)
+            stringResource(Res.string.scan_archive_day_plain, label, line.value, line.unit, date)
         }
-        val coverage = glance.lastDayCoverage?.takeIf { level.detailed }
+        val coverage = day.coverage?.takeIf { level.detailed }
             ?.let { ", " + stringResource(Res.string.scan_archive_coverage, "${(it * 100).toInt()} %") } ?: ""
         val fileCount = if (level.detailed) ", $files" else ""
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {

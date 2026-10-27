@@ -217,6 +217,7 @@ internal fun AppRoot(
                     MyDevicesEntry(
                         bridge = devices,
                         level = level,
+                        units = units,
                         requestBluetooth = requestBluetooth,
                         onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
                         onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
@@ -395,6 +396,7 @@ internal fun rememberIosBluetoothAccess(companion: CompanionState, requestBlueto
 private fun MyDevicesEntry(
     bridge: DevicesBridge,
     level: DetailLevel,
+    units: UnitSystem,
     requestBluetooth: () -> Unit,
     onFiles: () -> Unit,
     onHistory: () -> Unit,
@@ -407,6 +409,7 @@ private fun MyDevicesEntry(
     MyDevicesScreen(
         state = state,
         level = level,
+        units = remember(units) { UnitFormatter(units) },
         bluetooth = access,
         platform = IosDevices,
         onOpenLocalNetworkSettings = openSettings,

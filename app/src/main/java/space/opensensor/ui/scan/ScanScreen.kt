@@ -19,6 +19,7 @@ import space.opensensor.designsystem.AppIcons
 import space.opensensor.devices.DevicesAction
 import space.opensensor.devices.DevicesPlatform
 import space.opensensor.devices.MyDevicesScreen
+import space.opensensor.ui.components.LocalUnits
 import space.opensensor.ui.permissions.AccessDialogs
 import space.opensensor.ui.permissions.rememberBluetoothAccess
 import space.opensensor.ui.permissions.rememberLocalNetworkAccess
@@ -51,6 +52,7 @@ fun ScanScreen(
         level = level,
         bluetooth = bluetooth,
         platform = AndroidDevices,
+        units = LocalUnits.current,
         onScanTap = {
             viewModel.onAction(DevicesAction.StartScan)
             localNetwork.run(

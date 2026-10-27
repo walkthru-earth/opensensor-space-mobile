@@ -44,6 +44,17 @@ class BoardPowerTest {
     }
 
     @Test
+    fun coreS3MapsChgToChargingAndDischarging() {
+        val charging = stateOf(cores3, """{"chg":1}""")
+        assertEquals(BatteryState.Kind.CHARGING, charging?.kind)
+        assertTrue(charging!!.charging)
+        val discharging = stateOf(cores3, """{"chg":0}""")
+        assertEquals(BatteryState.Kind.DISCHARGING, discharging?.kind)
+        assertFalse(discharging!!.charging)
+        assertNull(stateOf(cores3, """{"chg":2}"""), "nodata shows no state")
+    }
+
+    @Test
     fun anUnknownClassNameKeepsTheTemplateWord() {
         val state = BatteryState("trickle")
         assertEquals(BatteryState.Kind.OTHER, state.kind)

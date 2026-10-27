@@ -58,11 +58,11 @@ sealed interface NowReading {
     data class SensorNotReady(val status: PmsStatus, val hint: String) : NowReading
 
     /**
-     * A valid PM2.5 reading and its mood. [pm25] is the value shown, the EPA corrected PM2.5 when the
+     * A valid PM2.5 reading and its mood. [primary] is the value shown, the EPA corrected PM2.5 when the
      * sample carries a valid RH, else the raw one, as [basis] says. [raw] is the sensor's own
      * atmospheric PM2.5, shown second in the Detailed level.
      */
-    data class Reading(val pm25: Double, val mood: AirMood, val basis: Pm25Basis = Pm25Basis.RAW, val raw: Double? = pm25) : NowReading
+    data class Reading(val primary: Double, val mood: AirMood, val basis: Pm25Basis = Pm25Basis.RAW, val raw: Double? = primary) : NowReading
 
     companion object {
         /**
