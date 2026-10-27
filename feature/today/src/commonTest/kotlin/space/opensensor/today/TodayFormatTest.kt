@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import space.opensensor.data.history.DeviceCapabilities
@@ -130,10 +133,17 @@ class TodayFormatTest {
             ) as Flow<HistorySeries>
         }
         val info = MutableStateFlow<DeviceInfo?>(WAVESHARE.copy(thing = "st-1", desc = desc.take(TemplateKey.DESC_PREFIX_HEX)))
-        val values = todaySoFar(info, observe, TimeZone.UTC, flowOf(1_767_225_600L), served)
-        assertEquals(AirMetrics.PM25_CORRECTED, values.filterNotNull().first().metric)
+        // One subscription across the template update, so the second value comes from the live flow.
+        val seen = mutableListOf<TodaySoFar>()
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            todaySoFar(info, observe, TimeZone.UTC, flowOf(1_767_225_600L), served).filterNotNull().collect { seen += it }
+        }
+        runCurrent()
+        assertEquals(AirMetrics.PM25_CORRECTED, seen.last().metric)
         served.value = listOf(revised)
-        val after = values.filterNotNull().first()
+        runCurrent()
+        job.cancel()
+        val after = seen.last()
         assertNotEquals(AirMetrics.PM25_CORRECTED, after.metric, "the served template has no particles")
         assertEquals(todayMetrics(DeviceCapabilities.from(info.value, listOf(revised))).first(), after.metric)
     }

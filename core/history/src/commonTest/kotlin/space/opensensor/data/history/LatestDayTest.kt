@@ -59,6 +59,9 @@ class LatestDayTest {
         // The newest raw day is NaN, the day before it shows.
         val older = LatestDays.latest(mapOf(raw to listOf(day(172_800, Float.NaN), day(86_400, 4f))))
         assertEquals(86_400L to 4f, older?.let { it.startEpochS to it.mean })
+        // PM2.5 has valid rows but no finite day, so it still is the main metric and nothing shows, as
+        // observe picks it from the metrics with data. Humidity never stands in.
+        assertNull(LatestDays.latest(mapOf(raw to listOf(day(86_400, Float.NaN)), AirMetrics.HUMIDITY.id to listOf(day(86_400, 60f)))))
     }
 
     @Test

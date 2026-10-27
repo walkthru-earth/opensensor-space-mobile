@@ -51,7 +51,9 @@ object LatestDays {
         metrics: List<MetricSpec> = Metrics.all,
         stepOf: (MetricSpec) -> Double = { displayStepOf(it) },
     ): LatestDay? {
-        val available = metrics.filter { m -> buckets[m.id].orEmpty().any(::shown) }
+        // Candidates come from the metrics with valid rows, as [observe] picks them, and a day still
+        // needs a finite mean to show. So a NaN day of the main metric falls back to its stored column.
+        val available = metrics.filter { m -> buckets[m.id].orEmpty().any { it.validRows > 0 } }
         var best: LatestDay? = null
         for (metric in candidatesOf(available)) {
             val day = buckets[metric.id].orEmpty().filter(::shown).maxByOrNull { it.startEpochS } ?: continue

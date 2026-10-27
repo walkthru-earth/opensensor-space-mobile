@@ -217,6 +217,13 @@ class DeviceLinkOwner @Inject constructor(
     private val identityReady = MutableStateFlow(false)
     private val connectionFailure = MutableStateFlow<String?>(null)
 
+    /**
+     * Accepted [connect] calls whose job has not ended, cancelled ones included. A failure the state
+     * shows while none runs is the outcome of the last connect, even when it equals the one before.
+     */
+    private val _connectsRunning = MutableStateFlow(0)
+    val connectsRunning: StateFlow<Int> = _connectsRunning.asStateFlow()
+
     @Volatile private var closing = false
     val session: StateFlow<DeviceSession?> = _session.asStateFlow()
 
@@ -401,6 +408,8 @@ class DeviceLinkOwner @Inject constructor(
             uiClaim = claim
             uiPreference = preference
             connectionFailure.value = null
+            // Counted before the job can end and uncounted when it ends, cancelled or not.
+            _connectsRunning.update { it + 1 }
             scope.launch(start = CoroutineStart.LAZY) {
                 connectMutex.withLock {
                     if (!connectionIntent.owns(claim) || collectionActive.value) return@withLock
@@ -414,7 +423,10 @@ class DeviceLinkOwner @Inject constructor(
             }
         }
         previous?.cancel()
-        job.invokeOnCompletion { stateLock.withLock { if (connectJob === job) connectJob = null } }
+        job.invokeOnCompletion {
+            stateLock.withLock { if (connectJob === job) connectJob = null }
+            _connectsRunning.update { it - 1 }
+        }
         job.start()
         return true
     }
@@ -1722,7 +1734,10 @@ class DeviceLinkOwner @Inject constructor(
         knownDeviceDao.touch(address, name, clock.nowEpochMs())
     }
 
-    /** Forgets [address]. False when another command held the device and the forget was refused. */
+    /**
+     * Forgets [address]. False when another command held the device, or when a newer connect took the
+     * link before the forget reached it, so nothing was deleted and the caller may try again.
+     */
     suspend fun forget(address: String): Boolean = withContext(io) {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
         if (!tryBeginCommand()) {
@@ -1735,7 +1750,7 @@ class DeviceLinkOwner @Inject constructor(
             cancelPendingConnect()
             cancelReconnect()
             connectMutex.withLock {
-                if (!connectionIntent.owns(claim)) return@withLock
+                if (!connectionIntent.owns(claim)) return@withLock false
                 // Revoke the live session before deleting credentials and enrollment.
                 closeSessionLocked()
                 tokenPolicy.clear(address)
@@ -1744,8 +1759,8 @@ class DeviceLinkOwner @Inject constructor(
                 // No cell of a forgotten Thing stays on the phone, from any of its epochs.
                 (listOfNotNull(known?.thing) + thingEpochDao.forDevice(address).map { it.thing }).distinct().forEach { places.remove(it) }
                 knownDeviceDao.delete(address)
+                true
             }
-            true
         } finally {
             endCommand()
         }

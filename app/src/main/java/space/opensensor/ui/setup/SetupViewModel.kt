@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import space.opensensor.data.DeviceConnectionManager
 import space.opensensor.data.ble.BleConnectionFailure
@@ -102,7 +103,7 @@ class SetupViewModel @AssistedInject constructor(
             val stale = staleFailures.remove(id.lowercase())
             var bonding = false
             emitAll(
-                combine(facade.connectionState.skipStale(stale), facade.info) { state, info ->
+                combine(facade.connectionState.skipStale(stale, facade.connectsRunning), facade.info) { state, info ->
                     if (state is ConnectionState.Bonding) bonding = true
                     setupLink(state, info?.proto, info != null, bonding)
                 }.distinctUntilChanged(),
@@ -137,11 +138,20 @@ class SetupViewModel @AssistedInject constructor(
 }
 
 /**
- * Drops the leading [stale] failure the shared state still holds after a retry, until the state
- * moves on. The same instance, never an equal one, so a new failure with the same words still shows.
+ * Drops the leading [stale] failure the shared state still holds after a retry, while that retry's
+ * connect still [running]. The same instance, never an equal one, so a new failure with the same
+ * words still shows. Once no connect runs, the failure shows even when the state never moved,
+ * because a retry that failed the same way leaves an equal state that a StateFlow does not emit.
  */
-internal fun Flow<ConnectionState>.skipStale(stale: ConnectionState.Failed?): Flow<ConnectionState> =
-    if (stale == null) this else dropWhile { it === stale }
+internal fun Flow<ConnectionState>.skipStale(stale: ConnectionState.Failed?, running: Flow<Int>): Flow<ConnectionState> =
+    if (stale == null) {
+        this
+    } else {
+        combine(this, running) { state, connects -> state to connects }
+            .dropWhile { (state, connects) -> state === stale && connects > 0 }
+            .map { it.first }
+            .distinctUntilChanged()
+    }
 
 /**
  * What the wizard sees of one Android link. The proto gate fails the link before INFO is kept, so old
