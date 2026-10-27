@@ -19,6 +19,19 @@ class H3IndexTest {
     }
 
     @Test
+    fun `only a cell index is a cell`() {
+        assertTrue(H3Index.isCell(berlin7))
+        assertTrue(H3Index.isCell(berlin4))
+        assertTrue(H3Index.isCell(H3Index.fromHex("8001fffffffffff")), "a resolution 0 base cell")
+        assertFalse(H3Index.isCell(0L))
+        assertFalse(H3Index.isCell((berlin7 and (0xFL shl 59).inv()) or (2L shl 59)), "mode 2 is a directed edge")
+        assertFalse(H3Index.isCell(H3Index.fromHex("80f5fffffffffff")), "base cell 122 does not exist")
+        assertFalse(H3Index.isCell(H3Index.fromHex("871f1d48fffffff")), "a resolution 7 digit of 7")
+        assertFalse(H3Index.isCell(H3Index.fromHex("871f1d4890fffff")), "a digit finer than the resolution that is not 7")
+        assertFalse(H3Index.isCell(berlin7 or (1L shl 56)), "a reserved bit set")
+    }
+
+    @Test
     fun `parent matches h3`() {
         assertEquals(berlin4, H3Index.parent(berlin7, 4))
         assertEquals(berlin7, H3Index.parent(berlin7, 7))

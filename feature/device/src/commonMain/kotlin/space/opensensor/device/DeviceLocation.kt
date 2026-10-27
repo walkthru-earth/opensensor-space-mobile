@@ -55,7 +55,9 @@ data class DeviceLocationState(
  */
 fun LocationConfig.hasCell(): Boolean {
     val hex = cell?.takeIf { Regex("[0-9a-f]{15}").matches(it) } ?: return false
-    val res = H3Index.resolution(H3Index.fromHex(hex))
+    val index = H3Index.fromHex(hex)
+    if (!H3Index.isCell(index)) return false
+    val res = H3Index.resolution(index)
     return res in 0..15 && (cellResolution == null || cellResolution == res) && res <= (resolution ?: 15)
 }
 

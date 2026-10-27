@@ -7,6 +7,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -103,13 +104,21 @@ class TodayViewModel @AssistedInject constructor(
         appScope.launch { forgetWhenFree(repository.busy) { repository.forget(deviceAddress) } }
     }
 
-    fun reconnectLanOnly() = repository.connect(deviceAddress, controller.state.value.snapshot.name, preference = TransportPreference.LAN_ONLY)
+    fun reconnectLanOnly() {
+        repository.connect(deviceAddress, controller.state.value.snapshot.name, preference = TransportPreference.LAN_ONLY)
+    }
 }
 
-/** Runs [forget] once [busy] is false. The link owner refuses a forget while the link is held. */
-internal suspend fun forgetWhenFree(busy: Flow<Boolean>, forget: suspend () -> Unit) {
-    busy.first { !it }
-    forget()
+/**
+ * Runs [forget] once [busy] is false, and again while it answers false. The link owner refuses a
+ * forget while another command holds the link, and one can take it between the check and the call.
+ */
+internal suspend fun forgetWhenFree(busy: Flow<Boolean>, retryDelayMs: Long = 250, forget: suspend () -> Boolean) {
+    while (true) {
+        busy.first { !it }
+        if (forget()) return
+        delay(retryDelayMs)
+    }
 }
 
 /** [DeviceFacade] as the shared Today port. Every verb is a call the old screen made. */
@@ -166,7 +175,9 @@ private class RepositoryTodaySource(
 
     override fun stopSync() = repository.cancelSync()
 
-    override fun reconnect() = repository.connect(address, snapshot.value.name, fake = fakeEndpoint)
+    override fun reconnect() {
+        repository.connect(address, snapshot.value.name, fake = fakeEndpoint)
+    }
 
     override fun disconnect() = repository.disconnect()
 }

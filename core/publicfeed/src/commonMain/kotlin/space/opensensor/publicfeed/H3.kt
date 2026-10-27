@@ -46,8 +46,25 @@ object H3Index {
     private const val RES_OFFSET = 52
     private const val RES_MASK = 0xFL shl RES_OFFSET
     private const val DIGIT_BITS = 3
+    private const val MODE_OFFSET = 59
+    private const val BASE_OFFSET = 45
+    private const val BASE_CELLS = 122L
 
     fun resolution(cell: Long): Int = ((cell and RES_MASK) ushr RES_OFFSET).toInt()
+
+    /**
+     * True when [cell] is an H3 cell index. Its mode is 1, its base cell is one of the 122, each digit
+     * down to its resolution is 0 to 6 and every finer digit is 7.
+     */
+    fun isCell(cell: Long): Boolean {
+        if (cell < 0 || ((cell ushr MODE_OFFSET) and 0xFL) != 1L || ((cell ushr (RES_OFFSET + 4)) and 0x7L) != 0L) return false
+        if (((cell ushr BASE_OFFSET) and 0x7FL) >= BASE_CELLS) return false
+        val res = resolution(cell)
+        return (1..MAX_RES).all { r ->
+            val digit = (cell ushr digitOffset(r)) and 7L
+            if (r <= res) digit != 7L else digit == 7L
+        }
+    }
 
     private fun digitOffset(res: Int): Int = (MAX_RES - res) * DIGIT_BITS
 

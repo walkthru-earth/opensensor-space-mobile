@@ -93,6 +93,13 @@ class CompanionState {
     internal var failedId by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * The sensor whose Bluetooth connection closed before INFO passed, for any reason but the user's
+     * own Disconnect, until a new connection starts. Setup shows it unreachable instead of waiting.
+     */
+    internal var closedId by mutableStateOf<String?>(null)
+        private set
+
     /** The sensor whose INFO reported a `proto` below 3, until a new connection starts. */
     internal var outdatedId by mutableStateOf<String?>(null)
         private set
@@ -486,6 +493,7 @@ class CompanionState {
 
     fun connectionStarted(id: String) {
         failedId = null
+        closedId = null
         outdatedId = null
         if (reconnectingId != id) reconnectingId = null
         selectedId = id
@@ -501,11 +509,13 @@ class CompanionState {
     fun receiveInfo(json: String): Boolean {
         val decoded = runCatching { DeviceInfo.parse(json) }.getOrNull()
         if (decoded == null || decoded.dev.isNullOrBlank()) {
+            closedId = selectedId
             close(UiText.of(Res.string.companion_info_invalid))
             return false
         }
         val gate = requireProto3(decoded)
         if (gate is ProtoGate.UpdateFirmware) {
+            outdatedId = selectedId
             close(
                 gate.reported?.let { UiText.of(Res.string.companion_firmware_update, it, gate.required) }
                     ?: UiText.of(Res.string.companion_firmware_update_unknown, gate.required),
@@ -548,7 +558,9 @@ class CompanionState {
     /** The Bluetooth connection ended for a typed [notice], shown in Android's words. */
     fun connectionClosedNoticed(notice: CompanionNotice) {
         val id = selectedId ?: reconnectingId
+        val opening = selectedId != null && !connected
         close(notice.text)
+        if (opening && notice != CompanionNotice.DISCONNECTED) closedId = id
         if (notice == CompanionNotice.PAIRING_REMOVED) failedId = id
         if (notice == CompanionNotice.FIRMWARE_UPDATE) outdatedId = id
     }
@@ -556,6 +568,7 @@ class CompanionState {
     /** The user forgot this sensor, so nothing is left to repair or reconnect. */
     fun sensorForgotten(id: String) {
         if (failedId.equals(id, ignoreCase = true)) failedId = null
+        if (closedId.equals(id, ignoreCase = true)) closedId = null
         if (reconnectingId.equals(id, ignoreCase = true)) reconnectingId = null
     }
 

@@ -21,6 +21,11 @@ data class Scale(
 ) {
     init {
         require(steps.isNotEmpty()) { "scale $id has no steps" }
+        // stepIndexOf takes the first step that fits, so a later step must stay reachable.
+        require(steps.dropLast(1).none { it.upper == null }) { "scale $id has an open step before the last one" }
+        val bounds = steps.mapNotNull { it.upper }
+        require(bounds.all { it.isFinite() }) { "scale $id has a bound that is not finite" }
+        require(bounds.zipWithNext().all { (a, b) -> a < b }) { "scale $id has bounds that do not rise" }
     }
 
     /**
