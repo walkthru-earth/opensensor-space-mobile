@@ -9,14 +9,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
 import space.opensensor.designsystem.FloatingControl
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
 import space.opensensor.designsystem.color as designSystemColor
 import space.opensensor.designsystem.onBand as designSystemOnBand
 
 // Today's WHO colour helpers delegate to :ui:designsystem (ColorContrast.kt). The ARGB values live
-// only in :core:airquality (WhoStep), so both apps paint a step the same colour.
+// only in :family:air (WhoStep), so both apps paint a step the same colour.
 
 internal fun WhoStep.color(): Color = designSystemColor()
 

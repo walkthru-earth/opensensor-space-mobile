@@ -6,12 +6,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import space.opensensor.archive.ArchiveRecord
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.LatestDay
 import space.opensensor.devices.ActiveLink
 import space.opensensor.devices.ArchiveGlance
 import space.opensensor.devices.KnownSensor
 import space.opensensor.devices.LinkPhase
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.strings.UiText
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -20,6 +21,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DevicesBridgeTest {
+    init {
+        AirFamily.install()
+    }
+
     private val a = "11111111-1111-1111-1111-111111111111"
     private val b = "22222222-2222-2222-2222-222222222222"
 

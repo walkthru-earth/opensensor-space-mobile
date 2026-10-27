@@ -5,9 +5,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
-import space.opensensor.airquality.WhoGuidelines
 import space.opensensor.model.Scale
 import space.opensensor.model.ThingCollection
+import kotlin.concurrent.Volatile
 import kotlin.math.abs
 
 /**
@@ -136,7 +136,7 @@ class DiscoverCollection private constructor(
 
         /**
          * The most `opensensor:scales` entries read. A Collection has one per health scale, a handful
-         * (two for PM today), so 64 leaves room for every property while a feed listing thousands
+         * (two bundled today), so 64 leaves room for every property while a feed listing thousands
          * cannot stall the parse. Entries past it are dropped and their properties fall back to the
          * neutral ramp.
          */
@@ -163,47 +163,18 @@ class DiscoverCollection private constructor(
         private const val ISO_DATE_LENGTH = 10
 
         /**
-         * The scales the app ships, for a feed that has no Collection yet (the bundled sample and the
-         * OpenAQ manifest feed). PM2.5 and PM10 on the WHO 2021 guideline and interim targets, the
-         * same edges, colours and step names as [WhoGuidelines] and the app's step strings.
+         * The scales the app's families ship, for a feed that has no Collection yet (the bundled
+         * sample and the OpenAQ manifest feed). It names no scale until an app entry point installs
+         * the families' collection ([installBundled]).
          */
-        val BUNDLED: DiscoverCollection by lazy { parse(bundledJson(), root = "") }
+        val BUNDLED: DiscoverCollection get() = bundled
 
-        private fun bundledJson(): String {
-            fun scale(edges: List<String>, guideline: String): String {
-                val uppers = edges + "null"
-                val steps = uppers.indices.joinToString(",") { i ->
-                    """{"upper":${uppers[i]},"label":{"en":"${WHO_EN[i]}","ar":"${WHO_AR[i]}"},"color_hint":"${WHO_COLORS[i]}"}"""
-                }
-                return """{"source":"${WhoGuidelines.URL}","unit":"µg/m³","guideline":$guideline,"steps":[$steps]}"""
-            }
-            return """
-                {"type":"Collection","id":"discover-cells-bundled",
-                 "opensensor:scales":{
-                   "who-2021-pm25":${scale(listOf("15", "25", "37.5", "50", "75"), "15")},
-                   "who-2021-pm10":${scale(listOf("45", "50", "75", "100", "150"), "45")}},
-                 "item_assets":{"data":{"table:columns":[
-                   {"name":"pm25__mean","opensensor:scale":"who-2021-pm25"},
-                   {"name":"pm10__mean","opensensor:scale":"who-2021-pm10"}]}}}
-            """.trimIndent()
+        @Volatile
+        private var bundled: DiscoverCollection = parse("""{"type":"Collection","id":"discover-cells-bundled"}""", root = "")
+
+        /** Makes the Collection [json] the [BUNDLED] one. Each app entry point calls it once at launch. */
+        fun installBundled(json: String) {
+            bundled = parse(json, root = "")
         }
-
-        private val WHO_COLORS = listOf("C6EBA8", "F5D75E", "F2A14A", "DC5A4A", "9A3F8E", "5C1A33")
-        private val WHO_EN = listOf(
-            "Within the WHO guideline",
-            "Within WHO interim target 4",
-            "Within WHO interim target 3",
-            "Within WHO interim target 2",
-            "Within WHO interim target 1",
-            "Above every WHO target",
-        )
-        private val WHO_AR = listOf(
-            "ضمن إرشاد منظمة الصحة العالمية",
-            "ضمن الهدف المرحلي 4 لمنظمة الصحة العالمية",
-            "ضمن الهدف المرحلي 3 لمنظمة الصحة العالمية",
-            "ضمن الهدف المرحلي 2 لمنظمة الصحة العالمية",
-            "ضمن الهدف المرحلي 1 لمنظمة الصحة العالمية",
-            "فوق كل أهداف منظمة الصحة العالمية",
-        )
     }
 }

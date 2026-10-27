@@ -14,8 +14,9 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.TimeZone
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.HistoryColumn
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.units.UnitFormatter
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,6 +28,10 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalTestApi::class)
 class DayRingSemanticsTest {
+    init {
+        AirFamily.install()
+    }
+
     private fun hour(index: Int, mean: Float?, estimated: Boolean = false) = HistoryColumn(
         startS = index * HOUR,
         endS = (index + 1) * HOUR,

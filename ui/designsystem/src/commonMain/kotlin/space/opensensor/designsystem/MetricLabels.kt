@@ -3,13 +3,13 @@ package space.opensensor.designsystem
 import androidx.compose.runtime.Composable
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.airquality.Pm25Basis
-import space.opensensor.airquality.WhoGuidelines
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.designsystem.resources.Res
 import space.opensensor.designsystem.resources.pm25_corrected
 import space.opensensor.designsystem.resources.pm25_correction_info
 import space.opensensor.designsystem.resources.pm25_raw
+import space.opensensor.family.air.Pm25Basis
+import space.opensensor.family.air.WhoGuidelines
 
 /** The short label of a PM2.5 basis, "PM2.5 corrected" or "PM2.5 raw", on every chart and card. */
 fun pm25LabelRes(basis: Pm25Basis): StringResource = when (basis) {

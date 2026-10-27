@@ -17,6 +17,8 @@ import space.opensensor.data.local.database.MetricBucket
 import space.opensensor.data.local.database.MetricBucketDao
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -24,6 +26,9 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 class HistoryRepositoryTest {
+    init {
+        AirFamily.install()
+    }
 
     private fun bytes(path: String) = migrateLegacyFooter(checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes())
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"

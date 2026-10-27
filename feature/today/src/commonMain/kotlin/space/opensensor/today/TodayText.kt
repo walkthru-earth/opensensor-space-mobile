@@ -6,11 +6,12 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
-import space.opensensor.data.history.AirMood
-import space.opensensor.data.protocol.PmsStatus
 import space.opensensor.data.sync.ClockQuality
 import space.opensensor.designsystem.moodLineRes
 import space.opensensor.designsystem.moodWord
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.PmsStatus
+import space.opensensor.family.air.formatPm
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.resources.Res
 import space.opensensor.today.resources.ago_days
@@ -52,6 +53,10 @@ import space.opensensor.today.resources.pms_absent_hint
 import space.opensensor.today.resources.pms_absent_title
 import space.opensensor.today.resources.pms_error_hint
 import space.opensensor.today.resources.pms_error_title
+import space.opensensor.today.resources.pms_mismatch_hint
+import space.opensensor.today.resources.pms_mismatch_title
+import space.opensensor.today.resources.pms_sleeping_hint
+import space.opensensor.today.resources.pms_sleeping_title
 import space.opensensor.today.resources.pms_stale_hint
 import space.opensensor.today.resources.pms_stale_title
 import space.opensensor.today.resources.pms_valid_title
@@ -61,7 +66,6 @@ import space.opensensor.today.resources.transport_ble
 import space.opensensor.today.resources.transport_fake
 import space.opensensor.today.resources.transport_lan
 import space.opensensor.units.formatFixed
-import space.opensensor.units.formatPm
 
 /** Shown where a value is missing or not read yet. Never a long dash (copy rules). */
 internal const val NO_VALUE = "n/a"
@@ -182,6 +186,8 @@ internal fun PmsStatus.titleText(): String = stringResource(
         PmsStatus.WARMING -> Res.string.pms_warming_title
         PmsStatus.STALE -> Res.string.pms_stale_title
         PmsStatus.ERROR -> Res.string.pms_error_title
+        PmsStatus.MODEL_MISMATCH -> Res.string.pms_mismatch_title
+        PmsStatus.SLEEPING -> Res.string.pms_sleeping_title
         PmsStatus.VALID -> Res.string.pms_valid_title
     },
 )
@@ -193,6 +199,8 @@ internal fun PmsStatus.hintText(): String = stringResource(
         PmsStatus.WARMING -> Res.string.pms_warming_hint
         PmsStatus.STALE -> Res.string.pms_stale_hint
         PmsStatus.ERROR -> Res.string.pms_error_hint
+        PmsStatus.MODEL_MISMATCH -> Res.string.pms_mismatch_hint
+        PmsStatus.SLEEPING -> Res.string.pms_sleeping_hint
         PmsStatus.VALID -> Res.string.pms_valid_title
     },
 )

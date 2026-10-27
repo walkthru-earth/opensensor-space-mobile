@@ -1,14 +1,21 @@
 package space.opensensor.model
 
 /**
- * The phone derived datastreams of one device family, such as the air family's EPA corrected PM2.5.
- * A provider names each one as data, a [Datastream] with [Datastream.derived] set, plus its per row
- * [RowFormula], so History builds it like a stored column and holds no family code. The app lists its
+ * What one device family (`:family:*`) adds to the generic core. Its phone derived datastreams, each
+ * named as data, a [Datastream] with [Datastream.derived] set, plus its per row [RowFormula], so
+ * History builds it like a stored column and holds no family code. Its health [scales], which a
+ * profile's `scales` id picks. And the [capabilitiesOf] a Thing of the family. The app lists its
  * providers once where it builds the metric catalog, never from static registration.
  */
 fun interface DerivedMetricProvider {
     /** The datastreams the phone derives for [template], empty when it lacks their source columns. */
     fun derive(template: BoardTemplate): List<DerivedMetric>
+
+    /** The health scales this family publishes, keyed by the scale id a profile's `scales` names. */
+    val scales: Map<String, HealthScale> get() = emptyMap()
+
+    /** The family capabilities [thing] has, beyond the generic ones core reads from any template. */
+    fun capabilitiesOf(thing: Thing): Set<Capability> = emptySet()
 }
 
 /** One row's value of a derived datastream from its source columns. */

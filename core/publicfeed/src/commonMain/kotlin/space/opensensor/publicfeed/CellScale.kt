@@ -1,9 +1,5 @@
 package space.opensensor.publicfeed
 
-import space.opensensor.airquality.Averaging
-import space.opensensor.airquality.HealthScale
-import space.opensensor.airquality.WhoGuidelines
-import space.opensensor.airquality.WhoStep
 import space.opensensor.model.Scale
 import kotlin.math.abs
 import kotlin.math.pow
@@ -11,8 +7,8 @@ import kotlin.math.roundToLong
 
 /**
  * How the map, the legend and the sheet colour one property (docs/devices-and-discovery.md,
- * Part 1 rule 3). A property whose feed gives it a scale (`opensensor:scales`, PM2.5 and PM10 on
- * WHO 2021 today) is coloured by fixed steps, so a colour means the same in every place, viewport
+ * Part 1 rule 3). A property whose feed gives it a scale (`opensensor:scales`, published by the
+ * family the property belongs to) is coloured by fixed steps, so a colour means the same in every place, viewport
  * and window. Every other property uses the neutral viridis ramp stretched over the cells in view.
  * Colours are ARGB.
  */
@@ -81,16 +77,6 @@ class StepScale private constructor(val propertyId: String, val scale: Scale) {
     /** True when text on step [i]'s colour should be light (relative luminance under 0.179). */
     fun darkFill(i: Int): Boolean = luminance(colors[i]) < DARK_LUMINANCE
 
-    /**
-     * The scale as a WHO guideline scale, for the mood surfaces (Simple mode). Set only for a scale
-     * cited to the WHO 2021 guidelines with six steps and an open last step.
-     */
-    val who: HealthScale? = if (scale.source == WhoGuidelines.URL && size == WhoStep.entries.size && scale.steps.last().upper == null) {
-        HealthScale(propertyId, scale.unit.orEmpty(), edges, Averaging.HOURS_24, WhoGuidelines.SOURCE)
-    } else {
-        null
-    }
-
     override fun equals(other: Any?): Boolean = other is StepScale && other.propertyId == propertyId && other.scale == scale
 
     override fun hashCode(): Int = 31 * propertyId.hashCode() + scale.hashCode()
@@ -101,7 +87,7 @@ class StepScale private constructor(val propertyId: String, val scale: Scale) {
         private const val DARK_LUMINANCE = 0.179
 
         /**
-         * The most steps a scale may have. WHO has 6, and the legend, the step bar and the chart bins
+         * The most steps a scale may have. The bundled ones have 6, and the legend, the step bar and the chart bins
          * walk every step, so a feed cannot make them draw thousands.
          */
         const val MAX_STEPS: Int = 12
@@ -171,8 +157,8 @@ object StepAxis {
      */
     fun bins(scale: StepScale, high: Double): Int? {
         if (!high.isFinite() || high <= 0.0) return null
-        // WHO edges are multiples of 0.5 µg/m³, so bin widths are searched in halves. A scale whose
-        // edges are not has no such count.
+        // Bin widths are searched in halves of the scale unit, the grid the bundled edges sit on. A
+        // scale whose edges do not has no such count.
         val unit = 0.5
         val inside = scale.edges.filter { it <= high + EPS } + high
         val units = inside.map { it / unit }

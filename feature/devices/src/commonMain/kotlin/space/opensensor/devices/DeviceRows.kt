@@ -29,7 +29,6 @@ import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.airquality.WhoStep
 import space.opensensor.data.history.LatestDay
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.FloatingControl
@@ -77,6 +76,8 @@ import space.opensensor.devices.resources.scan_tag_on_lan
 import space.opensensor.devices.resources.scan_tag_on_lan_no_token
 import space.opensensor.devices.resources.scan_tag_paired
 import space.opensensor.devices.resources.scan_unnamed
+import space.opensensor.family.air.WhoStep
+import space.opensensor.family.air.stepOf
 import space.opensensor.model.AppProfile
 import space.opensensor.settings.DetailLevel
 import space.opensensor.strings.resources.conn_connecting

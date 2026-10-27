@@ -21,7 +21,7 @@ data class AppProfile(
     val labels: Map<String, LocalizedText> = emptyMap(),
     /** Unit text per column, such as `µg/m³` for `ug/m3`. A column without one shows its template unit. */
     val displayUnit: Map<String, String> = emptyMap(),
-    /** Health scale id per column, such as `pm25`, the property id of a published scale. */
+    /** Health scale id per column, the id of a scale a family publishes ([DerivedMetricProvider.scales]). */
     val scales: Map<String, String> = emptyMap(),
     /** Columns the board writes but never fills, such as the CoreS3 ambient columns. Never shown, not even in LIVE. */
     val hidden: Set<String> = emptySet(),

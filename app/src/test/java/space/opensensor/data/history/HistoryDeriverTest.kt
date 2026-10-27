@@ -34,6 +34,8 @@ import space.opensensor.data.local.database.MetricBucket
 import space.opensensor.data.local.database.MetricBucketDao
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.model.BoardTemplate
 import space.opensensor.storage.AtomicFiles
 import space.opensensor.storage.DerivedQuota
@@ -49,6 +51,9 @@ import java.security.MessageDigest
 
 /** The deriver over in-memory DAOs and a temp archive: staleness by source signature, tiers and daily files together. */
 class HistoryDeriverTest {
+    init {
+        AirFamily.install()
+    }
 
     private fun bytes(path: String) = migrateLegacyFooter(checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes())
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"

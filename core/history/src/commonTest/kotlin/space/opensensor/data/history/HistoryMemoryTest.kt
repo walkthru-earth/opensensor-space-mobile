@@ -19,6 +19,8 @@ import space.opensensor.data.history.parquet.ColumnValues
 import space.opensensor.data.history.parquet.ParquetFile
 import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetWriter
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.storage.MemoryPressure
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -29,6 +31,10 @@ import kotlin.time.Duration.Companion.minutes
  * back on memory pressure, and every reader History opens is closed exactly once.
  */
 class HistoryMemoryTest {
+    init {
+        AirFamily.install()
+    }
+
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val firstDay = 20_000L // 2024-10-04, UTC epoch day
     private val board = fixtureBytes("parquet/device/v3-board-2rg-105rows.parquet")

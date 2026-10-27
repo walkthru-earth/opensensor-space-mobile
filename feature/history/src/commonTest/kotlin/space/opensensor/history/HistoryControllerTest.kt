@@ -15,7 +15,6 @@ import space.opensensor.archive.ArchiveRecord
 import space.opensensor.archive.ArchiveStore
 import space.opensensor.archive.PartialMeta
 import space.opensensor.archive.PartialWriter
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.DaySpan
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeriesReader
@@ -23,6 +22,8 @@ import space.opensensor.data.history.HistoryTiers
 import space.opensensor.data.history.Resolution
 import space.opensensor.data.history.TierBucket
 import space.opensensor.data.history.parquet.ByteReader
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,6 +33,10 @@ import kotlin.time.Instant
 
 /** The shared History state over a fake archive, without a device or a platform database. */
 class HistoryControllerTest {
+    init {
+        AirFamily.install()
+    }
+
     private val nowS = 1_790_769_600L // 2026-09-30T12:00Z
     private val todayEndS = 1_790_812_800L // 2026-10-01T00:00Z
     private val lastReadingS = 1_789_909_200L // 2026-09-20T13:00Z

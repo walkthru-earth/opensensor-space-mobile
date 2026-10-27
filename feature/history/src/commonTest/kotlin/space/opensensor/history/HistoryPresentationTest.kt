@@ -4,14 +4,19 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveRecord
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.startOfDay
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class HistoryPresentationTest {
+    init {
+        AirFamily.install()
+    }
+
     private fun file(thing: String, producer: String, dated: Boolean, indexed: Boolean = true, lastUtcNs: Long = 1_800_000_000_000_000_000): ArchiveRecord = ArchiveRecord(
         thing = thing,
         name = if (dated) "thing=$producer/year=2026/month=09/day=29/sample.parquet" else "thing=$producer/unsynced/boot=one/sample.parquet",

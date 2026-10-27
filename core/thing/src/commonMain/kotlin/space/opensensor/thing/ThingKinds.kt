@@ -1,6 +1,5 @@
 package space.opensensor.thing
 
-import space.opensensor.data.history.Metrics
 import space.opensensor.model.DerivedMetricProvider
 
 /**
@@ -21,12 +20,9 @@ class ThingKinds(val kinds: List<ThingKind>) {
     /** The first kind's reading of [evidence], in list order, or null when no kind recognizes it. */
     fun recognize(evidence: Evidence): Recognition? = kinds.firstNotNullOfOrNull { it.recognize(evidence) }
 
-    /** Every kind's derived metric providers, each once, in list order. */
+    /**
+     * Every kind's derived metric providers, each once, in list order. Each app hands them to its
+     * sensor family's install at launch, which puts them after the family in `Metrics.install`.
+     */
     val metricProviders: List<DerivedMetricProvider> get() = kinds.flatMap { it.derivedMetrics }.distinct()
-
-    /** Makes [metricProviders] the ones History's catalog applies ([Metrics.install]). Call once at launch. */
-    fun installMetrics(): ThingKinds {
-        Metrics.install(metricProviders)
-        return this
-    }
 }

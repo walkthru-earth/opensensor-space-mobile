@@ -32,7 +32,7 @@ include(":core:publicfeed")
 // Display units, metric or imperial, for every screen on both platforms (docs/screens.md, Settings).
 include(":core:units")
 // WHO 2021 air quality guideline scales and their palette, for every chart and the map.
-include(":core:airquality")
+include(":family:air")
 // HTTP range reads for remote Parquet, OkHttp on Android and NSURLSession on iOS (issue #62).
 include(":core:net")
 // The shared sync engine (docs/sync-engine.md).

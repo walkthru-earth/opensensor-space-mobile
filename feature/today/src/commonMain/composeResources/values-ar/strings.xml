@@ -83,11 +83,15 @@
     <string name="pms_warming_title">جارٍ الإحماء</string>
     <string name="pms_stale_title">القراءة قديمة</string>
     <string name="pms_error_title">خطأ في المستشعر</string>
+    <string name="pms_mismatch_title">طراز المستشعر غير مطابق</string>
+    <string name="pms_sleeping_title">المستشعر في استراحة</string>
     <string name="pms_valid_title">قراءة</string>
     <string name="pms_absent_hint">لا يستجيب أي مستشعر جسيمات. تحقّق من الكابل.</string>
     <string name="pms_warming_hint">المستشعر في مرحلة الإحماء. يستغرق ذلك نحو دقيقة بعد التشغيل.</string>
     <string name="pms_stale_hint">آخر قراءة من المستشعر قديمة، لذا لا يُعتمد عليها.</string>
     <string name="pms_error_hint">يبلّغ المستشعر عن خطأ، لذا لا تُعرض أرقامه.</string>
+    <string name="pms_mismatch_hint">المستشعر المركّب ليس الطراز الذي تتوقعه اللوحة، لذا لا تُعرض أرقامه.</string>
+    <string name="pms_sleeping_hint">المستشعر في استراحة بين القراءات.</string>
     <string name="env_title">درجة الحرارة والرطوبة</string>
     <string name="env_unsupported">هذا الإصدار من التطبيق لا يقرأ القيم المباشرة من هذا المستشعر بعد. الملفات المتزامنة لا تزال تعمل.</string>
     <string name="today_so_far">اليوم حتى الآن</string>

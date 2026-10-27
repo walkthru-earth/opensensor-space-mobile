@@ -1,9 +1,14 @@
 package space.opensensor.data.history
 
 import space.opensensor.data.history.parquet.ParquetFile
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import kotlin.test.Test
 
 class FileSummaryTest {
+    init {
+        AirFamily.install()
+    }
 
     private fun bytes(path: String) = fixtureBytes("parquet/$path")
 

@@ -38,6 +38,8 @@
     <string name="pms_warming_title">جارٍ الإحماء</string>
     <string name="pms_stale_title">القراءة قديمة</string>
     <string name="pms_error_title">خطأ في المستشعر</string>
+    <string name="pms_mismatch_title">طراز المستشعر غير مطابق</string>
+    <string name="pms_sleeping_title">المستشعر في استراحة</string>
     <string name="pms_valid_title">قراءة</string>
 
     <!-- Device -->

@@ -21,7 +21,7 @@ class LiveReading(val sample: LiveSample, val thing: Thing) {
     /** The value of [column] now, null when LIVE does not show it or the board has no reading now. */
     fun value(column: String): Double? = keyOf(column)?.let(sample::get)?.takeIf { it.isFinite() }
 
-    /** [value] as an integer code, for a code column such as `pms_status`. */
+    /** [value] as an integer code, for a code column such as a sensor state. */
     fun code(column: String): Int? = value(column)?.takeIf { it == kotlin.math.floor(it) }?.toInt()
 
     companion object {

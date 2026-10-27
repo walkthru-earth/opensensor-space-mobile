@@ -1,8 +1,10 @@
 package space.opensensor.devices
 
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.LatestDay
 import space.opensensor.data.history.MetricSpec
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.stepOf
 import space.opensensor.units.UnitFormatter
 import space.opensensor.units.UnitSystem
 import kotlin.test.Test
@@ -11,6 +13,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class DayLineTest {
+    init {
+        AirFamily.install()
+    }
+
     private fun day(metric: MetricSpec, mean: Float, step: Double) = LatestDay(86_400, mean, 1f, metric, step)
 
     @Test

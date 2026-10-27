@@ -5,12 +5,12 @@ import androidx.compose.ui.graphics.toArgb
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
 import space.opensensor.designsystem.BrandDarkScheme
 import space.opensensor.designsystem.BrandLightScheme
 import space.opensensor.designsystem.BrandPalette
 import space.opensensor.designsystem.BrandTokens
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
 
 /**
  * Pins the brand tokens to the website registry (`lib/brand.ts`, `sensing`) and checks that every
@@ -37,7 +37,7 @@ class BrandTokensTest {
     }
 
     @Test fun everyBandColourIsItsWhoStepColour() {
-        // One mapping: the six moods paint the six WHO steps, light to dark, from :core:airquality.
+        // One mapping: the six moods paint the six WHO steps, light to dark, from :family:air.
         assertEquals(
             listOf("#C6EBA8", "#F5D75E", "#F2A14A", "#DC5A4A", "#9A3F8E", "#5C1A33"),
             AirMood.entries.map { hex(it.color()) },

@@ -1,6 +1,6 @@
 package space.opensensor.device
 
-import space.opensensor.data.SensorLabel
+import space.opensensor.family.air.SensorLabel
 
 /**
  * Turns one platform barcode read into the [StickerScan] the sticker card shows. Android's Google

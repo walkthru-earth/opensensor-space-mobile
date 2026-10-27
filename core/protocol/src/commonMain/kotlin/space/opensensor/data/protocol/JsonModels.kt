@@ -126,19 +126,6 @@ data class DeviceStatus(
     }
 }
 
-/** `pms_status` code from the dictionary. */
-enum class PmsStatus(val code: Int, val label: String) {
-    ABSENT(0, "no PM sensor"),
-    WARMING(1, "sensor warming up"),
-    STALE(2, "sensor stale"),
-    ERROR(3, "sensor error"),
-    VALID(4, "valid");
-
-    companion object {
-        fun fromCode(code: Int?): PmsStatus? = entries.firstOrNull { it.code == code }
-    }
-}
-
 /**
  * `live` (read, notify). One snapshot per stored sample, read as a map by key name. The board sends
  * every key its field table declares, each as a number or `null`. `null` means no reading now, and an

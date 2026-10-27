@@ -1,12 +1,18 @@
 package space.opensensor.publicfeed
 
 import kotlinx.datetime.LocalDate
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.PublicSummary
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DailyCellFoldTest {
+    init {
+        AirFamily.install()
+    }
+
     private val asOf = LocalDate(2026, 10, 8)
     private val a = 0x85283473fffffffL
     private val b = 0x8528347bfffffffL

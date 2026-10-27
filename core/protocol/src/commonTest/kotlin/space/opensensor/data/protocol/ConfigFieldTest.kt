@@ -12,7 +12,7 @@ class ConfigFieldTest {
         addAll(ConfigPatch.build { blePair(PairMode.FIXED).blePin("000000").clearBonds() }.keys)
         addAll(ConfigPatch.build { wifiOn(true).wifiSsid("home").wifiPsk("").lanOn(true).rotateToken() }.keys)
         addAll(ConfigPatch.build { location("", 8, "") }.keys)
-        addAll(ConfigPatch.build { sensorIdentity("PMS5003T-2026040813", enableBatchCandidate = false) }.keys)
+        addAll(ConfigPatch.build { sensorIdentity("Acme", "X1", "X1-0042", batchCandidate = false) }.keys)
     }
 
     @Test

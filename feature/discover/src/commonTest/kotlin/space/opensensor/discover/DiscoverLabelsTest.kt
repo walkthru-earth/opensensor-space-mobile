@@ -1,7 +1,7 @@
 package space.opensensor.discover
 
-import space.opensensor.airquality.Pm25Basis
 import space.opensensor.designsystem.pm25LabelRes
+import space.opensensor.family.air.Pm25Basis
 import space.opensensor.publicfeed.FeedProperty
 import kotlin.test.Test
 import kotlin.test.assertEquals

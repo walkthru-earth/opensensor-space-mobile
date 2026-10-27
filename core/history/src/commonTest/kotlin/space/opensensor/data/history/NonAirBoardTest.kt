@@ -1,8 +1,9 @@
 package space.opensensor.data.history
 
-import space.opensensor.airquality.AirDerivedMetrics
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.showsAirCards
 import space.opensensor.model.AppProfile
 import space.opensensor.model.Basis
 import space.opensensor.model.BoardTemplate
@@ -84,11 +85,11 @@ class NonAirBoardTest {
         try {
             Metrics.install(emptyList())
             assertTrue(Metrics.catalog.none { it.derived })
-            assertEquals(null, Metrics.byId(AirDerivedMetrics.PM25_CORRECTED_ID))
-            Metrics.install(Metrics.DEFAULT_PROVIDERS)
-            assertNotNull(Metrics.byId(AirDerivedMetrics.PM25_CORRECTED_ID))
+            assertEquals(null, Metrics.byId(AirFamily.PM25_CORRECTED_ID))
+            AirFamily.install()
+            assertNotNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
         } finally {
-            Metrics.install(Metrics.DEFAULT_PROVIDERS)
+            AirFamily.install()
         }
     }
 
@@ -107,6 +108,7 @@ class NonAirBoardTest {
         assertEquals(setOf(Capability.LIVE, Capability.CONFIG), caps.capabilities)
         val sample = LiveSample.parse("""{"st":14.5,"sm":31.0,"pms":4}""")
         assertFalse(caps.showsAirCards(sample))
+        assertFalse(AirFamily.PARTICLES in caps.capabilities)
         assertEquals(14.5, caps.reading(sample)?.value("soil_temperature_c")!!, 0.0)
         assertEquals("soil_temperature_c", caps.temperature?.name)
     }

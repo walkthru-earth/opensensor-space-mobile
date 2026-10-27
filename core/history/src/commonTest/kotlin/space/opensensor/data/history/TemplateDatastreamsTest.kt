@@ -20,6 +20,8 @@ import space.opensensor.data.history.parquet.ParquetFile
 import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.history.parquet.ParquetWriter
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.model.Aggregate
 import space.opensensor.model.AppProfile
 import space.opensensor.model.BoardTemplate
@@ -40,6 +42,10 @@ import kotlin.test.assertTrue
  * template. A dictionary nothing resolves keeps its rows and has no metrics.
  */
 class TemplateDatastreamsTest {
+    init {
+        AirFamily.install()
+    }
+
     private val day = 20_000L
     private val startS = day * 86_400 + 10 * 3_600
     private val thing = "soil-thing"

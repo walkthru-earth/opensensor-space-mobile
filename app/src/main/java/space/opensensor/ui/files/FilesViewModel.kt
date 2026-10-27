@@ -33,7 +33,6 @@ import space.opensensor.data.SyncProgress
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.ThingStatus
 import space.opensensor.data.ble.TransportKind
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.ArchiveQueryResult
 import space.opensensor.data.history.DerivedStore
 import space.opensensor.data.history.FileSummary
@@ -47,6 +46,7 @@ import space.opensensor.data.local.database.ArchivedFileDao
 import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.settings.AppSettings
 import space.opensensor.data.settings.DetailLevel
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.files.DeviceFiles
 import space.opensensor.files.FileMetricsController
 import space.opensensor.files.FilesController

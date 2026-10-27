@@ -3,9 +3,14 @@ package space.opensensor.data.history
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveReading
 import space.opensensor.data.protocol.LiveSample
+import space.opensensor.family.air.AirFamily
 
-/** INFO and LIVE readings over the bundled templates, for tests. */
+/** INFO and LIVE readings over the bundled air boards, with the air family installed, for tests. */
 internal object LiveFixtures {
+    init {
+        AirFamily.install()
+    }
+
     val waveshareDict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809"
     val cores3Dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
     val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = waveshareDict)

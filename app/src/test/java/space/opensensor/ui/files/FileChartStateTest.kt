@@ -4,14 +4,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.ArchiveQueryResult
 import space.opensensor.data.history.FileSummary
 import space.opensensor.data.history.MetricAgg
 import space.opensensor.data.history.Metrics
 import space.opensensor.data.local.database.ArchivedFile
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 
 class FileChartStateTest {
+    init {
+        AirFamily.install()
+    }
+
     private fun file(thing: String, name: String) = ArchivedFile(
         thing = thing,
         name = name,

@@ -37,6 +37,7 @@ class OpenSensorApplication :
     Configuration.Provider {
 
     // First, so the kinds' metric providers are in the catalog before any field below reads it.
+    // ThingModuleTest holds this order.
     @Inject
     lateinit var thingKinds: ThingKinds
 

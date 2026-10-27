@@ -1,16 +1,21 @@
 package space.opensensor.data.history
 
-import space.opensensor.airquality.EpaPm25Correction
 import space.opensensor.data.history.parquet.ColumnValues
 import space.opensensor.data.history.parquet.ParquetCodec
 import space.opensensor.data.history.parquet.ParquetFile
 import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.history.parquet.ParquetWriter
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.EpaPm25Correction
 import kotlin.math.abs
 import kotlin.test.Test
 
 class AggregationTest {
+    init {
+        AirFamily.install()
+    }
 
     private fun bytes(path: String) = fixtureBytes("parquet/$path")
 

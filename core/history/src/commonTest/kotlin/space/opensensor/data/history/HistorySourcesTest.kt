@@ -12,7 +12,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.TimeZone
-import space.opensensor.airquality.EpaPm25Correction
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveKey
 import space.opensensor.archive.ArchiveRecord
@@ -27,6 +26,9 @@ import space.opensensor.data.history.parquet.ParquetFile
 import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetSink
 import space.opensensor.data.history.parquet.ParquetWriter
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.EpaPm25Correction
 import space.opensensor.model.TemplateKey
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -34,6 +36,10 @@ import kotlin.time.Duration
 
 /** The shared History sources over a fake archive: index repair, the row reader and the in-memory tiers. */
 class HistorySourcesTest {
+    init {
+        AirFamily.install()
+    }
+
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val dayStart = 1_789_603_200L // 2026-09-17T00:00Z
     private val board = fixtureBytes("parquet/device/v3-board-2rg-105rows.parquet")
