@@ -7,8 +7,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import space.opensensor.airquality.Pm25Basis
 import space.opensensor.model.AppProfile
+import space.opensensor.model.Basis
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
 
@@ -37,7 +37,7 @@ object LatestDays {
     fun candidatesOf(available: List<MetricSpec>): List<MetricSpec> {
         val main = Metrics.defaultOf(available) ?: return emptyList()
         if (!main.derived) return listOf(main)
-        val stored = available.firstOrNull { !it.derived && it.property == main.property && it.basis == Pm25Basis.RAW }
+        val stored = available.firstOrNull { !it.derived && it.property == main.property && it.basis == Basis.RAW }
         return listOfNotNull(main, stored)
     }
 
