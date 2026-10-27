@@ -52,7 +52,7 @@ object AirPresenter : FamilyPresenter {
     @Composable
     override fun Hero(state: TodayUiState, modifier: Modifier) {
         if (state.showsAirCards) {
-            MetricHeroCard(state.reading, state.snapshot.liveAtEpochMs, state.level, modifier)
+            MetricHeroCard(state.airReading, state.reading, state.snapshot.liveAtEpochMs, state.level, modifier)
         } else {
             EnvironmentCard(state.liveSupport, state.capabilities, state.reading, state.snapshot.liveAtEpochMs, hero = true, modifier = modifier)
         }

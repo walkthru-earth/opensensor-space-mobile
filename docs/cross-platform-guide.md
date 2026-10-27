@@ -201,7 +201,10 @@ in charts, on cards and in the peacock expression. The scale lives once in `:fam
 - **Fixed, not relative.** A step colour means the same thing in every viewport, window and
   screen. Percentile stretching is only for properties without a scale.
 - **Say the averaging.** The WHO values are 24-hour means. A 1-hour or 7-day mean is still
-  coloured by the steps, and the legend says it is compared with the 24-hour guideline.
+  coloured by the steps, and the legend says it is compared with the 24-hour guideline. The
+  Today hero is judged on the EPA NowCast of the last 12 hours (`PmNowCast`, #93) once the phone
+  archive has two of the three latest hours, and on the live value until then. Every level states
+  the basis in one short line under the label, and Detailed shows the live value beside a NowCast.
 - **Charts.** Bars or points take the step colour, the background stays neutral, the y axis
   starts at zero, the guideline is a labelled dashed line, and the y maximum snaps up to a WHO
   edge so the guideline is always in view and charts compare. Outliers above the 95th
@@ -211,6 +214,9 @@ in charts, on cards and in the peacock expression. The scale lives once in `:fam
   (`WhoPaletteTest`).
 - **Not an AQI.** A WHO step is not an index. The live number is a short snapshot and is never
   presented as a 24-hour mean.
+- **Flag, never change.** The quality checks (`QcRules`, #91) only flag a live value. Detailed
+  shows a flagged value with one short line and an info icon that lists the reasons. Simple shows
+  the value without a mood or step. A NowCast stays rated.
 
 The shared `AirQualityPeacock` maps Fresh air to Happy, Fair to Calm, Getting hazy to Concerned,
 Poor and Smoky to Masked, and Thick smoke to Feather shield. Missing measurements use Confused.

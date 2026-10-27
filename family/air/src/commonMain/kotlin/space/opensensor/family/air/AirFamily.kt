@@ -20,7 +20,8 @@ import space.opensensor.publicfeed.DiscoverCollection
  * profile scale ids `pm25` and `pm10` read the WHO 2021 scales ([WhoGuidelines]). An air Thing gets
  * [BATCH_ESTIMATE] and [PARTICLES].
  *
- * A NowCast for short PM windows (#93) belongs here too, next to the correction, once it lands.
+ * The EPA NowCast for short PM windows ([PmNowCast], #93) and the quality checks for suspect PM
+ * readings ([QcRules], [LiveQc], #91) live here too, next to the correction.
  */
 object AirFamily : DerivedMetricProvider {
     /** The family id of an air profile. */
@@ -47,6 +48,14 @@ object AirFamily : DerivedMetricProvider {
     const val PM25_CF1 = "pm25_cf1_ug_m3"
     const val PM25_ATMOSPHERIC = "pm25_atmospheric_ug_m3"
     const val RELATIVE_HUMIDITY = "relative_humidity_percent"
+    const val PM1_ATMOSPHERIC = "pm1_atmospheric_ug_m3"
+    const val PM10_ATMOSPHERIC = "pm10_atmospheric_ug_m3"
+
+    /**
+     * The Plantower particle count bins, per 0.1 L, from the smallest size up. A board writes the
+     * ones its template declares, the CoreS3 all six and the Waveshare the first four.
+     */
+    val PARTICLE_BINS: List<String> = listOf("gt03", "gt05", "gt10", "gt25", "gt50", "gt100").map { "particles_${it}_per_01l" }
 
     override fun derive(template: BoardTemplate): List<DerivedMetric> {
         val cf1 = template.datastream(PM25_CF1) ?: return emptyList()
