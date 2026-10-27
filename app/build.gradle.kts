@@ -121,8 +121,6 @@ android {
     testOptions {
         // Lets JVM tests exercise classes that call android.util.Log (TcpLinkDriver loopback test).
         unitTests.isReturnDefaultValues = true
-        // ManifestPermissionsTest reads the source manifest, so an edited manifest reruns it.
-        unitTests.all { it.inputs.file("src/main/AndroidManifest.xml").withPropertyName("manifest").withPathSensitivity(PathSensitivity.RELATIVE) }
     }
 
     lint {
@@ -204,6 +202,14 @@ val extractH3Jni = tasks.register<ExtractH3Jni>("extractH3Jni") {
 androidComponents {
     onVariants { variant ->
         variant.sources.jniLibs?.addGeneratedSourceDirectory(extractH3Jni, ExtractH3Jni::output)
+        // ManifestPermissionsTest reads the variant's merged manifest, with every library manifest
+        // folded in. As a task input it builds first, and any manifest change reruns the test.
+        val mergedManifest = variant.artifacts.get(com.android.build.api.artifact.SingleArtifact.MERGED_MANIFEST)
+        val unitTest = "test${variant.name.replaceFirstChar { it.uppercase() }}UnitTest"
+        tasks.withType<Test>().matching { it.name == unitTest }.configureEach {
+            inputs.file(mergedManifest).withPropertyName("mergedManifest").withPathSensitivity(PathSensitivity.NONE)
+            jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Dopensensor.mergedManifest=${mergedManifest.get().asFile.absolutePath}") })
+        }
     }
 }
 

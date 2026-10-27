@@ -68,15 +68,32 @@ object PlatformNeedsTable {
     private const val LOCATION_REDUCED = "NSLocationDefaultAccuracyReduced"
     private const val USER_DEFAULTS = "NSPrivacyAccessedAPICategoryUserDefaults"
 
-    /** The app shell without any kind. Discover reads the public feed and Near me asks for an approximate fix. */
+    /**
+     * The app shell without any kind. Discover reads the public feed and Near me asks for an
+     * approximate fix. The phone archive, its storage budget and the elapsed time clock serve every
+     * kind, so their required reasons sit here.
+     */
     val APP = PlatformNeeds(
         android = AndroidNeeds(
-            permissions = setOf("android.permission.INTERNET", "android.permission.ACCESS_COARSE_LOCATION"),
+            permissions = setOf(
+                "android.permission.INTERNET",
+                // Merged from the maplibre-compose manifest for the Discover map, a normal permission.
+                "android.permission.ACCESS_NETWORK_STATE",
+                "android.permission.ACCESS_COARSE_LOCATION",
+            ),
         ),
         ios = IosNeeds(
             infoKeys = setOf(LOCATION_WHEN_IN_USE, LOCATION_REDUCED),
-            // The Discover map camera, chip choices and app settings.
-            accessedApis = mapOf(USER_DEFAULTS to setOf("CA92.1")),
+            accessedApis = mapOf(
+                // File dates in the app container archive (core/archive, core/storage).
+                "NSPrivacyAccessedAPICategoryFileTimestamp" to setOf("C617.1"),
+                // Free space checked before writing archive and export files.
+                "NSPrivacyAccessedAPICategoryDiskSpace" to setOf("E174.1"),
+                // ProcessInfo.systemUptime for elapsed time.
+                "NSPrivacyAccessedAPICategorySystemBootTime" to setOf("35F9.1"),
+                // The Discover map camera, chip choices and app settings.
+                USER_DEFAULTS to setOf("CA92.1"),
+            ),
         ),
     )
 
@@ -116,9 +133,6 @@ object PlatformNeedsTable {
             backgroundModes = setOf("processing", "bluetooth-central"),
             backgroundTaskIds = setOf("space.opensensor.app.autosync", "space.opensensor.app.sync.*"),
             accessedApis = mapOf(
-                "NSPrivacyAccessedAPICategoryFileTimestamp" to setOf("C617.1"),
-                "NSPrivacyAccessedAPICategoryDiskSpace" to setOf("E174.1"),
-                "NSPrivacyAccessedAPICategorySystemBootTime" to setOf("35F9.1"),
                 // The Auto-sync switches, their last run times and the bonded sensor ids.
                 USER_DEFAULTS to setOf("CA92.1"),
             ),

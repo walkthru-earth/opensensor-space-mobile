@@ -68,11 +68,14 @@ declared yet.
 
 | Row | Android | iOS |
 | --- | --- | --- |
-| `APP` | `INTERNET` (Discover feed), `ACCESS_COARSE_LOCATION` (Near me) | `NSLocationWhenInUseUsageDescription`, `NSLocationDefaultAccuracyReduced`, UserDefaults `CA92.1` |
-| `OPENSENSOR_BOARD` | Bluetooth scan and connect, `ACCESS_LOCAL_NETWORK`, foreground service with `connectedDevice` and `dataSync`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, the four companion permissions, `RECEIVE_BOOT_COMPLETED`, `ACCESS_COARSE_LOCATION` (Use phone location) | Bluetooth, Local Network, camera and location usage strings, `NSLocationDefaultAccuracyReduced`, Bonjour `_ossync._tcp`, modes `processing` and `bluetooth-central`, both task ids, file timestamp `C617.1`, disk space `E174.1`, boot time `35F9.1`, UserDefaults `CA92.1`. No entitlements |
+| `APP` | `INTERNET` (Discover feed), `ACCESS_NETWORK_STATE` (merged from maplibre-compose), `ACCESS_COARSE_LOCATION` (Near me) | `NSLocationWhenInUseUsageDescription`, `NSLocationDefaultAccuracyReduced`, file timestamp `C617.1`, disk space `E174.1`, boot time `35F9.1` (archive, storage budget and elapsed time serve every kind), UserDefaults `CA92.1` |
+| `OPENSENSOR_BOARD` | Bluetooth scan and connect, `ACCESS_LOCAL_NETWORK`, foreground service with `connectedDevice` and `dataSync`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, the four companion permissions, `RECEIVE_BOOT_COMPLETED`, `ACCESS_COARSE_LOCATION` (Use phone location) | Bluetooth, Local Network, camera and location usage strings, `NSLocationDefaultAccuracyReduced`, Bonjour `_ossync._tcp`, modes `processing` and `bluetooth-central`, both task ids, UserDefaults `CA92.1`. No entitlements |
 
-- `ManifestPermissionsTest` (`:app` host test) checks the `uses-permission` set and every service's
-  `foregroundServiceType` against the kinds of `ThingModule.KINDS`.
+- `ManifestPermissionsTest` (`:app` host test) reads the variant's merged manifest, so a permission a
+  library or plugin module manifest brings in counts too. It checks the `uses-permission` set and every
+  service's `foregroundServiceType` against the kinds of `ThingModule.KINDS`. The one extra name it
+  allows, by exact name, is androidx.core's `space.opensensor.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`,
+  a signature permission the app declares for its own not exported receivers.
 - `IosBundleGateTest` (`:ios:shared`, iOS simulator in `verifyIos`) checks the gated Info.plist keys
   (every usage string plus `NSLocationDefaultAccuracyReduced` and `NSSupportsLiveActivities`),
   `NSBonjourServices`, `UIBackgroundModes`, `BGTaskSchedulerPermittedIdentifiers`, the privacy
