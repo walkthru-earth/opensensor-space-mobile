@@ -390,6 +390,21 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `a connect while a forget runs is refused and the forget completes`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        val gate = CompletableDeferred<Unit>()
+        h.places.removeGate = gate
+        val forgot = async { h.owner.forget(ADDRESS) }
+        h.until { h.repo.busy.value }
+        assertFalse("a connect during a forget is refused", h.repo.connect(ADDRESS, "OS-6b40", fake = true))
+        gate.complete(Unit)
+        h.until { forgot.isCompleted }
+        assertTrue(forgot.await())
+        assertNull(h.knownDao.get(ADDRESS))
+    }
+
+    @Test
     fun `forgetting a Thing removes the saved cells of its older epochs`() = harnessTest { h ->
         h.device.locationCell = "85283473fffffff"
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
@@ -408,7 +423,11 @@ class DeviceFacadeTest {
         val all: List<ThingPlace> get() = state.value
         override fun observeAll(): Flow<List<ThingPlace>> = state
         override suspend fun put(place: ThingPlace) = state.update { list -> list.filter { it.thing != place.thing } + place }
-        override suspend fun remove(thing: String) = state.update { list -> list.filter { it.thing != thing } }
+        var removeGate: CompletableDeferred<Unit>? = null
+        override suspend fun remove(thing: String) {
+            removeGate?.await()
+            state.update { list -> list.filter { it.thing != thing } }
+        }
     }
 
     @Test
