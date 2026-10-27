@@ -33,7 +33,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 class HistoryOrchestrator(
     private val repair: ArchiveIndexRepair,
-    private val index: ArchiveIndex,
+    internal val index: ArchiveIndex,
     private val log: (String) -> Unit = {},
     /** The waits before each retry of a backfill that left records waiting. */
     private val retryDelays: List<Duration> = RETRY_DELAYS,

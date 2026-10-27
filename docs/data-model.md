@@ -167,8 +167,9 @@ Version 2 adds `list_cursor` through `AutoMigration(from = 1, to = 2)`, which ke
 table. Version 3 adds `thing_source` through `Migration2To3`, and gives every Thing the phone
 already knows, from `known_device`, `thing_epoch` or `archived_file`, an `opensensor-board` row at
 contract version 1, so no stored Thing is lost on upgrade. Version 4 adds the footer
-`dictionarySha256` and `templateSha256` to `archived_file` through `Migration3To4`, and reopens
-every row indexed without an error so the back-fill reads them. A schema change adds an explicit or auto migration and the next
+`dictionarySha256` and `templateSha256` to `archived_file` through `Migration3To4`, each with an
+index for the template change check, and reopens every row indexed without an error so the back-fill
+reads them. A schema change adds an explicit or auto migration and the next
 `core/database/schemas/<n>.json`.
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores

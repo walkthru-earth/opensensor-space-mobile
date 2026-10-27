@@ -23,7 +23,7 @@ import space.opensensor.data.history.IndexedFileInfo
  */
 @Entity(
     tableName = "archived_file",
-    indices = [Index(value = ["thing", "name"], unique = true)],
+    indices = [Index(value = ["thing", "name"], unique = true), Index("templateSha256"), Index("dictionarySha256")],
 )
 data class ArchivedFile(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -207,6 +207,13 @@ interface ArchivedFileDao {
     @Query("SELECT * FROM archived_file WHERE thing = :thing AND indexedAtEpochMs IS NOT NULL AND indexError IS NULL")
     suspend fun indexedForThing(thing: String): List<ArchivedFile>
 
+    /** True when an indexed file's footer names one of [descs] or [dicts], on the digest indices. */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM archived_file WHERE indexedAtEpochMs IS NOT NULL AND indexError IS NULL " +
+            "AND (templateSha256 IN (:descs) OR dictionarySha256 IN (:dicts)))",
+    )
+    suspend fun anyIndexedNames(descs: List<String>, dicts: List<String>): Boolean
+
     @Query("SELECT DISTINCT thing FROM archived_file")
     suspend fun things(): List<String>
 
@@ -217,12 +224,15 @@ interface ArchivedFileDao {
 /**
  * Version 3 to 4 adds the footer `dictionary.sha256` and `template.sha256` to `archived_file`. Only
  * the file's footer has them, so every row indexed without error is reopened and the back-fill reads
- * each footer once. Until then a row awaits its index and holds its days in History.
+ * each footer once. Until then a row awaits its index and holds its days in History. Both digests are
+ * indexed, so a template change asks in one query whether any file names it.
  */
 object Migration3To4 : Migration(3, 4) {
     override fun migrate(connection: SQLiteConnection) {
         connection.execSQL("ALTER TABLE `archived_file` ADD COLUMN `dictionarySha256` TEXT")
         connection.execSQL("ALTER TABLE `archived_file` ADD COLUMN `templateSha256` TEXT")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_archived_file_templateSha256` ON `archived_file` (`templateSha256`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_archived_file_dictionarySha256` ON `archived_file` (`dictionarySha256`)")
         connection.execSQL("UPDATE `archived_file` SET `indexedAtEpochMs` = NULL WHERE `indexedAtEpochMs` IS NOT NULL AND `indexError` IS NULL")
     }
 }

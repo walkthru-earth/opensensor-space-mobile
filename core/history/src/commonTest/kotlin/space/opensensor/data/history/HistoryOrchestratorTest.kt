@@ -32,6 +32,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /** The History pass order both phones share, over an in-memory archive and fake platform passes. */
@@ -387,24 +388,48 @@ class HistoryOrchestratorTest {
     }
 
     @Test
-    fun aNewTemplateDerivesAgainAndAnUnchangedOneDoesNot() = runTest {
+    fun onlyATemplateThatAnIndexedFileNamesDerivesAgain() = runTest {
+        val dict = "ee".repeat(32)
+        val desc = "ff".repeat(32)
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict, templateSha256 = desc))
         val (cache, _) = blocks { }
         val history = orchestrator()
         val served = ServedTemplates()
         val startup = HistoryStartup(history, janitor { }, cache, templates = FileTemplates.over(served).changes)
         var derives = 0
+        fun served(dict: String, desc: String) = served.add(coreS3Template.copy(key = TemplateKey(dict, desc)))
+        fun settled() {
+            advanceTimeBy(HistoryStartup.TEMPLATE_SETTLE + 1.seconds)
+            runCurrent()
+        }
 
         val job = startup.start(this) { history.derivePass { derives++ } }
         runCurrent()
         assertEquals(1, derives)
 
-        served.add(coreS3Template.copy(key = TemplateKey("ab".repeat(32), "cd".repeat(32))))
-        runCurrent()
-        assertEquals(2, derives, "a template the cache loads or a board serves derives again")
+        // A board that serves a fresh valid template on every reconnect, none of them named by a file.
+        repeat(40) { i ->
+            served("ab".repeat(32), i.toString(16).padStart(64, '0'))
+            settled()
+        }
+        assertEquals(1, derives, "templates no indexed file names derive nothing")
 
-        served.add(coreS3Template.copy(key = TemplateKey("ab".repeat(32), "cd".repeat(32))))
-        runCurrent()
+        served(dict, desc)
+        settled()
+        assertEquals(2, derives, "a template an indexed file names derives again")
+
+        served(dict, desc)
+        settled()
         assertEquals(2, derives, "a template already held changes nothing")
+
+        // Half a second apart, closer than the settle time, as a board reconnecting in a loop would serve them.
+        repeat(5) { i ->
+            served(dict, "0$i".repeat(32))
+            advanceTimeBy(500.milliseconds)
+            runCurrent()
+        }
+        settled()
+        assertEquals(3, derives, "a burst of templates for the file's dict settles into one derive")
         job.cancel()
     }
 }

@@ -32,8 +32,11 @@ fun interface FileTemplates {
      */
     fun template(dict: String?, desc: String?): BoardTemplate?
 
-    /** Emits a new value whenever [template] may answer differently, so History derives again. */
-    val changes: StateFlow<Any?> get() = UNCHANGING
+    /**
+     * The templates held beside the bundled ones, emitted whenever [template] may answer differently, so
+     * History derives again. Empty and unchanging when only bundled templates resolve.
+     */
+    val changes: StateFlow<List<BoardTemplate>> get() = UNCHANGING
 
     /**
      * Which template [record]'s footer digests resolve to now, its full desc or `dict:<dict>` for a
@@ -58,7 +61,7 @@ fun interface FileTemplates {
     companion object {
         private const val MS_PER_S = 1000.0
 
-        private val UNCHANGING: StateFlow<Any?> = MutableStateFlow(Unit)
+        private val UNCHANGING: StateFlow<List<BoardTemplate>> = MutableStateFlow(emptyList())
 
         /**
          * The bundled templates, by template digest first and then by dict. A desc match whose dict
@@ -80,7 +83,7 @@ fun interface FileTemplates {
          * [served]'s, so a template a board serves or the cache loads derives History again.
          */
         fun over(served: ServedTemplates): FileTemplates = object : FileTemplates {
-            override val changes: StateFlow<Any?> get() = served.all
+            override val changes: StateFlow<List<BoardTemplate>> get() = served.all
 
             override fun template(dict: String?, desc: String?): BoardTemplate? {
                 val held = served.all.value

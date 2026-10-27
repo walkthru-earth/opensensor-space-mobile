@@ -1,6 +1,7 @@
 package space.opensensor.data.local.database
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /**
@@ -31,6 +32,9 @@ interface DerivedArchivedFileQueries : ArchivedFileDao {
             ThingArchiveGlance(thing, list.size, list.maxOfOrNull { it.syncedAtEpochMs }, list.mapNotNull { it.lastUtcNs }.maxOrNull())
         }
     }
+
+    override suspend fun anyIndexedNames(descs: List<String>, dicts: List<String>): Boolean =
+        observeAll().first().any { it.isIndexed && (it.templateSha256 in descs || it.dictionarySha256 in dicts) }
 
     override fun observeAnyNeverIndexed(): Flow<Boolean> = observeAll().map { rows -> rows.any { it.indexedAtEpochMs == null } }
 

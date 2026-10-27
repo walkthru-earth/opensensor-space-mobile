@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 4,
-    "identityHash": "c11796540d06bba8cd95b543960693d6",
+    "identityHash": "91a59e93cee9cefcef2cc63aaaff9bd5",
     "entities": [
       {
         "tableName": "known_device",
@@ -233,6 +233,24 @@
             ],
             "orders": [],
             "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_archived_file_thing_name` ON `${TABLE_NAME}` (`thing`, `name`)"
+          },
+          {
+            "name": "index_archived_file_templateSha256",
+            "unique": false,
+            "columnNames": [
+              "templateSha256"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_archived_file_templateSha256` ON `${TABLE_NAME}` (`templateSha256`)"
+          },
+          {
+            "name": "index_archived_file_dictionarySha256",
+            "unique": false,
+            "columnNames": [
+              "dictionarySha256"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_archived_file_dictionarySha256` ON `${TABLE_NAME}` (`dictionarySha256`)"
           }
         ]
       },
@@ -659,7 +677,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c11796540d06bba8cd95b543960693d6')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '91a59e93cee9cefcef2cc63aaaff9bd5')"
     ]
   }
 }

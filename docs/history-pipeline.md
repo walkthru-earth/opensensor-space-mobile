@@ -35,9 +35,12 @@ milliseconds.
 Both phones run the same order (#100). The shared `HistoryStartup.start` is called once per process,
 from `OpenSensorApplication.onCreate` on Android and `IosArchive.startIndexRepair` on iOS
 (`AppStartupTest`, `IosArchiveStartupTest`). It runs the storage janitor, then the feed block quota,
-then `HistoryOrchestrator.run`. Beside it, every change of `FileTemplates.SERVED.changes` (a template
-the cache loads at start or a board serves) runs the platform derive again, so the days of the files it
-resolves rebuild with their metrics. No file is indexed again for it.
+then `HistoryOrchestrator.run`. Beside it, it watches `FileTemplates.SERVED.changes` (a template the
+cache loads at start or a board serves). Changes settle for `HistoryStartup.TEMPLATE_SETTLE` (2 s) and
+coalesce into one check. When a template added or removed names a desc or dict that an indexed file's
+footer names (`ArchiveIndex.anyIndexedNames`, one `EXISTS` query on the digest indices), the platform
+derive runs again, so the days of the files it resolves rebuild with their metrics. A board that serves
+fresh templates no file names costs no derive. No file is indexed again for it.
 
 ```mermaid
 flowchart LR

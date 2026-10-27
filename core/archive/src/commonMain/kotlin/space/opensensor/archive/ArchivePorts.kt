@@ -1,6 +1,7 @@
 package space.opensensor.archive
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import space.opensensor.data.history.parquet.ByteReader
 import space.opensensor.storage.AlreadyCommitted
@@ -84,6 +85,14 @@ interface ArchiveIndex {
     fun observeLatestTimed(): Flow<Map<String, Long?>> = observeAll().map(::latestTimedEnds)
 
     suspend fun get(key: ArchiveKey): ArchiveRecord?
+
+    /**
+     * True when an indexed record's footer names one of [descs] as its `template.sha256` or one of
+     * [dicts] as its `dictionary.sha256`, so a template change that names neither leaves History as it
+     * is. The default reads every record. An adapter with an `EXISTS` query overrides it.
+     */
+    suspend fun anyIndexedNames(descs: Set<String>, dicts: Set<String>): Boolean =
+        observeAll().first().any { it.isIndexed && (it.templateSha256 in descs || it.dictionarySha256 in dicts) }
 
     /** Inserts or replaces the record of (thing, name). */
     suspend fun put(record: ArchiveRecord)
