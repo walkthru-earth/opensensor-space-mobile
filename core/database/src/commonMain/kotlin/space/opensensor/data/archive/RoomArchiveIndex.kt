@@ -21,7 +21,8 @@ class RoomArchiveIndex(private val dao: ArchivedFileDao) : ArchiveIndex {
 
     override suspend fun get(key: ArchiveKey): ArchiveRecord? = dao.get(key.thing, key.name)?.toRecord()
 
-    override suspend fun anyIndexedNames(descs: Set<String>, dicts: Set<String>): Boolean = dao.anyIndexedNames(descs.toList(), dicts.toList())
+    override suspend fun anyIndexedNames(descs: Set<String>, dicts: Set<String>, pinned: Set<String>): Boolean =
+        dao.anyIndexedNames(descs.toList(), dicts.toList(), pinned.toList())
 
     override suspend fun put(record: ArchiveRecord) = dao.upsert(record.toEntity())
 

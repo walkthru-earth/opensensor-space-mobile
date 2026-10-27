@@ -41,16 +41,18 @@ it. `HistoryStartup` derives the things it names, and iOS's `ArchiveHistoryTiers
 things through `TemplateRederive.generation`.
 
 1. Changes settle for `TemplateRederive.SETTLE` (2 s) and coalesce into one check.
-2. When no template added or removed names a desc or dict that an indexed file's footer names
-   (`ArchiveIndex.anyIndexedNames`, one `EXISTS` query on the digest indices), the check ends.
+2. The check ends when no indexed file could resolve differently (`ArchiveIndex.anyIndexedNames`, one
+   `EXISTS` query on the digest indices). A file could when its footer names the desc of a template
+   added or removed, or names the dict of one and does not resolve by its own desc both before and
+   after (`FileTemplates.pinned`). A fresh desc for a dict whose files resolve by their own desc reads
+   nothing.
 3. Otherwise every indexed file resolves over the templates before and after the change
    (`FileTemplates.at`). Only the things with a file whose resolved digest changed derive again
-   (`deriveStale(things)` on Android, a pass over those things on iOS). A fresh desc that changes no
-   file's resolution does no work.
-4. After a check that derived, the next one waits 30 s, then twice as long each time up to 10 min,
-   and back to 30 s after 10 quiet minutes (`TemplateRederive.Cooldown`, one per process). A board
-   that keeps a known dict and rotates its desc costs a bounded number of passes. Sync-driven derives
-   never wait for it, and they read the live templates anyway.
+   (`deriveStale(things)` on Android, a pass over those things on iOS).
+4. After a check that read the index, whether it derived or not, the next one waits 30 s, then twice
+   as long each time up to 10 min, and back to 30 s after 10 quiet minutes (`TemplateRederive.Cooldown`,
+   one per process). A board that keeps a known dict and rotates its desc costs a bounded number of
+   reads and passes. Sync-driven derives never wait for it, and they read the live templates anyway.
 
 No file is indexed again for a template.
 

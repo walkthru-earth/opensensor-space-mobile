@@ -51,6 +51,13 @@ fun interface FileTemplates {
      */
     fun at(held: List<BoardTemplate>): FileTemplates = this
 
+    /**
+     * The [ArchiveRecord.pin]s of the templates a footer resolves to by its own desc with [held] in place
+     * of the served ones, so [TemplateRederive] skips the files a change of their dict leaves as they
+     * are. Empty, which skips none, when only bundled templates resolve.
+     */
+    fun pinned(held: List<BoardTemplate>): Set<String> = emptySet()
+
     /** The [FileTemplate] of a raw file with Parquet [keyValues], from its `opensensor` footer. */
     fun of(keyValues: Map<String, String>): FileTemplate = of(OpenSensorFooter.of(keyValues))
 
@@ -94,6 +101,9 @@ fun interface FileTemplates {
             override fun template(dict: String?, desc: String?): BoardTemplate? = resolve(served.all.value, dict, desc)
 
             override fun at(held: List<BoardTemplate>): FileTemplates = FileTemplates { dict, desc -> resolve(held, dict, desc) }
+
+            override fun pinned(held: List<BoardTemplate>): Set<String> =
+                (held + BundledCatalog.templates).mapNotNullTo(HashSet()) { t -> t.key.desc?.let { ArchiveRecord.pin(it, t.dict) } }
         }
 
         private fun resolve(held: List<BoardTemplate>, dict: String?, desc: String?): BoardTemplate? {

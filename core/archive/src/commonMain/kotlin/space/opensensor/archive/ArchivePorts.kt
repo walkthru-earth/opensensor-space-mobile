@@ -87,12 +87,13 @@ interface ArchiveIndex {
     suspend fun get(key: ArchiveKey): ArchiveRecord?
 
     /**
-     * True when an indexed record's footer names one of [descs] as its `template.sha256` or one of
-     * [dicts] as its `dictionary.sha256`, so a template change that names neither leaves History as it
-     * is. The default reads every record. An adapter with an `EXISTS` query overrides it.
+     * True when a template change could change what an indexed record resolves to, by
+     * [ArchiveRecord.mayResolveAnew]. A change no indexed file can resolve differently leaves History as
+     * it is. The default reads every record, for an in-memory index. The Room adapter asks one `EXISTS`
+     * query on the digest indices.
      */
-    suspend fun anyIndexedNames(descs: Set<String>, dicts: Set<String>): Boolean =
-        observeAll().first().any { it.isIndexed && (it.templateSha256 in descs || it.dictionarySha256 in dicts) }
+    suspend fun anyIndexedNames(descs: Set<String>, dicts: Set<String>, pinned: Set<String>): Boolean =
+        observeAll().first().any { it.mayResolveAnew(descs, dicts, pinned) }
 
     /** Inserts or replaces the record of (thing, name). */
     suspend fun put(record: ArchiveRecord)

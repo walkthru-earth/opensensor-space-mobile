@@ -207,12 +207,17 @@ interface ArchivedFileDao {
     @Query("SELECT * FROM archived_file WHERE thing = :thing AND indexedAtEpochMs IS NOT NULL AND indexError IS NULL")
     suspend fun indexedForThing(thing: String): List<ArchivedFile>
 
-    /** True when an indexed file's footer names one of [descs] or [dicts], on the digest indices. */
+    /**
+     * True when an indexed file's footer names one of [descs], or names one of [dicts] with a desc that
+     * is not one of [pinned] (`desc:dict`), on the digest indices. The SQL form of
+     * [space.opensensor.archive.ArchiveRecord.mayResolveAnew].
+     */
     @Query(
         "SELECT EXISTS(SELECT 1 FROM archived_file WHERE indexedAtEpochMs IS NOT NULL AND indexError IS NULL " +
-            "AND (templateSha256 IN (:descs) OR dictionarySha256 IN (:dicts)))",
+            "AND (templateSha256 IN (:descs) OR (dictionarySha256 IN (:dicts) " +
+            "AND (templateSha256 IS NULL OR templateSha256 || ':' || dictionarySha256 NOT IN (:pinned)))))",
     )
-    suspend fun anyIndexedNames(descs: List<String>, dicts: List<String>): Boolean
+    suspend fun anyIndexedNames(descs: List<String>, dicts: List<String>, pinned: List<String>): Boolean
 
     @Query("SELECT DISTINCT thing FROM archived_file")
     suspend fun things(): List<String>

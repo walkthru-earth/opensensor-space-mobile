@@ -53,6 +53,19 @@ data class ArchiveRecord(
      */
     val awaitsIndex: Boolean get() = indexedAtEpochMs == null
 
+    /**
+     * True when a template change could change what this indexed record resolves to. Its footer names
+     * one of [descs], or it names one of [dicts] and its own desc is not one of [pinned], the [pin]s
+     * that resolve by desc before and after the change. `ArchivedFileDao.anyIndexedNames` is the same
+     * test in SQL.
+     */
+    fun mayResolveAnew(descs: Set<String>, dicts: Set<String>, pinned: Set<String>): Boolean {
+        if (!isIndexed) return false
+        if (templateSha256 in descs) return true
+        val dict = dictionarySha256 ?: return false
+        return dict in dicts && templateSha256?.let { pin(it, dict) } !in pinned
+    }
+
     /** Thing data, the only purpose history reads. */
     val isTelemetry: Boolean get() = purpose == null || purpose == TELEMETRY
 
@@ -87,6 +100,9 @@ data class ArchiveRecord(
 
     companion object {
         const val TELEMETRY: String = "telemetry"
+
+        /** A footer that resolves by its own [desc] to a template of [dict], as [mayResolveAnew] reads it. */
+        fun pin(desc: String, dict: String): String = "$desc:$dict"
 
         /** The order [ArchiveIndex.timeline] returns, by real or estimated first time, unplaced last. */
         val TIMELINE_ORDER: Comparator<ArchiveRecord> = compareBy(nullsLast()) { it.timelineFirstNs }

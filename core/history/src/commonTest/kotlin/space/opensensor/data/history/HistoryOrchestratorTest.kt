@@ -3,6 +3,7 @@ package space.opensensor.data.history
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -60,7 +61,20 @@ class HistoryOrchestratorTest {
 
         /** How many next row updates throw, as a busy database would. */
         var failUpdates = 0
-        override fun observeAll(): Flow<List<ArchiveRecord>> = rows
+
+        /** How many times a caller read every row. */
+        var scans = 0
+
+        /** When true the template match throws, as a busy database would, so the index cannot say. */
+        var failMatch = false
+        override fun observeAll(): Flow<List<ArchiveRecord>> = flow {
+            scans++
+            emitAll(rows)
+        }
+        override suspend fun anyIndexedNames(descs: Set<String>, dicts: Set<String>, pinned: Set<String>): Boolean {
+            if (failMatch) error("database busy")
+            return rows.value.any { it.mayResolveAnew(descs, dicts, pinned) }
+        }
         override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.thing == thing } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) {
@@ -428,7 +442,8 @@ class HistoryOrchestratorTest {
         settled()
         assertEquals(1, derived.size, "a template already held changes nothing")
 
-        // Fresh descs for the file's dict. The file still resolves by its own desc, so nothing derives.
+        // Fresh descs for the file's dict. The file still resolves by its own desc, so nothing reads the index.
+        val scans = index.scans
         repeat(5) { i ->
             served(dict, "0$i".repeat(32))
             advanceTimeBy(500.milliseconds)
@@ -436,6 +451,7 @@ class HistoryOrchestratorTest {
         }
         settled()
         assertEquals(1, derived.size, "a desc that changes no file's resolution does no work")
+        assertEquals(scans, index.scans, "a file that resolves by its own desc before and after is never read")
 
         served(otherDict, "0a".repeat(32))
         settled()
@@ -478,6 +494,32 @@ class HistoryOrchestratorTest {
         advanceTimeBy(TemplateRederive.SETTLE + 1.seconds)
         runCurrent()
         assertEquals(5, derives, "after a quiet spell the cooldown starts again from its first wait")
+        job.cancel()
+    }
+
+    @Test
+    fun aCheckThatReadsTheIndexAndFindsNothingStillWaitsForTheCooldown() = runTest {
+        // The match cannot say, so every check reads the index. No file resolves differently.
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = "ee".repeat(32)))
+        index.failMatch = true
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val startup = HistoryStartup(history, janitor { }, cache, rederive = rederive(served))
+        var derives = 0
+        val job = startup.start(this, deriveThings = { history.derivePass { derives++ } }) { }
+        runCurrent()
+        val before = index.scans
+
+        // 50 fresh valid templates for a dict no file names, 3 s apart, past the settle time each.
+        repeat(50) { i ->
+            served.add(coreS3Template.copy(key = TemplateKey("ab".repeat(32), (0x100 + i).toString(16).padStart(64, '0'))))
+            advanceTimeBy(3.seconds)
+            runCurrent()
+        }
+        // 150 s. Reads at about 2 s, 32 s and 92 s, the next waits until 212 s.
+        assertEquals(3, index.scans - before, "the cooldown bounds the reads that find nothing")
+        assertEquals(0, derives)
         job.cancel()
     }
 

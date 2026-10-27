@@ -26,12 +26,14 @@ import kotlin.time.TimeSource
  * [HistoryStartup] derives those things and [ArchiveHistoryTiers] rebuilds them through [generation].
  *
  * 1. Changes settle for [settle] and coalesce, so a burst of served templates costs one check.
- * 2. When no indexed file names a desc or dict of a template added or removed, one indexed query, the
- *    check ends there.
+ * 2. When no indexed file could resolve differently, one indexed query, the check ends there. A file
+ *    could when it names the desc of a template added or removed, or names its dict and does not
+ *    resolve by its own desc both before and after.
  * 3. Otherwise each indexed file resolves over the templates before and after, and only the things with
- *    a file whose resolved digest changed derive again. A desc that changes no file's resolution does no work.
- * 4. After a check that derived, the next check waits for [cooldown]. A board that keeps a known dict
- *    and rotates its desc therefore costs a bounded number of passes. Sync-driven derives never wait.
+ *    a file whose resolved digest changed derive again.
+ * 4. After a check that read the index, whether it derived or not, the next check waits for [cooldown].
+ *    A board that keeps a known dict and rotates its desc therefore costs a bounded number of reads and
+ *    passes. Sync-driven derives never wait.
  *
  * [log] gets class names only, never paths or thing ids.
  */
@@ -61,7 +63,6 @@ class TemplateRederive(
             val things = affected(seen, now)
             seen = now
             if (things.isEmpty()) return@collect
-            cooldown.fired()
             generations.update { held -> held + things.associateWith { (held[it] ?: 0L) + 1 } }
             derive(things)
         }
@@ -70,7 +71,9 @@ class TemplateRederive(
     /** The things with an indexed file that resolves to another template under [after] than under [before]. */
     private suspend fun affected(before: List<BoardTemplate>, after: List<BoardTemplate>): Set<String> {
         val changed = changed(before, after)
-        if (changed.isEmpty() || !named(changed)) return emptySet()
+        if (changed.isEmpty() || !named(changed, templates.pinned(before) intersect templates.pinned(after))) return emptySet()
+        // The read below is the costly step, so it waits for the cooldown even when it finds nothing.
+        cooldown.fired()
         val was = templates.at(before)
         val now = templates.at(after)
         return try {
@@ -84,9 +87,12 @@ class TemplateRederive(
         }
     }
 
-    /** True when an indexed file names a desc or dict of [changed], and when the index cannot say. */
-    private suspend fun named(changed: Set<BoardTemplate>): Boolean = try {
-        index.anyIndexedNames(changed.mapNotNullTo(HashSet()) { it.key.desc }, changed.mapTo(HashSet()) { it.dict })
+    /**
+     * True when an indexed file could resolve differently after [changed], with [pinned] the desc
+     * matches that hold before and after, and when the index cannot say.
+     */
+    private suspend fun named(changed: Set<BoardTemplate>, pinned: Set<String>): Boolean = try {
+        index.anyIndexedNames(changed.mapNotNullTo(HashSet()) { it.key.desc }, changed.mapTo(HashSet()) { it.dict }, pinned)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -95,8 +101,8 @@ class TemplateRederive(
     }
 
     /**
-     * How long template checks wait after one that derived. The first waits [first], each next one twice
-     * the last up to [longest], and after [quiet] with no derive it starts again at [first]. One per
+     * How long template checks wait after one that read the index. The first waits [first], each next one twice
+     * the last up to [longest], and after [quiet] with no read it starts again at [first]. One per
      * process, read only by [run]'s single collector.
      */
     class Cooldown(
@@ -111,7 +117,7 @@ class TemplateRederive(
         /** How long the next check still waits, zero when it may run now. */
         fun remaining(): Duration = last?.let { (wait - it.elapsedNow()).coerceAtLeast(Duration.ZERO) } ?: Duration.ZERO
 
-        /** Records a check that derived. */
+        /** Records a check that read the index. */
         fun fired() {
             val since = last?.elapsedNow()
             wait = if (since == null || since >= wait + quiet) first else (wait * 2).coerceAtMost(longest)
