@@ -45,12 +45,21 @@ internal fun steppedZoom(zoom: Double, step: Int): Double = (zoom + step).coerce
  */
 internal class ZoomSteps {
     private var pending: Double? = null
+    private var latest = 0
 
-    fun next(current: Double, step: Int): Double = steppedZoom(pending ?: current, step).also { pending = it }
+    /** One press, the zoom it aims at and the token that names it. */
+    data class Step(val target: Double, val token: Int)
 
-    /** The move toward [target] ended. A newer press keeps its own target. */
-    fun settled(target: Double) {
-        if (pending == target) pending = null
+    fun next(current: Double, step: Int): Step {
+        val target = steppedZoom(pending ?: current, step)
+        pending = target
+        latest += 1
+        return Step(target, latest)
+    }
+
+    /** The move of press [token] ended. A newer press keeps its own target, even an equal one. */
+    fun settled(token: Int) {
+        if (token == latest) pending = null
     }
 }
 
@@ -79,12 +88,12 @@ internal fun ZoomControls(mapState: MapState, zoomIn: String, zoomOut: String, m
     val reduce = LocalReduceMotion.current
     val steps = remember { ZoomSteps() }
     fun zoomBy(step: Int) {
-        val target = steps.next(mapState.cameraPosition.zoom, step)
+        val press = steps.next(mapState.cameraPosition.zoom, step)
         scope.launch {
             try {
-                mapState.moveCamera(zoom = target, reduceMotion = reduce)
+                mapState.moveCamera(zoom = press.target, reduceMotion = reduce)
             } finally {
-                steps.settled(target)
+                steps.settled(press.token)
             }
         }
     }
