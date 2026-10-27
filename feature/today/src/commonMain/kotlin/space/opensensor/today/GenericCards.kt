@@ -65,7 +65,7 @@ internal fun GenericMetricHero(state: TodayUiState, modifier: Modifier = Modifie
     val receivedAt = state.snapshot.liveAtEpochMs
     val fresh = rememberIsFresh(receivedAt)
     val onCard = MaterialTheme.colorScheme.onPrimaryContainer
-    val quiet = onCard.copy(alpha = 0.85f)
+    val quiet = heroQuiet(onCard, MaterialTheme.colorScheme.primaryContainer)
     val column = state.capabilities.thing?.let(::heroColumn)
     BrandCard(modifier = modifier, tone = CardTone.HERO) {
         Row(verticalAlignment = Alignment.CenterVertically) {

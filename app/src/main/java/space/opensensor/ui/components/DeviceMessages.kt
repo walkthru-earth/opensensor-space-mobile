@@ -12,6 +12,8 @@ import space.opensensor.data.DeviceMessage
 import space.opensensor.data.DeviceMessage.Command
 import space.opensensor.data.DeviceMessage.ConfigChange
 import space.opensensor.data.lan.LanFailure
+import space.opensensor.data.protocol.ConfigFields
+import space.opensensor.data.protocol.ConfigGroup
 import space.opensensor.data.protocol.ConfigProblem
 import space.opensensor.link.UnavailableKind
 
@@ -102,12 +104,23 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
     DeviceMessage.ClockSet -> res(R.string.msg_clock_set)
     is DeviceMessage.Finalized -> plural(R.plurals.msg_finalized, rows.toLong(), rows, files)
     is DeviceMessage.ConfigSaved -> if (rebootRequired) res(R.string.msg_saved_after_reboot, res(change.toStringRes())) else res(change.toStringRes())
-    is DeviceMessage.ConfigKeyRejected -> res(R.string.msg_config_key_rejected, key)
+    is DeviceMessage.ConfigKeyRejected -> res(configRejectedRes(key))
     DeviceMessage.SecretNeedsBluetooth -> res(R.string.msg_secret_needs_bluetooth)
     DeviceMessage.NoRebootWhileSyncing -> res(R.string.msg_no_reboot_syncing)
     DeviceMessage.Rebooting -> res(R.string.msg_rebooting)
     is DeviceMessage.CommandRejected -> res(command.rejectedRes())
     is DeviceMessage.CommandFailed -> res(command.failedRes())
+}
+
+/** A refused key names its settings card, never the wire key. */
+@StringRes
+fun configRejectedRes(key: String): Int = when (ConfigFields.groupOf(key)) {
+    ConfigGroup.PAIRING -> R.string.msg_config_rejected_pairing
+    ConfigGroup.WIFI -> R.string.msg_config_rejected_wifi
+    ConfigGroup.LAN -> R.string.msg_config_rejected_lan
+    ConfigGroup.LOCATION -> R.string.msg_config_rejected_location
+    ConfigGroup.SENSOR -> R.string.msg_config_rejected_sensor
+    ConfigGroup.OTHER -> R.string.msg_config_rejected_other
 }
 
 /** One line per way a sync can end, shared with the notification and the Files screen. */

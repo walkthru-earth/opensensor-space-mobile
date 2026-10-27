@@ -24,7 +24,13 @@ class DeviceMessagesTest {
         assertEquals(UiText.Plural(R.plurals.msg_sync_finished, 4, listOf(3, 4)), DeviceMessage.SyncFinished(synced = 3, total = 4).toUiText())
         assertEquals(UiText.Plural(R.plurals.msg_unplaced, 12, listOf(12L)), DeviceMessage.UnplacedReadings(12).toUiText())
         assertEquals(UiText.Plural(R.plurals.msg_finalized, 5, listOf<Any>(5, 2L)), DeviceMessage.Finalized(rows = 5, files = 2).toUiText())
-        assertEquals(UiText.Res(R.string.msg_config_key_rejected, listOf("wifi.ssid")), DeviceMessage.ConfigKeyRejected("wifi.ssid").toUiText())
+        // A refusal names the card in words and never shows the wire key.
+        assertEquals(UiText.Res(R.string.msg_config_rejected_wifi), DeviceMessage.ConfigKeyRejected("wifi.ssid").toUiText())
+        assertEquals(UiText.Res(R.string.msg_config_rejected_pairing), DeviceMessage.ConfigKeyRejected("ble.pin").toUiText())
+        assertEquals(UiText.Res(R.string.msg_config_rejected_lan), DeviceMessage.ConfigKeyRejected("lan.on").toUiText())
+        assertEquals(UiText.Res(R.string.msg_config_rejected_location), DeviceMessage.ConfigKeyRejected("location.cell").toUiText())
+        assertEquals(UiText.Res(R.string.msg_config_rejected_sensor), DeviceMessage.ConfigKeyRejected("sensor.serial").toUiText())
+        assertEquals(UiText.Res(R.string.msg_config_rejected_other), DeviceMessage.ConfigKeyRejected("debug.level").toUiText())
         assertEquals(
             UiText.Res(R.string.msg_file_check_failed, listOf("data_0900.parquet")),
             DeviceMessage.FileNotSynced("data_0900.parquet", DeviceMessage.FileProblem.CHECK_FAILED).toUiText(),
