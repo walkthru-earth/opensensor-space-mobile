@@ -21,6 +21,7 @@ import space.opensensor.discover.MapCache
 import space.opensensor.settings.SettingsRepository
 import space.opensensor.storage.MemoryPressure
 import space.opensensor.storage.RetentionPolicy
+import space.opensensor.thing.ThingKinds
 import javax.inject.Inject
 import android.content.res.Configuration as ResConfiguration
 
@@ -34,6 +35,10 @@ import android.content.res.Configuration as ResConfiguration
 class OpenSensorApplication :
     Application(),
     Configuration.Provider {
+
+    // First, so the kinds' metric providers are in the catalog before any field below reads it.
+    @Inject
+    lateinit var thingKinds: ThingKinds
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory

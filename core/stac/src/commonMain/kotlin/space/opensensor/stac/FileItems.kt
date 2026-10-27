@@ -104,6 +104,8 @@ object FileItems {
     /**
      * The Item of the device file [fileName], whose verified bytes [reader] holds, with its parsed
      * [footer] and the [template] of the board that wrote it. [dataBaseUrl] is the public archive root.
+     * A cell finer than [maxRes] is coarsened to its parent at [maxRes] first, so the Item never names
+     * a finer place than its publish policy allows (`PublishGate` in `:core:thing`).
      */
     fun build(
         fileName: String,
@@ -112,6 +114,7 @@ object FileItems {
         template: BoardTemplate,
         h3: H3Grid = platformH3Grid(),
         dataBaseUrl: String = DATA_BASE_URL,
+        maxRes: Int = H3Index.MAX_RES,
     ): FileItemResult {
         if (!DATED_FILE.matches(fileName)) return FileItemResult.NotDatedFile
         if (footer == null) return FileItemResult.NoThingId
@@ -125,7 +128,7 @@ object FileItems {
         val startNs = times.values.min()
         val endNs = times.values.max()
 
-        val cells = visitedCells(file)
+        val cells = visitedCells(file).map { if (H3Index.resolution(it) > maxRes) H3Index.parent(it, maxRes) else it }.distinct()
         val geometry: Geometry? = when {
             cells.isEmpty() -> if (ITEM_NEEDS_LOCATION) return FileItemResult.NoLocation else null
             !h3.available -> return FileItemResult.NoH3

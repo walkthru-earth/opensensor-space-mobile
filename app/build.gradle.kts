@@ -222,6 +222,8 @@ dependencies {
     // Request session, sync policies, planner and progress maths, shared with iOS.
     implementation(project(":core:sync"))
     implementation(project(":core:storage"))
+    // The Thing kinds the app lists (data/di/ThingModule) and the PublishGate in front of FileItems.
+    implementation(project(":core:thing"))
     // The Discover map (shared Compose with iOS) and the public feed port behind it.
     implementation(project(":feature:discover"))
     implementation(project(":feature:history"))

@@ -1,14 +1,21 @@
 package space.opensensor.data.history
 
+import space.opensensor.airquality.AirDerivedMetrics
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
+import space.opensensor.model.Basis
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.Capability
 import space.opensensor.model.Datastream
+import space.opensensor.model.Derivation
+import space.opensensor.model.DerivedMetric
+import space.opensensor.model.DerivedMetricProvider
 import space.opensensor.model.Role
+import space.opensensor.model.RowFormula
 import space.opensensor.model.TemplateKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -39,6 +46,47 @@ class NonAirBoardTest {
         val metrics = Metrics.of(probe)
         assertEquals(listOf("soil_temperature_c", "soil_moisture_percent"), metrics.map { it.id })
         assertTrue(metrics.none { it.derived || it.healthScale != null || it.basis != null })
+    }
+
+    /** A soil family provider with a temperature compensated view of the stored moisture, named [id]. */
+    private fun soilProvider(id: String = "soil_moisture_compensated") = DerivedMetricProvider { template ->
+        val moisture = template.datastream("soil_moisture_percent") ?: return@DerivedMetricProvider emptyList()
+        val view = moisture.copy(name = id, liveKey = null, derived = Derivation(listOf("soil_moisture_percent", "soil_temperature_c"), "test-compensation"))
+        listOf(DerivedMetric(view, label = "Soil moisture compensated", formula = RowFormula { m, _ -> m }, viewOf = "soil_moisture_percent"))
+    }
+
+    @Test
+    fun `a non air view is raw or corrected on its own property`() {
+        val metrics = Metrics.of(probe, providers = listOf(soilProvider()))
+        val view = metrics.single { it.derived }
+        val stored = metrics.single { it.id == "soil_moisture_percent" }
+        assertEquals(Basis.CORRECTED, view.basis)
+        assertEquals(Basis.RAW, stored.basis)
+        assertEquals("soil_moisture_percent", view.property)
+        assertEquals("soil_moisture_percent", stored.property)
+    }
+
+    @Test
+    fun `a derived id that repeats a stored column is refused`() {
+        assertFailsWith<IllegalArgumentException> { Metrics.of(probe, providers = listOf(soilProvider("soil_temperature_c"))) }
+    }
+
+    @Test
+    fun `two providers deriving one id are refused`() {
+        assertFailsWith<IllegalArgumentException> { Metrics.of(probe, providers = listOf(soilProvider(), soilProvider())) }
+    }
+
+    @Test
+    fun `installed providers build the catalog`() {
+        try {
+            Metrics.install(emptyList())
+            assertTrue(Metrics.catalog.none { it.derived })
+            assertEquals(null, Metrics.byId(AirDerivedMetrics.PM25_CORRECTED_ID))
+            Metrics.install(Metrics.DEFAULT_PROVIDERS)
+            assertNotNull(Metrics.byId(AirDerivedMetrics.PM25_CORRECTED_ID))
+        } finally {
+            Metrics.install(Metrics.DEFAULT_PROVIDERS)
+        }
     }
 
     @Test

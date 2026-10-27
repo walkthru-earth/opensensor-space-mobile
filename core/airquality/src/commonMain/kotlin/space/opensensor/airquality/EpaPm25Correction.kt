@@ -1,13 +1,12 @@
 package space.opensensor.airquality
 
-/** Which PM2.5 a value is, so every chart and card can say it in a short label. */
-enum class Pm25Basis {
-    /** The sensor's own atmospheric PM2.5, as stored. */
-    RAW,
+import space.opensensor.model.Basis
 
-    /** The US EPA humidity correction of [EpaPm25Correction], computed per row from CF=1 PM2.5 and RH. */
-    CORRECTED,
-}
+/**
+ * Which PM2.5 a value is, so every chart and card can say it in a short label. RAW is the sensor's own
+ * atmospheric PM2.5 as stored, CORRECTED the US EPA humidity correction of [EpaPm25Correction].
+ */
+typealias Pm25Basis = Basis
 
 /**
  * The US EPA humidity correction for Plantower PM2.5, the US-wide piecewise equation the EPA applies

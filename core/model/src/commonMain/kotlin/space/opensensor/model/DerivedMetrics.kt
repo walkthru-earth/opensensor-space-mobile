@@ -6,7 +6,7 @@ package space.opensensor.model
  * [RowFormula], so History builds it like a stored column and holds no family code. The app lists its
  * providers once where it builds the metric catalog, never from static registration.
  */
-interface DerivedMetricProvider {
+fun interface DerivedMetricProvider {
     /** The datastreams the phone derives for [template], empty when it lacks their source columns. */
     fun derive(template: BoardTemplate): List<DerivedMetric>
 }
@@ -36,4 +36,16 @@ class DerivedMetric(
         val from = requireNotNull(datastream.derived) { "derived metric ${datastream.name} has no derivation" }.from
         require(from.size <= 2) { "derived metric ${datastream.name} reads more than two columns" }
     }
+}
+
+/**
+ * Which of two views of one quantity a value is. A stored column with a derived view ([DerivedMetric.viewOf])
+ * is [RAW] and that view is [CORRECTED], whatever the family, so every chart and card can say which it shows.
+ */
+enum class Basis {
+    /** The column as the board stored it. */
+    RAW,
+
+    /** The phone's per row correction of the stored column. */
+    CORRECTED,
 }

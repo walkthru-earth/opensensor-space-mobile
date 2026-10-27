@@ -13,6 +13,7 @@ Ready for plugins.
 Tied to boards or air quality.
 - The family registry and capabilities named in `docs/devices-and-discovery.md` do not exist as types.
 - Done in #220. `Metrics.kt` takes scales from `WhoGuidelines.forProperty` and derived metrics from `DerivedMetricProvider`s (`:core:model`), with `AirDerivedMetrics` in `:core:airquality`. A template without PM columns builds the catalog. `DeviceCapabilities` holds a `Capability` set (`live`, `config`, `sensor-identity`, `batch-estimate`, `particles`). `PMS_STATUS` moved to `AirMetrics` in `:core:history`.
+- Done in #222 and #224. `:core:thing` holds `ThingKind`, `DataSource` (`PullSync`, `RemoteFeed`, `PrivateRead`, no `LocalSampling` until #228), `PublishPolicy`, `OpenSensorBoardKind`, the `ThingKinds` list each app builds and `PublishGate`, the only caller of `FileItems`. `PullSync` holds no `LinkProvider` yet, the board's links stay in `DeviceFacade` and `SensorCollections`. `Metrics.install` takes the kinds' providers. `MetricSpec.basis` is the generic `Basis` (`RAW`, `CORRECTED`) of `:core:model`, and only a `pm25` spec gets the PM2.5 label.
 - `TodayCards.kt` lists CF1 columns by name. `TodaySoFarFlow.kt` asks for PM2.5 directly. `LiveColumns` picks temperature and humidity by unit.
 - `KnownDevice` is keyed by Bluetooth address. `TransportKind` is a closed enum (`BLE`, `LAN`, `FAKE`). `CollectionLink` wraps a wire `DeviceSession`, so `CollectionController` and `SyncEngine` only speak the firmware protocol.
 - `FileItems` assumes the `data_HHMM_` file name and one source.coop root.

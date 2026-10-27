@@ -22,6 +22,7 @@ flowchart TB
     ST[":core:storage<br/>atomic files, storage budget, quotas, memory caches"]
     SY1[":core:sync<br/>LinkSession, SyncEngine, ArchiveCollector, CollectionController"]
     SC[":core:stac<br/>one STAC File Item per synced device file"]
+    TH[":core:thing<br/>ThingKind contract, board kind, ThingKinds registry, PublishGate"]
   end
   subgraph ui["Compose Multiplatform, Android and iOS"]
     DS[":ui:designsystem<br/>tokens, theme, fonts, floating controls"]
@@ -39,13 +40,14 @@ flowchart TB
   PF --> PQ & AQ & NT
   NT --> PQ
   SC --> HI & PF & PR
+  TH --> SC & HI & PR & MO1
   DI --> PF & UN & DS & PM & SE
   DS --> AQ
   SE --> UN & ST
   FS --> SE & DS
   SH --> DS
-  APP --> SY1 & ST & HI & PF & UN & DI & DS & SE & FS & PM & SH
-  IS --> SY1 & AR1 & HI & PR & UN & DI & DS & SE & FS & PM & SH
+  APP --> TH & SY1 & ST & HI & PF & UN & DI & DS & SE & FS & PM & SH
+  IS --> TH & SY1 & AR1 & HI & PR & UN & DI & DS & SE & FS & PM & SH
   IOS --> IS
 ```
 

@@ -29,6 +29,14 @@ class FileItemsTest {
     private fun json(result: FileItemResult): JsonObject = Json.parseToJsonElement(assertIs<FileItemResult.Item>(result).json).jsonObject
 
     @Test
+    fun aCellFinerThanMaxResIsCoarsenedToItsParent() {
+        val bytes = deviceFile(rowsIn(OSU_CELL, 6))
+        val result = FileItems.build(FILE_NAME, ByteArrayReader(bytes), footer(Mobility.FIXED), coreS3Template, h3, maxRes = 7)
+        val properties = json(result)["properties"]!!.jsonObject
+        assertEquals("H3-${H3Index.toHex(H3Index.parent(OSU_CELL, 7))}", properties["grid:code"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun fixedThingGetsItsCellPolygonAndGridCode() {
         val bytes = deviceFile(rowsIn(OSU_CELL, 6))
         val result = assertIs<FileItemResult.Item>(item(bytes, Mobility.FIXED))
