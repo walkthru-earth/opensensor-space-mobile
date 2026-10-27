@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
  * "unknown", never a default.
  *
  * ```json
- * {"ble":{"pair":"random","pin":123456,"pin_default":1,"bonds":1,"display":1},
+ * {"ble":{"pair":"random","pin_set":1,"pin_default":0,"bonds":1,"display":1},
  *  "wifi":{"on":1,"ssid":"home","psk_set":1,"state":"connected","ip":"192.168.1.42","rssi":-58,"mac":"e0..6b40"},
  *  "lan":{"on":1,"port":47390,"host":"os-6b40","clients":0},
  *  "sensor":{"vendor":"Acme","model":"X1","serial":"X1-0042","batch_candidate":0}}
@@ -83,9 +83,9 @@ enum class PairMode(val wire: String, val label: String) {
 data class BleConfig(
     /** `random` | `fixed` | `none`. */
     val pair: String? = null,
-    /** Passkey for `fixed` mode; the firmware emits it as a number, so `012345` arrives as 12345. */
-    val pin: Int? = null,
-    /** 1 while `ble.pin` is still 123456 — the phone's cue to nag. */
+    /** 1 when a fixed PIN is stored. The firmware never echoes the PIN itself. */
+    @SerialName("pin_set") val pinSet: Int? = null,
+    /** 1 while the legacy universal PIN is still set, the phone's cue to ask for a new one. */
     @SerialName("pin_default") val pinDefault: Int? = null,
     /** Bonded phones currently stored (max 3). */
     val bonds: Int? = null,
@@ -94,13 +94,7 @@ data class BleConfig(
 ) {
     val pairMode: PairMode? get() = PairMode.fromWire(pair)
     val isPinDefault: Boolean get() = pinDefault == 1
-
-    /** Six-digit rendering of [pin], restoring leading zeros lost on the wire. */
-    val pinText: String? get() = pin?.let { it.toString().padStart(6, '0') }
-
-    /** Never prints the passkey, so a config dump or log line cannot leak it. */
-    override fun toString(): String =
-        "BleConfig(pair=$pair, pin=${if (pin == null) "null" else "<redacted>"}, pinDefault=$pinDefault, bonds=$bonds, display=$display)"
+    val hasPin: Boolean get() = pinSet == 1
 }
 
 /** `wifi.state` values. */
@@ -195,17 +189,14 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
             require(resolution in 0..15) { "H3 resolution must be 0 to 15" }
             require(cell.isEmpty() || Regex("[0-9a-f]{15}").matches(cell)) { "invalid H3 cell text" }
             require(country.isEmpty() || Regex("[A-Z]{2}").matches(country)) { "country must be an uppercase ISO alpha2 code" }
-            add("location.cell", cell)
-            add("location.resolution", resolution.toString())
-            return add("location.country", country)
+            add(ConfigFields.LOCATION_CELL, cell)
+            add(ConfigFields.LOCATION_RESOLUTION, resolution.toString())
+            return add(ConfigFields.LOCATION_COUNTRY, country)
         }
 
-        /** How the Thing moves. The firmware writes it to the footer and splits the file on a change. */
-        fun thingMobility(mobility: ThingMobility): Builder = add(KEY_THING_MOBILITY, mobility.wire)
+        fun clearBonds(): Builder = add(ConfigFields.BLE_CLEAR_BONDS, "1")
 
-        fun clearBonds(): Builder = add("ble.clear_bonds", "1")
-
-        fun wifiOn(on: Boolean): Builder = add("wifi.on", if (on) "1" else "0")
+        fun wifiOn(on: Boolean): Builder = add(ConfigFields.WIFI_ON, if (on) "1" else "0")
 
         /** ≤ 32 bytes UTF-8, no line breaks (the wire format is line-based). */
         fun wifiSsid(ssid: String): Builder {
@@ -213,7 +204,7 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
             if (bytes == 0) throw ConfigValidationException(ConfigProblem.SSID_EMPTY, "SSID is empty")
             if (bytes > SSID_MAX_BYTES) throw ConfigValidationException(ConfigProblem.SSID_TOO_LONG, "SSID is $bytes bytes, max $SSID_MAX_BYTES")
             requireSingleLine(ssid, "SSID")
-            return add("wifi.ssid", ssid)
+            return add(ConfigFields.WIFI_SSID, ssid)
         }
 
         /** ≤ 63 bytes UTF-8; empty for an open network. */
@@ -224,9 +215,9 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
             return add(KEY_WIFI_PSK, psk)
         }
 
-        fun lanOn(on: Boolean): Builder = add("lan.on", if (on) "1" else "0")
+        fun lanOn(on: Boolean): Builder = add(ConfigFields.LAN_ON, if (on) "1" else "0")
 
-        fun rotateToken(): Builder = add("lan.rotate_token", "1")
+        fun rotateToken(): Builder = add(ConfigFields.LAN_ROTATE_TOKEN, "1")
 
         /**
          * The replaceable sensor module's identity. A family checks its own sticker format first and
@@ -236,10 +227,10 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
             requireSingleLine(vendor, "sensor vendor")
             requireSingleLine(model, "sensor model")
             requireSingleLine(serial, "sensor serial")
-            add("sensor.vendor", vendor)
-            add("sensor.model", model)
-            add("sensor.serial", serial)
-            return add("sensor.batch_candidate", if (batchCandidate) "1" else "0")
+            add(ConfigFields.SENSOR_VENDOR, vendor)
+            add(ConfigFields.SENSOR_MODEL, model)
+            add(ConfigFields.SENSOR_SERIAL, serial)
+            return add(ConfigFields.SENSOR_BATCH_CANDIDATE, if (batchCandidate) "1" else "0")
         }
 
         fun build(): ConfigPatch = ConfigPatch(lines.toList())
@@ -258,10 +249,9 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
     }
 
     companion object {
-        const val KEY_BLE_PAIR = "ble.pair"
-        const val KEY_BLE_PIN = "ble.pin"
-        const val KEY_WIFI_PSK = "wifi.psk"
-        const val KEY_THING_MOBILITY = "thing.mobility"
+        const val KEY_BLE_PAIR = ConfigFields.BLE_PAIR
+        const val KEY_BLE_PIN = ConfigFields.BLE_PIN
+        const val KEY_WIFI_PSK = ConfigFields.WIFI_PSK
 
         /**
          * Reserved. The H3 cell hex of the phone's own fix, which the board keeps in RAM and writes
@@ -269,13 +259,10 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
          */
         const val KEY_LOCATION_PHONE_CELL = "location.phone_cell"
 
-        /** Keys whose values are secrets. See [carriesSecret]. */
-        val SECRET_KEYS: Set<String> = setOf(KEY_WIFI_PSK, KEY_BLE_PIN)
+        /** Keys whose values are secrets, from the [ConfigFields] table. See [carriesSecret]. */
+        val SECRET_KEYS: Set<String> get() = ConfigFields.SECRET_KEYS
         const val SSID_MAX_BYTES = 32
         const val PSK_MAX_BYTES = 63
-
-        /** The PIN every `fixed`-mode device ships with; `pin_default` reports whether it is still set. */
-        const val DEFAULT_PIN = "123456"
 
         fun build(block: Builder.() -> Unit): ConfigPatch = Builder().apply(block).build()
     }

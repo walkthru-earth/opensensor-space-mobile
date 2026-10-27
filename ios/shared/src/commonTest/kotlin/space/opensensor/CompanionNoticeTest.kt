@@ -3,6 +3,7 @@ package space.opensensor
 import space.opensensor.strings.UiText
 import space.opensensor.strings.resources.Res
 import space.opensensor.strings.resources.companion_ble_off
+import space.opensensor.strings.resources.companion_firmware_update_unknown
 import space.opensensor.strings.resources.companion_lan_needs_access
 import space.opensensor.strings.resources.companion_lan_syncing
 import space.opensensor.strings.resources.companion_wifi_access_saving_message
@@ -23,6 +24,7 @@ class CompanionNoticeTest {
         assertEquals(UiText.of(Res.string.msg_identity_enroll_ble), CompanionNotice.ENROLL_OVER_BLUETOOTH.text)
         assertEquals(UiText.of(Res.string.msg_verification_failed), CompanionNotice.VERIFICATION_FAILED.text)
         assertEquals(UiText.of(Res.string.msg_busy_before_sync), CompanionNotice.BUSY_BEFORE_SYNC.text)
+        assertEquals(UiText.of(Res.string.companion_firmware_update_unknown, 3), CompanionNotice.FIRMWARE_UPDATE.text)
     }
 
     @Test fun lanNoticeKeepsTheCardCountsAndStopsTheRate() {

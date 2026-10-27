@@ -15,6 +15,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -53,12 +56,25 @@ import space.opensensor.permissions.AccessDialogs
 
 @Composable
 internal fun DeviceLocationCard(state: DeviceConfigUiState, onAction: (DeviceConfigAction) -> Unit) {
+    val title = stringResource(Res.string.location_title)
+    BrandCard {
+        CardHeader(title, info = InfoContent(title, stringResource(Res.string.location_info)))
+        DeviceLocationForm(state, onAction)
+    }
+}
+
+/**
+ * The sensor location, its Configure button and the dialog that saves it. Shared by the Device
+ * settings card and the setup wizard, so both send the same `location.*` keys. Approximate location
+ * is asked for only from Use phone location.
+ */
+@Composable
+fun DeviceLocationForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction) -> Unit) {
     val loc = state.location
     val draft = loc.draft
     var open by remember { mutableStateOf(false) }
     val title = stringResource(Res.string.location_title)
-    BrandCard {
-        CardHeader(title, info = InfoContent(title, stringResource(Res.string.location_info)))
+    Column {
         Text(if (draft.cell.isEmpty()) stringResource(Res.string.location_unset) else stringResource(Res.string.location_set))
         if (state.level.detailed && draft.cell.isNotEmpty()) Text(draft.cell)
         if (loc.supported == false) Text(stringResource(Res.string.location_unsupported))
@@ -113,11 +129,15 @@ internal fun DeviceLocationCard(state: DeviceConfigUiState, onAction: (DeviceCon
                     value = draft.country,
                     onValueChange = { if (it.length <= 2) onAction(DeviceConfigAction.LocationCountry(it)) },
                     label = { Text(stringResource(Res.string.location_country)) },
+                    // One letter is the only invalid length the field allows, so the hint turns into the error.
+                    isError = draft.country.length == 1,
+                    supportingText = {
+                        Text(stringResource(Res.string.location_country_info), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !loc.working,
                 )
-                Text(stringResource(Res.string.location_country_info))
                 if (draft.cell.isNotEmpty()) Text(draft.cell)
                 if (draft.needsFix) Text(stringResource(Res.string.location_fresh_required))
                 if (fixFailed) Text(stringResource(Res.string.location_fix_failed))

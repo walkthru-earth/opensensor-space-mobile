@@ -58,6 +58,44 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setDiscoverSource(source: DiscoverSource) {
         store.edit { it[SettingsKeys.DISCOVER_SOURCE] = source.name }
     }
+
+    /** Phone only nicknames by lowercase sensor id. They stay on the phone, see [setNickname]. */
+    val nicknames: Flow<Map<String, String>> = store.data.map { p ->
+        p.asMap().entries.mapNotNull { (key, value) ->
+            val id = key.name.removePrefix(SettingsKeys.NICKNAME_PREFIX)
+            if (id != key.name && value is String) id to value else null
+        }.toMap()
+    }.distinctUntilChanged()
+
+    /** Lowercase ids of sensors whose setup has not reached Done. */
+    val setupPending: Flow<Set<String>> = store.data.map { it[SettingsKeys.SETUP_PENDING].orEmpty() }.distinctUntilChanged()
+
+    /**
+     * Stores the nickname of sensor [id], or removes it when [nickname] is blank. The caller checks
+     * the length. It is never put in a frame, a patch or a log.
+     */
+    suspend fun setNickname(id: String, nickname: String?) {
+        val key = SettingsKeys.nickname(id)
+        val value = nickname?.trim().orEmpty()
+        store.edit { if (value.isEmpty()) it.remove(key) else it[key] = value }
+    }
+
+    suspend fun setSetupPending(id: String, pending: Boolean) {
+        val lower = id.lowercase()
+        store.edit {
+            val now = it[SettingsKeys.SETUP_PENDING].orEmpty()
+            it[SettingsKeys.SETUP_PENDING] = if (pending) now + lower else now - lower
+        }
+    }
+
+    /** Drops the nickname and the setup flag of a forgotten sensor. */
+    suspend fun forgetSensor(id: String) {
+        val lower = id.lowercase()
+        store.edit {
+            it.remove(SettingsKeys.nickname(lower))
+            it[SettingsKeys.SETUP_PENDING] = it[SettingsKeys.SETUP_PENDING].orEmpty() - lower
+        }
+    }
 }
 
 /** Reads [AppPrefs] with the defaults and the legacy `advanced_mode` rule. Unknown names read as the default. */

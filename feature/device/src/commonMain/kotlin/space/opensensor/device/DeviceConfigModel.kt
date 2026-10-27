@@ -107,6 +107,9 @@ sealed interface DeviceConfigNotice {
 
     /** The sensor took a new token. [stored] when this phone already holds it, else fetch it again later. */
     data class TokenRotated(val stored: Boolean) : DeviceConfigNotice
+
+    /** The sensor still reports Wi-Fi `connecting` after a minute of reads. */
+    data object WifiStillJoining : DeviceConfigNotice
 }
 
 /**

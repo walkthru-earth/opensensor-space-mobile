@@ -321,6 +321,16 @@ class CompanionStateTest {
         assertNull(plain.failedId, "an ordinary loss needs no repair")
     }
 
+    @Test fun oldFirmwareMarksTheSensorOutdatedUntilANewConnection() {
+        val state = CompanionState()
+        state.connectionStarted("p1")
+        state.connectionClosedNoticed(CompanionNotice.FIRMWARE_UPDATE)
+        assertEquals("p1", state.outdatedId)
+        assertNull(state.failedId)
+        state.connectionStarted("p1")
+        assertNull(state.outdatedId)
+    }
+
     @Test fun arrivalTimesComeFromTheMessagesNotFromLooking() {
         val state = linked()
         var now = 5L

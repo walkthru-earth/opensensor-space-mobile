@@ -246,7 +246,7 @@ fun MyDevicesScreen(
                     NearbyRow(
                         row = row,
                         level = level,
-                        onClick = { open(row.id, row.name) },
+                        onClick = { openNearby(row, bluetooth, onAction) },
                     )
                 }
 
@@ -302,6 +302,11 @@ internal const val SCAN_BUTTON_TAG = "devices-scan"
  */
 internal fun openThing(id: String, name: String?, bluetooth: RuntimeAccess, onAction: (DevicesAction) -> Unit) {
     onAction(DevicesAction.Open(id, name, connect = bluetooth.ready))
+}
+
+/** A nearby row. A new sensor goes through the Add sensor wizard, so setup always comes before Today. */
+internal fun openNearby(row: DeviceRow, bluetooth: RuntimeAccess, onAction: (DevicesAction) -> Unit) {
+    if (row.known) openThing(row.id, row.name, bluetooth, onAction) else onAction(DevicesAction.Add(row.id, row.name))
 }
 
 @Composable

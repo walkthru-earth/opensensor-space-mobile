@@ -68,6 +68,8 @@ include(":feature:history")
 include(":feature:today")
 // The Device section of one sensor, its configuration cards and confirmations, shared Compose for Android and iOS.
 include(":feature:device")
+// The setup wizard, one step list per Thing kind, shared Compose for Android and iOS (docs/screens.md, Add sensor).
+include(":feature:setup")
 // The Debug screen, shared Compose for Android and iOS, Developer level only (docs/screens.md, Debug).
 include(":feature:debug")
 // The app shell: bottom bar, per-tab Navigation 3 back stacks, Back rules (docs/adr/0001-shared-navigation.md).

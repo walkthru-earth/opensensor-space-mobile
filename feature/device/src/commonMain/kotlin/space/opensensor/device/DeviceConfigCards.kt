@@ -52,7 +52,6 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.WifiScanState
 import space.opensensor.data.ble.TransportKind
-import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.PairMode
 import space.opensensor.data.protocol.WifiState
@@ -72,6 +71,8 @@ import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.StatusDot
 import space.opensensor.designsystem.WarningNote
 import space.opensensor.designsystem.rememberCredentialCaptureGuard
+import space.opensensor.designsystem.switchRowSemantics
+import space.opensensor.designsystem.touchTarget
 import space.opensensor.device.resources.Res
 import space.opensensor.device.resources.action_cancel
 import space.opensensor.device.resources.action_hide
@@ -173,6 +174,7 @@ import space.opensensor.device.resources.wifi_over_lan
 import space.opensensor.device.resources.wifi_passphrase
 import space.opensensor.device.resources.wifi_passphrase_label
 import space.opensensor.device.resources.wifi_psk_open
+import space.opensensor.device.resources.wifi_psk_short
 import space.opensensor.device.resources.wifi_psk_storage
 import space.opensensor.device.resources.wifi_psk_stored
 import space.opensensor.device.resources.wifi_rssi
@@ -254,7 +256,7 @@ fun PairingCard(state: DeviceConfigUiState, onSave: (PairingChoice) -> Unit, onR
         }
         if (ble?.isPinDefault == true && current == PairMode.FIXED) {
             Spacer(Modifier.height(8.dp))
-            WarningNote(stringResource(Res.string.pairing_default_pin, ConfigPatch.DEFAULT_PIN))
+            WarningNote(stringResource(Res.string.pairing_default_pin))
         }
         if (snapshot.config?.rebootRequired == true) {
             Spacer(Modifier.height(8.dp))
@@ -624,6 +626,12 @@ fun WifiCard(
                                     )
                                 }
                             },
+                            isError = psk.isNotEmpty() && psk.encodeToByteArray().size < 8,
+                            supportingText = if (psk.isNotEmpty() && psk.encodeToByteArray().size < 8) {
+                                { Text(stringResource(Res.string.wifi_psk_short), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+                            } else {
+                                null
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = state.canEdit,
                         )
@@ -656,7 +664,7 @@ private fun AccessPointRow(ap: Frame.WifiAp, selected: Boolean, showDetails: Boo
         shape = MaterialTheme.shapes.medium,
         color = if (selected) FloatingControl.Selected else MaterialTheme.colorScheme.surface,
         contentColor = if (selected) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).touchTarget().selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
@@ -776,9 +784,13 @@ fun SensorIdentityCard(
             WarningNote(stringResource(Res.string.sensor_sticker_invalid))
         }
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // One Role.Switch node, the label names the switch for screen readers.
+        Row(
+            Modifier.fillMaxWidth().switchRowSemantics(effectiveBatch, { useBatch = it }, enabled = editable && knownBatch),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(stringResource(Res.string.sensor_store_estimate), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Switch(checked = effectiveBatch, onCheckedChange = { useBatch = it }, enabled = editable && knownBatch)
+            Switch(checked = effectiveBatch, onCheckedChange = null, enabled = editable && knownBatch)
         }
         if (!knownBatch && label != null) InfoNote(stringResource(Res.string.sensor_estimate_none))
         Spacer(Modifier.height(10.dp))

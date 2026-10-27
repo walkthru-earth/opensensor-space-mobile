@@ -35,6 +35,8 @@ kotlin {
             implementation(project(":feature:debug"))
             // Device settings of a Bluetooth sensor, the same cards and confirmations as Android.
             implementation(project(":feature:device"))
+            // The Add sensor wizard, the same steps as Android.
+            implementation(project(":feature:setup"))
             // The shared shell: bottom bar, per-tab stacks, Back and the iOS edge swipe.
             implementation(project(":feature:shell"))
             // viewModel { } holders for controllers kept per navigation entry.

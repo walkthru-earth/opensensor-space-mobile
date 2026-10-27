@@ -73,6 +73,7 @@ import space.opensensor.settings.SettingsController
 import space.opensensor.settings.SettingsRepository
 import space.opensensor.settings.SettingsScreen
 import space.opensensor.settings.iosSettingsRepository
+import space.opensensor.setup.SetupCandidate
 import space.opensensor.shell.AppShell
 import space.opensensor.shell.DebugKey
 import space.opensensor.shell.DeviceKey
@@ -82,6 +83,7 @@ import space.opensensor.shell.FilesKey
 import space.opensensor.shell.HistoryKey
 import space.opensensor.shell.ScanKey
 import space.opensensor.shell.SettingsKey
+import space.opensensor.shell.SetupKey
 import space.opensensor.shell.ShellBottomBar
 import space.opensensor.shell.TodayKey
 import space.opensensor.today.TodayAction
@@ -211,7 +213,7 @@ internal fun AppRoot(
         AppShell(
             entries = { nav ->
                 entry<DiscoverKey> {
-                    DiscoverEntry(networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.toMyDevicesRoot() })
+                    DiscoverEntry(networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.openSetup() })
                 }
                 entry<ScanKey> {
                     MyDevicesEntry(
@@ -221,6 +223,7 @@ internal fun AppRoot(
                         requestBluetooth = requestBluetooth,
                         onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
                         onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
+                        onAdd = { id, name -> nav.openSetup(pick = id, pickName = name) },
                     ) { id, connect ->
                         val peripheral = when {
                             IosKnown.isPeripheral(id) -> id
@@ -256,6 +259,13 @@ internal fun AppRoot(
                         }
                     } else {
                         LaunchedEffect(key) { nav.popIfTop { it == key } }
+                    }
+                }
+                entry<SetupKey> { key ->
+                    val pick = key.pick?.let { SetupCandidate(it, key.pickName, added = false) }
+                    SetupEntry(key.resume, pick, devices, configLinks, requestBluetooth, openSensor, onClose = { nav.popIfTop { it == key } }) { id ->
+                        nav.popIfTop { it == key }
+                        nav.push(TodayKey(id))
                     }
                 }
                 entry<DeviceKey> { key ->
@@ -400,6 +410,7 @@ private fun MyDevicesEntry(
     requestBluetooth: () -> Unit,
     onFiles: () -> Unit,
     onHistory: () -> Unit,
+    onAdd: (id: String, name: String?) -> Unit,
     onOpen: (id: String, connect: Boolean) -> Unit,
 ) {
     val controller = viewModel { DevicesHolder(bridge) }.controller
@@ -416,6 +427,7 @@ private fun MyDevicesEntry(
         onAction = { action ->
             when (action) {
                 is DevicesAction.Open -> onOpen(action.id, action.connect)
+                is DevicesAction.Add -> onAdd(action.id, action.name)
                 else -> controller.onAction(action)
             }
         },
