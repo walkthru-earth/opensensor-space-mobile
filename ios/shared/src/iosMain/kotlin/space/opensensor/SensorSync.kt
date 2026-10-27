@@ -34,12 +34,16 @@ import space.opensensor.data.sync.FileProblem
 import space.opensensor.data.sync.InsufficientSpaceException
 import space.opensensor.data.sync.ListCursors
 import space.opensensor.data.sync.SyncEngine
+import space.opensensor.data.sync.ThingSources
 import space.opensensor.data.sync.failed
 import space.opensensor.designsystem.nowEpochMillis
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkClosedException
 import space.opensensor.link.LinkTimeoutException
+import space.opensensor.model.ThingId
 import space.opensensor.storage.StorageBudget
+import space.opensensor.thing.OpenSensorBoardKind
+import space.opensensor.thing.sourceFor
 import space.opensensor.today.TodayNotice
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.milliseconds
@@ -84,8 +88,17 @@ class SensorSync internal constructor(
     coordinator: DeviceCoordinator = DeviceCoordinator(),
     /** Where each station's incremental list left off. */
     cursors: ListCursors = ListCursors.None,
+    /** Where each Thing's data comes from. Every listing records the board's source once. */
+    sources: ThingSources = ThingSources.None,
 ) {
-    internal val collector = ArchiveCollector(store, index, SyncEngine(store, index, coordinator = coordinator, log = ::syncLog), budget, cursors = cursors)
+    internal val collector = ArchiveCollector(
+        store,
+        index,
+        SyncEngine(store, index, coordinator = coordinator, log = ::syncLog),
+        budget,
+        cursors = cursors,
+        recordSource = { thing -> sources.recordIfAbsent(OpenSensorBoardKind.sourceFor(thing)) },
+    )
     private val scope = CoroutineScope(SupervisorJob())
     private val lock = NSLock()
 
@@ -296,7 +309,7 @@ class SensorSync internal constructor(
     fun collections(
         pick: (String, LinkPreference) -> IosLink?,
         dial: (String, LinkPreference, (DialResult) -> Unit) -> Unit,
-        protect: (String, Long, Boolean) -> Boolean,
+        protect: (ThingId.BleAddress, Long, Boolean) -> Boolean,
         unprotect: (Long) -> Unit,
     ): SensorCollections {
         lock.lock()

@@ -20,10 +20,11 @@ import space.opensensor.collection.CollectionScope
 import space.opensensor.collection.KeepAlive
 import space.opensensor.collection.KeepAliveKind
 import space.opensensor.collection.StopSource
+import space.opensensor.model.ThingId
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SyncWorkerBudgetTest {
-    private val intent = CollectionIntent(1, "synthetic-device", CollectionScope.All, CollectionOrigin.WORKER)
+    private val intent = CollectionIntent(1, ThingId.BleAddress("synthetic-device"), CollectionScope.All, CollectionOrigin.WORKER)
 
     @Test
     fun `deadline cancels collection and waits for cleanup before returning`() = runTest {

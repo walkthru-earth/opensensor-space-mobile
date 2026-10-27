@@ -37,6 +37,7 @@ import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkClosedException
 import space.opensensor.link.TimeoutPhase
 import space.opensensor.link.UnavailableKind
+import space.opensensor.model.ThingId
 import space.opensensor.storage.FakeStorageBudget
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -241,6 +242,24 @@ class SensorCollectionsTest {
     }
 
     private fun SensorCollections.collect(seen: Seen) = collect(device, null, LinkPreference.ANY, RunOrigin.USER, seen::progress, seen::finished)
+
+    // Swift names a board by its ThingId, and these read the tests by its 12 hex dev.
+    private fun SensorCollections.collect(
+        device: String,
+        onlyName: String?,
+        prefer: LinkPreference,
+        origin: RunOrigin,
+        progress: (SyncProgress) -> Unit,
+        finished: (SyncResult) -> Unit,
+    ) = collect(ThingId.BleAddress(device), onlyName, prefer, origin, progress, finished)
+
+    private fun SensorCollections.stop(device: String) = stop(ThingId.BleAddress(device))
+
+    private fun SensorCollections.stopUserRun(device: String) = stopUserRun(ThingId.BleAddress(device))
+
+    private fun SensorCollections.interrupt(device: String) = interrupt(ThingId.BleAddress(device))
+
+    private fun SensorCollections.isActive(device: String) = isActive(ThingId.BleAddress(device))
 
     /** What waits to resume, read without starting it. */
     private fun SensorCollections.waiting(): List<InterruptedRun> {
@@ -645,7 +664,7 @@ class SensorCollectionsTest {
 
         val resumed = runs.waiting()
         assertEquals(1, resumed.size)
-        assertEquals(device, resumed[0].device)
+        assertEquals(ThingId.BleAddress(device), resumed[0].device)
         assertEquals(null, resumed[0].onlyName)
         assertEquals(LinkPreference.LAN, resumed[0].prefer)
 
@@ -781,7 +800,7 @@ class SensorCollectionsTest {
         val result = withTimeout(10_000) { step.done.await() }
         assertEquals(SyncEndReason.INTERRUPTED, result.endReason)
         assertEquals(1, result.saved, "the file saved before the interruption stays")
-        assertEquals(listOf(device), runs.waiting().map { it.device })
+        assertEquals(listOf(ThingId.BleAddress(device)), runs.waiting().map { it.device })
     }
 
     @Test

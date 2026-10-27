@@ -20,12 +20,12 @@ thing/Hive paths. Partial downloads are not exported. The original archive stays
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
-## Room schema v2 (`opensensor.db`)
+## Room schema v3 (`opensensor.db`)
 
 One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
 keeps the file in its app database directory. iOS keeps it at
 `Application Support/database/opensensor.db`, excluded from backup, and uses only `archived_file`,
-`pruned_file` and `list_cursor`. Exported schemas live in `core/database/schemas/`.
+`pruned_file`, `list_cursor` and `thing_source`. Exported schemas live in `core/database/schemas/`.
 
 ```mermaid
 erDiagram
@@ -112,12 +112,20 @@ erDiagram
     long wholeAtEpochMs "phone time of the last whole listing"
     int sinceWhole "incremental runs since then"
   }
+  thing_source {
+    string thing_uuid PK "one row per Thing"
+    string kind "ThingKind id, opensensor-board"
+    int kind_version "the kind's contract version"
+    string config_json "the kind's own settings, {} for a board"
+  }
   known_device ||--o{ archived_file : "thing"
   known_device ||--o{ thing_epoch : "address (logical association, no cascade)"
   archived_file }o--o{ metric_bucket : "derived per thing-day"
   archived_file }o--|| derived_day : "signature over sources"
   known_device ||--o{ pruned_file : "thing"
   known_device ||--o| list_cursor : "thing"
+  thing_source ||--o| known_device : "thing_uuid, the Bluetooth adapter row"
+  thing_source ||--o{ archived_file : "thing_uuid"
 ```
 
 `metric_bucket` and `derived_day` are **caches**: drop them and derive again → identical rows.
@@ -129,6 +137,14 @@ keeps its row with `indexError`).
 behind the `ListCursors` port in `:core:sync` ([sync-engine](sync-engine.md#incremental-listing)). A
 lost row only costs one whole listing. Forgetting a station keeps its row, and the next run still
 lists in whole because the phone holds no file of it.
+`thing_source` says where each Thing's data comes from, keyed by its UUID (#223). Its `kind` and
+`kind_version` name the `ThingKind` that records it, and `config_json` holds that kind's settings,
+never a PIN, a Wi-Fi password, a LAN token or a location. `known_device` stays the Bluetooth
+adapter row of a board, so forgetting a board keeps its source. Every listing records the board's
+source once through `ArchiveCollector`, behind the `ThingSources` port in `:core:sync`
+(`RoomThingSources`), and a failed write never stops the run. In code a collection, a keep alive
+lease and the iOS bridges name the Thing they reach by a `ThingId` (`:core:model`), a
+`BleAddress` for a board or a `PhoneInstall` for this phone's own install.
 `pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the
 device lists the same name and size and the phone has no copy. Settings › Storage › Removed files ›
 Download again empties it. Both phones use this table through `RoomPrunedFiles`, behind the `PrunedFiles` port in
@@ -146,7 +162,9 @@ that cannot list the archive writes no marker and imports on the next launch.
 ### Migrations
 
 Version 2 adds `list_cursor` through `AutoMigration(from = 1, to = 2)`, which keeps every other
-table. A schema change adds an explicit or auto migration and the next
+table. Version 3 adds `thing_source` through `Migration2To3`, and gives every Thing the phone
+already knows, from `known_device`, `thing_epoch` or `archived_file`, an `opensensor-board` row at
+contract version 1, so no stored Thing is lost on upgrade. A schema change adds an explicit or auto migration and the next
 `core/database/schemas/<n>.json`.
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores

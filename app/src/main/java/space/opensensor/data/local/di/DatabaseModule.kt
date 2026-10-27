@@ -11,6 +11,7 @@ import space.opensensor.archive.PrunedFiles
 import space.opensensor.data.archive.RoomArchiveIndex
 import space.opensensor.data.archive.RoomListCursors
 import space.opensensor.data.archive.RoomPrunedFiles
+import space.opensensor.data.archive.RoomThingSources
 import space.opensensor.data.local.database.AppDatabase
 import space.opensensor.data.local.database.ArchivedFileDao
 import space.opensensor.data.local.database.DerivedDayDao
@@ -20,6 +21,7 @@ import space.opensensor.data.local.database.MetricBucketDao
 import space.opensensor.data.local.database.PrunedFileDao
 import space.opensensor.data.local.database.SensorInstallationDao
 import space.opensensor.data.local.database.ThingEpochDao
+import space.opensensor.data.local.database.ThingSourceDao
 import space.opensensor.data.local.database.openAppDatabase
 import space.opensensor.data.local.security.LanCredentialStore
 import space.opensensor.data.local.security.LanTokenCipher
@@ -27,6 +29,7 @@ import space.opensensor.data.local.security.LanTokenCipherContract
 import space.opensensor.data.local.security.LanTokenMigration
 import space.opensensor.data.local.security.SecureKnownDeviceDao
 import space.opensensor.data.sync.ListCursors
+import space.opensensor.data.sync.ThingSources
 import javax.inject.Singleton
 
 @Module
@@ -71,6 +74,9 @@ class DatabaseModule {
     @Provides
     fun provideListCursorDao(db: AppDatabase): ListCursorDao = db.listCursorDao()
 
+    @Provides
+    fun provideThingSourceDao(db: AppDatabase): ThingSourceDao = db.thingSourceDao()
+
     /** The shared index adapter over `archived_file`, the same class iOS uses (#100). */
     @Provides
     @Singleton
@@ -83,6 +89,11 @@ class DatabaseModule {
     @Provides
     @Singleton
     fun provideListCursors(dao: ListCursorDao): ListCursors = RoomListCursors(dao)
+
+    /** Where each Thing's data comes from, keyed by its UUID, the same adapter iOS uses (#223). */
+    @Provides
+    @Singleton
+    fun provideThingSources(dao: ThingSourceDao): ThingSources = RoomThingSources(dao)
 
     @Provides
     @Singleton

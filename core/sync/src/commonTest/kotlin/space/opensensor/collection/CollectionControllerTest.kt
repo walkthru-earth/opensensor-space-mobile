@@ -36,6 +36,7 @@ import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkState
 import space.opensensor.link.TimeoutPhase
 import space.opensensor.link.UnavailableKind
+import space.opensensor.model.ThingId
 import space.opensensor.storage.FakeStorageBudget
 import space.opensensor.storage.StorageClass
 import kotlin.test.Test
@@ -71,7 +72,7 @@ class CollectionControllerTest {
         scope: CoroutineScope = backgroundScope,
         onLog: (String) -> Unit = {},
     ): CollectionController = CollectionController(
-        device,
+        ThingId.BleAddress(device),
         links,
         collector(),
         keepAlive,
@@ -87,7 +88,7 @@ class CollectionControllerTest {
     ).also { c -> keepAlive.observe = { c.state.value } }
 
     private fun intent(scope: CollectionScope = CollectionScope.All, device: String = "fake-0") =
-        CollectionIntent(nextId++, device, scope, CollectionOrigin.USER_TAP)
+        CollectionIntent(nextId++, ThingId.BleAddress(device), scope, CollectionOrigin.USER_TAP)
 
     private fun archived(links: FakeLinks, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(links.thing, name))]
 
@@ -111,7 +112,7 @@ class CollectionControllerTest {
         val links = FakeLinks(backgroundScope)
         val request = intent()
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector(),
             keepAlive,
@@ -150,7 +151,7 @@ class CollectionControllerTest {
         val keepAlive = CountingKeepAlive()
         val links = FakeLinks(backgroundScope, keepOpen = true) { closedDelayMs = 5_000 }
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector(),
             keepAlive,
@@ -194,7 +195,7 @@ class CollectionControllerTest {
         val observed = ArrayList<FileOutcome>()
         var receiptRemoved = false
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector(),
             keepAlive,
@@ -221,6 +222,21 @@ class CollectionControllerTest {
     }
 
     @Test
+    fun aBoardIsDialledAndRecordedByItsBareAddress() = runTest {
+        val links = FakeLinks(backgroundScope)
+        val controller = controller(links, CountingKeepAlive(), device = "AA:BB:CC:DD:EE:FF")
+
+        controller.start(intent(device = "AA:BB:CC:DD:EE:FF"))
+        settle(controller)
+
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(listOf("AA:BB:CC:DD:EE:FF"), links.dialled, "the link opens on the address, never the ThingId key")
+        val saved = links.files.map { index.get(ArchiveKey(links.thing, it.name))?.sourceDevice }
+        assertTrue(saved.isNotEmpty())
+        assertEquals(List(saved.size) { "AA:BB:CC:DD:EE:FF" }, saved, "each file records the bare address")
+    }
+
+    @Test
     fun acceptedClockEvidenceIsAwaitedOnTheExactLinkBeforeListing() = runTest {
         val accepted = Frame.TimeSet(1_789_581_931L, 123_456L, 789_000)
         var persisted = false
@@ -230,7 +246,7 @@ class CollectionControllerTest {
             beforeList = { assertTrue(persisted, "LIST must follow receipt persistence") }
         }
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector(),
             keepAlive,
@@ -263,7 +279,7 @@ class CollectionControllerTest {
         val keepAlive = CountingKeepAlive()
         val links = FakeLinks(backgroundScope) { clockAck = accepted }
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector(),
             keepAlive,
@@ -292,7 +308,7 @@ class CollectionControllerTest {
     fun aRefusedClockCreatesNoReceiptAndKeepsOriginalFilesFlowing() = runTest {
         val links = FakeLinks(backgroundScope)
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector(),
             CountingKeepAlive(),
@@ -315,7 +331,7 @@ class CollectionControllerTest {
             clockError = Frame.Error(0, ProtocolError.UNKNOWN_OPCODE.code, "")
         }
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector(),
             keepAlive,
@@ -344,7 +360,7 @@ class CollectionControllerTest {
         val keepAlive = CountingKeepAlive()
         val links = FakeLinks(backgroundScope)
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector(),
             keepAlive,
@@ -381,7 +397,7 @@ class CollectionControllerTest {
             refuseOpen = { if (++opens == 2) Frame.Error(0, ProtocolError.AUTH_FAILED.code, "") else null }
         }
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector(),
             keepAlive,
@@ -418,7 +434,7 @@ class CollectionControllerTest {
         var listed: List<Frame.File>? = null
         var end: Frame.ListEnd? = null
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector,
             keepAlive,
@@ -795,7 +811,7 @@ class CollectionControllerTest {
         val links = FakeLinks(backgroundScope, kind = TransportKind.LAN)
         val entered = CompletableDeferred<Unit>()
         val controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             links,
             collector(),
             keepAlive,
@@ -838,7 +854,7 @@ class CollectionControllerTest {
             }
         }
         controller = CollectionController(
-            "fake-0",
+            ThingId.BleAddress("fake-0"),
             controllerLinks,
             collector(),
             keepAlive,

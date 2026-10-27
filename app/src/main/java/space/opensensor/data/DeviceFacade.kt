@@ -47,6 +47,7 @@ import space.opensensor.data.sync.FileProblem
 import space.opensensor.data.sync.SyncEndCause
 import space.opensensor.data.sync.failed
 import space.opensensor.link.retryable
+import space.opensensor.model.ThingId
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
 import javax.inject.Inject
@@ -112,7 +113,7 @@ class DeviceFacade internal constructor(
         this.address = address
         linkOwner.bind(address)
         controller = CollectionController(
-            address,
+            ThingId.BleAddress(address),
             LinkProvider { device, preference ->
                 val active = lock.withLock { requireNotNull(request).also { it.replaced = null } }
                 // A run asks for a link only after the run it replaced cleaned up. The archive's shared
@@ -239,7 +240,7 @@ class DeviceFacade internal constructor(
 
     private fun interactive(scope: CollectionScope, clockConfirmed: Boolean) {
         val device = address ?: return
-        val intent = CollectionIntent(nextIntent.incrementAndGet(), device, scope, CollectionOrigin.USER_TAP, clockConfirmed)
+        val intent = CollectionIntent(nextIntent.incrementAndGet(), ThingId.BleAddress(device), scope, CollectionOrigin.USER_TAP, clockConfirmed)
         if (start(intent) == null) linkOwner.emitCollectionEvent(DeviceEvent.Info(DeviceMessage.BusyBeforeSync))
     }
 
@@ -265,7 +266,7 @@ class DeviceFacade internal constructor(
         check(this.address == address)
         val name = currentDisplayName
         val preference = if (lanTarget == null) LinkPreference.BLE else LinkPreference.LAN
-        val intent = CollectionIntent(nextIntent.incrementAndGet(), address, CollectionScope.All, CollectionOrigin.WORKER, clockConfirmed = true, linkPreference = preference)
+        val intent = CollectionIntent(nextIntent.incrementAndGet(), ThingId.BleAddress(address), CollectionScope.All, CollectionOrigin.WORKER, clockConfirmed = true, linkPreference = preference)
         val receipt = start(intent, BackgroundLinkRequest(lanTarget, bleConnectTimeoutMs, owner), protection)
             ?: return BackgroundSyncResult(address, name, null, 0, 0, 0, skipped = "interactive collection or device ownership")
         try {
