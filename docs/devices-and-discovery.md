@@ -221,8 +221,8 @@ an info button.
   touch target. Choosing 24 hours in Real saves it even while a saved last hour is shown as
   24 hours. "Sample data" still
   heads every cell sheet while the feed on screen is the sample, and the info button explains the
-  feed on screen. At peek the area list shows it as a one line tag in the chart title, so the
-  chart stays in sight. `DiscoverController.onSourceSettings`, `chooseSource` and `retry`.
+  feed on screen. At peek the area list shows it as a one line tag above the chart title, so the
+  chart stays in sight and the tag is never cut at a large font. `DiscoverController.onSourceSettings`, `chooseSource` and `retry`.
 - **Zoom.** A compact floating pair of Zoom in and Zoom out buttons bottom right, above Near me,
   each a 48 dp target with its own spoken name, so the map never needs a pinch. One step per tap.
   The map holds pinch and the buttons to the same zoom 1 to 16. With Reduce Motion on, zoom, place search and Near me move the camera

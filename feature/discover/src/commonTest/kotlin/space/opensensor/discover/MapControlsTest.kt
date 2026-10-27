@@ -4,6 +4,7 @@ import space.opensensor.designsystem.BrandDarkScheme
 import space.opensensor.designsystem.BrandLightScheme
 import space.opensensor.designsystem.UI_COMPONENT_CONTRAST
 import space.opensensor.designsystem.contrastRatio
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -53,6 +54,22 @@ class MapControlsTest {
             val spans = fractions.indices.sortedBy { fractions[it] }.map { xs[it] to xs[it] + widths[it] }
             for ((a, b) in spans.zipWithNext()) assertTrue(a.second <= b.first, "$fractions overlap $a $b")
             for ((start, end) in spans) assertTrue(start >= 0 && end <= width, "$fractions outside $start $end")
+        }
+    }
+
+    @Test
+    fun labelsStayNearTheirMarks() {
+        // A label sits within half the closest gap of its mark, so it still names the edge it is drawn by.
+        for (fractions in listOf(listOf(0f, 1f / 6, 2f / 6, 3f / 6, 4f / 6, 5f / 6, 1f), listOf(0f, 0.1f, 1f), listOf(0.2f, 0.25f))) {
+            val width = 212
+            val sorted = fractions.sorted()
+            val gap = sorted.zipWithNext { a, b -> (b - a) * width }.min()
+            val slot = labelSlot(fractions, width)
+            val xs = labelPositions(fractions, fractions.map { slot }, width)
+            for (i in fractions.indices) {
+                val off = abs(xs[i] + slot / 2f - fractions[i] * width)
+                assertTrue(off <= gap / 2 + 1, "$fractions label $i is $off from its mark, gap $gap")
+            }
         }
     }
 

@@ -691,7 +691,7 @@ private fun LoadFailed(strings: DiscoverStrings, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun FirstRunCard(strings: DiscoverStrings, sample: Boolean, onAddSensor: () -> Unit, onExplore: () -> Unit) {
+internal fun FirstRunCard(strings: DiscoverStrings, sample: Boolean, onAddSensor: () -> Unit, onExplore: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Peacock(size = 80.dp, expression = PeacockExpression.WELCOME)
         // The tag sits beside the peacock, so the actions below stay inside the peek.
@@ -709,11 +709,12 @@ private fun FirstRunCard(strings: DiscoverStrings, sample: Boolean, onAddSensor:
 
 /**
  * "Sample data" as one short line in the tertiary tone, for the peek, where a 48 dp row would push
- * the chart or the first run actions out of sight. The cell sheets carry the full badge and its info.
+ * the chart or the first run actions out of sight. It shrinks to fit its line rather than being
+ * cut. The cell sheets carry the full badge and its info.
  */
 @Composable
 private fun SampleTag(strings: DiscoverStrings, modifier: Modifier = Modifier) {
-    Text(strings.sampleData, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary, maxLines = 1, modifier = modifier)
+    FitText(strings.sampleData, modifier, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
 }
 
 /** "Sample data" in the tertiary tone with its info button, over a cell sheet that shows the sample. */
@@ -747,7 +748,7 @@ private fun InView(
     onPickCell: (String) -> Unit,
 ) {
     // Bundled preview data says so before anything else, so it is never taken for local air. Over a
-    // chart the tag rides in the chart title, so the chart stays inside the peek.
+    // chart the tag takes one short line above the chart title, so the chart stays inside the peek.
     val property = state.property
     val values = property?.let { p -> state.rows.mapNotNull { it.mean(p.id) } }.orEmpty()
     val health = state.scale.who
@@ -848,9 +849,13 @@ private fun DiscoverStateMessage(text: String, expression: PeacockExpression, mo
     }
 }
 
-/** Label, unit and window over a chart, with an optional [trailing] note and the [sample] tag at the end. */
+/**
+ * Label, unit and window over a chart, with an optional [trailing] note. The [sample] tag takes its
+ * own line above, so at a large font it never shares the row with the title and is never cut.
+ */
 @Composable
-private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: DiscoverUiState, trailing: String? = null, sample: Boolean = false) {
+internal fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: DiscoverUiState, trailing: String? = null, sample: Boolean = false) {
+    if (sample) SampleTag(strings, Modifier.padding(bottom = 4.dp))
     // One heading for the chart below, read as label, unit, window and the trailing note.
     Row(Modifier.semantics(mergeDescendants = true) { heading() }, verticalAlignment = Alignment.Bottom) {
         FitText("${property.shownLabel()}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)
@@ -862,7 +867,6 @@ private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: 
             modifier = Modifier.weight(1f),
         )
         if (trailing != null) Text(trailing, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (sample) SampleTag(strings, Modifier.padding(start = 8.dp))
     }
 }
 
