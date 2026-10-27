@@ -202,7 +202,7 @@
     <string name="location_stop">إيقاف</string>
     <string name="location_country">رمز البلد</string>
     <string name="location_country_info">اختياري. حرفان، مثل GH.</string>
-    <string name="wifi_psk_long">63 حرفًا على الأكثر</string>
+    <string name="wifi_psk_long">طويلة جدًا. استخدم كلمة مرور أقصر.</string>
     <string name="wifi_psk_short">8 أحرف على الأقل</string>
     <string name="location_fresh_required">استخدم موقع الهاتف مجددًا قبل حفظ منطقة أصغر</string>
     <string name="location_fix_failed">لا يتوفر موقع حديث. تحقق من إذن الموقع وحاول مجددًا.</string>

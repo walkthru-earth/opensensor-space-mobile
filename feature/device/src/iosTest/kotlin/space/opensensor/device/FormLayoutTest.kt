@@ -70,7 +70,7 @@ class FormLayoutTest {
         onNodeWithText("home").performSemanticsAction(SemanticsActions.OnClick)
         waitForIdle()
         onNode(hasSetTextAction()).performTextInput("a".repeat(64))
-        onNodeWithText("At most 63 characters").assertExists()
+        onNodeWithText("Too long. Use a shorter passphrase.").assertExists()
         onNodeWithText("Save and connect").assertIsNotEnabled()
     }
 }
