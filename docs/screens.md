@@ -48,7 +48,9 @@ device, and nothing is asked at launch.
   lands on My devices. A device screen that loses its session returns there too. Settings is reached only from the bottom bar.
   The wizard's Location page has no Skip. Next waits until the sensor confirms a saved H3 cell, and a
   setup left before Done resumes at Location. After pairing, the close arrow and system back both ask
-  "Leave setup?" first, and old firmware fails on Find with the update message.
+  "Leave setup?" first, and old firmware fails on Find with the update message. A sensor under Nearby
+  on My devices that this phone has not added opens the wizard with it picked, never Today, so setup
+  always comes first on both platforms.
 - Each thing action has one home. Today holds Smart Sync, its Stop, Reconnect or Disconnect in the
   header, Forget in the header menu, and Debug at Developer. Files holds the archive list and Sync all. Device holds the sensor
   settings, Wi-Fi access, paired phones and Auto-sync. Every thing page reads one

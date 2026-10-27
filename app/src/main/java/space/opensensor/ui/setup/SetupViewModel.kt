@@ -44,12 +44,14 @@ class SetupViewModel @AssistedInject constructor(
     private val manager: DeviceConnectionManager,
     private val knownDeviceDao: KnownDeviceDao,
     private val settings: SettingsRepository,
-    @Assisted resume: String?,
+    @Assisted("resume") resume: String?,
+    @Assisted("pick") pick: String?,
+    @Assisted("pickName") pickName: String?,
 ) : ViewModel() {
 
     @AssistedFactory
     interface Factory {
-        fun create(resume: String?): SetupViewModel
+        fun create(@Assisted("resume") resume: String?, @Assisted("pick") pick: String?, @Assisted("pickName") pickName: String?): SetupViewModel
     }
 
     private val adverts = NearbyAdverts(touch = { knownDeviceDao.touch(it.address, it.name, it.lastSeenEpochMs) })
@@ -110,7 +112,13 @@ class SetupViewModel @AssistedInject constructor(
     private fun bluetoothReady() = hasBluetoothPermissions(context) && BluetoothStatus.isEnabled(context)
 
     /** A resumed run shows the advertised name the link owner already knows. */
-    val controller = SetupController(viewModelScope, port, resumeId = resume, resumeName = resume?.let { manager.controller(it).currentDisplayName })
+    val controller = SetupController(
+        viewModelScope,
+        port,
+        resumeId = resume,
+        resumeName = resume?.let { manager.controller(it).currentDisplayName },
+        pick = pick?.let { SetupCandidate(it, pickName, added = false) },
+    )
 
     override fun onCleared() {
         scanJob?.cancel()

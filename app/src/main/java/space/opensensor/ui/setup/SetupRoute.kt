@@ -24,9 +24,14 @@ import space.opensensor.ui.permissions.rememberLocalNetworkAccess
 @Composable
 fun SetupRoute(
     resume: String?,
+    pick: String?,
+    pickName: String?,
     onClose: () -> Unit,
     onOpenSensor: (String) -> Unit,
-    viewModel: SetupViewModel = hiltViewModel<SetupViewModel, SetupViewModel.Factory>(key = "setup:$resume", creationCallback = { it.create(resume) }),
+    viewModel: SetupViewModel = hiltViewModel<SetupViewModel, SetupViewModel.Factory>(
+        key = "setup:$resume:$pick",
+        creationCallback = { it.create(resume, pick, pickName) },
+    ),
 ) {
     val controller = viewModel.controller
     val state by controller.state.collectAsStateWithLifecycle()

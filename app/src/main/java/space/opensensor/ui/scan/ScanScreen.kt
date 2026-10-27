@@ -36,6 +36,7 @@ private val AndroidDevices = DevicesPlatform(collectInBackground = true)
 @Composable
 fun ScanScreen(
     onConnected: (address: String) -> Unit,
+    onAdd: (address: String, name: String?) -> Unit,
     viewModel: ScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -67,6 +68,7 @@ fun ScanScreen(
                     viewModel.onAction(action)
                     onConnected(action.id)
                 }
+                is DevicesAction.Add -> onAdd(action.id, action.name)
                 DevicesAction.CollectAll -> notificationPermission.ensureThen { viewModel.onAction(action) }
                 else -> viewModel.onAction(action)
             }

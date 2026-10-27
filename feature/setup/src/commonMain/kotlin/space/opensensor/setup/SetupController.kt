@@ -94,7 +94,8 @@ data class SetupUiState(
  * belongs to settings. Closing after pairing asks first, and the sensor stays added with setup
  * pending. Nothing about the run is persisted besides the nickname and that flag, so a resumed run
  * ([resumeId]) opens at the first required page, Location for the board, and reconnects silently.
- * Done, which clears the flag, is reached only once every required page is satisfied.
+ * A [pick] is a new sensor tapped outside Find, paired at once as if chosen there, so Name still
+ * comes first. Done, which clears the flag, is reached only once every required page is satisfied.
  */
 class SetupController(
     private val scope: CoroutineScope,
@@ -102,6 +103,7 @@ class SetupController(
     val steps: List<SetupStep> = SetupFlows.BOARD,
     resumeId: String? = null,
     resumeName: String? = null,
+    pick: SetupCandidate? = null,
 ) {
     private val pages: List<SetupStep> = steps.filter { it.isPage }
     private val _state = MutableStateFlow(SetupUiState(page = pages.first()))
@@ -117,6 +119,7 @@ class SetupController(
             pair(candidate, silent = true)
         } else {
             nearbyJob = scope.launch { port.nearby.collect { list -> _state.update { it.copy(candidates = list) } } }
+            if (pick != null) pair(pick, silent = false)
         }
     }
 

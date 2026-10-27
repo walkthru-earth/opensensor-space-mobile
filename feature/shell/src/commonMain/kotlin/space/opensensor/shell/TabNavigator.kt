@@ -49,10 +49,10 @@ class TabNavigator(
         writeTab(TopTab.MY_DEVICES)
     }
 
-    /** The Add sensor wizard over the My devices root, from Discover or a Stations card. */
-    fun openSetup(resume: String? = null) {
+    /** The Add sensor wizard over the My devices root, from Discover, or from a new sensor tapped on My devices ([pick]). */
+    fun openSetup(resume: String? = null, pick: String? = null, pickName: String? = null) {
         toMyDevicesRoot()
-        push(SetupKey(resume))
+        push(SetupKey(resume, pick, pickName))
     }
 
     /** A detail screen on top of the active tab. */

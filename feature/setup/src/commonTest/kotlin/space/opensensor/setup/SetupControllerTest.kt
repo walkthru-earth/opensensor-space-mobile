@@ -200,6 +200,17 @@ class SetupControllerTest {
     }
 
     @Test
+    fun aNewSensorPickedOnMyDevicesPairsAtOnceAndOpensName() = runTest(UnconfinedTestDispatcher()) {
+        val port = FakePort()
+        val c = SetupController(backgroundScope, port, pick = SetupCandidate("AA", "OS-1", added = false))
+        assertTrue("connect AA" in port.calls)
+        assertTrue(c.state.value.pairing)
+        port.ready("AA")
+        assertEquals(SetupStep.Name, c.state.value.page)
+        assertEquals(setOf("AA"), port.pending)
+    }
+
+    @Test
     fun anAddedSensorRunsSetupAgain() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         port.nicknames["BB"] = "Kitchen"

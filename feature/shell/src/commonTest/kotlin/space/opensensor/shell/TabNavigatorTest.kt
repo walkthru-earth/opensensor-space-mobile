@@ -105,6 +105,14 @@ class TabNavigatorTest {
     }
 
     @Test
+    fun `a new sensor tapped on My devices opens the wizard and not Today`() {
+        nav.select(TopTab.MY_DEVICES)
+        nav.openSetup(pick = "A", pickName = "OS-1")
+        assertEquals(listOf(ScanKey, SetupKey(pick = "A", pickName = "OS-1")), stack(TopTab.MY_DEVICES))
+        assertTrue(stack(TopTab.MY_DEVICES).none { it is TodayKey })
+    }
+
+    @Test
     fun `add sensor opens the wizard full screen over the My devices root`() {
         nav.select(TopTab.MY_DEVICES)
         nav.push(TodayKey("A"))
