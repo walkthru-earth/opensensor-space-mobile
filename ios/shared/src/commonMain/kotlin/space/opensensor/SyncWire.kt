@@ -42,6 +42,9 @@ class SyncWire {
         SyncIdentity(thing, device.lowercase(), maxRead.coerceIn(1, MAX_READ_CAP), info.boot, info.dict, info.desc)
     }.getOrNull()
 
+    /** INFO that parses but reports a `proto` below 3. The adapter closes with an update notice. */
+    fun outdated(json: String): Boolean = runCatching { requireProto3(DeviceInfo.parse(json)) is ProtoGate.UpdateFirmware }.getOrDefault(false)
+
     companion object {
         const val DEFAULT_MAX_READ = 4096
         private const val MAX_READ_CAP = 16384

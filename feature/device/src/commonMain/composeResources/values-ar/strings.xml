@@ -36,7 +36,7 @@
     <string name="msg_sensor_not_confirmed">لم يؤكد المستشعر الملصق.</string>
     <string name="msg_sensor_saved_off">حُفظ الملصق. تقدير الدفعة متوقف.</string>
     <string name="msg_sensor_saved_on">حُفظ الملصق. تقدير الدفعة مفعّل.</string>
-    <string name="pairing_default_pin">رمز PIN ما زال الافتراضي %1$s. غيّره.</string>
+    <string name="pairing_default_pin">رمز PIN ما زال الافتراضي القديم. عيّن رمزًا جديدًا.</string>
     <string name="pairing_display">شاشة اكتُشفت عند أول تشغيل</string>
     <string name="pairing_fixed">رمز PIN ثابت. رمز واحد من 6 أرقام تختاره أنت. للمستشعرات التي بلا شاشة.</string>
     <string name="pairing_hide_pin">إخفاء رمز PIN</string>
@@ -164,6 +164,7 @@
     <string name="msg_lan_token_stored">حُفظ رمز الوصول عبر Wi-Fi على هذا الهاتف.</string>
     <string name="msg_token_rotated_stored">تغيّر رمز الوصول وحُفظ الرمز الجديد على هذا الهاتف.</string>
     <string name="msg_token_rotated_fetch">تغيّر رمز الوصول. استخدم جلب الرمز لحفظ الرمز الجديد.</string>
+    <string name="msg_wifi_still_joining">ما زال الانضمام إلى Wi-Fi جاريًا. تحقّق من الاسم وكلمة المرور.</string>
     <string name="config_problem_pin">يتكوّن رمز PIN من 6 أرقام بالضبط.</string>
     <string name="config_problem_ssid_empty">أدخل اسم الشبكة.</string>
     <string name="config_problem_ssid_long">اسم الشبكة طويل جدًا. الحد الأقصى 32 بايت.</string>
@@ -187,7 +188,8 @@
     <string name="location_precision_info">الدقة الأقل تغطي مساحة أكبر. الدقة الافتراضية 8 تغطي حوالي 0.74 كم² في المتوسط. موقع الهاتف تقريبي.</string>
     <string name="location_fine_warning">قد تكشف الخلايا الدقيقة عن مكان محدد. الخلية الأصغر لا تجعل موقع الهاتف أدق. للمشاركة العامة حد دقة منفصل.</string>
     <string name="location_country">رمز البلد</string>
-    <string name="location_country_info">رمز بلد ISO اختياري تحدده أنت، مثل EG. لا يضمن وجود خادم الوقت داخل البلد.</string>
+    <string name="location_country_info">اختياري. حرفان، مثل GH.</string>
+    <string name="wifi_psk_short">8 أحرف على الأقل</string>
     <string name="location_fresh_required">استخدم موقع الهاتف مجددًا قبل حفظ خلية أدق</string>
     <string name="location_fix_failed">لا يتوفر موقع حديث. تحقق من إذن الموقع وحاول مجددًا.</string>
     <string name="location_locating">جارٍ الحصول على الموقع</string>

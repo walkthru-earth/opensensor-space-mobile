@@ -437,9 +437,8 @@ class DeviceLinkOwner @Inject constructor(
         closeSessionLocked()
         resetDerivedState()
 
-        knownDeviceDao.insertIfAbsent(
-            KnownDevice(address, name, null, null, null, clock.nowEpochMs(), null)
-        )
+        // No row before the link proves itself. A sensor joins the list only at enrollment, after
+        // INFO and the identity checks, so a failed pairing leaves no ghost row (#225).
         val known = knownDeviceDao.get(address)
 
         var transport: AndroidLink? = null
@@ -553,7 +552,7 @@ class DeviceLinkOwner @Inject constructor(
         when (val cause = e.disconnectCause) {
             is DisconnectCause.UpdateFirmware -> {
                 Log.w(TAG, "firmware update required (proto ${cause.reported})")
-                connectionFailure.value = "firmware update required"
+                connectionFailure.value = BleConnectionFailure.FIRMWARE_UPDATE_MESSAGE
                 _events.tryEmit(DeviceEvent.Error(DeviceMessage.FirmwareUpdateRequired(cause.reported, cause.required)))
             }
             is DisconnectCause.FramingViolation -> {

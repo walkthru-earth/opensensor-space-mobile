@@ -9,7 +9,7 @@ import kotlin.test.fail
 
 /** CONFIG JSON and SET_CONFIG line builder (docs/ble-sync-protocol.md, "Device configuration"). */
 class DeviceConfigTest {
-    private val full = """{"ble":{"pair":"random","pin":123456,"pin_default":1,"bonds":1,"display":1},""" +
+    private val full = """{"ble":{"pair":"random","pin_set":1,"pin_default":1,"bonds":1,"display":1},""" +
         """"wifi":{"on":1,"ssid":"home","psk_set":1,"state":"connected","ip":"192.168.1.42","rssi":-58,"mac":"e0..6b40"},""" +
         """"lan":{"on":1,"port":47390,"host":"os-6b40","clients":0}}"""
 
@@ -17,7 +17,7 @@ class DeviceConfigTest {
     fun `full document parses`() {
         val c = DeviceConfig.parse(full)
         assertEquals(PairMode.RANDOM, c.ble?.pairMode)
-        assertEquals("123456", c.ble?.pinText)
+        assertTrue(c.ble!!.hasPin)
         assertTrue(c.ble!!.isPinDefault)
         assertEquals(1, c.ble?.bonds)
         assertEquals(1, c.ble?.display)
@@ -37,7 +37,8 @@ class DeviceConfigTest {
     fun `absent objects and keys are null and unknown keys are ignored`() {
         val c = DeviceConfig.parse("""{"ble":{"pair":"fixed","pin":42,"future":true},"extra":{"x":1}}""")
         assertEquals(PairMode.FIXED, c.ble?.pairMode)
-        assertEquals("000042", c.ble?.pinText) // leading zeros restored
+        assertFalse(c.ble!!.hasPin) // a legacy echoed pin is ignored, only pin_set counts
+        assertFalse("42" in c.ble.toString())
         assertNull(c.ble?.pinDefault)
         assertFalse(c.ble!!.isPinDefault)
         assertNull(c.wifi)
@@ -163,14 +164,11 @@ class DeviceConfigTest {
     }
 
     @Test
-    fun `thing mobility round trips and phone cell is never sent`() {
+    fun `thing mobility parses and phone cell is not an app key`() {
         val page1 = """{"location":{"cell":"","resolution":8,"cell_resolution":null,"lat":null,"lon":null,"country":""},"thing":{"mobility":"fixed"}}"""
         assertEquals(ThingMobility.FIXED, DeviceConfig.parse(page1).thing?.thingMobility)
         assertNull(DeviceConfig.parse("""{"thing":{"mobility":"drifting"}}""").thing?.thingMobility)
         assertNull(DeviceConfig.parse("{}").thing)
-        val patch = ConfigPatch.build { thingMobility(ThingMobility.MOVING) }
-        assertEquals("thing.mobility=moving\n", patch.encode())
-        assertFalse(patch.carriesSecret)
-        assertFalse(ConfigPatch.KEY_LOCATION_PHONE_CELL in patch.encode())
+        assertNull(ConfigFields.of(ConfigPatch.KEY_LOCATION_PHONE_CELL))
     }
 }
