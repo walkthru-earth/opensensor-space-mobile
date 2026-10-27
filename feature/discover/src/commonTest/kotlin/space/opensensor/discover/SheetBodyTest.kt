@@ -3,6 +3,8 @@ package space.opensensor.discover
 import space.opensensor.publicfeed.CellRow
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** What the Discover sheet shows for a state, the order of [sheetBody]. */
 class SheetBodyTest {
@@ -26,5 +28,14 @@ class SheetBodyTest {
         assertEquals(SheetBody.CELL, DiscoverUiState(selected = row).sheetBody(showAll = false, simple = false))
         assertEquals(SheetBody.ALL_PROPERTIES, DiscoverUiState(selected = row).sheetBody(showAll = true, simple = false))
         assertEquals(SheetBody.IN_VIEW, DiscoverUiState().sheetBody(showAll = false, simple = false))
+    }
+
+    @Test
+    fun everyBodyBesideTheMapPinsListsTheOwnThings() {
+        // The pins are drawn in every state. Only a cell and the property list replace the list.
+        val listed = setOf(SheetBody.UNAVAILABLE, SheetBody.LOAD_FAILED, SheetBody.FIRST_RUN, SheetBody.IN_VIEW)
+        SheetBody.entries.forEach { body ->
+            if (body in listed) assertTrue(body.listsOwn, "$body") else assertFalse(body.listsOwn, "$body")
+        }
     }
 }

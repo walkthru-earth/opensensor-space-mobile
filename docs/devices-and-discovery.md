@@ -472,8 +472,10 @@ the Things the phone still knows. A Thing set up before this build shows once it
 off the main thread, and only when a Thing, its cell or its last update changes. No request leaves
 the phone for it and nothing is published.
 
-The list alternative for TalkBack and VoiceOver is the sheet. Under the areas in view it lists
-"Your sensors" by name, each row a button that moves the map to that pin. The cluster badge shows
+The list alternative for TalkBack and VoiceOver is the sheet. Under the areas in view, the first
+run card, a failed load or the unavailable message it lists "Your sensors" by name, each row a
+button that moves the map to that pin. Only a selected area and the property list take its place
+(`everyBodyBesideTheMapPinsListsTheOwnThings`). The cluster badge shows
 the count only. Naming the worst step on it waits until the latest readings join the places.
 
 ### Privacy rules

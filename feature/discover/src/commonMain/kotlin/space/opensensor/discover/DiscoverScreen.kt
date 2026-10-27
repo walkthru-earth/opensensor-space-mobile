@@ -682,22 +682,28 @@ private fun SheetContent(
     // Sample data is a snapshot, so its freshness is read against its own newest hour.
     val reference = if (state.isSample) (state.newestUpdateEpochMs ?: now) else now
     Column(Modifier.fillMaxWidth().heightIn(min = PEEK_HEIGHT - 24.dp).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-        when (state.sheetBody(showAll, simple)) {
+        val body = state.sheetBody(showAll, simple)
+        when (body) {
             SheetBody.UNAVAILABLE -> DiscoverStateMessage(strings.unavailable, PeacockExpression.CONCERNED)
             SheetBody.ALL_PROPERTIES -> AllProperties(state, strings, onPickProperty)
             SheetBody.SIMPLE_CELL -> SimpleCellDetail(state, strings, infoButton, reference, onShowProperty, onRetry)
             SheetBody.CELL -> CellDetail(state.selected!!, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
             SheetBody.LOAD_FAILED -> LoadFailed(strings, onRetryLoad)
             SheetBody.FIRST_RUN -> FirstRunCard(strings, state.isSample, onAddSensor, onExplore)
-            SheetBody.IN_VIEW -> {
-                InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
-                OwnList(state.own, strings, onPickOwn)
-            }
+            SheetBody.IN_VIEW -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
         }
+        if (body.listsOwn) OwnList(state.own, strings, onPickOwn)
     }
 }
 
 internal enum class SheetBody { UNAVAILABLE, ALL_PROPERTIES, SIMPLE_CELL, CELL, LOAD_FAILED, FIRST_RUN, IN_VIEW }
+
+/**
+ * Whether the sheet lists the own Things under its body. The map draws their pins in every state,
+ * so every body that is not a cell or the property list lists them for screen readers.
+ */
+internal val SheetBody.listsOwn: Boolean
+    get() = this == SheetBody.UNAVAILABLE || this == SheetBody.LOAD_FAILED || this == SheetBody.FIRST_RUN || this == SheetBody.IN_VIEW
 
 /**
  * What the sheet shows. A failed load comes before the first run card, so a user who picks Real
