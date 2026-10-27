@@ -6,6 +6,7 @@ import android.content.pm.ServiceInfo
 import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -78,6 +79,11 @@ class SyncWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
+        if (targetOf(inputData) == RunTarget.Unreadable) {
+            // A one board run must never widen to every board, so it ends with nothing done.
+            Log.w(TAG, "auto-sync input names a board it cannot read, run skipped")
+            return Result.success()
+        }
         val result = boundedWorkerRun(MAX_RUN_MS) { protection -> runProtected(protection) }
         if (result != null) return result
         Log.i(TAG, "auto-sync deadline reached; releasing worker quota")
@@ -116,10 +122,10 @@ class SyncWorker @AssistedInject constructor(
                         }
                 }
                 try {
-                    val trigger = inputData.getString(KEY_TRIGGER) ?: (if (onlyThing() != null || inputData.getBoolean(KEY_ALL_KNOWN, false)) SyncTrigger.MANUAL.name else "PERIODIC")
+                    val trigger = inputData.getString(KEY_TRIGGER) ?: (if (onlyAddress() != null || inputData.getBoolean(KEY_ALL_KNOWN, false)) SyncTrigger.MANUAL.name else "PERIODIC")
                     Log.i(TAG, "auto-sync run: trigger=$trigger")
                     AutoSyncRunner(gateway.forRun(owner, protection) { workerStopSource(stopReason) }, log = { Log.i(TAG, it) }).run(
-                        onlyAddress = onlyThing()?.address,
+                        onlyAddress = onlyAddress(),
                         allKnown = inputData.getBoolean(KEY_ALL_KNOWN, false),
                         lanOnly = inputData.getBoolean(KEY_LAN_ONLY, false),
                     )
@@ -137,7 +143,7 @@ class SyncWorker @AssistedInject constructor(
             if (!foreground) runCatching { notificationManager.cancel(notificationId) }
         }
 
-        if (inputData.getString(KEY_TRIGGER) == null && onlyThing() == null && !inputData.getBoolean(KEY_ALL_KNOWN, false)) {
+        if (inputData.getString(KEY_TRIGGER) == null && onlyAddress() == null && !inputData.getBoolean(KEY_ALL_KNOWN, false)) {
             // Periodic run: the cheapest place to re-arm the offloaded flag scan, which a Bluetooth
             // toggle silently drops (stop + start, de-duplicated by the receiver).
             suspendRunCatching { advertScan.ensureRegisteredNow() }.onFailure { Log.w(TAG, "flag scan re-register failed: ${it::class.simpleName}") }
@@ -153,8 +159,8 @@ class SyncWorker @AssistedInject constructor(
         return if (report.transientFailure) retryOrGiveUp() else Result.success()
     }
 
-    /** The one board this run is for, or null for every eligible one. */
-    private fun onlyThing(): ThingId.BleAddress? = inputData.getString(KEY_THING)?.let(ThingId::parse) as? ThingId.BleAddress
+    /** The address of the one board this run is for, or null for every eligible one. */
+    private fun onlyAddress(): String? = (targetOf(inputData) as? RunTarget.One)?.board?.address
 
     /** Backed-off retry for transient trouble, bounded so a flaky link cannot keep the radio busy all period. */
     private fun retryOrGiveUp(): Result =
@@ -178,6 +184,13 @@ class SyncWorker @AssistedInject constructor(
 
         /** Input data: restrict a run to this board, a [ThingId.key] of its Bluetooth address. Absent for periodic runs. */
         const val KEY_THING = "thing"
+
+        /** Which boards a run with [input] is for. */
+        internal fun targetOf(input: Data): RunTarget {
+            val key = input.getString(KEY_THING) ?: return RunTarget.Every
+            val board = ThingId.parse(key) as? ThingId.BleAddress ?: return RunTarget.Unreadable
+            return RunTarget.One(board)
+        }
 
         /** Input data: a manual run over every known device ("Collect from all loggers"). */
         const val KEY_ALL_KNOWN = "all_known"
@@ -211,3 +224,15 @@ internal fun workerStopSource(reason: Int): StopSource =
         WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT -> StopSource.FGS_TIMEOUT
         else -> StopSource.SYSTEM
     }
+
+/** Which boards one [SyncWorker] run is for, read from its input. */
+internal sealed interface RunTarget {
+    /** No board named, so every eligible board. */
+    data object Every : RunTarget
+
+    /** Only [board]. */
+    data class One(val board: ThingId.BleAddress) : RunTarget
+
+    /** A board is named in a form this build cannot read, so the run does nothing. */
+    data object Unreadable : RunTarget
+}

@@ -222,6 +222,21 @@ class CollectionControllerTest {
     }
 
     @Test
+    fun aBoardIsDialledAndRecordedByItsBareAddress() = runTest {
+        val links = FakeLinks(backgroundScope)
+        val controller = controller(links, CountingKeepAlive(), device = "AA:BB:CC:DD:EE:FF")
+
+        controller.start(intent(device = "AA:BB:CC:DD:EE:FF"))
+        settle(controller)
+
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(listOf("AA:BB:CC:DD:EE:FF"), links.dialled, "the link opens on the address, never the ThingId key")
+        val saved = links.files.map { index.get(ArchiveKey(links.thing, it.name))?.sourceDevice }
+        assertTrue(saved.isNotEmpty())
+        assertEquals(List(saved.size) { "AA:BB:CC:DD:EE:FF" }, saved, "each file records the bare address")
+    }
+
+    @Test
     fun acceptedClockEvidenceIsAwaitedOnTheExactLinkBeforeListing() = runTest {
         val accepted = Frame.TimeSet(1_789_581_931L, 123_456L, 789_000)
         var persisted = false

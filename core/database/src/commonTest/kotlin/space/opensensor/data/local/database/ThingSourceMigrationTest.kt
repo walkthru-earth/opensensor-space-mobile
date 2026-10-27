@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 
 /**
  * A version 2 database file, written as version 2 wrote it, opened by the app at version 3
- * ([Migration2To3]). Every Thing it knew gets a board source and no stored row is lost.
+ * ([Migration2To3]). Every Thing it knew gets a board source, a blank Thing gets none and no stored row is lost.
  */
 class ThingSourceMigrationTest {
     private val dir = newTempDir()
@@ -45,6 +45,12 @@ class ThingSourceMigrationTest {
                     "INSERT INTO archived_file (thing, name, bytes, crc32, sha256, syncedAtEpochMs, sourceDevice) VALUES ('thing-ios', '$name', 10, 1, 'ab', 5, 'aabbccddeeff')",
                 )
             }
+            // A file named by no Thing, which gets no source.
+            connection.execSQL(
+                "INSERT INTO archived_file (thing, name, bytes, crc32, sha256, syncedAtEpochMs, sourceDevice) VALUES ('', 'orphan.parquet', 10, 1, 'ab', 5, 'aabbccddeeff')",
+            )
+            connection.execSQL("INSERT INTO list_cursor (thing, cursor, wholeAtEpochMs, sinceWhole) VALUES ('thing-a', X'2A000000', 7, 3)")
+            connection.execSQL("INSERT INTO pruned_file (thing, name, bytes, crc32, prunedAtEpochMs) VALUES ('thing-a', 'day=03/data.parquet', 20, 2, 9)")
             connection.execSQL("PRAGMA user_version = 2")
         } finally {
             connection.close()
@@ -69,6 +75,11 @@ class ThingSourceMigrationTest {
             assertEquals(null, db.knownDeviceDao().get("AA:00:00:00:00:02")!!.thing)
             assertEquals(2, db.thingEpochDao().forDevice("AA:00:00:00:00:01").size)
             assertEquals(listOf("thing-ios"), db.archivedFileDao().identitiesForThing("thing-ios").map { it.thing }.distinct())
+            assertEquals(1, db.archivedFileDao().identitiesForThing("").size)
+            val cursor = db.listCursorDao().get("thing-a")!!
+            assertEquals(listOf<Byte>(42, 0, 0, 0), cursor.cursor.toList())
+            assertEquals(7L to 3, cursor.wholeAtEpochMs to cursor.sinceWhole)
+            assertEquals(listOf("day=03/data.parquet"), db.prunedFileDao().forThing("thing-a").map { it.name })
             val version = db.useReaderConnection { c -> c.usePrepared("PRAGMA user_version") { it.step(); it.getLong(0) } }
             assertEquals(3L, version)
         } finally {

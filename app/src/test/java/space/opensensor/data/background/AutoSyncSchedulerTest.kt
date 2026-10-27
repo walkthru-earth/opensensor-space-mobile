@@ -2,6 +2,7 @@ package space.opensensor.data.background
 
 import androidx.work.OneTimeWorkRequest
 import androidx.work.PeriodicWorkRequest
+import androidx.work.workDataOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -12,6 +13,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import space.opensensor.data.local.database.KnownDeviceDao
+import space.opensensor.model.ThingId
 import java.lang.reflect.Proxy
 
 class AutoSyncSchedulerTest {
@@ -109,6 +111,21 @@ class AutoSyncSchedulerTest {
         assertTrue(scheduler.observeAnyActive().first())
         scheduler.setPeriodicEnabled(false)
         assertFalse(scheduler.observeAnyActive().first())
+    }
+
+    @Test
+    fun `the worker reads back the one board a sync now names`() = runTest {
+        scheduler.syncNow(A)
+        scheduler.syncNow(B, SyncTrigger.PRESENCE)
+        val targets = queue.requests.map { (_, request) -> SyncWorker.targetOf(request.workSpec.input) }
+        assertEquals(listOf(RunTarget.One(ThingId.BleAddress(A)), RunTarget.One(ThingId.BleAddress(B))), targets)
+    }
+
+    @Test
+    fun `a board the worker cannot read ends the run instead of widening it`() {
+        assertEquals(RunTarget.Unreadable, SyncWorker.targetOf(workDataOf(SyncWorker.KEY_THING to A)))
+        assertEquals(RunTarget.Unreadable, SyncWorker.targetOf(workDataOf(SyncWorker.KEY_THING to "phone:0f8e7d6c")))
+        assertEquals(RunTarget.Every, SyncWorker.targetOf(workDataOf(SyncWorker.KEY_ALL_KNOWN to true)))
     }
 
     private companion object {

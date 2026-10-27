@@ -17,11 +17,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
+import space.opensensor.data.archive.FileArchiveStore
+import space.opensensor.data.archive.RoomArchiveIndex
+import space.opensensor.data.archive.SyncEngineModule
 import space.opensensor.data.ble.DeviceSession
+import space.opensensor.data.coroutines.WallClock
 import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.local.database.ArchivedFile
 import space.opensensor.data.local.database.DerivedArchivedFileQueries
 import space.opensensor.storage.AlreadyCommitted
+import space.opensensor.storage.FakeStorageBudget
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
@@ -203,6 +208,30 @@ class ConcurrentArchiveTest {
         assertTrue(archive.fileFor("thing-a", name).isDirectory)
         assertTrue(archive.partialLengths("thing-a").containsKey(name))
         assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test
+    fun `the app collector records a listed thing as an opensensor board`() = runBlocking {
+        val recorded = ArrayList<ThingSource>()
+        val sources = object : ThingSources {
+            override suspend fun get(thing: String) = recorded.firstOrNull { it.thing == thing }
+            override suspend fun all() = recorded.toList()
+            override suspend fun recordIfAbsent(source: ThingSource) = recorded.add(source)
+        }
+        val collector = SyncEngineModule.provideArchiveCollector(
+            FileArchiveStore(archive, Dispatchers.Unconfined),
+            RoomArchiveIndex(dao),
+            engine,
+            FakeStorageBudget(),
+            dao,
+            ListCursors.None,
+            sources,
+            WallClock.System,
+        )
+
+        withTimeout(10_000) { collector.list(device().second, "thing-a", onlyName = name) }
+
+        assertEquals(listOf(ThingSource("thing-a", "opensensor-board", 1)), recorded)
     }
 
     private class InMemoryDao : DerivedArchivedFileQueries {
