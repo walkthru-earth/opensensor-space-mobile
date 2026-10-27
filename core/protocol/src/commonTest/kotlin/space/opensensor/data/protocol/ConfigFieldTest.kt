@@ -22,6 +22,37 @@ class ConfigFieldTest {
     }
 
     @Test
+    fun `every table key names the card it is set from`() {
+        val expected = mapOf(
+            "ble.pair" to ConfigGroup.PAIRING,
+            "ble.pin" to ConfigGroup.PAIRING,
+            "ble.clear_bonds" to ConfigGroup.PAIRING,
+            "wifi.on" to ConfigGroup.WIFI,
+            "wifi.ssid" to ConfigGroup.WIFI,
+            "wifi.psk" to ConfigGroup.WIFI,
+            "lan.on" to ConfigGroup.LAN,
+            "lan.rotate_token" to ConfigGroup.LAN,
+            "location.cell" to ConfigGroup.LOCATION,
+            "location.resolution" to ConfigGroup.LOCATION,
+            "location.country" to ConfigGroup.LOCATION,
+            "sensor.vendor" to ConfigGroup.SENSOR,
+            "sensor.model" to ConfigGroup.SENSOR,
+            "sensor.serial" to ConfigGroup.SENSOR,
+            "sensor.batch_candidate" to ConfigGroup.SENSOR,
+        )
+        assertEquals(expected.keys, ConfigFields.ALL.map { it.key }.toSet())
+        expected.forEach { (key, group) -> assertEquals(group, ConfigFields.groupOf(key), key) }
+    }
+
+    @Test
+    fun `a key the app does not know is other`() {
+        assertEquals(ConfigGroup.LOCATION, ConfigFields.groupOf("thing.mobility"))
+        assertEquals(ConfigGroup.OTHER, ConfigFields.groupOf("debug.level"))
+        assertEquals(ConfigGroup.OTHER, ConfigFields.groupOf("wifi"))
+        assertEquals(ConfigGroup.OTHER, ConfigFields.groupOf(""))
+    }
+
+    @Test
     fun `secret keys come from the table`() {
         assertEquals(setOf("wifi.psk", "ble.pin"), ConfigFields.SECRET_KEYS)
         assertEquals(ConfigFields.SECRET_KEYS, ConfigPatch.SECRET_KEYS)

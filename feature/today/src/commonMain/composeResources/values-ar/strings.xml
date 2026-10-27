@@ -96,7 +96,7 @@
     <string name="env_unsupported">هذا الإصدار من التطبيق لا يقرأ القيم المباشرة من هذا المستشعر بعد. الملفات المتزامنة لا تزال تعمل.</string>
     <string name="today_so_far">اليوم حتى الآن</string>
     <string name="today_none">لا قراءات مؤرخة اليوم بعد.</string>
-    <string name="today_none_clock">لا قراءات مؤرخة بعد. اضبط وقت المستشعر ثم زامِن.</string>
+    <string name="today_none_clock">لا قراءات مؤرخة بعد. زر زامِن الآن يضبط وقت المستشعر أيضًا.</string>
     <string name="today_average">المتوسط %1$s %2$s</string>
     <string name="today_of_the_day">مغطّى حتى الآن</string>
     <plurals name="today_readings_since_midnight">

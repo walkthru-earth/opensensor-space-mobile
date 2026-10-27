@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -109,6 +110,29 @@ fun StatLine(label: String, value: String, modifier: Modifier = Modifier, valueC
                 maxLines = TypographyLimits.StatValueMaxLines,
             )
         }
+    }
+}
+
+/**
+ * A labelled switch on its own line. The whole row is one 48 dp [androidx.compose.ui.semantics.Role.Switch]
+ * node named by [label], so TalkBack and VoiceOver read the label with the state, and a tap anywhere
+ * on the row toggles it. The label wraps between words at large font sizes.
+ */
+@Composable
+fun SwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Row(
+        modifier.fillMaxWidth().switchRowSemantics(checked, onCheckedChange, enabled),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MinTouchSpacing),
+    ) {
+        BodyText(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 

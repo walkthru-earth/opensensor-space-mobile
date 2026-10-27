@@ -38,9 +38,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -56,12 +56,14 @@ import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.PairMode
 import space.opensensor.data.protocol.WifiState
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.BrandCard
 import space.opensensor.designsystem.CardHeader
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.InfoNote
+import space.opensensor.designsystem.MinTouchSpacing
 import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockIcon
@@ -69,6 +71,7 @@ import space.opensensor.designsystem.PillButton
 import space.opensensor.designsystem.SignalBars
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.StatusDot
+import space.opensensor.designsystem.SwitchRow
 import space.opensensor.designsystem.WarningNote
 import space.opensensor.designsystem.rememberCredentialCaptureGuard
 import space.opensensor.designsystem.switchRowSemantics
@@ -100,6 +103,7 @@ import space.opensensor.device.resources.lan_seen
 import space.opensensor.device.resources.lan_seen_at
 import space.opensensor.device.resources.lan_server
 import space.opensensor.device.resources.lan_server_on
+import space.opensensor.device.resources.lan_switch
 import space.opensensor.device.resources.lan_title
 import space.opensensor.device.resources.lan_token_explain
 import space.opensensor.device.resources.lan_token_held
@@ -144,6 +148,7 @@ import space.opensensor.device.resources.sensor_save
 import space.opensensor.device.resources.sensor_scan
 import space.opensensor.device.resources.sensor_sticker
 import space.opensensor.device.resources.sensor_sticker_invalid
+import space.opensensor.device.resources.sensor_sticker_other_model
 import space.opensensor.device.resources.sensor_store_estimate
 import space.opensensor.device.resources.sensor_title
 import space.opensensor.device.resources.sensor_vendor
@@ -173,6 +178,7 @@ import space.opensensor.device.resources.wifi_open_network
 import space.opensensor.device.resources.wifi_over_lan
 import space.opensensor.device.resources.wifi_passphrase
 import space.opensensor.device.resources.wifi_passphrase_label
+import space.opensensor.device.resources.wifi_psk_long
 import space.opensensor.device.resources.wifi_psk_open
 import space.opensensor.device.resources.wifi_psk_short
 import space.opensensor.device.resources.wifi_psk_storage
@@ -185,6 +191,7 @@ import space.opensensor.device.resources.wifi_scan_unavailable
 import space.opensensor.device.resources.wifi_scanning
 import space.opensensor.device.resources.wifi_secured
 import space.opensensor.device.resources.wifi_show_passphrase
+import space.opensensor.device.resources.wifi_switch
 import space.opensensor.device.resources.wifi_title
 import space.opensensor.device.resources.wifi_unknown
 import space.opensensor.family.air.PlantowerBatchCandidate
@@ -263,14 +270,16 @@ fun PairingCard(state: DeviceConfigUiState, onSave: (PairingChoice) -> Unit, onR
             WarningNote(stringResource(Res.string.pairing_reboot_pending))
         }
         Spacer(Modifier.height(10.dp))
-        // One exclusive choice. The whole row is the radio button, the dot keeps its 48 dp slot.
-        Column(Modifier.selectableGroup()) {
+        // One exclusive choice. The whole row is the radio button, at least 48 dp tall with an 8 dp gap
+        // to the next row so a tap never lands on the wrong mode.
+        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(MinTouchSpacing)) {
             PairMode.entries.forEach { mode ->
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .touchTarget()
                         .selectable(selected = selected == mode, enabled = state.canEdit, role = Role.RadioButton) { selected = mode }
-                        .padding(vertical = 2.dp),
+                        .testTag("pair-mode-${mode.name}"),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     RadioButton(
@@ -279,7 +288,7 @@ fun PairingCard(state: DeviceConfigUiState, onSave: (PairingChoice) -> Unit, onR
                         enabled = state.canEdit,
                         modifier = Modifier.minimumInteractiveComponentSize(),
                     )
-                    Text(pairModeLabel(mode), style = MaterialTheme.typography.bodyMedium)
+                    BodyText(pairModeLabel(mode), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -393,15 +402,14 @@ fun LanCard(
         CardHeader(
             title,
             info = InfoContent(title, stringResource(Res.string.lan_explain), stringResource(Res.string.lan_token_explain), stringResource(Res.string.perm_lan_body)),
-        ) {
-            // The card title names the switch for screen readers.
-            Switch(
-                checked = lan?.isOn == true,
-                onCheckedChange = onToggleLan,
-                enabled = state.canEdit && lan != null,
-                modifier = Modifier.semantics { contentDescription = title },
-            )
-        }
+        )
+        // A labelled row, one Role.Switch node that toggles from anywhere on the line.
+        SwitchRow(
+            stringResource(Res.string.lan_switch),
+            checked = lan?.isOn == true,
+            onCheckedChange = onToggleLan,
+            enabled = state.canEdit && lan != null,
+        )
         if (level.detailed) {
             StatLine(
                 stringResource(Res.string.lan_server),
@@ -489,15 +497,13 @@ fun WifiCard(
 
     BrandCard(modifier = modifier) {
         val title = stringResource(Res.string.wifi_title)
-        CardHeader(title, info = InfoContent(title, stringResource(Res.string.info_wifi_body), stringResource(Res.string.wifi_psk_storage))) {
-            // The card title names the switch for screen readers.
-            Switch(
-                checked = wifi?.isOn == true,
-                onCheckedChange = onToggleWifi,
-                enabled = state.canEdit && wifi != null,
-                modifier = Modifier.semantics { contentDescription = title },
-            )
-        }
+        CardHeader(title, info = InfoContent(title, stringResource(Res.string.info_wifi_body), stringResource(Res.string.wifi_psk_storage)))
+        SwitchRow(
+            stringResource(Res.string.wifi_switch),
+            checked = wifi?.isOn == true,
+            onCheckedChange = onToggleWifi,
+            enabled = state.canEdit && wifi != null,
+        )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusDot(
                 when (ws) {
@@ -626,11 +632,20 @@ fun WifiCard(
                                     )
                                 }
                             },
-                            isError = psk.isNotEmpty() && psk.encodeToByteArray().size < 8,
-                            supportingText = if (psk.isNotEmpty() && psk.encodeToByteArray().size < 8) {
-                                { Text(stringResource(Res.string.wifi_psk_short), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
-                            } else {
-                                null
+                            isError = pskProblem(psk) != null,
+                            // Says why Save is off, and is read out when it appears or changes.
+                            supportingText = pskProblem(psk)?.let { problem ->
+                                {
+                                    Text(
+                                        stringResource(
+                                            when (problem) {
+                                                PskProblem.SHORT -> Res.string.wifi_psk_short
+                                                PskProblem.LONG -> Res.string.wifi_psk_long
+                                            },
+                                        ),
+                                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                                    )
+                                }
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = state.canEdit,
@@ -645,7 +660,7 @@ fun WifiCard(
                                 picked = null
                                 psk = ""
                             },
-                            enabled = state.canEdit && (pickedOpen || psk.encodeToByteArray().size in 8..63),
+                            enabled = state.canEdit && (pickedOpen || pskSavable(psk)),
                         )
                         TextButton(onClick = {
                             picked = null
@@ -720,6 +735,7 @@ fun SensorIdentityCard(
     }
     val label = SensorLabel.parse(serial)
     val matchesInstalledModel = label?.model == DeviceConfigController.SUPPORTED_MODEL
+    val stickerProblem = stickerProblem(serial)
     val knownBatch = matchesInstalledModel && label?.batch == PlantowerBatchCandidate.BATCH
     val effectiveBatch = useBatch && knownBatch
     val editable = state.canEdit && !snapshot.syncRunning
@@ -776,13 +792,21 @@ fun SensorIdentityCard(
             singleLine = true,
             enabled = editable,
             modifier = Modifier.fillMaxWidth(),
-            isError = serial.isNotBlank() && !matchesInstalledModel,
+            isError = stickerProblem != null,
+            // Every error state says why in words, read out when it changes.
+            supportingText = stickerProblem?.let { problem ->
+                {
+                    Text(
+                        when (problem) {
+                            StickerProblem.FORMAT -> stringResource(Res.string.sensor_sticker_invalid)
+                            StickerProblem.OTHER_MODEL -> stringResource(Res.string.sensor_sticker_other_model, DeviceConfigController.SUPPORTED_MODEL)
+                        },
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
+            },
         )
-        if (label != null) {
-            StatLine(stringResource(Res.string.sensor_batch), label.batch)
-        } else if (serial.isNotBlank()) {
-            WarningNote(stringResource(Res.string.sensor_sticker_invalid))
-        }
+        if (label != null) StatLine(stringResource(Res.string.sensor_batch), label.batch)
         Spacer(Modifier.height(8.dp))
         // One Role.Switch node, the label names the switch for screen readers.
         Row(

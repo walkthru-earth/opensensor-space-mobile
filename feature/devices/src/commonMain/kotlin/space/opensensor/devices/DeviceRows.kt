@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -133,7 +134,8 @@ internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) 
             Column(Modifier.weight(1f)) {
                 Text(row.name ?: stringResource(Res.string.scan_unnamed), style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(2.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Tags wrap to a new line at large text instead of squeezing each other.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                     if (level.developer) Mono(row.id)
                     if (row.bonded) Tag(stringResource(Res.string.scan_tag_paired))
                     if (row.known) Tag(stringResource(Res.string.scan_tag_known))
@@ -160,7 +162,7 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) {
     ) {
         Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                     Text(row.name ?: stringResource(Res.string.scan_unnamed), style = MaterialTheme.typography.titleMedium)
                     row.wifi?.let { Tag(wifiTagText(it)) }
                 }
@@ -262,10 +264,11 @@ private fun ArchiveLine(glance: ArchiveGlance?, level: DetailLevel) {
                     { now -> "$base$coverage$fileCount, " + DeviceText.fill(syncedTemplate, ago(now - synced)) },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    // The whole line stays readable at large text, it wraps instead of shrinking or cutting.
+                    maxLines = Int.MAX_VALUE,
                 )
             } else {
-                Text("$base$coverage$fileCount", style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                Text("$base$coverage$fileCount", style = MaterialTheme.typography.bodySmall)
             }
         }
     } else if (glance.lastDataUtcNs == null && glance.files > 0) {

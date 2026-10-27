@@ -5,10 +5,14 @@ authenticated BLE or LAN session. This is available in shared Android/iOS UI on
 firmware that supports GET_CONFIG page 1. Legacy firmware shows unsupported.
 
 1. Stand beside the sensor and open Configure location.
-2. Choose a maximum H3 resolution, initially 8, and optionally enter the
-   owner-declared assigned ISO alpha-2 country code, such as EG.
+2. Choose how large an area to share, initially about 0.74 km² (H3 resolution 8),
+   and optionally enter the owner-declared assigned ISO alpha-2 country code,
+   such as EG. A country code that is not two letters A to Z says so under the
+   field and keeps Save off.
 3. Tap Use phone location. Only this tap requests foreground approximate OS
-   access and a one-shot fix. Cancel, denial or timeout leaves a failed-fix note.
+   access and a one-shot fix. While it waits, Stop cancels it, and it gives up
+   after 25 seconds. Cancel, denial or timeout leaves a failed-fix note. Stop keeps
+   nothing and shows no note.
 4. Review and tap Save on device. Readback must match before the app says saved.
    Clear location and Save removes the cell. This flow does not enable uploads.
 
@@ -20,7 +24,9 @@ There are no background updates. Dismissing the dialog cancels the request.
 Android retains only ACCESS_COARSE_LOCATION. iOS retains When In Use and reduced
 accuracy by default. A small chosen cell cannot improve an approximate OS fix.
 
-Resolution 0 through 15 is configurable. Lower values disclose a larger area;
+Resolution 0 through 15 is configurable. The menu names each choice by its
+average area (`LocationArea`, km² down to 0.11 km², then m²), and Detailed adds
+the resolution number and the cell index. Lower values disclose a larger area;
 resolution 8, the default for every Thing, fixed or moving, averages about 0.74 km² with an edge
 of about 460 m. Actual cell area varies. Finer values can expose a particular place, and the
 app warns above 8. Raising precision after coarsening cannot recover

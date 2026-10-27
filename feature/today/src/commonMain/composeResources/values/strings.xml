@@ -92,7 +92,7 @@
     <string name="env_unsupported">This app version cannot read live values from this sensor yet. Synced files still work.</string>
     <string name="today_so_far">Today so far</string>
     <string name="today_none">No timed readings yet today.</string>
-    <string name="today_none_clock">No timed readings yet. Set the sensor time, then sync.</string>
+    <string name="today_none_clock">No timed readings yet. Sync now also sets the sensor time.</string>
     <string name="today_average">Average %1$s %2$s</string>
     <string name="today_of_the_day">covered so far</string>
     <plurals name="today_readings_since_midnight">
