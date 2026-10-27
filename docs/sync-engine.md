@@ -145,7 +145,12 @@ saved, skipped or left for a reason a retry cannot fix (an unsafe name or a loca
 that throws, or one with a file that failed, keeps the old cursor, so the board names the same
 files again. A walk that ends early sends no `LIST_SINCE_END`, so nothing is saved. An incremental
 listing proves nothing about names it does not carry, so it never drops a `PrunedFiles` record.
+A file the board keeps refusing, or one whose CRC never matches, holds the cursor where it was.
+Each later run lists from there again, which costs a longer listing but never skips a file, and the
+audit still runs on schedule.
 Every listed file still passes the same size, CRC-32 and `PAR1` checks before it counts as synced.
+The run's file total counts the files already on this phone that an incremental listing left out,
+so progress and the finished message read as after a whole listing.
 The Android Files screen merges an incremental listing into the last whole one by name
 (`ManifestState.withNew`).
 

@@ -16,6 +16,4 @@ class RoomListCursors(private val dao: ListCursorDao) : ListCursors {
 
     override suspend fun put(state: ListCursorState) =
         dao.upsert(ListCursorEntity(state.thing, state.cursor.bytes, state.wholeAtEpochMs, state.sinceWhole))
-
-    override suspend fun remove(thing: String) = dao.delete(thing)
 }

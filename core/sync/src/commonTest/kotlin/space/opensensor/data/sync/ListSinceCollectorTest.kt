@@ -37,9 +37,6 @@ class ListSinceCollectorTest {
         override suspend fun put(state: ListCursorState) {
             rows[state.thing] = state
         }
-        override suspend fun remove(thing: String) {
-            rows.remove(thing)
-        }
     }
 
     private fun TestScope.collector(pruned: PrunedFiles = PrunedFiles.None) = ArchiveCollector(
@@ -92,7 +89,7 @@ class ListSinceCollectorTest {
         val summary = collect(fake)
 
         assertEquals(listOf(ListCursor.ZERO, fake.cursorAt(3)), fake.listSinceCursors)
-        assertEquals(1, summary.files)
+        assertEquals(4, summary.files, "the three files already here still count, as after a whole listing")
         assertEquals(1, summary.newFiles)
         assertContentEquals(added.bytes, finalBytes(fake.thing, added.name))
         assertEquals(ListCursorState(fake.thing, fake.cursorAt(4), now, 1), cursors.rows[fake.thing])
@@ -108,7 +105,7 @@ class ListSinceCollectorTest {
 
         val summary = collect(fake)
 
-        assertEquals(1, summary.files)
+        assertEquals(3, summary.files)
         assertEquals(listOf(FileNotSaved(grown.name, FileProblem.LOCAL_CONFLICT)), summary.notSaved)
         assertContentEquals(grown.bytes, finalBytes(fake.thing, grown.name), "a saved file is never replaced")
         assertEquals(fake.cursorAt(4), cursors.rows[fake.thing]?.cursor, "a conflict a retry cannot fix still moves the cursor")

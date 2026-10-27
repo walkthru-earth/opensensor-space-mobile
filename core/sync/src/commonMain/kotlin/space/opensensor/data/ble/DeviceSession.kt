@@ -117,8 +117,9 @@ class WindowLostException(val receivedUpTo: Long, reason: String) : Exception(re
 
 /**
  * The typed device API, a thin view over one [LinkSession]. The session owns the reply routing,
- * the drain of abandoned replies and any owed `CLOSE`, so this class holds no protocol state and
- * any number of views on one session share it. Making a view per run is harmless.
+ * the drain of abandoned replies and any owed `CLOSE`, so any number of views on one session share
+ * them. A view keeps only [latestStatus], the last status it asked for, so a view made per run starts
+ * without one and asks again.
  *
  * [transport] still supplies identity, connection state, the GATT reads and the push flows until
  * the Android and iOS drivers land (#57, #58). It is never read for replies. [frames] records raw

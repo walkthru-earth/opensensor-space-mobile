@@ -16,7 +16,8 @@ data class ListCursorState(
 
 /**
  * The phone's `LIST_SINCE` cursors, one per station. A cursor only ever goes back to the board it
- * came from. Both phones keep them in the Room `list_cursor` table.
+ * came from. Both phones keep them in the Room `list_cursor` table. A station forgotten with its
+ * files keeps its row, and the next run still sends the zero cursor because the phone holds no file of it.
  */
 interface ListCursors {
     suspend fun get(thing: String): ListCursorState?
@@ -24,12 +25,9 @@ interface ListCursors {
     /** Adds or replaces the cursor of [ListCursorState.thing]. */
     suspend fun put(state: ListCursorState)
 
-    suspend fun remove(thing: String)
-
     /** No cursors, so every collection takes a whole listing. */
     object None : ListCursors {
         override suspend fun get(thing: String): ListCursorState? = null
         override suspend fun put(state: ListCursorState) = Unit
-        override suspend fun remove(thing: String) = Unit
     }
 }

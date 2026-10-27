@@ -101,8 +101,9 @@ class SyncListing(
 /**
  * One collection over an open [DeviceSession]: a listing ([list]), plan against the archive, then
  * every missing file through the [SyncEngine], oldest dated partition first. The session is a view on
- * its link and holds no protocol state, so a view made per run shares the link's drain and owed
- * `CLOSE`. A file that cannot be saved fails alone and is reported in the summary. A link,
+ * its link, so a view made per run shares the link's drain and owed `CLOSE`. The `ls` comes from the
+ * view's [DeviceSession.latestStatus] when it has one. A session kept across runs may hold an older
+ * `ls`, which is safe because the board itself answers `full` for a cursor of another mount. A file that cannot be saved fails alone and is reported in the summary. A link,
  * protocol or session fault (a refused token, a busy sensor) ends the run by throwing, and the
  * partials written so far resume on the next run.
  *
@@ -259,7 +260,10 @@ class ArchiveCollector(
             }
         }
         budget.requireRoom(plan.missingBytes)
-        return PlannedCollection(plan, notSaved)
+        // An incremental listing names only what changed, so the files already here still count
+        // toward the run's total, as they would after a whole listing.
+        val held = if (whole) 0 else (archived.mapTo(HashSet()) { it.name } - scopedFiles.mapTo(HashSet()) { it.name }).size
+        return PlannedCollection(plan, notSaved, held = held)
     }
 
     private suspend fun forgetRemoved(file: PrunedFile) {
@@ -288,7 +292,7 @@ class ArchiveCollector(
         val plan = planned.plan
         if (planned.unlisted) return CollectionSummary(1, planned.notSaved)
         val notSaved = ArrayList(planned.notSaved)
-        val total = plan.entries.size
+        val total = plan.entries.size + planned.held
         val bytesTotal = plan.missingBytes
         var done = total - plan.toDownload.size
         var received = 0L
@@ -323,9 +327,10 @@ class ArchiveCollector(
 
 /**
  * One run's plan from a fresh listing. [notSaved] holds the entries reported without a transfer.
- * [unlisted] means the one selected file was not in the listing, so nothing runs.
+ * [unlisted] means the one selected file was not in the listing, so nothing runs. [held] counts the
+ * archived files an incremental listing left out, which join the run's total as already done.
  */
-class PlannedCollection(val plan: SyncPlan, val notSaved: List<FileNotSaved>, val unlisted: Boolean = false)
+class PlannedCollection(val plan: SyncPlan, val notSaved: List<FileNotSaved>, val unlisted: Boolean = false, val held: Int = 0)
 
 /** Audit after a day since the last whole listing. */
 internal val AUDIT_INTERVAL_MS: Long = 24.hours.inWholeMilliseconds

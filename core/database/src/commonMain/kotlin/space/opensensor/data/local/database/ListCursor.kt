@@ -27,7 +27,4 @@ interface ListCursorDao {
     /** The key is the whole primary key and nothing references the row, so `REPLACE` is an upsert. */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(cursor: ListCursorEntity)
-
-    @Query("DELETE FROM list_cursor WHERE thing = :thing")
-    suspend fun delete(thing: String)
 }

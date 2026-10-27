@@ -127,7 +127,8 @@ from the raw cf1 and RH columns. Archived files and `archived_file` rows never c
 keeps its row with `indexError`).
 `list_cursor` keeps where each station's incremental `LIST_SINCE` left off, through `RoomListCursors`
 behind the `ListCursors` port in `:core:sync` ([sync-engine](sync-engine.md#incremental-listing)). A
-lost row only costs one whole listing.
+lost row only costs one whole listing. Forgetting a station keeps its row, and the next run still
+lists in whole because the phone holds no file of it.
 `pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the
 device lists the same name and size and the phone has no copy. Settings › Storage › Removed files ›
 Download again empties it. Both phones use this table through `RoomPrunedFiles`, behind the `PrunedFiles` port in

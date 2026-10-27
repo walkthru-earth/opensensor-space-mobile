@@ -80,7 +80,6 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
     val cursors: ListCursors = object : ListCursors {
         override suspend fun get(thing: String): ListCursorState? = ready().let { roomCursors.get(thing) }
         override suspend fun put(state: ListCursorState) = ready().let { roomCursors.put(state) }
-        override suspend fun remove(thing: String) = ready().let { roomCursors.remove(thing) }
     }
 
     /** Closes the database, for tests. The app keeps it open for the life of the process. */

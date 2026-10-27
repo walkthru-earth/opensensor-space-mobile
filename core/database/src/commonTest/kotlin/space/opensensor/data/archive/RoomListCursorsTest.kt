@@ -32,16 +32,6 @@ class RoomListCursorsTest {
     }
 
     @Test
-    fun removeForgetsOneStation() = runTest {
-        cursors.put(ListCursorState("thing-a", cursor, 10, 0))
-        cursors.put(ListCursorState("thing-b", cursor, 10, 0))
-
-        cursors.remove("thing-a")
-        assertNull(cursors.get("thing-a"))
-        assertEquals(cursor, cursors.get("thing-b")?.cursor)
-    }
-
-    @Test
     fun aRowOfTheWrongSizeReadsAsNone() = runTest {
         db.listCursorDao().upsert(ListCursorEntity("thing-a", ByteArray(31), 10, 0))
         assertNull(cursors.get("thing-a"))

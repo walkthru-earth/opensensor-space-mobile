@@ -217,7 +217,8 @@ class SensorSyncTest {
         val second = runOn(board())
 
         assertEquals(SyncEnd.COMPLETE, second.end)
-        assertEquals(0, second.files)
+        assertEquals(2, second.files, "the two files already here still count")
+        assertEquals(0, second.saved)
         assertEquals(listOf(ListCursor.ZERO, next), sent)
         assertFalse(Opcode.LIST in requests)
     }
