@@ -22,7 +22,6 @@ import space.opensensor.data.history.startOfDay
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.designsystem.nowEpochMillis
 import space.opensensor.family.air.AirFamily
-import space.opensensor.family.air.AirMetrics
 import space.opensensor.model.BoardTemplate
 
 /** Epoch second of the current local midnight in [zone]. */
@@ -38,15 +37,19 @@ fun localDayStarts(zone: TimeZone, periodMs: Long = 60_000): Flow<Long> = flow {
 
 /**
  * The metrics Today so far averages for [capabilities], in preference order. An air board with
- * particles takes the EPA corrected PM2.5 and falls back to raw. Any other thing takes the metric of
+ * particles takes the EPA corrected PM2.5 and falls back to raw, both resolved from its template. Any other thing takes the metric of
  * its first visible primary column, so a soil board averages its soil reading. Empty when the thing
  * is unknown or shows no primary.
  */
 fun todayMetrics(capabilities: DeviceCapabilities): List<MetricSpec> {
     val thing = capabilities.thing ?: return emptyList()
-    if (AirFamily.PARTICLES in capabilities) return listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25)
+    val specs = Metrics.of(thing.template, thing.profile)
+    if (AirFamily.PARTICLES in capabilities) {
+        val pm = listOf(AirFamily.PM25_CORRECTED_ID, AirFamily.PM25_ATMOSPHERIC).mapNotNull { id -> specs.firstOrNull { it.id == id } }
+        if (pm.isNotEmpty()) return pm
+    }
     val primary = thing.primary.firstOrNull() ?: return emptyList()
-    return listOfNotNull(Metrics.of(thing.template, thing.profile).firstOrNull { it.id == primary.name })
+    return listOfNotNull(specs.firstOrNull { it.id == primary.name })
 }
 
 /** One Today so far read, the day of a thing and the metrics to try in order. */
