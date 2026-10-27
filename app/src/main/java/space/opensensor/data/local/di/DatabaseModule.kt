@@ -11,6 +11,7 @@ import space.opensensor.archive.PrunedFiles
 import space.opensensor.data.archive.RoomArchiveIndex
 import space.opensensor.data.archive.RoomListCursors
 import space.opensensor.data.archive.RoomPrunedFiles
+import space.opensensor.data.archive.RoomThingPlaces
 import space.opensensor.data.archive.RoomThingSources
 import space.opensensor.data.local.database.AppDatabase
 import space.opensensor.data.local.database.ArchivedFileDao
@@ -29,6 +30,7 @@ import space.opensensor.data.local.security.LanTokenCipherContract
 import space.opensensor.data.local.security.LanTokenMigration
 import space.opensensor.data.local.security.SecureKnownDeviceDao
 import space.opensensor.data.sync.ListCursors
+import space.opensensor.data.sync.ThingPlaces
 import space.opensensor.data.sync.ThingSources
 import javax.inject.Singleton
 
@@ -94,6 +96,11 @@ class DatabaseModule {
     @Provides
     @Singleton
     fun provideThingSources(dao: ThingSourceDao): ThingSources = RoomThingSources(dao)
+
+    /** Each fixed Thing's saved cell, read only by Discover (#226). */
+    @Provides
+    @Singleton
+    fun provideThingPlaces(db: AppDatabase): ThingPlaces = RoomThingPlaces(db.thingPlaceDao())
 
     @Provides
     @Singleton

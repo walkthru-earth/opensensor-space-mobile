@@ -3,7 +3,9 @@ package space.opensensor.data.local.database
 import androidx.room.useReaderConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import space.opensensor.data.archive.RoomThingPlaces
 import space.opensensor.data.archive.RoomThingSources
 import space.opensensor.data.sync.ThingSource
 import kotlin.test.AfterTest
@@ -13,8 +15,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * A version 2 database file, written as version 2 wrote it, opened by the app at version 3
- * ([Migration2To3]). Every Thing it knew gets a board source, a blank Thing gets none and no stored row is lost.
+ * A version 2 database file, written as version 2 wrote it, opened by the app at version 4
+ * ([Migration2To3], then the automatic step that adds `thing_place`). Every Thing it knew gets a board source, a blank Thing gets none and no stored row is lost.
  */
 class ThingSourceMigrationTest {
     private val dir = newTempDir()
@@ -81,7 +83,9 @@ class ThingSourceMigrationTest {
             assertEquals(7L to 3, cursor.wholeAtEpochMs to cursor.sinceWhole)
             assertEquals(listOf("day=03/data.parquet"), db.prunedFileDao().forThing("thing-a").map { it.name })
             val version = db.useReaderConnection { c -> c.usePrepared("PRAGMA user_version") { it.step(); it.getLong(0) } }
-            assertEquals(3L, version)
+            assertEquals(4L, version)
+            // Version 4 adds the own Thing places empty. A pin waits for the next location read.
+            assertEquals(emptyList(), RoomThingPlaces(db.thingPlaceDao()).observeAll().first())
         } finally {
             db.close()
         }

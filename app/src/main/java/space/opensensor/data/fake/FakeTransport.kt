@@ -97,6 +97,11 @@ class FakeTransport(
     private var bonds = 1
     private val display = 1
     private var wifiOn = false
+
+    /** The location page `GET_CONFIG 1` answers, the saved cell and mobility. Tests set them. */
+    @Volatile var locationCell = ""
+
+    @Volatile var mobility = "fixed"
     private var ssid = ""
     private var pskSet = false
     private var wifiState = "off"
@@ -330,7 +335,7 @@ class FakeTransport(
             Opcode.STATUS -> _status.tryEmit(statusJson().encodeToByteArray())
 
             // ------------------------------------------------------------ v2
-            Opcode.GET_CONFIG -> send(Frame.Config(configFlags(), configJson()))
+            Opcode.GET_CONFIG -> send(Frame.Config(configFlags(), if (buf.hasRemaining() && buf.get().toInt() == 1) locationJson() else configJson()))
             Opcode.SET_CONFIG -> {
                 val text = String(ByteArray(buf.remaining()).also { buf.get(it) }, Charsets.UTF_8)
                 val bad = applyConfigLines(text)
@@ -400,6 +405,9 @@ class FakeTransport(
     // ------------------------------------------------------------- v2 helpers
 
     private fun configFlags(): Int = if (pendingPairMode != null || pendingPin != null) 1 else 0
+
+    private fun locationJson(): String =
+        """{"location":{"cell":"$locationCell","resolution":8,"cell_resolution":${if (locationCell.isEmpty()) "null" else "8"},"lat":null,"lon":null,"country":""},"thing":{"mobility":"$mobility"}}"""
 
     private fun configJson(): String {
         val effectivePin = pendingPin ?: pin

@@ -86,6 +86,8 @@ import space.opensensor.data.sync.FileArchive
 import space.opensensor.data.sync.ReadWindow
 import space.opensensor.data.sync.SyncListing
 import space.opensensor.data.sync.SyncPlan
+import space.opensensor.data.sync.ThingPlaces
+import space.opensensor.data.sync.recordFrom
 import space.opensensor.link.AuthKind
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkClosedException
@@ -191,6 +193,8 @@ class DeviceLinkOwner @Inject constructor(
     private val pruned: PrunedFiles,
     /** Board templates the device serves over `GET_DESCRIPTOR` (#191). */
     private val boardDescriptors: BoardDescriptors,
+    /** Each fixed Thing's saved cell, for its pin on Discover (#226). Only the cell, never coordinates. */
+    private val places: ThingPlaces,
 ) {
     /**
      * Child of the process scope: one failed child never cancels its siblings, and cancelling the
@@ -1528,7 +1532,7 @@ class DeviceLinkOwner @Inject constructor(
     suspend fun readLocation(): space.opensensor.data.protocol.LocationConfig? {
         val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
         if (!tryBeginCommand()) throw IllegalStateException("link busy")
-        try { return session.getLocation() } finally { endCommand() }
+        try { return recordPlace(session.getLocationPage()) } finally { endCommand() }
     }
 
     suspend fun writeLocation(patch: ConfigPatch): space.opensensor.data.protocol.LocationConfig? {
@@ -1536,8 +1540,15 @@ class DeviceLinkOwner @Inject constructor(
         if (!tryBeginCommand()) throw IllegalStateException("link busy")
         try {
             _config.value = session.setConfig(patch)
-            return session.getLocation()
+            return recordPlace(session.getLocationPage())
         } finally { endCommand() }
+    }
+
+    /** Keeps the connected Thing's Discover pin in step with the location [page] it returned. */
+    private suspend fun recordPlace(page: space.opensensor.data.protocol.DeviceConfig?): space.opensensor.data.protocol.LocationConfig? {
+        val thing = _info.value?.thing
+        if (page != null && thing != null) places.recordFrom(thing, page, clock.nowEpochMs())
+        return page?.location
     }
 
     fun startWifiScan() {

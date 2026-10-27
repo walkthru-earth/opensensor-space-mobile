@@ -110,6 +110,10 @@ data class DiscoverUiState(
     val newestUpdateEpochMs: Long? = null,
     val firstRun: Boolean = false,
     val res: Int = ViewportCover.MIN_RES,
+    /** The user's own fixed Things, sorted by name, each at its cell centre. The sheet lists them. */
+    val own: List<OwnPin> = emptyList(),
+    /** The own Things point source. Separate from [geoJson], which never carries them. */
+    val ownGeoJson: String = EMPTY_GEOJSON,
 ) {
     companion object {
         const val EMPTY_GEOJSON = "{\"type\":\"FeatureCollection\",\"features\":[]}"
@@ -205,6 +209,7 @@ class DiscoverController(
 
     private val rest = MutableStateFlow<CameraRest?>(null)
     private val reload = MutableStateFlow(0)
+    private val ownThings = MutableStateFlow<List<OwnThing>>(emptyList())
     private var saved = DiscoverSaved()
 
     /** The feed every read goes to. Swapped only by [switchTo]. */
@@ -226,6 +231,14 @@ class DiscoverController(
     private var rowsWindow: FeedWindow? = null
 
     init {
+        // The own Things source is built off the main thread, and only when the list changes.
+        // A StateFlow drops an equal list, so the same Things keep the same source.
+        scope.launch {
+            ownThings.collectLatest { things ->
+                val layer = withContext(io) { catching { OwnThingGeoJson.build(h3, things) }.getOrDefault(OwnLayer.EMPTY) }
+                _state.update { it.copy(own = layer.pins, ownGeoJson = layer.geoJson) }
+            }
+        }
         // A feed that caches bytes in memory gives them back under memory pressure (#61).
         if (feed is MemoryTrimmable) scope.trimOnMemoryPressure(feed)
         if (liveFeed is MemoryTrimmable) scope.trimOnMemoryPressure(liveFeed)
@@ -246,6 +259,14 @@ class DiscoverController(
      * A rotation rebuilds the map, and it should not fit the region again over the user's view.
      */
     fun resumeStart(): StartView? = saved.camera?.let { StartView.Camera(it) } ?: _state.value.start
+
+    /**
+     * The user's own fixed Things, on every change of the host's list (#226). Each stands at the
+     * centre of its saved cell. A Thing without a well formed cell shows no pin.
+     */
+    fun showOwnThings(things: List<OwnThing>) {
+        ownThings.value = things
+    }
 
     /** Called on every camera move. The read starts once the camera has rested for 400 ms. */
     fun onCamera(rest: CameraRest) {

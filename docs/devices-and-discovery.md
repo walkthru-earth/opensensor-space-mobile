@@ -455,6 +455,27 @@ allow it cleanly. Precise location is never requested on either platform.
 
 `AGENTS.md` records this boundary.
 
+### Your own sensors on the map (#226)
+
+Each of the user's own fixed Things shows as a pin at the centre of its saved H3 cell, a paper dot
+ringed in ink. The pins are their own clustered GeoJSON source above the public cells and below the
+Near me puck. Pins closer than 44 dp merge into an ink badge with its count, up to zoom 14. A badge
+tap zooms two steps on it. A pin tap falls through to the public cell under it. Neither takes the
+brand blue, which marks selection only. Each point carries only its index in the list, never a
+Thing UUID or name, and the public source never carries an own Thing. A test holds both
+(`ownThingsNeverReachThePublicSource`).
+
+The cell comes from `thing_place` on the phone ([data model](data-model.md)), written when Device
+settings reads or saves the location. A moving Thing, or one with no well formed cell, has no pin. A
+forgotten sensor loses its pin, because the host joins the places with the Things the phone still
+knows. A Thing set up before this build shows once its location is next read. The source is rebuilt
+off the main thread, and only when a Thing, its cell or its last update changes. No request leaves
+the phone for it and nothing is published.
+
+The list alternative for TalkBack and VoiceOver is the sheet. Under the areas in view it lists
+"Your sensors" by name, each row a button that moves the map to that pin. The cluster badge shows
+the count only. Naming the worst step on it waits until the latest readings join the places.
+
 ### Privacy rules
 
 Snapping a home to a hexagon does not make its data anonymous. Temperature, humidity, CO2 and
@@ -755,7 +776,7 @@ starts with the target layout from the producer guidance.
 | `:core:thing` | The `ThingKind` contract (`KindId`, `Evidence`, `Recognition`, `DataSource`, `PublishPolicy`), `OpenSensorBoardKind` (recognized by its GATT service, `_ossync._tcp` or its `INFO`, capabilities from `DeviceCapabilities`, `PullSync` with `OptInCcBy` at res 7) and the `ThingKinds` registry, a plain list built by Android `ThingModule` and iOS `launchThingKinds` (#222). `installMetrics` feeds the kinds' derived metric providers to `Metrics.install`. `PublishGate` issues a `PublishTicket` only for a Recording kind with `OptInCcBy` and an opted in Thing (`UploadConsent`, none by default) and builds its Items at the policy's `maxRes`, asking consent again for each Item (#224). No upload. `PlatformNeedsTable` lists what the app shell and each kind ask of the Android manifest and the iOS bundle, which `ManifestPermissionsTest` and `IosBundleGateTest` hold the files to (#227). `:core:thing:testkit` holds `ThingKindContract` |
 | `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, used by `OpenAqAggregatesFeed` in both apps |
 | `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
-| `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
+| `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, the own Things layer (`OwnThingGeoJson`, `knownOwnThings`), `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
 | `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, one row group per file sorted by `h3_index`, 16-row pages with page indexes, about 270 KB for 18 files, made-up cells around Berlin, Cairo, Lisbon, Nairobi, New York, Jakarta and Accra). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2, each with a `-latin` variant for iOS. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
 
 `:feature:discover` is shared Compose, so Android and iOS show the same screens. Platform code

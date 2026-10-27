@@ -22,6 +22,7 @@ import space.opensensor.data.local.database.deleteTempDir
 import space.opensensor.data.local.database.newTempDir
 import space.opensensor.data.local.database.openAppDatabase
 import space.opensensor.data.protocol.ParquetVerify
+import space.opensensor.data.sync.ThingPlace
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -111,5 +112,20 @@ class IosArchiveDatabaseTest {
             close()
         }
         assertTrue(fm.fileExistsAtPath("$dir/${IosArchiveDatabase.IMPORT_MARKER}"))
+    }
+
+    @Test
+    fun aThingPlaceOutlivesARelaunchAndGoesWhenRemoved() = runTest {
+        val place = ThingPlace(thing, "88283082a7fffff", 1_000L)
+        IosArchiveDatabase(store, dir).apply {
+            places.put(place)
+            close()
+        }
+        IosArchiveDatabase(store, dir).apply {
+            assertEquals(listOf(place), places.observeAll().first())
+            places.remove(thing)
+            assertEquals(emptyList(), places.observeAll().first())
+            close()
+        }
     }
 }
