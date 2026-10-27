@@ -4,7 +4,7 @@
 strings, privacy manifest, Data safety and privacy label answers, and the conservative decisions taken for
 Discover and uploads before the first store submission.
 **Code:** `app/src/main/AndroidManifest.xml`, `ui/permissions/`, `ios/App/Info.plist`,
-`ios/App/PrivacyInfo.xcprivacy`. **Related:** [screens.md](screens.md) (permission timing table),
+`ios/App/PrivacyInfo.xcprivacy`, `PlatformNeedsTable` in `:core:thing`. **Related:** [screens.md](screens.md) (permission timing table),
 [devices-and-discovery.md](devices-and-discovery.md) (network boundary, public feed, uploads).
 
 State as of 2026-10-09. Re-check the linked store pages before each submission. They change yearly.
@@ -61,6 +61,34 @@ State as of 2026-10-09. Re-check the linked store pages before each submission. 
 | App Review note, camera | "The camera is used only in a sensor's Device settings, when the user taps Scan on the sensor sticker card. It reads the barcode printed on the user's own Plantower sensor, so the user does not have to type it. No photo or video is stored or uploaded. Only the decoded sticker text is kept, and the user can always type it instead." Show the Scan tap and the system camera prompt in the review recording | `StickerScanner.swift`, `StickerScan.kt` |
 | Account deletion (Guideline 5.1.1(v)) | Not applicable, no account | |
 | Tracking (ATT) | No tracking, no IDFA | |
+
+## Per kind gates (#227)
+
+`PlatformNeedsTable` (`core/thing/.../PlatformNeeds.kt`) is the one table of what the store forms
+read. `APP` is the shell without any kind, `OPENSENSOR_BOARD` the only kind today. Phone kinds are not
+declared yet.
+
+| Row | Android | iOS |
+| --- | --- | --- |
+| `APP` | `INTERNET` (Discover feed), `ACCESS_NETWORK_STATE` (merged from maplibre-compose), `ACCESS_COARSE_LOCATION` (Near me) | `NSLocationWhenInUseUsageDescription`, `NSLocationDefaultAccuracyReduced`, file timestamp `C617.1`, disk space `E174.1`, boot time `35F9.1` (archive, storage budget and elapsed time serve every kind), UserDefaults `CA92.1` |
+| `OPENSENSOR_BOARD` | Bluetooth scan and connect, `ACCESS_LOCAL_NETWORK`, foreground service with `connectedDevice` and `dataSync`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, the four companion permissions, `RECEIVE_BOOT_COMPLETED`, `ACCESS_COARSE_LOCATION` (Use phone location) | Bluetooth, Local Network, camera and location usage strings, `NSLocationDefaultAccuracyReduced`, Bonjour `_ossync._tcp`, modes `processing` and `bluetooth-central`, both task ids, UserDefaults `CA92.1`. No entitlements |
+
+- `ManifestPermissionsTest` (`:app` host test) reads the variant's merged manifest, so a permission a
+  library or plugin module manifest brings in counts too. It checks the `uses-permission` set and every
+  service's `foregroundServiceType` against the kinds of `ThingModule.KINDS`. The one extra name it
+  allows, by exact name, is androidx.core's `space.opensensor.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`,
+  a signature permission the app declares for its own not exported receivers.
+- `IosBundleGateTest` (`:ios:shared`, iOS simulator in `verifyIos`) checks the gated Info.plist keys
+  (every usage string plus `NSLocationDefaultAccuracyReduced` and `NSSupportsLiveActivities`),
+  `NSBonjourServices`, `UIBackgroundModes`, `BGTaskSchedulerPermittedIdentifiers`, the privacy
+  manifest API reasons and collected data types, and the keys of every `CODE_SIGN_ENTITLEMENTS` file
+  against the kinds of `IOS_THING_KINDS`. Tracking must stay off with no tracking domains. There is no
+  entitlements file today, and a loose `.entitlements` file in `ios/App` fails the test.
+- Both fail when a file has an entry no enabled kind declares, when a declared entry is missing, and
+  when an enabled kind has no row.
+- A new permission, service type, usage string, mode, entitlement or privacy entry lands in its kind's
+  row in the same release as the feature, with its row in the store tables above and an updated
+  review note.
 
 ## Decisions for Discover and uploads (conservative defaults, 2026-10-08)
 
@@ -121,7 +149,7 @@ Have counsel read the privacy policy before the first public release.
 
 ## Gate before each submission
 
-- [ ] `ManifestPermissionsTest` and `PermissionFlowTest` (`:ui:permissions`, Android host and iOS simulator) pass, the manifest set is unchanged or reviewed.
+- [ ] `ManifestPermissionsTest`, `IosBundleGateTest` and `PermissionFlowTest` (`:ui:permissions`, Android host and iOS simulator) pass, and any change to `PlatformNeedsTable` is reviewed against this page.
 - [ ] Fresh install on a phone shows no permission prompt at launch (Android and iPhone), recorded in `docs/status.md`.
 - [ ] Xcode Organizer privacy report of the archive matches `PrivacyInfo.xcprivacy`.
 - [ ] Data safety form and App privacy answers match this page.

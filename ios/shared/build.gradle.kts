@@ -54,3 +54,13 @@ kotlin {
         }
     }
 }
+
+// IosBundleGateTest reads Info.plist, PrivacyInfo.xcprivacy and the Xcode project from this checkout.
+// simctl hands SIMCTL_CHILD_ variables to the test process without the prefix.
+val iosDir: String = projectDir.parentFile.absolutePath
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest>().configureEach {
+    environment("SIMCTL_CHILD_OPENSENSOR_IOS_DIR", iosDir)
+    // So an edited plist, privacy manifest, entitlements file or project reruns the gate.
+    inputs.dir("$iosDir/App").withPropertyName("iosApp").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file("$iosDir/OpenSensor.xcodeproj/project.pbxproj").withPropertyName("iosProject").withPathSensitivity(PathSensitivity.RELATIVE)
+}
