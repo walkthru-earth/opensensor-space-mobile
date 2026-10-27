@@ -8,6 +8,9 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.execSQL
 import kotlinx.coroutines.flow.Flow
 import space.opensensor.data.history.IndexedFileInfo
 
@@ -20,7 +23,7 @@ import space.opensensor.data.history.IndexedFileInfo
  */
 @Entity(
     tableName = "archived_file",
-    indices = [Index(value = ["thing", "name"], unique = true)],
+    indices = [Index(value = ["thing", "name"], unique = true), Index("templateSha256"), Index("dictionarySha256")],
 )
 data class ArchivedFile(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -35,7 +38,7 @@ data class ArchivedFile(
     /** Bluetooth address (or fake id) of the device the copy came from. */
     val sourceDevice: String,
 
-    // ---- History index (schema v4). All nullable: null means "not indexed yet" (a row written before
+    // ---- History index (schema v5). All nullable: null means "not indexed yet" (a row written before
     // v4, or a file the reader refused — see indexError). Derived from the file's own footer/rows by
     // `ParquetIndexer`, never from the Hive name.
     /** When the index below was computed; null until then. */
@@ -61,6 +64,11 @@ data class ArchivedFile(
     val estFirstUtcNs: Long? = null,
     val estLastUtcNs: Long? = null,
     val estAnchorFile: String? = null,
+
+    // ---- Footer digests (schema v5). The `dictionary.sha256` and `template.sha256` the file names, so
+    // History resolves its template at each derive and a newly served template rebuilds its days.
+    val dictionarySha256: String? = null,
+    val templateSha256: String? = null,
 ) {
     /** The same test as [space.opensensor.archive.ArchiveRecord.isIndexed]. */
     val isIndexed: Boolean get() = indexedAtEpochMs != null && indexError == null
@@ -199,9 +207,37 @@ interface ArchivedFileDao {
     @Query("SELECT * FROM archived_file WHERE thing = :thing AND indexedAtEpochMs IS NOT NULL AND indexError IS NULL")
     suspend fun indexedForThing(thing: String): List<ArchivedFile>
 
+    /**
+     * True when an indexed file's footer names one of [descs], or names one of [dicts] with a desc that
+     * is not one of [pinned] (`desc:dict`), on the digest indices. The SQL form of
+     * [space.opensensor.archive.ArchiveRecord.mayResolveAnew].
+     */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM archived_file WHERE indexedAtEpochMs IS NOT NULL AND indexError IS NULL " +
+            "AND (templateSha256 IN (:descs) OR (dictionarySha256 IN (:dicts) " +
+            "AND (templateSha256 IS NULL OR templateSha256 || ':' || dictionarySha256 NOT IN (:pinned)))))",
+    )
+    suspend fun anyIndexedNames(descs: List<String>, dicts: List<String>, pinned: List<String>): Boolean
+
     @Query("SELECT DISTINCT thing FROM archived_file")
     suspend fun things(): List<String>
 
     @Query("DELETE FROM archived_file WHERE thing = :thing AND name = :name")
     suspend fun delete(thing: String, name: String)
+}
+
+/**
+ * Version 4 to 5 adds the footer `dictionary.sha256` and `template.sha256` to `archived_file`. Only
+ * the file's footer has them, so every row indexed without error is reopened and the back-fill reads
+ * each footer once. Until then a row awaits its index and holds its days in History. Both digests are
+ * indexed, so a template change asks in one query whether any file names it.
+ */
+object Migration4To5 : Migration(4, 5) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `archived_file` ADD COLUMN `dictionarySha256` TEXT")
+        connection.execSQL("ALTER TABLE `archived_file` ADD COLUMN `templateSha256` TEXT")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_archived_file_templateSha256` ON `archived_file` (`templateSha256`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_archived_file_dictionarySha256` ON `archived_file` (`dictionarySha256`)")
+        connection.execSQL("UPDATE `archived_file` SET `indexedAtEpochMs` = NULL WHERE `indexedAtEpochMs` IS NOT NULL AND `indexError` IS NULL")
+    }
 }

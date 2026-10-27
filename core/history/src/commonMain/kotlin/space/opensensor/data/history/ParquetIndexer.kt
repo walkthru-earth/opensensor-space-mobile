@@ -41,6 +41,9 @@ data class ParquetIndex(
     val validRows: Long?,
     /** True when the UTC span came from footer statistics without decoding (v6 writer). */
     val fromStatistics: Boolean,
+    /** Footer `dictionary.sha256` and `template.sha256`, null when the footer has none. */
+    val dictionarySha256: String? = null,
+    val templateSha256: String? = null,
 ) {
     val hasUtc: Boolean get() = utcRows > 0
     val isTelemetry: Boolean get() = purpose == null || purpose == "telemetry"
@@ -100,6 +103,8 @@ object ParquetIndexer {
             lastSeq = seq?.max,
             validRows = validRows,
             fromStatistics = fromStats,
+            dictionarySha256 = footer?.dictionarySha256,
+            templateSha256 = footer?.templateSha256,
         )
     }
 

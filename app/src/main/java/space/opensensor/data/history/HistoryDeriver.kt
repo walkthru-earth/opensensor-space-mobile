@@ -41,8 +41,9 @@ fun interface DeriveBackfill {
 /**
  * Keeps the aggregate tiers (`aggregate_bucket`) in step with the archive, one UTC thing-day at a
  * time. A day is (re)built when the set of verified, indexed, telemetry files that carry UTC rows
- * overlapping it differs from the set recorded in `derived_day` — so a late-arriving file rebuilds
- * exactly its day, and an unchanged day costs one string comparison.
+ * overlapping it, or the template one of them resolves to, differs from the set recorded in
+ * `derived_day` — so a late-arriving file or a newly served template rebuilds exactly its days, and an
+ * unchanged day costs one string comparison.
  *
  * Pure caches: dropping both tables and running [deriveStale] again gives the same rows. Nothing here
  * writes to the archive. Passes come from several places (start, post-sync, worker, Settings, export),
@@ -69,8 +70,8 @@ class HistoryDeriver @Inject constructor(
     /** Which thing-days a set of indexed files touches, by real UTC or by the estimated span (§4.6). */
     fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> = ThingDays.of(files.map { it.toRecord() })
 
-    /** [signatureOf] for Room rows. */
-    fun signature(files: List<ArchivedFile>): String = signatureOf(files.map { it.toRecord() })
+    /** [signatureOf] for Room rows, under the templates this deriver reads with. */
+    fun signature(files: List<ArchivedFile>): String = signatureOf(files.map { it.toRecord() }, indexer.templates)
 
     /** Only the accepted receipt; collection reconciliation runs in its cancellable finalization. */
     override suspend fun persistClockAnchor(thing: String, boot: String, utcNs: Long, monotonicUs: Long) {
@@ -260,14 +261,15 @@ class HistoryDeriver @Inject constructor(
         private val cpu = Dispatchers.Default.limitedParallelism(2)
 
         /**
-         * Deterministic identity of a day's source set: sorted `name:crc32[:est<anchor>]` lines, SHA-256
-         * (a new anchor re-dates a file, so it is part of the identity). The Day view compares it to the
-         * recorded one before it reads a daily file ([RoomDerivedDayFiles]).
+         * Deterministic identity of a day's source set: the sorted [ArchiveHistoryTiers.sourceLine]s of
+         * both phones, SHA-256 (a new anchor re-dates a file and a newly resolved template gives it
+         * metrics, so both are part of the identity). The Day view compares it to the recorded one
+         * before it reads a daily file ([RoomDerivedDayFiles]).
          */
-        fun signatureOf(files: List<ArchiveRecord>): String {
+        fun signatureOf(files: List<ArchiveRecord>, templates: FileTemplates): String {
             val digest = MessageDigest.getInstance("SHA-256")
             digest.update("derive-v$DERIVE_VERSION\n".toByteArray())
-            files.map { "${it.name}:${it.crc32}" + (if (it.hasEstimatedUtc) ":est${it.estAnchorFile}:${it.estFirstUtcNs}" else "") }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
+            files.map { ArchiveHistoryTiers.sourceLine(it, templates) }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
             return hex(digest.digest())
         }
 
@@ -287,8 +289,8 @@ class HistoryDeriver @Inject constructor(
         /** Each day's sources from one thing listing, the same files and order as `withUtcBetween`. */
         fun sourcesByDay(files: List<ArchivedFile>): Map<Long, List<ArchivedFile>> = ThingDays.sourcesByDay(files) { it.toRecord() }
 
-        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order, 6 = MICROS UTC and field_id in the daily file, 7 = EPA corrected PM2.5 tier, 8 = template datastreams and the footer sample interval, 9 = the app_day entry in the daily file. */
-        const val DERIVE_VERSION = 9
+        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order, 6 = MICROS UTC and field_id in the daily file, 7 = EPA corrected PM2.5 tier, 8 = template datastreams and the footer sample interval, 9 = the app_day entry in the daily file, 10 = the resolved template in the signature. */
+        const val DERIVE_VERSION = 10
         const val DAY_NS = ThingDays.DAY_NS
     }
 }

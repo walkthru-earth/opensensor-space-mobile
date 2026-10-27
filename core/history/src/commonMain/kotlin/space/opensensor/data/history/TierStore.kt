@@ -53,8 +53,8 @@ class SavedDay(val signature: String, val tiers: DayTiers)
  * buckets as fixed width fields, little endian. About 48 bytes a bucket.
  */
 object TierCodec {
-    /** 4 = template column ids, per metric aggregates and the footer sample interval (#186). */
-    internal const val VERSION = 4
+    /** 4 = template column ids, per metric aggregates and the footer sample interval (#186), 5 = the resolved template in the signature. */
+    internal const val VERSION = 5
 
     fun encode(signature: String, tiers: DayTiers): ByteArray {
         val out = Out()

@@ -95,6 +95,8 @@ class ArchiveIndexRepair(
                 lastMonoUs = index.lastMonoUs,
                 firstSeq = index.firstSeq,
                 lastSeq = index.lastSeq,
+                dictionarySha256 = index.dictionarySha256,
+                templateSha256 = index.templateSha256,
             )
         }
     } catch (e: ParquetFormatException) {
@@ -212,6 +214,8 @@ class ArchiveIndexRepair(
             lastMonoUs = indexed.lastMonoUs,
             firstSeq = indexed.firstSeq,
             lastSeq = indexed.lastSeq,
+            dictionarySha256 = indexed.dictionarySha256,
+            templateSha256 = indexed.templateSha256,
         )
 
         /** [file] with its estimate set from [anchors], or cleared when the anchor is gone or the file now has UTC. */

@@ -67,7 +67,7 @@ class LegacyReceiptImportTest {
     @Test
     fun theFirstLaunchCopiesALaterLaunchDeletesAndThenNothingRuns() = runTest {
         synced(1)
-        synced(2, """{"size":${bytes.size},"crc":$crc,"sha256":"ab","syncedAtEpochMs":7,"sourceDevice":"dev","rows":2,"utcRows":2,"firstUtcNs":1,"lastUtcNs":2,"indexedAtEpochMs":9,"indexLayout":${ArchiveRecord.INDEX_LAYOUT}}""")
+        synced(2, """{"size":${bytes.size},"crc":$crc,"sha256":"ab","syncedAtEpochMs":7,"sourceDevice":"dev","rows":2,"utcRows":2,"firstUtcNs":1,"lastUtcNs":2,"indexedAtEpochMs":9}""")
         writePruned(3)
         val index = InMemoryArchiveIndex()
         val pruned = MemoryPruned()
@@ -79,7 +79,8 @@ class LegacyReceiptImportTest {
         assertEquals(ArchiveRecord(thing, name(1), bytes.size.toLong(), crc, "", 0, ""), index.get(ArchiveKey(thing, name(1))))
         val full = index.get(ArchiveKey(thing, name(2)))!!
         assertEquals("ab", full.sha256)
-        assertEquals(9L, full.indexedAtEpochMs)
+        assertEquals(2L, full.utcRows)
+        assertNull(full.indexedAtEpochMs)
         assertEquals(listOf(mark(3)), pruned.observeAll().first())
         assertEquals(IosFiles.Kind.FILE, kind(marker))
         // Nothing goes before a later launch has seen the rows.
@@ -285,12 +286,11 @@ class LegacyReceiptImportTest {
     }
 
     @Test
-    fun anOlderLayoutReceiptWithoutUtcRowsReadsAsNeverIndexed() {
+    fun everyReceiptReadsAsNeverIndexedSoRepairReadsItsFooterDigests() {
         val noUtc = """{"size":1,"crc":2,"indexedAtEpochMs":9,"rows":3,"utcRows":0,"purpose":"telemetry"}"""
         val dated = """{"size":1,"crc":2,"indexedAtEpochMs":9,"rows":3,"utcRows":3,"firstUtcNs":1,"lastUtcNs":2}"""
         assertNull(LegacyReceiptImport.decode(thing, name(1), noUtc)!!.indexedAtEpochMs)
-        assertEquals(9L, LegacyReceiptImport.decode(thing, name(1), dated)!!.indexedAtEpochMs)
-        assertEquals(9L, LegacyReceiptImport.decode(thing, name(1), noUtc.replace("}", ""","indexLayout":${ArchiveRecord.INDEX_LAYOUT}}"""))!!.indexedAtEpochMs)
+        assertNull(LegacyReceiptImport.decode(thing, name(1), dated)!!.indexedAtEpochMs)
         assertNull(LegacyReceiptImport.decode(thing, name(1), """{"size":-1,"crc":2}"""))
         assertNull(LegacyReceiptImport.decode(thing, name(1), """{"size":1,"crc":4294967296}"""))
     }

@@ -61,6 +61,8 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
         override fun observeNeverIndexed(): Flow<Boolean> = after { it.observeNeverIndexed() }
         override fun observeLatestTimed(): Flow<Map<String, Long?>> = after { it.observeLatestTimed() }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = room().get(key)
+        override suspend fun anyIndexedNames(descs: Set<String>, dicts: Set<String>, pinned: Set<String>): Boolean =
+            room().anyIndexedNames(descs, dicts, pinned)
         override suspend fun put(record: ArchiveRecord) = room().put(record)
         override suspend fun putIfAbsent(record: ArchiveRecord): Boolean = room().putIfAbsent(record)
         override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) = room().update(key, transform)

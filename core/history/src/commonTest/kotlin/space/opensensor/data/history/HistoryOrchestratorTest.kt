@@ -3,6 +3,7 @@ package space.opensensor.data.history
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -20,6 +21,7 @@ import space.opensensor.archive.PartialWriter
 import space.opensensor.data.history.parquet.ByteArrayReader
 import space.opensensor.data.history.parquet.ByteReader
 import space.opensensor.data.history.parquet.ParquetFile
+import space.opensensor.model.TemplateKey
 import space.opensensor.net.BlockCache
 import space.opensensor.net.MemoryBlockStore
 import space.opensensor.storage.StorageEntry
@@ -31,6 +33,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /** The History pass order both phones share, over an in-memory archive and fake platform passes. */
@@ -57,7 +61,27 @@ class HistoryOrchestratorTest {
 
         /** How many next row updates throw, as a busy database would. */
         var failUpdates = 0
-        override fun observeAll(): Flow<List<ArchiveRecord>> = rows
+
+        /** How many times a caller read every row. */
+        var scans = 0
+
+        /** When true the template match throws, as a busy database would, so the index cannot say. */
+        var failMatch = false
+
+        /** How many next full reads throw, as a busy database would. */
+        var failScans = 0
+        override fun observeAll(): Flow<List<ArchiveRecord>> = flow {
+            scans++
+            if (failScans > 0) {
+                failScans--
+                error("database busy")
+            }
+            emitAll(rows)
+        }
+        override suspend fun anyIndexedNames(descs: Set<String>, dicts: Set<String>, pinned: Set<String>): Boolean {
+            if (failMatch) error("database busy")
+            return rows.value.any { it.mayResolveAnew(descs, dicts, pinned) }
+        }
         override fun observeThing(thing: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.thing == thing } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) {
@@ -384,4 +408,220 @@ class HistoryOrchestratorTest {
         assertTrue(blockStore.list().isEmpty())
         job.cancel()
     }
+
+    @Test
+    fun onlyAThingWhoseFileResolvesToAnotherTemplateDerivesAgain() = runTest {
+        val dict = "ee".repeat(32)
+        val desc = "ff".repeat(32)
+        val otherDict = "dd".repeat(32)
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict, templateSha256 = desc))
+        index.put(ArchiveRecord("other", "thing=other/day/b.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = otherDict))
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val startup = HistoryStartup(history, janitor { }, cache, rederive = rederive(served))
+        var derives = 0
+        val derived = ArrayList<Set<String>>()
+        fun served(dict: String, desc: String) = served.add(coreS3Template.copy(key = TemplateKey(dict, desc)))
+
+        // Long enough for the settle time and any cooldown, so each step is checked on its own.
+        fun settled() {
+            advanceTimeBy(15.minutes)
+            runCurrent()
+        }
+
+        val job = startup.start(this, deriveThings = { history.derivePass { derived += it } }) { history.derivePass { derives++ } }
+        runCurrent()
+        assertEquals(1, derives)
+
+        // A board that serves a fresh valid template on every reconnect, none of them named by a file.
+        repeat(40) { i ->
+            served("ab".repeat(32), i.toString(16).padStart(64, '0'))
+            settled()
+        }
+        assertEquals(emptyList(), derived, "templates no indexed file names derive nothing")
+
+        served(dict, desc)
+        settled()
+        assertEquals(listOf(setOf(thing)), derived, "a template an indexed file resolves to derives only its thing")
+
+        served(dict, desc)
+        settled()
+        assertEquals(1, derived.size, "a template already held changes nothing")
+
+        // Fresh descs for the file's dict. The file still resolves by its own desc, so nothing reads the index.
+        val scans = index.scans
+        repeat(5) { i ->
+            served(dict, "0$i".repeat(32))
+            advanceTimeBy(500.milliseconds)
+            runCurrent()
+        }
+        settled()
+        assertEquals(1, derived.size, "a desc that changes no file's resolution does no work")
+        assertEquals(scans, index.scans, "a file that resolves by its own desc before and after is never read")
+
+        served(otherDict, "0a".repeat(32))
+        settled()
+        assertEquals(listOf(setOf(thing), setOf("other")), derived, "the other thing's file now resolves by its dict")
+        assertEquals(1, derives, "a template change never runs the full derive")
+        job.cancel()
+    }
+
+    @Test
+    fun aTemplateThatLandsDuringTheJanitorStillDerivesItsThing() = runTest {
+        val dict = "ee".repeat(32)
+        val desc = "ff".repeat(32)
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict, templateSha256 = desc))
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val rederive = rederive(served)
+        // The served template cache loads while the janitor runs, after a reader already built its days.
+        val startup = HistoryStartup(history, janitor { served.add(coreS3Template.copy(key = TemplateKey(dict, desc))) }, cache, rederive = rederive)
+        val derived = ArrayList<Set<String>>()
+        val job = startup.start(this, deriveThings = { history.derivePass { derived += it } }) { }
+        advanceTimeBy(TemplateRederive.SETTLE + 1.seconds)
+        runCurrent()
+        assertEquals(listOf(setOf(thing)), derived)
+        job.cancel()
+    }
+
+    @Test
+    fun aBoardRotatingDescsForAKnownDictDerivesWithinTheCooldown() = runTest {
+        val dict = "ee".repeat(32)
+        // Its own desc is never served, so each fresh template of its dict changes what it resolves to.
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict, templateSha256 = "11".repeat(32)))
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val startup = HistoryStartup(history, janitor { }, cache, rederive = rederive(served))
+        var derives = 0
+        fun serve(i: Int) = served.add(coreS3Template.copy(key = TemplateKey(dict, (0x100 + i).toString(16).padStart(64, '0'))))
+
+        val job = startup.start(this, deriveThings = { history.derivePass { derives++ } }) { }
+        runCurrent()
+
+        // 50 fresh valid templates naming the file's dict, 3 s apart, past the settle time each.
+        repeat(50) { i ->
+            serve(i)
+            advanceTimeBy(3.seconds)
+            runCurrent()
+        }
+        // 150 s. Derives at about 2 s, 32 s and 92 s, the next waits until 212 s.
+        assertEquals(3, derives, "the cooldown bounds the derives")
+
+        advanceTimeBy(5.minutes)
+        runCurrent()
+        assertEquals(4, derives, "the last template derives once the cooldown ends")
+
+        // Quiet for longer than the reset, so the next template derives after the settle time alone.
+        advanceTimeBy(15.minutes)
+        serve(50)
+        advanceTimeBy(TemplateRederive.SETTLE + 1.seconds)
+        runCurrent()
+        assertEquals(5, derives, "after a quiet spell the cooldown starts again from its first wait")
+        job.cancel()
+    }
+
+    @Test
+    fun aCheckThatReadsTheIndexAndFindsNothingStillWaitsForTheCooldown() = runTest {
+        // The match cannot say, so every check reads the index. No file resolves differently.
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = "ee".repeat(32)))
+        index.failMatch = true
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val startup = HistoryStartup(history, janitor { }, cache, rederive = rederive(served))
+        var derives = 0
+        val job = startup.start(this, deriveThings = { history.derivePass { derives++ } }) { }
+        runCurrent()
+        val before = index.scans
+
+        // 50 fresh valid templates for a dict no file names, 3 s apart, past the settle time each.
+        repeat(50) { i ->
+            served.add(coreS3Template.copy(key = TemplateKey("ab".repeat(32), (0x100 + i).toString(16).padStart(64, '0'))))
+            advanceTimeBy(3.seconds)
+            runCurrent()
+        }
+        // 150 s. Reads at about 2 s, 32 s and 92 s, the next waits until 212 s.
+        assertEquals(3, index.scans - before, "the cooldown bounds the reads that find nothing")
+        assertEquals(0, derives)
+        job.cancel()
+    }
+
+    @Test
+    fun aFailedReadOrDeriveStaysPendingAndRetriesAfterTheCooldown() = runTest {
+        val dict = "ee".repeat(32)
+        val desc = "ff".repeat(32)
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict, templateSha256 = desc))
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val startup = HistoryStartup(history, janitor { }, cache, rederive = rederive(served))
+        var failDerives = 1
+        var attempts = 0
+        val derived = ArrayList<Set<String>>()
+        val job = startup.start(this, deriveThings = {
+            attempts++
+            if (failDerives-- > 0) error("disk full")
+            history.derivePass { derived += it }
+        }) { }
+        runCurrent()
+        index.failScans = 1
+
+        served.add(coreS3Template.copy(key = TemplateKey(dict, desc)))
+        advanceTimeBy(TemplateRederive.SETTLE + 1.seconds)
+        runCurrent()
+        assertEquals(0, attempts, "the failed read derives nothing yet")
+
+        // The read retries after the first wait and finds the thing, but its derive fails.
+        advanceTimeBy(30.seconds)
+        runCurrent()
+        assertEquals(1, attempts)
+        assertEquals(emptyList(), derived)
+
+        // The derive retries after the next wait, with no new template.
+        advanceTimeBy(60.seconds)
+        runCurrent()
+        assertEquals(listOf(setOf(thing)), derived, "the change stayed pending until it derived")
+
+        advanceTimeBy(30.minutes)
+        runCurrent()
+        assertEquals(2, attempts, "a change that derived is not tried again")
+        job.cancel()
+    }
+
+    @Test
+    fun aReadThatKeepsFailingRetriesOnlyAtTheCooldownPace() = runTest {
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = "ee".repeat(32)))
+        index.failMatch = true
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val startup = HistoryStartup(history, janitor { }, cache, rederive = rederive(served))
+        var derives = 0
+        val job = startup.start(this, deriveThings = { derives++ }) { }
+        runCurrent()
+        val before = index.scans
+        index.failScans = 10_000
+
+        served.add(coreS3Template.copy(key = TemplateKey("ab".repeat(32), "cd".repeat(32))))
+        advanceTimeBy(30.minutes)
+        runCurrent()
+        // Reads at about 2 s, 32 s, 92 s, 212 s, 452 s, 932 s and 1532 s, then every 10 minutes.
+        assertEquals(7, index.scans - before, "a failing read retries at the cooldown's pace")
+        assertEquals(0, derives)
+
+        index.failScans = 0
+        advanceTimeBy(10.minutes)
+        runCurrent()
+        assertEquals(8, index.scans - before, "the pending change reads once more when the index recovers")
+        advanceTimeBy(30.minutes)
+        runCurrent()
+        assertEquals(8, index.scans - before, "then the change is settled")
+        job.cancel()
+    }
+
+    private fun TestScope.rederive(served: ServedTemplates) =
+        TemplateRederive(index, FileTemplates.over(served), cooldown = TemplateRederive.Cooldown(clock = testScheduler.timeSource))
 }

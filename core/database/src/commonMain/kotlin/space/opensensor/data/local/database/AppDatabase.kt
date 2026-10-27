@@ -17,13 +17,14 @@ import kotlinx.coroutines.IO
  * The schema is exported to `core/database/schemas/`. Version 2 adds `list_cursor` (#95) through an
  * automatic migration, since a new table needs no hand written step. Version 3 adds `thing_source`
  * (#223) through [Migration2To3], which also gives every Thing already stored a source row. Version 4
- * adds `thing_place` (#226), the cell of each own fixed Thing, through an automatic migration.
+ * adds `thing_place` (#226), the cell of each own fixed Thing, through an automatic migration. Version 5
+ * adds the footer digests to `archived_file` through [Migration4To5], which reopens every indexed row.
  * `metric_bucket` and `derived_day` are caches of the archive that `HistoryDeriver` rebuilds.
  */
 @ConstructedBy(AppDatabaseConstructor::class)
 @Database(
     entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, ThingEpoch::class, SensorInstallation::class, PrunedFileEntity::class, ListCursorEntity::class, ThingSourceEntity::class, ThingPlaceEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
     autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 3, to = 4)],
 )
@@ -49,7 +50,7 @@ abstract class AppDatabase : RoomDatabase() {
          */
         fun configured(builder: RoomDatabase.Builder<AppDatabase>): AppDatabase = builder
             .setDriver(BundledSQLiteDriver())
-            .addMigrations(Migration2To3)
+            .addMigrations(Migration2To3, Migration4To5)
             .setQueryCoroutineContext(Dispatchers.IO)
             .build()
     }

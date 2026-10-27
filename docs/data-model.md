@@ -20,7 +20,7 @@ thing/Hive paths. Partial downloads are not exported. The original archive stays
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
-## Room schema v4 (`opensensor.db`)
+## Room schema v5 (`opensensor.db`)
 
 One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
 keeps the file in its app database directory. iOS keeps it at
@@ -74,6 +74,8 @@ erDiagram
     long estFirstUtcNs "v6 time estimate →"
     long estLastUtcNs
     string estAnchorFile
+    string dictionarySha256 "footer digests, History resolves the template from them"
+    string templateSha256
   }
   metric_bucket {
     long id PK "UNIQUE (thing,metricId,resolution,startEpochS)"
@@ -178,7 +180,10 @@ Version 2 adds `list_cursor` through `AutoMigration(from = 1, to = 2)`, which ke
 table. Version 3 adds `thing_source` through `Migration2To3`, and gives every Thing the phone
 already knows, from `known_device`, `thing_epoch` or `archived_file`, an `opensensor-board` row at
 contract version 1, so no stored Thing is lost on upgrade. Version 4 adds `thing_place` through
-`AutoMigration(from = 3, to = 4)`. A schema change adds an explicit or auto migration and the next
+`AutoMigration(from = 3, to = 4)`. Version 5 adds the footer `dictionarySha256` and `templateSha256`
+to `archived_file` through `Migration4To5`, each with an index for the template change check, and
+reopens every row indexed without an error so the back-fill reads them. A schema change adds an
+explicit or auto migration and the next
 `core/database/schemas/<n>.json`.
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores
