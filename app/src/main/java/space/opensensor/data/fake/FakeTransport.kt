@@ -97,6 +97,11 @@ class FakeTransport(
     private var bonds = 1
     private val display = 1
     private var wifiOn = false
+
+    /** The location page `GET_CONFIG 1` answers, the saved cell and mobility. Tests and `SET_CONFIG` set them. */
+    @Volatile var locationCell = ""
+
+    @Volatile var mobility = "fixed"
     private var ssid = ""
     private var pskSet = false
     private var wifiState = "off"
@@ -330,7 +335,7 @@ class FakeTransport(
             Opcode.STATUS -> _status.tryEmit(statusJson().encodeToByteArray())
 
             // ------------------------------------------------------------ v2
-            Opcode.GET_CONFIG -> send(Frame.Config(configFlags(), configJson()))
+            Opcode.GET_CONFIG -> send(Frame.Config(configFlags(), if (buf.hasRemaining() && buf.get().toInt() == 1) locationJson() else configJson()))
             Opcode.SET_CONFIG -> {
                 val text = String(ByteArray(buf.remaining()).also { buf.get(it) }, Charsets.UTF_8)
                 val bad = applyConfigLines(text)
@@ -401,6 +406,9 @@ class FakeTransport(
 
     private fun configFlags(): Int = if (pendingPairMode != null || pendingPin != null) 1 else 0
 
+    private fun locationJson(): String =
+        """{"location":{"cell":"$locationCell","resolution":8,"cell_resolution":${if (locationCell.isEmpty()) "null" else "8"},"lat":null,"lon":null,"country":""},"thing":{"mobility":"$mobility"}}"""
+
     private fun configJson(): String {
         val effectivePin = pendingPin ?: pin
         val mac = "e0:5a:1b:f6:6b:40"
@@ -427,6 +435,10 @@ class FakeTransport(
                 "wifi.on", "lan.on" -> v == "0" || v == "1"
                 "wifi.ssid" -> v.toByteArray().size in 1..32
                 "wifi.psk" -> v.toByteArray().size <= 63
+                "location.cell" -> v.isEmpty() || Regex("[0-9a-f]{15}").matches(v)
+                "location.resolution" -> v.toIntOrNull() in 0..15
+                "location.country" -> v.isEmpty() || Regex("[A-Z]{2}").matches(v)
+                "thing.mobility" -> v == "fixed" || v == "moving"
                 else -> false
             }
             if (!ok) return k
@@ -442,6 +454,8 @@ class FakeTransport(
                 "wifi.ssid" -> { ssid = v; wifiChanged = true }
                 "wifi.psk" -> { pskSet = v.isNotEmpty(); wifiChanged = true }
                 "lan.on" -> { lanOn = v == "1"; logLine("LAN ${if (lanOn) "ON" else "OFF"}") }
+                "location.cell" -> locationCell = v
+                "thing.mobility" -> mobility = v
             }
         }
         logLine("CONFIG SET keys=${parsed.joinToString(",") { it.first }}")

@@ -167,4 +167,7 @@
     <string name="discover_sheet_collapse">عرض أقل</string>
     <string name="discover_clear_filter">إلغاء التصفية</string>
     <string name="discover_near_me_none">تعذّر تحديد الموقع</string>
+    <string name="discover_own_heading">مستشعراتك</string>
+    <string name="discover_own_unnamed">مستشعر</string>
+    <string name="discover_own_show">عرض %1$s على الخريطة</string>
 </resources>

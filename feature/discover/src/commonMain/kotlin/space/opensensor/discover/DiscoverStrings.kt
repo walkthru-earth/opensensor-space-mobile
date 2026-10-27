@@ -51,6 +51,9 @@ import space.opensensor.discover.resources.discover_no_places
 import space.opensensor.discover.resources.discover_not_measured
 import space.opensensor.discover.resources.discover_off_scale
 import space.opensensor.discover.resources.discover_osm
+import space.opensensor.discover.resources.discover_own_heading
+import space.opensensor.discover.resources.discover_own_show
+import space.opensensor.discover.resources.discover_own_unnamed
 import space.opensensor.discover.resources.discover_range_summary
 import space.opensensor.discover.resources.discover_range_to
 import space.opensensor.discover.resources.discover_read_failed
@@ -210,7 +213,15 @@ class DiscoverStrings internal constructor(
     val clearFilter: String,
     /** Near me found no fix in time. Announced, the map stays where it is. */
     val nearMeNone: String,
+    /** The sheet's list of the user's own fixed Things, the list alternative to their map pins. */
+    val ownHeading: String,
+    /** An own Thing with no name. */
+    val ownUnnamed: String,
 ) {
+    /** Spoken on an own Thing row. A tap moves the map to it. */
+    @Composable
+    fun ownShow(name: String): String = stringResource(Res.string.discover_own_show, name)
+
     /** The Real label, as in "OpenAQ, data to 8 Oct". */
     @Composable
     fun realDataTo(date: LocalDate): String = stringResource(Res.string.discover_real_data_to, dayMonth(date))
@@ -289,6 +300,8 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     sheetCollapse = stringResource(Res.string.discover_sheet_collapse),
     clearFilter = stringResource(Res.string.discover_clear_filter),
     nearMeNone = stringResource(Res.string.discover_near_me_none),
+    ownHeading = stringResource(Res.string.discover_own_heading),
+    ownUnnamed = stringResource(Res.string.discover_own_unnamed),
     searchPlaces = stringResource(Res.string.discover_search_places),
     addSensor = stringResource(Res.string.discover_add_sensor),
     more = stringResource(Res.string.discover_more),

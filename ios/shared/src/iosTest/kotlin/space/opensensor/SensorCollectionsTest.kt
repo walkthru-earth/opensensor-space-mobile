@@ -33,6 +33,7 @@ import space.opensensor.data.protocol.FrameCodec
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ParquetVerify
 import space.opensensor.data.protocol.ProtocolError
+import space.opensensor.data.sync.ThingSources
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkClosedException
 import space.opensensor.link.TimeoutPhase
@@ -78,6 +79,7 @@ class SensorCollectionsTest {
         progressInterval = 0,
         recordClockAnchor = record,
         budget = FakeStorageBudget(),
+        sources = ThingSources.None,
     )
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val device = "a1b2c3d4e5f6"

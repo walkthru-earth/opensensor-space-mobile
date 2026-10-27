@@ -43,7 +43,7 @@ day.
 ## Data retention and deletion
 
 Forget removes a sensor's enrollment and access credentials from the app, such as its saved
-record, its Wi-Fi token and its Auto-sync setting. Readings already collected from that sensor
+record, its Wi-Fi token, its Auto-sync setting and the map cell of its pin. Readings already collected from that sensor
 stay on your phone until you clear the app's storage or uninstall the app. Settings can also
 remove old format files and clear the History and map caches.
 There is no account to delete. Published data stays public under its licence. For a legal

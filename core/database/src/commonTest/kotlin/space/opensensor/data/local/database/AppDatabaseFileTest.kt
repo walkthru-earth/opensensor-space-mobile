@@ -40,7 +40,7 @@ class AppDatabaseFileTest {
             assertEquals(listOf(mark), RoomPrunedFiles(again.prunedFileDao()).observeAll().first())
             assertEquals(cursor, RoomListCursors(again.listCursorDao()).get("thing-a"))
             val version = again.useReaderConnection { c -> c.usePrepared("PRAGMA user_version") { it.step(); it.getLong(0) } }
-            assertEquals(3L, version)
+            assertEquals(4L, version)
         } finally {
             again.close()
         }

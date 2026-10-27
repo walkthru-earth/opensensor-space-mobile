@@ -21,6 +21,9 @@ binding before returning a cell. UI/controller state and wire requests contain
 only the cell, cap and declared country. The exact fix is never written to app
 storage, logged, sent to firmware or reverse-geocoded through a remote service.
 There are no background updates. Dismissing the dialog cancels the request.
+After a read or save the phone keeps the readback cell of a fixed Thing in `thing_place`, so
+Discover can show the user's own pin there. It keeps the cell only, never the published centre.
+A moving Thing keeps no cell on the phone, and Forget deletes the cell of every Thing the sensor named.
 Android retains only ACCESS_COARSE_LOCATION. iOS retains When In Use and reduced
 accuracy by default. A small chosen cell cannot improve an approximate OS fix.
 
