@@ -42,8 +42,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -87,6 +90,7 @@ import space.opensensor.debug.resources.debug_log_idle
 import space.opensensor.debug.resources.debug_log_incomplete
 import space.opensensor.debug.resources.debug_log_loading
 import space.opensensor.debug.resources.debug_log_refresh
+import space.opensensor.debug.resources.debug_log_retry
 import space.opensensor.debug.resources.debug_log_summary
 import space.opensensor.debug.resources.debug_log_title
 import space.opensensor.debug.resources.debug_raw_bad_length
@@ -119,6 +123,7 @@ import space.opensensor.debug.resources.transport_ble
 import space.opensensor.debug.resources.transport_fake
 import space.opensensor.debug.resources.transport_lan
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
@@ -211,7 +216,7 @@ fun DebugScreen(
                             }
                         },
                     ) {
-                        MonoBox(state.statusJsonPretty ?: stringResource(Res.string.debug_status_none), maxHeight = 320)
+                        state.statusJsonPretty?.let { MonoBox(it, maxHeight = 320) } ?: EmptyNote(stringResource(Res.string.debug_status_none))
                     }
                 }
                 item(key = "config") {
@@ -227,7 +232,7 @@ fun DebugScreen(
                             null
                         },
                     ) {
-                        MonoBox(state.configJsonPretty ?: stringResource(Res.string.debug_config_none), maxHeight = 320)
+                        state.configJsonPretty?.let { MonoBox(it, maxHeight = 320) } ?: EmptyNote(stringResource(Res.string.debug_config_none))
                     }
                 }
                 item(key = "frames") { FramesCard(state.frames, controller::clearFrames) }
@@ -260,11 +265,11 @@ private fun SyncCard(trace: DebugSyncTrace) {
             rows(a.unplacedRows) + " · " + files(a.unplacedFiles) + " · " + pluralStringResource(Res.plurals.debug_boots, a.unplacedBoots, a.unplacedBoots),
         )
         Spacer(Modifier.height(8.dp))
-        MonoBox(
-            trace.steps.asReversed().joinToString("\n") { d -> "${timeOf(d.atEpochMs)}  ${d.step.padEnd(10)} ${d.detail}" }
-                .ifEmpty { stringResource(Res.string.debug_sync_none) },
-            maxHeight = 240,
-        )
+        if (trace.steps.isEmpty()) {
+            EmptyNote(stringResource(Res.string.debug_sync_none))
+        } else {
+            MonoBox(trace.steps.asReversed().joinToString("\n") { d -> "${timeOf(d.atEpochMs)}  ${d.step.padEnd(10)} ${d.detail}" }, maxHeight = 240)
+        }
     }
 }
 
@@ -275,22 +280,26 @@ private fun FramesCard(frames: List<RawFrameRecord>, onClear: () -> Unit) {
         trailing = { TextButton(onClick = onClear) { Text(stringResource(Res.string.debug_clear)) } },
     ) {
         if (frames.isEmpty()) {
-            Text(stringResource(Res.string.debug_frames_none), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            EmptyNote(stringResource(Res.string.debug_frames_none))
         } else {
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 frames.forEach { f ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        val tx = f.direction == FrameDirection.TX
-                        // The arrow is read as a word, not as "right arrow".
-                        val direction = stringResource(if (tx) Res.string.debug_frame_sent else Res.string.debug_frame_received)
+                    val tx = f.direction == FrameDirection.TX
+                    val direction = stringResource(if (tx) Res.string.debug_frame_sent else Res.string.debug_frame_received)
+                    val line = frameLine(f)
+                    // One stop per frame, its direction read as a word and then the whole line, never "right arrow".
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp).clearAndSetSemantics { contentDescription = "$direction, $line" },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
                             if (tx) "→" else "←",
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (tx) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.width(18.dp).semantics { contentDescription = direction },
+                            modifier = Modifier.width(18.dp),
                         )
                         Text(
-                            frameLine(f),
+                            line,
                             style = MaterialTheme.typography.bodySmall,
                             fontFamily = FontFamily.Monospace,
                             maxLines = 1,
@@ -316,14 +325,22 @@ private fun LogCard(log: DebugLog, ready: Boolean, ago: (Long) -> String, onRefr
                     Icon(AppIcons.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
                 Spacer(Modifier.width(6.dp))
-                Text(stringResource(if (log is DebugLog.Idle) Res.string.debug_log_fetch else Res.string.debug_log_refresh))
+                Text(
+                    stringResource(
+                        when (log) {
+                            DebugLog.Idle -> Res.string.debug_log_fetch
+                            is DebugLog.Failed -> Res.string.debug_log_retry
+                            else -> Res.string.debug_log_refresh
+                        },
+                    ),
+                )
             }
         },
     ) {
         when (log) {
-            DebugLog.Idle -> Text(stringResource(Res.string.debug_log_idle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            DebugLog.Idle -> EmptyNote(stringResource(Res.string.debug_log_idle))
             DebugLog.Loading -> Text(stringResource(Res.string.debug_log_loading), style = MaterialTheme.typography.bodySmall)
-            is DebugLog.Failed -> WarningNote(stringResource(Res.string.debug_log_failed, log.message))
+            is DebugLog.Failed -> WarningNote(stringResource(Res.string.debug_log_failed, log.message), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             is DebugLog.Loaded -> {
                 val summary = stringResource(Res.string.debug_log_summary, log.tail.returned, log.tail.totalBytesSinceBoot)
                 TickingText({ now -> "$summary · ${ago(now - log.atEpochMs)}" }, maxLines = 2)
@@ -372,11 +389,18 @@ private fun RawCard(state: DebugUiState, ready: Boolean, onSend: (String) -> Uni
                 modifier = Modifier.weight(1f),
                 isError = state.rawError != null,
             )
-            FilledTonalButton(onClick = { onSend(hex) }, enabled = ready && !state.rawBusy, shape = FloatingControl.SmallShape) {
+            // Named Send even while the spinner replaces the icon, so the button never goes silent.
+            val sendLabel = stringResource(Res.string.debug_raw_send)
+            FilledTonalButton(
+                onClick = { onSend(hex) },
+                enabled = ready && !state.rawBusy,
+                shape = FloatingControl.SmallShape,
+                modifier = Modifier.semantics { contentDescription = sendLabel },
+            ) {
                 if (state.rawBusy) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else {
-                    Icon(AppIcons.Send, contentDescription = stringResource(Res.string.debug_raw_send))
+                    Icon(AppIcons.Send, contentDescription = null)
                 }
             }
         }
@@ -480,6 +504,12 @@ internal fun timeOf(epochMs: Long): String {
     val t = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault())
     fun two(n: Int) = n.toString().padStart(2, '0')
     return "${two(t.hour)}:${two(t.minute)}:${two(t.second)}.${(t.nanosecond / 1_000_000).toString().padStart(3, '0')}"
+}
+
+/** A plain sentence where a card has nothing to show yet, not a code box. */
+@Composable
+private fun EmptyNote(text: String) {
+    BodyText(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable

@@ -26,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.toKotlinTimeZone
@@ -62,9 +64,9 @@ fun FileChartCard(
 ) {
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            val title = stringResource(R.string.chart_by_file)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    val title = stringResource(R.string.chart_by_file)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(title, style = MaterialTheme.typography.titleMedium)
                         InfoButton(InfoContent(title, stringResource(R.string.info_file_chart_body)))
@@ -77,7 +79,8 @@ fun FileChartCard(
                         )
                     }
                 }
-                Switch(checked = state != null, onCheckedChange = onToggle)
+                // The switch speaks the card title, the title text sits apart from it next to its info button.
+                Switch(checked = state != null, onCheckedChange = onToggle, modifier = Modifier.semantics { contentDescription = title })
             }
             if (state == null) return@Column
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

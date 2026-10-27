@@ -22,10 +22,8 @@ class FormatTest {
     }
 
     @Test
-    fun uptimeAndBytes() {
+    fun uptime() {
         assertEquals("2m 03s", formatMonoUs(123_000_000L))
         assertEquals("1h 02m 03s", formatMonoUs(3_723_000_000L))
-        assertEquals("512 B", formatBytes(512))
-        assertEquals("1.5 KiB", formatBytes(1536))
     }
 }

@@ -188,6 +188,8 @@ fun BandColumnChart(
                 traversalIndex = -1f
             }
             .pointerInput(columns, fromS, toS, margins) {
+                // A tap selects its bar and a sideways drag scrubs. A drag that turns vertical first is
+                // never consumed, so the page around the chart still scrolls.
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     fun pick(x: Float): HistoryColumn? {
@@ -197,13 +199,26 @@ fun BandColumnChart(
                         val t = fromS + ((x - left) / width * (toS - fromS)).toLong()
                         return columns.firstOrNull { t >= it.startS && t < it.endS }
                     }
-                    onSelect(pick(down.position.x))
+                    val slop = viewConfiguration.touchSlop
+                    var intent = DragIntent.PENDING
                     while (true) {
                         val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull() ?: break
-                        if (!change.pressed) break
-                        onSelect(pick(change.position.x))
-                        change.consume()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            if (intent == DragIntent.PENDING && !change.isConsumed) onSelect(pick(change.position.x))
+                            break
+                        }
+                        // The page took the drag as a scroll.
+                        if (change.isConsumed) break
+                        if (intent == DragIntent.PENDING) {
+                            val moved = change.position - down.position
+                            intent = dragIntent(moved.x, moved.y, slop)
+                            if (intent == DragIntent.SCROLL) break
+                        }
+                        if (intent == DragIntent.SCRUB) {
+                            onSelect(pick(change.position.x))
+                            change.consume()
+                        }
                     }
                 }
             },
@@ -669,4 +684,17 @@ internal fun timeTicks(range: HistoryRange, fromS: Long, toS: Long, zone: TimeZo
         }
     }
     return out
+}
+
+/** What a drag over the chart is for, decided once it passes the touch slop. */
+internal enum class DragIntent { PENDING, SCRUB, SCROLL }
+
+/**
+ * A drag of ([dx], [dy]) from its first touch. Under [slop] it is still a tap. Past it, a mostly
+ * sideways drag scrubs the bars and anything else belongs to the page scroll.
+ */
+internal fun dragIntent(dx: Float, dy: Float, slop: Float): DragIntent = when {
+    abs(dx) <= slop && abs(dy) <= slop -> DragIntent.PENDING
+    abs(dx) > abs(dy) -> DragIntent.SCRUB
+    else -> DragIntent.SCROLL
 }

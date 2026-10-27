@@ -13,6 +13,8 @@
     <string name="history_range_year">سنة</string>
     <string name="history_page_earlier">الأقدم</string>
     <string name="history_page_later">الأحدث</string>
+    <!-- History, the button that jumps from a past span back to the one holding now. -->
+    <string name="history_today">اليوم</string>
     <string name="history_untimed">القراءات بلا وقت بعد. اعرضها في الملفات.</string>
     <string name="history_nothing_indexed">لم تُفهرس أي قراءات بعد.</string>
     <string name="history_archive">على هذا الهاتف</string>

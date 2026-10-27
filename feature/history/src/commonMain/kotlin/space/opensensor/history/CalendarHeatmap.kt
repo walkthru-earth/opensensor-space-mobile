@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.datetime.DateTimeUnit
@@ -56,8 +57,11 @@ import space.opensensor.units.UnitFormatter
 /**
  * A month or a year as a calendar of local days: one cell per day, weeks as columns, Monday at the
  * top, coloured by the WHO step of the day's mean (neutral ink without a WHO scale) and faded by its
- * coverage. Empty days are plain cells, estimated days dashed. Tap a day to open it. Month labels
- * along the top.
+ * coverage. The colour is never the only cue. A day fills its cell from the bottom by its WHO step
+ * ([whoStepShare]), and every cell has an `outline` border that keeps 3 to 1 against the card. Empty
+ * days are plain cells, estimated days dashed. Tap a day to open it. Month rows are at least
+ * [MONTH_ROW] tall, so each day is a full touch target. Month labels run along the top, and a label
+ * that would run into the one before it is left out, so long or large month names never overlap.
  *
  * Screen readers get a summary of the calendar, then one button per day the tap opens, in date order,
  * naming the date, the mean with its mood and WHO step (step only when `showStep`, Simple never
@@ -77,7 +81,7 @@ internal fun CalendarHeatmap(
     showStep: Boolean = true,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val empty = MaterialTheme.colorScheme.surfaceContainerHighest
+    val (border, empty) = markColors(MaterialTheme.colorScheme)
     val labelPx = with(LocalDensity.current) { 10.sp.toPx() }
     val measurer = rememberTextMeasurer()
     val labelStyle = remember(muted) { chartTextStyle(muted, 10) }
@@ -91,7 +95,8 @@ internal fun CalendarHeatmap(
     val byDay = remember(days) { days.associateBy { it.startS } }
     val readable = remember(days, fromS, toS) { readableDays(days, fromS, toS) }
     val rows = 7
-    val heightDp = if (weeks > 10) 120.dp else 150.dp
+    val gridTopDp = with(LocalDensity.current) { (labelPx * 1.6f).toDp() }
+    val heightDp = calendarHeight(weeks, gridTopDp)
     val shownDays = firstDay.daysUntil(lastDay) + 1
     val daysWithReadings = readable.size
     val separator = listSeparator()
@@ -131,7 +136,10 @@ internal fun CalendarHeatmap(
             val cellH = (size.height - gridTop) / rows
             val pad = (minOf(cellW, cellH) * 0.15f).coerceAtLeast(1f)
             val radius = CornerRadius((minOf(cellW, cellH) * 0.2f).coerceAtMost(6f))
+            val borderPx = 1.dp.toPx()
+            val labelGapPx = 4.dp.toPx()
             var lastMonth: Int = -1
+            var labelEnd = Float.NEGATIVE_INFINITY
             val marks = ArrayList<Rect>()
             for (week in 0 until weeks) {
                 for (dow in 0 until rows) {
@@ -144,24 +152,28 @@ internal fun CalendarHeatmap(
                     val sz = Size(cellW - 2 * pad, cellH - 2 * pad)
                     val m = col?.mean
                     if (startS in readable) marks += Rect(Offset(x0, y0), sz)
-                    if (m == null) {
-                        drawRoundRect(empty, Offset(x0, y0), sz, radius)
-                    } else {
+                    drawRoundRect(empty, Offset(x0, y0), sz, radius)
+                    if (m != null) {
                         val color = metric.valueColor(m.toDouble(), muted)
                         val alpha = 0.5f + 0.5f * col.coverage
-                        if (col.estimated) {
-                            drawRoundRect(color.copy(alpha = alpha * 0.3f), Offset(x0, y0), sz, radius)
-                            drawRoundRect(color.copy(alpha = alpha), Offset(x0, y0), sz, radius, style = Stroke(1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 3f))))
-                        } else {
-                            drawRoundRect(color.copy(alpha = alpha), Offset(x0, y0), sz, radius)
-                        }
+                        // The fill rises from the bottom of the cell by the day's WHO step.
+                        val fillH = sz.height * whoStepShare(metric.stepOf(m.toDouble()))
+                        val fillTop = Offset(x0, y0 + sz.height - fillH)
+                        drawRoundRect(color.copy(alpha = if (col.estimated) alpha * 0.3f else alpha), fillTop, Size(sz.width, fillH), radius)
+                        val dash = if (col.estimated) PathEffect.dashPathEffect(floatArrayOf(3f, 3f)) else null
+                        drawRoundRect(border, Offset(x0, y0), sz, radius, style = Stroke(if (col.estimated) 1.5f else borderPx, pathEffect = dash))
                     }
                     // Month label above the first week that holds the 1st (or the first visible day).
                     if (dow == 0 || date.day == 1) {
                         val month = date.month.ordinal
                         if (month != lastMonth && (date.day <= 7 || lastMonth == -1)) {
                             lastMonth = month
-                            drawLabel(measurer.measure(formatEpoch(startS, zone, "MMM"), labelStyle), week * cellW + pad, labelPx)
+                            val x = week * cellW + pad
+                            if (x >= labelEnd + labelGapPx) {
+                                val layout = measurer.measure(formatEpoch(startS, zone, "MMM"), labelStyle)
+                                drawLabel(layout, x, labelPx)
+                                labelEnd = x + layout.size.width
+                            }
                         }
                     }
                 }
@@ -173,7 +185,7 @@ internal fun CalendarHeatmap(
         ExactTouchBounds {
             BoxWithConstraints(Modifier.fillMaxWidth().height(heightDp)) {
                 val cellW = maxWidth / weeks
-                val gridTop = with(LocalDensity.current) { (labelPx * 1.6f).toDp() }
+                val gridTop = gridTopDp
                 val cellH = (maxHeight - gridTop) / rows
                 for (week in 0 until weeks) {
                     for (dow in 0 until rows) {
@@ -219,6 +231,19 @@ internal fun CalendarHeatmap(
  */
 internal fun readableDays(days: List<HistoryColumn>, fromS: Long, toS: Long): Map<Long, HistoryColumn> =
     days.filter { it.mean != null && it.startS >= fromS && it.startS < toS }.associateBy { it.startS }
+
+/**
+ * The calendar's height under [gridTop], the month label row. A month (up to 6 weeks) gives each
+ * row [MONTH_ROW], so every day is a full touch target. A year keeps a compact strip, its days are
+ * reached through the per day screen reader nodes and by opening a month.
+ */
+internal fun calendarHeight(weeks: Int, gridTop: Dp): Dp = if (weeks > MONTH_MAX_WEEKS) YEAR_HEIGHT else gridTop + MONTH_ROW * 7
+
+/** The smallest row height of a month calendar, the minimum touch target. */
+internal val MONTH_ROW = 48.dp
+
+private const val MONTH_MAX_WEEKS = 10
+private val YEAR_HEIGHT = 120.dp
 
 /** A day spoken in full, so a screen reader says "Tuesday 3 March", not "3 Mar". */
 private const val DAY_SPOKEN = "EEEE d MMMM"
