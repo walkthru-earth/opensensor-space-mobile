@@ -16,14 +16,18 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import okhttp3.OkHttpClient
+import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.settings.AppSettings
 import space.opensensor.data.settings.DetailLevel
 import space.opensensor.data.settings.DiscoverStore
+import space.opensensor.data.sync.ThingPlaces
 import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.discover.DiscoverController
 import space.opensensor.discover.DiscoverScreen
+import space.opensensor.discover.OwnThing
 import space.opensensor.discover.bundledSampleFeed
+import space.opensensor.discover.knownOwnThings
 import space.opensensor.net.BlockCache
 import space.opensensor.net.OkHttpRangeEngine
 import space.opensensor.publicfeed.OpenAqAggregatesFeed
@@ -35,7 +39,13 @@ import javax.inject.Inject
 
 /** Owns the shared [DiscoverController] for the Discover entry, so it survives rotation. */
 @HiltViewModel
-class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppSettings, blocks: BlockCache) : ViewModel() {
+class DiscoverViewModel @Inject constructor(
+    store: DiscoverStore,
+    settings: AppSettings,
+    blocks: BlockCache,
+    places: ThingPlaces,
+    known: KnownDeviceDao,
+) : ViewModel() {
     val controller = DiscoverController(
         scope = viewModelScope,
         feed = bundledSampleFeed(),
@@ -53,6 +63,13 @@ class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppS
         // Settings is open. Turning public sensors off cancels it before another request leaves.
         combine(settings.discoverSource, settings.showPublicSensors, ::Pair)
             .onEach { (source, publicSensors) -> controller.onSourceSettings(source, publicSensors) }
+            .launchIn(viewModelScope)
+        // The user's own fixed Things, each at its saved cell (#226). Read from the phone only.
+        combine(places.observeAll(), known.observeAll()) { saved, devices ->
+            val names = devices.mapNotNull { d -> d.thing?.let { it to d.name } }.toMap()
+            knownOwnThings(saved.map { OwnThing(it.thing, "", it.cell, it.updatedEpochMs) }, names)
+        }
+            .onEach(controller::showOwnThings)
             .launchIn(viewModelScope)
     }
 

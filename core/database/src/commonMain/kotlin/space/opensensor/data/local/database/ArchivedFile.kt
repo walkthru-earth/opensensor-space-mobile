@@ -38,7 +38,7 @@ data class ArchivedFile(
     /** Bluetooth address (or fake id) of the device the copy came from. */
     val sourceDevice: String,
 
-    // ---- History index (schema v4). All nullable: null means "not indexed yet" (a row written before
+    // ---- History index (schema v5). All nullable: null means "not indexed yet" (a row written before
     // v4, or a file the reader refused — see indexError). Derived from the file's own footer/rows by
     // `ParquetIndexer`, never from the Hive name.
     /** When the index below was computed; null until then. */
@@ -65,7 +65,7 @@ data class ArchivedFile(
     val estLastUtcNs: Long? = null,
     val estAnchorFile: String? = null,
 
-    // ---- Footer digests (schema v4). The `dictionary.sha256` and `template.sha256` the file names, so
+    // ---- Footer digests (schema v5). The `dictionary.sha256` and `template.sha256` the file names, so
     // History resolves its template at each derive and a newly served template rebuilds its days.
     val dictionarySha256: String? = null,
     val templateSha256: String? = null,
@@ -227,12 +227,12 @@ interface ArchivedFileDao {
 }
 
 /**
- * Version 3 to 4 adds the footer `dictionary.sha256` and `template.sha256` to `archived_file`. Only
+ * Version 4 to 5 adds the footer `dictionary.sha256` and `template.sha256` to `archived_file`. Only
  * the file's footer has them, so every row indexed without error is reopened and the back-fill reads
  * each footer once. Until then a row awaits its index and holds its days in History. Both digests are
  * indexed, so a template change asks in one query whether any file names it.
  */
-object Migration3To4 : Migration(3, 4) {
+object Migration4To5 : Migration(4, 5) {
     override fun migrate(connection: SQLiteConnection) {
         connection.execSQL("ALTER TABLE `archived_file` ADD COLUMN `dictionarySha256` TEXT")
         connection.execSQL("ALTER TABLE `archived_file` ADD COLUMN `templateSha256` TEXT")

@@ -164,11 +164,12 @@ class DiscoverControllerTest {
         prefs: MemoryPrefs = MemoryPrefs(),
         io: CoroutineDispatcher = StandardTestDispatcher(testScheduler),
         nowMs: Long = 1_000L,
+        grid: H3Grid = FakeGrid,
     ): DiscoverController {
         val c = DiscoverController(
             backgroundScope,
             feed,
-            FakeGrid,
+            grid,
             prefs,
             "UTC",
             now = { nowMs },
@@ -825,5 +826,62 @@ class DiscoverControllerTest {
         c.onSourceSettings(DiscoverSource.SAMPLE, publicSensors = true)
         settle()
         assertEquals(FeedWindow.DAY, c.state.value.window)
+    }
+
+    private val ownUuid = "3f6c2a9e-8d41-4b7a-9e2c-5a1d0b7c4e11"
+
+    private fun ownThing(cell: Long = cellA, name: String = "Rooftop", key: String = ownUuid) = OwnThing(key, name, H3Index.toHex(cell), updatedEpochMs = 500L)
+
+    @Test
+    fun ownThingsNeverReachThePublicSource() = runTest {
+        val c = controller(FakeFeed())
+        // The own Thing stands in cell A, a cell the public feed also reports. The shared cell is allowed.
+        c.showOwnThings(listOf(ownThing()))
+        settle()
+        val s = c.state.value
+        assertTrue(s.geoJson.contains(H3Index.toHex(cellA)), "the public source still draws cell A")
+        assertFalse(s.geoJson.contains(ownUuid), "no own Thing UUID in the public source")
+        assertFalse(s.geoJson.contains("Rooftop"), "no own Thing name in the public source")
+        assertEquals(1, s.own.size)
+        assertFalse(s.ownGeoJson.contains(ownUuid), "the own source carries an index, never the UUID")
+        assertFalse(s.ownGeoJson.contains("Rooftop"), "the own source carries an index, never the name")
+        assertTrue(s.ownGeoJson.contains("[-122.0,37.0]"), "the pin stands at the cell centre")
+    }
+
+    /** [FakeGrid] that counts the cell centres asked, one per own Thing per source build. */
+    private class CountingGrid : H3Grid by FakeGrid {
+        var centres = 0
+        override fun cellToLatLng(cell: Long): LatLng {
+            centres++
+            return FakeGrid.cellToLatLng(cell)
+        }
+    }
+
+    @Test
+    fun ownThingsAreRebuiltOnlyWhenTheirKeysChange() = runTest {
+        val grid = CountingGrid()
+        val c = controller(FakeFeed(), grid = grid)
+        c.showOwnThings(listOf(ownThing()))
+        settle()
+        val built = grid.centres
+        c.showOwnThings(listOf(ownThing()))
+        settle()
+        assertEquals(built, grid.centres, "the same Things keep the same source")
+        c.showOwnThings(listOf(ownThing().copy(updatedEpochMs = 900L)))
+        settle()
+        assertEquals(built + 1, grid.centres, "a newer update builds the source again")
+        c.showOwnThings(emptyList())
+        settle()
+        assertEquals(DiscoverUiState.EMPTY_GEOJSON, c.state.value.ownGeoJson)
+        assertTrue(c.state.value.own.isEmpty())
+    }
+
+    @Test
+    fun anOwnThingWithoutAWellFormedCellShowsNoPin() = runTest {
+        val c = controller(FakeFeed())
+        c.showOwnThings(listOf(ownThing(name = "B", key = "b"), OwnThing("x", "Bad", "not-a-cell", 1L), OwnThing("y", "Short", "8528347", 1L), ownThing(cellB, name = "A", key = "a")))
+        settle()
+        assertEquals(listOf("A", "B"), c.state.value.own.map { it.thing.name })
+        assertEquals(2, Regex("\"Point\"").findAll(c.state.value.ownGeoJson).count())
     }
 }

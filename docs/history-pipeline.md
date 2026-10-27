@@ -103,7 +103,7 @@ error) is the one test of whether a row's index columns can be read, and `withUt
 same test in SQL. `ArchiveRecord.awaitsIndex` (never indexed, or reopened) marks a row the back-fill
 still has to read.
 
-Room schema 4 (`Migration3To4`) added the two footer digests and reopens every row indexed without an
+Room schema 5 (`Migration4To5`) added the two footer digests and reopens every row indexed without an
 error, and the one time iOS receipt import reads every receipt as never indexed, since neither knew
 the digests. Until the back-fill reaches it, such a row awaits its index.
 

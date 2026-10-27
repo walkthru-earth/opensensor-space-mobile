@@ -20,6 +20,7 @@ import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.PairMode
+import space.opensensor.data.sync.ThingPlaces
 import space.opensensor.device.DeviceConfigChange
 import space.opensensor.device.DeviceConfigNotice
 import kotlin.test.AfterTest
@@ -87,7 +88,7 @@ class IosSecretPatchTest {
             scanSticker = null,
         )
         val scope = CoroutineScope(backgroundScope.coroutineContext + dispatcher)
-        val source = IosDeviceConfigSource(address, state, devices, links, scope)
+        val source = IosDeviceConfigSource(address, state, devices, links, scope, ThingPlaces.None)
         val notices = mutableListOf<DeviceConfigNotice>()
         scope.launch { source.notices.collect { notices += it } }
         runCurrent()

@@ -87,8 +87,9 @@ A force quit stops everything. Downloaded bytes and index records stay for the n
   UserDefaults (never a credential), the Keychain credential list (ids only) and the Room
   index.
 - **Today.** `CompanionTodaySource` reads INFO, STATUS and LIVE for the open link. Forget, in
-  the Today menu after confirmation, drops the record, the Keychain access and Auto-sync
-  (`DevicesBridge.forgetNow`), and says the bond is removed in iOS Settings. Today so far
+  the Today menu after confirmation, drops the Discover cells, then the record, the Keychain
+  access and Auto-sync (`DevicesBridge.forgetLater`). It runs in a scope that outlives Today, and a
+  failed removal keeps the record so Forget can run again. It says the bond is removed in iOS Settings. Today so far
   reads the hourly tier. Sync and Finalize use a ready LAN session first, then Bluetooth. The
   engine sets the device clock automatically from phone UTC.
 - **Device settings.** `IosDeviceConfigSource` borrows a short LAN or Bluetooth link per request.

@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -45,8 +46,10 @@ import space.opensensor.devices.MyDevicesScreen
 import space.opensensor.devices.bluetoothAccessTexts
 import space.opensensor.discover.DiscoverController
 import space.opensensor.discover.DiscoverScreen
+import space.opensensor.discover.OwnThing
 import space.opensensor.discover.UserDefaultsDiscoverPrefs
 import space.opensensor.discover.bundledSampleFeed
+import space.opensensor.discover.knownOwnThings
 import space.opensensor.files.FileMetricsController
 import space.opensensor.files.FileMetricsScreen
 import space.opensensor.files.FilesController
@@ -109,7 +112,7 @@ private val openAqFeed: OpenAqAggregatesFeed by lazy {
  * Holds the Discover controller for the Discover entry, so it survives tab switches and is cleared
  * only when its entry leaves the back stack (the ViewModel entry decorator of the shell).
  */
-private class DiscoverHolder : ViewModel() {
+private class DiscoverHolder(known: Flow<List<KnownRecord>>) : ViewModel() {
     val controller = DiscoverController(
         scope = viewModelScope,
         feed = bundledSampleFeed(),
@@ -126,6 +129,13 @@ private class DiscoverHolder : ViewModel() {
         // Settings is open. Turning public sensors off cancels it before another request leaves.
         combine(settingsRepository.discoverSource, settingsRepository.showPublicSensors, ::Pair)
             .onEach { (source, publicSensors) -> controller.onSourceSettings(source, publicSensors) }
+            .launchIn(viewModelScope)
+        // The user's own fixed Things, each at its saved cell (#226). Read from the phone only.
+        combine(IosArchive.places.observeAll(), known) { saved, records ->
+            val names = records.filter { it.thing.isNotBlank() }.associate { it.thing to it.name }
+            knownOwnThings(saved.map { OwnThing(it.thing, "", it.cell, it.updatedEpochMs) }, names)
+        }
+            .onEach(controller::showOwnThings)
             .launchIn(viewModelScope)
     }
 }
@@ -162,7 +172,7 @@ private class DebugHolder(address: String, state: CompanionState, openLink: (Str
 private class DeviceSettingsHolder(address: String, devices: DevicesBridge, links: DeviceConfigLinks) : ViewModel() {
     val controller = DeviceConfigController(
         scope = viewModelScope,
-        source = IosDeviceConfigSource(address, devices.state, devices, links, viewModelScope),
+        source = IosDeviceConfigSource(address, devices.state, devices, links, viewModelScope, IosArchive.places),
         detailLevel = settingsRepository.detailLevel,
         // Nothing else reads the config on iOS, so the page reads it once the link is ready.
         readOnReady = true,
@@ -213,7 +223,7 @@ internal fun AppRoot(
         AppShell(
             entries = { nav ->
                 entry<DiscoverKey> {
-                    DiscoverEntry(networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.openSetup() })
+                    DiscoverEntry(known = devices.known, networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.openSetup() })
                 }
                 entry<ScanKey> {
                     MyDevicesEntry(
@@ -440,8 +450,8 @@ private fun MyDevicesEntry(
 
 /** Discover with its controller kept per entry. The shared screen takes Back, or the edge swipe, while a sheet is open. */
 @Composable
-private fun DiscoverEntry(networkAllowed: Boolean, source: DiscoverSource, level: DetailLevel, units: UnitSystem, onAddSensor: () -> Unit) {
-    val controller = viewModel { DiscoverHolder() }.controller
+private fun DiscoverEntry(known: Flow<List<KnownRecord>>, networkAllowed: Boolean, source: DiscoverSource, level: DetailLevel, units: UnitSystem, onAddSensor: () -> Unit) {
+    val controller = viewModel { DiscoverHolder(known) }.controller
     DiscoverScreen(
         controller = controller,
         networkAllowed = networkAllowed,

@@ -11,21 +11,22 @@ import kotlinx.coroutines.IO
 
 /**
  * The one database of both phones, `opensensor.db`, opened through [configured] with the bundled SQLite
- * driver. Android uses every table. iOS uses `archived_file`, `pruned_file`, `list_cursor` and
- * `thing_source`, the other tables stay empty there, so one schema and one version serve both (#100).
+ * driver. Android uses every table. iOS uses `archived_file`, `pruned_file`, `list_cursor`,
+ * `thing_source` and `thing_place`, the other tables stay empty there, so one schema and one version serve both (#100).
  *
  * The schema is exported to `core/database/schemas/`. Version 2 adds `list_cursor` (#95) through an
  * automatic migration, since a new table needs no hand written step. Version 3 adds `thing_source`
  * (#223) through [Migration2To3], which also gives every Thing already stored a source row. Version 4
- * adds the footer digests to `archived_file` through [Migration3To4], which reopens every indexed row.
+ * adds `thing_place` (#226), the cell of each own fixed Thing, through an automatic migration. Version 5
+ * adds the footer digests to `archived_file` through [Migration4To5], which reopens every indexed row.
  * `metric_bucket` and `derived_day` are caches of the archive that `HistoryDeriver` rebuilds.
  */
 @ConstructedBy(AppDatabaseConstructor::class)
 @Database(
-    entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, ThingEpoch::class, SensorInstallation::class, PrunedFileEntity::class, ListCursorEntity::class, ThingSourceEntity::class],
-    version = 4,
+    entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, ThingEpoch::class, SensorInstallation::class, PrunedFileEntity::class, ListCursorEntity::class, ThingSourceEntity::class, ThingPlaceEntity::class],
+    version = 5,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 3, to = 4)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun knownDeviceDao(): KnownDeviceDao
@@ -37,6 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun prunedFileDao(): PrunedFileDao
     abstract fun listCursorDao(): ListCursorDao
     abstract fun thingSourceDao(): ThingSourceDao
+    abstract fun thingPlaceDao(): ThingPlaceDao
 
     companion object {
         /** The file name on both phones. */
@@ -48,7 +50,7 @@ abstract class AppDatabase : RoomDatabase() {
          */
         fun configured(builder: RoomDatabase.Builder<AppDatabase>): AppDatabase = builder
             .setDriver(BundledSQLiteDriver())
-            .addMigrations(Migration2To3, Migration3To4)
+            .addMigrations(Migration2To3, Migration4To5)
             .setQueryCoroutineContext(Dispatchers.IO)
             .build()
     }

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 4,
-    "identityHash": "91a59e93cee9cefcef2cc63aaaff9bd5",
+    "identityHash": "5cafd5e42e872011d6b542df47cf15b5",
     "entities": [
       {
         "tableName": "known_device",
@@ -76,7 +76,7 @@
       },
       {
         "tableName": "archived_file",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `thing` TEXT NOT NULL, `name` TEXT NOT NULL, `bytes` INTEGER NOT NULL, `crc32` INTEGER NOT NULL, `sha256` TEXT NOT NULL, `syncedAtEpochMs` INTEGER NOT NULL, `sourceDevice` TEXT NOT NULL, `indexedAtEpochMs` INTEGER, `indexError` TEXT, `rows` INTEGER, `rowGroups` INTEGER, `bootId` TEXT, `purpose` TEXT, `utcRows` INTEGER, `firstUtcNs` INTEGER, `lastUtcNs` INTEGER, `firstMonoUs` INTEGER, `lastMonoUs` INTEGER, `firstSeq` INTEGER, `lastSeq` INTEGER, `estFirstUtcNs` INTEGER, `estLastUtcNs` INTEGER, `estAnchorFile` TEXT, `dictionarySha256` TEXT, `templateSha256` TEXT)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `thing` TEXT NOT NULL, `name` TEXT NOT NULL, `bytes` INTEGER NOT NULL, `crc32` INTEGER NOT NULL, `sha256` TEXT NOT NULL, `syncedAtEpochMs` INTEGER NOT NULL, `sourceDevice` TEXT NOT NULL, `indexedAtEpochMs` INTEGER, `indexError` TEXT, `rows` INTEGER, `rowGroups` INTEGER, `bootId` TEXT, `purpose` TEXT, `utcRows` INTEGER, `firstUtcNs` INTEGER, `lastUtcNs` INTEGER, `firstMonoUs` INTEGER, `lastMonoUs` INTEGER, `firstSeq` INTEGER, `lastSeq` INTEGER, `estFirstUtcNs` INTEGER, `estLastUtcNs` INTEGER, `estAnchorFile` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -205,16 +205,6 @@
             "fieldPath": "estAnchorFile",
             "columnName": "estAnchorFile",
             "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "dictionarySha256",
-            "columnName": "dictionarySha256",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "templateSha256",
-            "columnName": "templateSha256",
-            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -233,24 +223,6 @@
             ],
             "orders": [],
             "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_archived_file_thing_name` ON `${TABLE_NAME}` (`thing`, `name`)"
-          },
-          {
-            "name": "index_archived_file_templateSha256",
-            "unique": false,
-            "columnNames": [
-              "templateSha256"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_archived_file_templateSha256` ON `${TABLE_NAME}` (`templateSha256`)"
-          },
-          {
-            "name": "index_archived_file_dictionarySha256",
-            "unique": false,
-            "columnNames": [
-              "dictionarySha256"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_archived_file_dictionarySha256` ON `${TABLE_NAME}` (`dictionarySha256`)"
           }
         ]
       },
@@ -673,11 +645,41 @@
             "thing_uuid"
           ]
         }
+      },
+      {
+        "tableName": "thing_place",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`thing_uuid` TEXT NOT NULL, `cell` TEXT NOT NULL, `updated_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`thing_uuid`))",
+        "fields": [
+          {
+            "fieldPath": "thing",
+            "columnName": "thing_uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cell",
+            "columnName": "cell",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedEpochMs",
+            "columnName": "updated_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "thing_uuid"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '91a59e93cee9cefcef2cc63aaaff9bd5')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5cafd5e42e872011d6b542df47cf15b5')"
     ]
   }
 }

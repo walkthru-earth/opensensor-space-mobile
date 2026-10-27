@@ -41,6 +41,7 @@ import space.opensensor.data.history.UtcDayRange
 import space.opensensor.data.history.info
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.ListCursors
+import space.opensensor.data.sync.ThingPlaces
 import space.opensensor.data.sync.ThingSources
 import space.opensensor.discover.MapCache
 import space.opensensor.net.BlockCache
@@ -86,6 +87,14 @@ internal object IosArchive {
 
     /** Where each Thing's data comes from, by Thing UUID, beside the index. */
     val sources: ThingSources get() = database.sources
+
+    /** Each own fixed Thing's saved cell, for its pin on Discover (#226). Only the cell, never coordinates. */
+    val places: ThingPlaces get() = database.places
+
+    /** Drops the saved cells of [things] once their sensor is forgotten, so none stays on the phone. */
+    suspend fun forgetPlaces(things: List<String>) {
+        things.forEach { places.remove(it) }
+    }
 
     // Tiers persist beside the derived day files, so a cold History open decodes only new days (#63).
     val tiers: ArchiveHistoryTiers by lazy {

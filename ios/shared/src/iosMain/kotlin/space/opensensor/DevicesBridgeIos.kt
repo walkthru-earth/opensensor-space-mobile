@@ -19,7 +19,8 @@ private class UserDefaultsKnownRecords(private val defaults: NSUserDefaults) : K
  * Builds the My devices bridge over the app's [state] and the shared [sync] engine's receipt
  * index. Swift passes its adapter calls. [forget] receives the peripheral id and, when known, the
  * hardware id whose Keychain credential to remove. [collect] receives the sensor id and the Wi-Fi
- * service name when the step goes over Wi-Fi. Each card's day comes from the History tiers.
+ * service name when the step goes over Wi-Fi. Each card's day comes from the History tiers. A
+ * forgotten sensor's Discover cells are dropped from the archive database.
  */
 fun devicesBridge(
     state: CompanionState,
@@ -38,4 +39,5 @@ fun devicesBridge(
     forget = forget,
     collect = collect,
     latestDay = { LatestDays.observe(IosArchive.tiers, it) },
+    forgetPlaces = IosArchive::forgetPlaces,
 )

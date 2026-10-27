@@ -88,8 +88,11 @@ class SensorSync internal constructor(
     coordinator: DeviceCoordinator = DeviceCoordinator(),
     /** Where each station's incremental list left off. */
     cursors: ListCursors = ListCursors.None,
-    /** Where each Thing's data comes from. Every listing records the board's source once. */
-    sources: ThingSources = ThingSources.None,
+    /**
+     * Where each Thing's data comes from. Every listing records the board's source once. It has no
+     * default, so the app cannot build a runner that forgets the database's sources.
+     */
+    sources: ThingSources,
 ) {
     internal val collector = ArchiveCollector(
         store,

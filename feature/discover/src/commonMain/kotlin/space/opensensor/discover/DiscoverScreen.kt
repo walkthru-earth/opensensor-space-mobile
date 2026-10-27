@@ -127,6 +127,12 @@ private val PEEK_HEIGHT = 200.dp
 // A city and its surroundings, after a place search.
 private const val PLACE_ZOOM = 9.0
 
+// A neighbourhood, after an own Thing is picked from the sheet list.
+private const val OWN_ZOOM = 13.0
+
+// Zoom steps into an own Things cluster badge on a tap.
+private const val OWN_CLUSTER_STEP = 2
+
 /**
  * The Discover map, first screen at the Simple level (docs/devices-and-discovery.md, "First screen
  * at the Simple level"). Zero taps shows the map, the metric and window chips, the legend, the
@@ -183,6 +189,9 @@ private fun DiscoverContent(
     var highlight by remember { mutableStateOf<ValueBand?>(null) }
     // Bumped to let go of a pinned bar, when the map is tapped outside any area.
     var clearSignal by remember { mutableStateOf(0) }
+    // Where the map moves next for an own Thing, its pin from the list or a cluster badge tapped.
+    // Null zoom steps in from the current one.
+    var ownMove by remember { mutableStateOf<Pair<Position, Double?>?>(null) }
     fun expand() = scope.launch { catchingNonCancel { sheet.bottomSheetState.expand() } }
     fun peek() = scope.launch { catchingNonCancel { sheet.bottomSheetState.partialExpand() } }
 
@@ -228,6 +237,10 @@ private fun DiscoverContent(
                 onRetry = controller::retryWindows,
                 onRetryLoad = controller::retry,
                 onPickCell = { hex -> controller.selectCell(hex) },
+                onPickOwn = { pin ->
+                    ownMove = Position(longitude = pin.lng, latitude = pin.lat) to OWN_ZOOM
+                    peek()
+                },
                 highlight = highlight,
                 clearSignal = clearSignal,
                 onHighlight = { highlight = it },
@@ -243,11 +256,27 @@ private fun DiscoverContent(
                 val nearMe = rememberNearMe()
                 // A rotation rebuilds the map. It resumes at the last camera, not the region fit.
                 val mapStart = remember(start) { controller.resumeStart() ?: start }
-                val mapState = rememberDiscoverMapState(mapStart, style, state.geoJson, selectedHex, ink, nearMe.location, highlight) { hex ->
+                val mapState = rememberDiscoverMapState(
+                    mapStart,
+                    style,
+                    state.geoJson,
+                    selectedHex,
+                    ink,
+                    nearMe.location,
+                    highlight,
+                    ownGeoJson = state.ownGeoJson,
+                    paper = paper,
+                    onOwnCluster = { centre -> ownMove = centre to null },
+                ) { hex ->
                     controller.selectCell(hex)
                     controller.dismissFirstRun()
                     showAll = false
                     if (hex != null) expand() else peek()
+                }
+                LaunchedEffect(ownMove) {
+                    val (centre, zoom) = ownMove ?: return@LaunchedEffect
+                    catchingNonCancel { mapState.moveCamera(centre, zoom ?: steppedZoom(mapState.cameraPosition.zoom, OWN_CLUSTER_STEP), reduceMotion) }
+                    ownMove = null
                 }
                 var attributionOpen by remember { mutableStateOf(true) }
                 LaunchedEffect(Unit) {
@@ -647,6 +676,7 @@ private fun SheetContent(
     onRetry: () -> Unit,
     onRetryLoad: () -> Unit,
     onPickCell: (String) -> Unit,
+    onPickOwn: (OwnPin) -> Unit,
     highlight: ValueBand?,
     clearSignal: Int,
     onHighlight: (ValueBand?) -> Unit,
@@ -655,7 +685,8 @@ private fun SheetContent(
     // Sample data is a snapshot, so its freshness is read against its own newest hour.
     val reference = if (state.isSample) (state.newestUpdateEpochMs ?: now) else now
     Column(Modifier.fillMaxWidth().heightIn(min = PEEK_HEIGHT - 24.dp).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-        when (state.sheetBody(showAll, simple)) {
+        val body = state.sheetBody(showAll, simple)
+        when (body) {
             SheetBody.UNAVAILABLE -> DiscoverStateMessage(strings.unavailable, PeacockExpression.CONCERNED)
             SheetBody.ALL_PROPERTIES -> AllProperties(state, strings, onPickProperty)
             SheetBody.SIMPLE_CELL -> SimpleCellDetail(state, strings, infoButton, reference, onShowProperty, onRetry)
@@ -664,10 +695,18 @@ private fun SheetContent(
             SheetBody.FIRST_RUN -> FirstRunCard(strings, state.isSample, onAddSensor, onExplore)
             SheetBody.IN_VIEW -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
         }
+        if (body.listsOwn) OwnList(state.own, strings, onPickOwn)
     }
 }
 
 internal enum class SheetBody { UNAVAILABLE, ALL_PROPERTIES, SIMPLE_CELL, CELL, LOAD_FAILED, FIRST_RUN, IN_VIEW }
+
+/**
+ * Whether the sheet lists the own Things under its body. The map draws their pins in every state,
+ * so every body that is not a cell or the property list lists them for screen readers.
+ */
+internal val SheetBody.listsOwn: Boolean
+    get() = this == SheetBody.UNAVAILABLE || this == SheetBody.LOAD_FAILED || this == SheetBody.FIRST_RUN || this == SheetBody.IN_VIEW
 
 /**
  * What the sheet shows. A failed load comes before the first run card, so a user who picks Real
@@ -816,6 +855,31 @@ private fun InView(
                 }
                 Text(strings.sensors(row.devices), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+    }
+}
+
+/**
+ * The user's own fixed Things, the list alternative to their pins for TalkBack and VoiceOver (#226).
+ * Each row names the Thing and a tap moves the map to its cell. Nothing shows without own Things.
+ */
+@Composable
+private fun OwnList(own: List<OwnPin>, strings: DiscoverStrings, onPick: (OwnPin) -> Unit) {
+    if (own.isEmpty()) return
+    val ink = MaterialTheme.colorScheme.onSurface
+    Spacer(Modifier.height(16.dp))
+    Text(strings.ownHeading, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+    own.forEach { pin ->
+        val name = pin.thing.name.ifBlank { strings.ownUnnamed }
+        val label = strings.ownShow(name)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClickLabel = label) { onPick(pin) }.padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // The pin as the map draws it, a light dot ringed in ink.
+            Box(Modifier.size(14.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerLow).border(3.dp, ink, CircleShape))
+            Spacer(Modifier.width(12.dp))
+            Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         }
     }
 }

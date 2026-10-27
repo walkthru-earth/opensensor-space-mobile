@@ -3,7 +3,9 @@ package space.opensensor.data.local.database
 import androidx.room.useReaderConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import space.opensensor.data.archive.RoomThingPlaces
 import space.opensensor.data.archive.RoomThingSources
 import space.opensensor.data.sync.ThingSource
 import kotlin.test.AfterTest
@@ -13,9 +15,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * A version 2 database file, written as version 2 wrote it, opened by the app at version 4
- * ([Migration2To3], then [Migration3To4]). Every Thing it knew gets a board source, a blank Thing gets
- * none and no stored row is lost. A version 3 file reopens its indexed rows to read their footer digests.
+ * A version 2 database file, written as version 2 wrote it, opened by the app at version 5
+ * ([Migration2To3], the automatic step that adds `thing_place`, then [Migration4To5]). Every Thing it
+ * knew gets a board source, a blank Thing gets none and no stored row is lost. A version 3 file
+ * reopens its indexed rows to read their footer digests.
  */
 class ThingSourceMigrationTest {
     private val dir = newTempDir()
@@ -82,14 +85,16 @@ class ThingSourceMigrationTest {
             assertEquals(7L to 3, cursor.wholeAtEpochMs to cursor.sinceWhole)
             assertEquals(listOf("day=03/data.parquet"), db.prunedFileDao().forThing("thing-a").map { it.name })
             val version = db.useReaderConnection { c -> c.usePrepared("PRAGMA user_version") { it.step(); it.getLong(0) } }
-            assertEquals(4L, version)
+            assertEquals(5L, version)
+            // Version 4 adds the own Thing places empty. A pin waits for the next location read.
+            assertEquals(emptyList(), RoomThingPlaces(db.thingPlaceDao()).observeAll().first())
         } finally {
             db.close()
         }
     }
 
     @Test
-    fun version4ReopensEveryIndexedFileSoRepairReadsItsFooterDigests() = runTest {
+    fun version5ReopensEveryIndexedFileSoRepairReadsItsFooterDigests() = runTest {
         val connection = BundledSQLiteDriver().open(path)
         try {
             V2_SCHEMA.forEach { connection.execSQL(it) }

@@ -18,6 +18,8 @@ import space.opensensor.data.local.database.checkpointDurably
 import space.opensensor.data.local.database.openAppDatabase
 import space.opensensor.data.sync.ListCursorState
 import space.opensensor.data.sync.ListCursors
+import space.opensensor.data.sync.ThingPlace
+import space.opensensor.data.sync.ThingPlaces
 import space.opensensor.data.sync.ThingSource
 import space.opensensor.data.sync.ThingSources
 
@@ -93,6 +95,15 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
         override suspend fun get(thing: String): ThingSource? = ready().let { roomSources.get(thing) }
         override suspend fun all(): List<ThingSource> = ready().let { roomSources.all() }
         override suspend fun recordIfAbsent(source: ThingSource): Boolean = ready().let { roomSources.recordIfAbsent(source) }
+    }
+
+    private val roomPlaces by lazy { RoomThingPlaces(database.thingPlaceDao()) }
+
+    /** Each own fixed Thing's saved cell, for its pin on Discover (#226). */
+    val places: ThingPlaces = object : ThingPlaces {
+        override fun observeAll(): Flow<List<ThingPlace>> = flow { ready(); emitAll(roomPlaces.observeAll()) }
+        override suspend fun put(place: ThingPlace) = ready().let { roomPlaces.put(place) }
+        override suspend fun remove(thing: String) = ready().let { roomPlaces.remove(thing) }
     }
 
     /** Closes the database, for tests. The app keeps it open for the life of the process. */

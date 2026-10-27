@@ -20,12 +20,12 @@ thing/Hive paths. Partial downloads are not exported. The original archive stays
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
-## Room schema v4 (`opensensor.db`)
+## Room schema v5 (`opensensor.db`)
 
 One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
 keeps the file in its app database directory. iOS keeps it at
 `Application Support/database/opensensor.db`, excluded from backup, and uses only `archived_file`,
-`pruned_file`, `list_cursor` and `thing_source`. Exported schemas live in `core/database/schemas/`.
+`pruned_file`, `list_cursor`, `thing_source` and `thing_place`. Exported schemas live in `core/database/schemas/`.
 
 ```mermaid
 erDiagram
@@ -120,6 +120,11 @@ erDiagram
     int kind_version "the kind's contract version"
     string config_json "the kind's own settings, {} for a board"
   }
+  thing_place {
+    string thing_uuid PK "one row per own fixed Thing"
+    string cell "H3 cell in lowercase hex, never a coordinate"
+    long updated_epoch_ms "phone time of the location read"
+  }
   known_device ||--o{ archived_file : "thing"
   known_device ||--o{ thing_epoch : "address (logical association, no cascade)"
   archived_file }o--o{ metric_bucket : "derived per thing-day"
@@ -128,6 +133,7 @@ erDiagram
   known_device ||--o| list_cursor : "thing"
   thing_source ||--o| known_device : "thing_uuid, the Bluetooth adapter row"
   thing_source ||--o{ archived_file : "thing_uuid"
+  thing_place |o--o| thing_source : "thing_uuid"
 ```
 
 `metric_bucket` and `derived_day` are **caches**: drop them and derive again → identical rows.
@@ -147,6 +153,13 @@ source once through `ArchiveCollector`, behind the `ThingSources` port in `:core
 (`RoomThingSources`), and a failed write never stops the run. In code a collection, a keep alive
 lease and the iOS bridges name the Thing they reach by a `ThingId` (`:core:model`), a
 `BleAddress` for a board or a `PhoneInstall` for this phone's own install.
+`thing_place` keeps the H3 cell of each of the user's own fixed Things, keyed by its UUID (#226).
+Discover draws it as a pin and nothing else reads it. A location read or save in Device settings
+writes the row through `ThingPlaces.recordFrom` (`:core:sync`, `RoomThingPlaces`). A Thing that is
+moving, or names no well formed cell, loses its row. It holds the cell only, never the cell centre or
+a fix, and it never leaves the phone. Forget deletes the rows of every Thing the sensor named, the
+current one and older epochs, so no cell of a forgotten sensor stays on the phone. The Discover
+host also joins it with `known_device` on Android and the saved records on iOS.
 `pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the
 device lists the same name and size and the phone has no copy. Settings › Storage › Removed files ›
 Download again empties it. Both phones use this table through `RoomPrunedFiles`, behind the `PrunedFiles` port in
@@ -166,10 +179,11 @@ that cannot list the archive writes no marker and imports on the next launch.
 Version 2 adds `list_cursor` through `AutoMigration(from = 1, to = 2)`, which keeps every other
 table. Version 3 adds `thing_source` through `Migration2To3`, and gives every Thing the phone
 already knows, from `known_device`, `thing_epoch` or `archived_file`, an `opensensor-board` row at
-contract version 1, so no stored Thing is lost on upgrade. Version 4 adds the footer
-`dictionarySha256` and `templateSha256` to `archived_file` through `Migration3To4`, each with an
-index for the template change check, and reopens every row indexed without an error so the back-fill
-reads them. A schema change adds an explicit or auto migration and the next
+contract version 1, so no stored Thing is lost on upgrade. Version 4 adds `thing_place` through
+`AutoMigration(from = 3, to = 4)`. Version 5 adds the footer `dictionarySha256` and `templateSha256`
+to `archived_file` through `Migration4To5`, each with an index for the template change check, and
+reopens every row indexed without an error so the back-fill reads them. A schema change adds an
+explicit or auto migration and the next
 `core/database/schemas/<n>.json`.
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores
