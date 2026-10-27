@@ -17,6 +17,8 @@ kotlin {
             implementation(project(":core:settings"))
             implementation(project(":core:sync"))
             implementation(project(":core:archive"))
+            // The Thing kinds the app lists at launch (ThingKindsIos.kt).
+            implementation(project(":core:thing"))
             // The Room index and removed-file marks, shared with Android (IosArchiveDatabase).
             implementation(project(":core:database"))
             implementation(project(":feature:discover"))

@@ -44,7 +44,17 @@ JSON at `thing=<uuid>/year=YYYY/month=MM/day=DD/<file>.json`. It is a pure funct
 file bytes, its `opensensor` footer and its `BoardTemplate`, with no upload, network or Room. The
 geometry is H3 cells only, `ColumnStatistics` gives each measurement column `statistics` under its
 `valid_when` gate, and `FileItemResult.NoItem` names why a file gets none (no UTC anchor, no located
-row under `FileItems.ITEM_NEEDS_LOCATION`, a fixed Thing in two cells). Nothing calls it yet.
+row under `FileItems.ITEM_NEEDS_LOCATION`, a fixed Thing in two cells). Cells finer than its required `maxRes`
+are coarsened to their parent. `PublishGate` in `thing/` is its only caller.
+`thing/` (`:core:thing`, #219) holds the `ThingKind` contract, its `DataSource` and `PublishPolicy`,
+`OpenSensorBoardKind` (#222) and the `ThingKinds` registry. Each app builds that registry as a plain
+list, Android in `data/di/ThingModule` and iOS in `ThingKindsIos.kt` from `AppServices`, with no self
+registration. `ThingKinds.installMetrics` hands the kinds' `DerivedMetricProvider`s to `Metrics.install`,
+which rebuilds the catalog. `PublishGate` (#224) issues a ticket only for a `Recording` kind with
+`OptInCcBy` whose Thing the owner opted in (`UploadConsent`, none by default), then builds that file's
+Item at the policy's `maxRes` (7 for the board), asking consent again so an opt out stops it. Health, feeds and anything else get none. It never
+uploads. `thing/testkit` (`:core:thing:testkit`) holds `ThingKindContract`, the checks every kind runs
+from its own tests.
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log` in any

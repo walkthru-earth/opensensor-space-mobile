@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.airquality.Pm25Basis
+import space.opensensor.airquality.WhoGuidelines
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.designsystem.resources.Res
 import space.opensensor.designsystem.resources.pm25_corrected
@@ -27,5 +28,9 @@ fun pm25CorrectionInfo(): String = stringResource(Res.string.pm25_correction_inf
 @Composable
 fun metricLabel(metric: MetricSpec): String = metricLabelRes(metric)?.let { stringResource(it) } ?: metric.label
 
-/** The app label that replaces a metric's registry label, set for the two PM2.5 views and null otherwise. */
-fun metricLabelRes(metric: MetricSpec): StringResource? = metric.basis?.let(::pm25LabelRes)
+/**
+ * The app label that replaces a metric's registry label, set for the two PM2.5 views and null otherwise.
+ * A raw or corrected view of any other quantity keeps its own label.
+ */
+fun metricLabelRes(metric: MetricSpec): StringResource? =
+    metric.basis?.takeIf { metric.property == WhoGuidelines.PM25.propertyId }?.let(::pm25LabelRes)

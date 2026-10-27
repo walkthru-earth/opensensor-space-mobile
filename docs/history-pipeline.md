@@ -100,8 +100,9 @@ first, and `Metrics.defaultOf` opens History on the first of them.
 
 **Derived metrics come from providers.** A `DerivedMetricProvider` (`:core:model`) reads a template
 and returns `DerivedMetric`s, each a derived `Datastream` with a label, a `RowFormula` over its
-`derived.from` columns and an optional stored column it is a view of. `Metrics.providers` lists them,
-today only `AirDerivedMetrics` in `:core:airquality`, which derives `pm25_epa` when the template
+`derived.from` columns and an optional stored column it is a view of. `Metrics.providers` lists them.
+Each app installs its Thing kinds' providers at launch (`ThingKinds.installMetrics`, `Metrics.install`),
+which rebuilds the catalog. Today that is only `AirDerivedMetrics` in `:core:airquality`, which derives `pm25_epa` when the template
 stores `pm25_cf1_ug_m3` and `relative_humidity_percent`. Scales come from
 `WhoGuidelines.forProperty`, so a template without PM columns builds its metrics and the catalog
 (`Metrics.catalogOf`) with no air metric. The named air specs (`AirMetrics.PM25` and the rest in

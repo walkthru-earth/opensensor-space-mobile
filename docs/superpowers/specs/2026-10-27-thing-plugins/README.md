@@ -1,6 +1,6 @@
 # Thing plugins, one app for many kinds of Things
 
-Research report, 2026-10-27. Status is proposal. Nothing here is implemented yet.
+Research report, 2026-10-27. Status is proposal. Steps 1, 3 and 5 of the migration order are built (#220, #222, #224), the rest is not.
 
 Goal. Any kind of Thing (an opensensor board over BLE or LAN, the phone itself, a device that uploads on its own, a public feed station, later LoRa or a third party cloud) plugs into the app through one contract. Shared Kotlin does the work once for Android and iOS. Screens, the map and the setup wizard are driven by templates and data, with code only where data cannot express it.
 

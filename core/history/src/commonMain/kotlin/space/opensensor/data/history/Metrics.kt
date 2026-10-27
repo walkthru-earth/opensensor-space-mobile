@@ -2,11 +2,11 @@ package space.opensensor.data.history
 
 import space.opensensor.airquality.AirDerivedMetrics
 import space.opensensor.airquality.HealthScale
-import space.opensensor.airquality.Pm25Basis
 import space.opensensor.airquality.WhoGuidelines
 import space.opensensor.airquality.WhoStep
 import space.opensensor.model.Aggregate
 import space.opensensor.model.AppProfile
+import space.opensensor.model.Basis
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
 import space.opensensor.model.Datastream
@@ -16,6 +16,7 @@ import space.opensensor.model.LocalizedText
 import space.opensensor.model.PlausibleRange
 import space.opensensor.model.RowFormula
 import space.opensensor.model.ValidityGate
+import kotlin.concurrent.Volatile
 
 /**
  * One quantity History keeps in its tiers and charts, built from a board template datastream and the
@@ -52,9 +53,10 @@ data class MetricSpec(
     val property: String = id,
     /**
      * Raw or corrected, for a stored column with a derived corrected view and for that view, so every
-     * chart and card can say which it shows. Null for every other metric.
+     * chart and card can say which it shows. Null for every other metric. It says nothing about the
+     * family, the label comes from [property].
      */
-    val basis: Pm25Basis? = null,
+    val basis: Basis? = null,
     /**
      * The per row formula of a derived metric, or null for a metric shown as stored. When set, each
      * row's value is the formula of [column] and [auxColumn], computed per row before any rollup, and a
@@ -121,8 +123,28 @@ data class MetricSpec(
  * knowledge comes from the profile's scale ids and from the [providers] of derived metrics.
  */
 object Metrics {
+    /** The providers the catalog applies until an app entry point installs its own. */
+    val DEFAULT_PROVIDERS: List<DerivedMetricProvider> = listOf(AirDerivedMetrics)
+
+    /** The installed providers and the catalog built from them on first read. */
+    private class Installed(val providers: List<DerivedMetricProvider>) {
+        val catalog: List<MetricSpec> by lazy { catalogOf(BundledCatalog.templates, providers) }
+    }
+
+    @Volatile
+    private var installed = Installed(DEFAULT_PROVIDERS)
+
     /** The derived metric providers the catalog applies, in order. */
-    val providers: List<DerivedMetricProvider> = listOf(AirDerivedMetrics)
+    val providers: List<DerivedMetricProvider> get() = installed.providers
+
+    /**
+     * Makes [providers] the ones the [catalog] applies, the derived metrics of the app's Thing kinds
+     * (`ThingKinds.installMetrics` in `:core:thing`). Each app entry point calls it once at launch,
+     * before any screen reads a metric, since the named specs of `AirMetrics` keep what they first read.
+     */
+    fun install(providers: List<DerivedMetricProvider>) {
+        installed = Installed(providers.distinct())
+    }
 
     /** The axis floor of [metric]'s health scale, so the guideline stays in view, or null for a neutral metric. */
     fun axisFloorOf(metric: MetricSpec): Float? = metric.healthScale?.axisFloor?.toFloat()
@@ -131,7 +153,7 @@ object Metrics {
     fun rollupOf(ds: Datastream): Aggregate = if (ds.aggregate == null) Aggregate.MEAN else ds.rollup
 
     /** The metric for [ds] under [profile]. [basis] marks a column with a derived corrected view. */
-    fun of(ds: Datastream, profile: AppProfile, basis: Pm25Basis? = null): MetricSpec {
+    fun of(ds: Datastream, profile: AppProfile, basis: Basis? = null): MetricSpec {
         val scale = profile.scales[ds.name]?.let(WhoGuidelines::forProperty)
         val labels = profile.labels[ds.name]
         return MetricSpec(
@@ -157,7 +179,8 @@ object Metrics {
      * profile's primary columns in its order, then every other measured (`physicalMeasurement` or
      * `modelResult`) column the profile does not hide, in template order. A board-derived column counts
      * when the file stores it, and a file without it gives it no values. A template with none of a
-     * provider's source columns simply gets none of its metrics.
+     * provider's source columns simply gets none of its metrics. Ids are unique, a derived id that
+     * repeats a stored column or another derived id is an error.
      */
     fun of(
         template: BoardTemplate,
@@ -169,8 +192,11 @@ object Metrics {
         val columns = LinkedHashSet<String>()
         profile.primary.filterTo(columns) { it !in profile.hidden && template.datastream(it) != null }
         template.datastreams.filter { it.role?.isMeasurement == true && it.name !in profile.hidden }.mapTo(columns) { it.name }
-        val stored = columns.mapNotNull { name -> template.datastream(name)?.let { of(it, profile, if (name in views) Pm25Basis.RAW else null) } }
-        return derived.map { of(it, template, profile) } + stored
+        val stored = columns.mapNotNull { name -> template.datastream(name)?.let { of(it, profile, if (name in views) Basis.RAW else null) } }
+        val metrics = derived.map { of(it, template, profile) } + stored
+        val repeated = metrics.groupingBy { it.id }.eachCount().filterValues { it > 1 }.keys
+        require(repeated.isEmpty()) { "metric ids repeat on ${template.dict}: ${repeated.joinToString()}" }
+        return metrics
     }
 
     /** [metric] on [template], sharing the profile unit, scale and primary flag of the column it is a view of. */
@@ -190,7 +216,7 @@ object Metrics {
             plausibleRange = ds.plausibleRange,
             healthScale = shown?.healthScale,
             property = shown?.property ?: ds.name,
-            basis = if (metric.viewOf != null) Pm25Basis.CORRECTED else null,
+            basis = if (metric.viewOf != null) Basis.CORRECTED else null,
             formula = metric.formula,
             auxColumn = from.getOrNull(1),
             primary = shown?.primary ?: false,
@@ -202,10 +228,11 @@ object Metrics {
      * Where two boards describe one column, the first keeps its unit and aggregate and the plausible
      * ranges join. A board that stores it otherwise gives it no values ([MetricSpec.inTemplate]).
      */
-    val catalog: List<MetricSpec> = catalogOf(BundledCatalog.templates)
+    val catalog: List<MetricSpec> get() = installed.catalog
 
-    /** The catalog of [templates] under their bundled or derived profiles, see [catalog]. */
-    fun catalogOf(templates: List<BoardTemplate>): List<MetricSpec> = merge(templates.sortedBy { it.dict }.map { of(it) })
+    /** The catalog of [templates] under their bundled or derived profiles and [providers], see [catalog]. */
+    fun catalogOf(templates: List<BoardTemplate>, providers: List<DerivedMetricProvider> = this.providers): List<MetricSpec> =
+        merge(templates.sortedBy { it.dict }.map { of(it, providers = providers) })
 
     internal fun merge(lists: List<List<MetricSpec>>): List<MetricSpec> {
         val out = LinkedHashMap<String, MetricSpec>()
@@ -238,7 +265,7 @@ object Metrics {
      */
     fun defaultOf(metrics: List<MetricSpec>): MetricSpec? {
         val first = metrics.firstOrNull { it.primary && !it.derived } ?: return metrics.firstOrNull()
-        return metrics.firstOrNull { it.derived && it.property == first.property && first.basis == Pm25Basis.RAW } ?: first
+        return metrics.firstOrNull { it.derived && it.property == first.property && first.basis == Basis.RAW } ?: first
     }
 
     /** The metric History opens on, [defaultOf] the [catalog]. */
