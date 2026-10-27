@@ -55,7 +55,11 @@ which rebuilds the catalog. `PublishGate` (#224) issues a ticket only for a `Rec
 `OptInCcBy` whose Thing the owner opted in (`UploadConsent`, none by default), then builds that file's
 Item at the policy's `maxRes` (7 for the board), asking consent again so an opt out stops it. Health, feeds and anything else get none. It never
 uploads. `thing/testkit` (`:core:thing:testkit`) holds `ThingKindContract`, the checks every kind runs
-from its own tests.
+from its own tests. `PlatformNeedsTable` (#227) is the one table of what the app shell and each kind ask
+of the Android manifest (permissions, foreground service types) and the iOS bundle (Info.plist privacy
+keys, Bonjour types, background modes and task ids, entitlements, privacy manifest entries).
+`ManifestPermissionsTest` (app) and `IosBundleGateTest` (ios/shared, simulator) fail on any entry the
+enabled kinds do not declare and on any declared entry that is missing. A kind with no row fails too.
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log` in any

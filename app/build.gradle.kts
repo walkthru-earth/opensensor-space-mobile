@@ -202,6 +202,14 @@ val extractH3Jni = tasks.register<ExtractH3Jni>("extractH3Jni") {
 androidComponents {
     onVariants { variant ->
         variant.sources.jniLibs?.addGeneratedSourceDirectory(extractH3Jni, ExtractH3Jni::output)
+        // ManifestPermissionsTest reads the variant's merged manifest, with every library manifest
+        // folded in. As a task input it builds first, and any manifest change reruns the test.
+        val mergedManifest = variant.artifacts.get(com.android.build.api.artifact.SingleArtifact.MERGED_MANIFEST)
+        val unitTest = "test${variant.name.replaceFirstChar { it.uppercase() }}UnitTest"
+        tasks.withType<Test>().matching { it.name == unitTest }.configureEach {
+            inputs.file(mergedManifest).withPropertyName("mergedManifest").withPathSensitivity(PathSensitivity.NONE)
+            jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Dopensensor.mergedManifest=${mergedManifest.get().asFile.absolutePath}") })
+        }
     }
 }
 

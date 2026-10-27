@@ -246,6 +246,9 @@ History charts, background sync, error messages and back stack restore after pro
 
 ## Permissions (`AndroidManifest.xml`)
 
+`PlatformNeedsTable` in `:core:thing` lists these per kind, and `ManifestPermissionsTest` holds the
+merged manifest to it ([store-compliance.md](store-compliance.md#per-kind-gates-227)).
+
 | Permission | Why | Runtime? |
 | --- | --- | --- |
 | `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT` | the BLE pipe | yes |
