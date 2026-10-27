@@ -23,22 +23,26 @@ import space.opensensor.data.ble.BleConnectionFailure
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.designsystem.TickingText
 import space.opensensor.today.TodayReconnect
-import java.util.Locale
+import space.opensensor.units.ByteUnit
+import space.opensensor.units.byteSize
 
 /** Shown where a value is missing or not read yet. Never a long dash (copy rules). */
 const val NO_VALUE = "n/a"
 
-fun formatBytes(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> String.format(Locale.US, "%.1f KiB", bytes / 1024.0)
-    bytes < 1024L * 1024 * 1024 -> String.format(Locale.US, "%.2f MiB", bytes / 1048576.0)
-    else -> String.format(Locale.US, "%.2f GiB", bytes / 1073741824.0)
+/** A byte count as [UiText], `1.5 KB` or `1.5 كيلوبايت`, through the shared [byteSize] that Files uses too. */
+fun bytesText(bytes: Long): UiText {
+    val size = byteSize(bytes)
+    val id = when (size.unit) {
+        ByteUnit.B -> R.string.unit_bytes
+        ByteUnit.KB -> R.string.unit_kilobytes
+        ByteUnit.MB -> R.string.unit_megabytes
+        ByteUnit.GB -> R.string.unit_gigabytes
+    }
+    return UiText.Res(id, listOf(size.number))
 }
 
-fun formatRate(bytesPerSecond: Double): String = when {
-    bytesPerSecond < 1024 -> String.format(Locale.US, "%.0f B/s", bytesPerSecond)
-    else -> String.format(Locale.US, "%.1f KiB/s", bytesPerSecond / 1024.0)
-}
+/** [bytesText] resolved, for notifications built outside composition. */
+fun formatBytes(bytes: Long, res: Resources): String = bytesText(bytes).resolve(res)
 
 fun formatAgo(ageMs: Long, res: Resources): String {
     val s = ageMs / 1000
