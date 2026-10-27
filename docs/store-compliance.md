@@ -14,6 +14,8 @@ State as of 2026-10-09. Re-check the linked store pages before each submission. 
 - Bluetooth LE and the local Wi-Fi (mDNS `_ossync._tcp`) reach only the user's own sensors.
 - Readings and Parquet files stay on the phone. They leave only when the user shares or exports them
   through the system share sheet or document picker.
+- A sensor nickname and its setup pending flag from the Add sensor wizard stay in app settings
+  on the phone. Neither is sent to the sensor or anywhere else.
 - No account, no analytics, no crash reporting SDK, no ads. The only location permission is
   approximate, asked from Discover Near me or Device settings Use phone location.
   Near me only moves the map. Private device setup converts a temporary fix into

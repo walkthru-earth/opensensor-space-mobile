@@ -35,8 +35,8 @@ class TabNavigator(
     /** What the user sees now. */
     val top: NavKey get() = stack(tab).last()
 
-    /** The bar steps aside only for the full-screen inspectors, which have their own back arrow. */
-    val showsBottomBar: Boolean get() = top !is DebugKey && top !is FileMetricsKey
+    /** The bar steps aside only for the full-screen inspectors and the setup wizard, which have their own back arrow. */
+    val showsBottomBar: Boolean get() = top !is DebugKey && top !is FileMetricsKey && top !is SetupKey
 
     /** A bottom bar tap. The active tab pops to its root, another tab is shown as it was left. */
     fun select(target: TopTab) {
@@ -47,6 +47,12 @@ class TabNavigator(
     fun toMyDevicesRoot() {
         popToRoot(TopTab.MY_DEVICES)
         writeTab(TopTab.MY_DEVICES)
+    }
+
+    /** The Add sensor wizard over the My devices root, from Discover or a Stations card. */
+    fun openSetup(resume: String? = null) {
+        toMyDevicesRoot()
+        push(SetupKey(resume))
     }
 
     /** A detail screen on top of the active tab. */

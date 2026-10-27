@@ -97,6 +97,5 @@ New here.
 
 ## 6. Drift found on the way
 
-- `BleConfig` still reads `pin` and keeps `DEFAULT_PIN = "123456"` (`core/protocol/.../DeviceConfig.kt:276`, shown at `feature/device/.../DeviceConfigCards.kt:257`). Firmware no longer echoes the PIN and reports `pin_set` (`ble-sync-protocol.md:322,350,392`).
-- `ConfigPatch.Builder.thingMobility()` (`DeviceConfig.kt:204`) has only a test caller.
+- Fixed by #225. `BleConfig` reads `pin_set`, and `ConfigPatch.Builder.thingMobility()` is gone until a screen sends mobility.
 - `profile.hero` is parsed (`ModelJson.kt:91`) but no screen reads it.

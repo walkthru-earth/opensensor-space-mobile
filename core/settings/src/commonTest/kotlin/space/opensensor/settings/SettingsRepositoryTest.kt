@@ -129,4 +129,25 @@ class SettingsRepositoryTest {
         assertEquals(DiscoverSource.SAMPLE, effectiveDiscoverSource(DiscoverSource.SAMPLE, showPublicSensors = true))
         assertEquals(DiscoverSource.SAMPLE, effectiveDiscoverSource(DiscoverSource.SAMPLE, showPublicSensors = false))
     }
+
+    @Test
+    fun nicknamesAndPendingSetupStayPerSensor() = runTest {
+        val store = MemoryStore()
+        val repo = SettingsRepository(store)
+        repo.setNickname("AA:BB:CC:DD:EE:FF", "  Balcony  ")
+        repo.setSetupPending("AA:BB:CC:DD:EE:FF", true)
+        repo.setSetupPending("11:22:33:44:55:66", true)
+        assertEquals(mapOf("aa:bb:cc:dd:ee:ff" to "Balcony"), repo.nicknames.first())
+        assertEquals(setOf("aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66"), repo.setupPending.first())
+        assertEquals(AppPrefs(), repo.current())
+
+        repo.setSetupPending("11:22:33:44:55:66", false)
+        repo.forgetSensor("aa:bb:cc:dd:ee:ff")
+        assertEquals(emptyMap(), repo.nicknames.first())
+        assertEquals(emptySet(), repo.setupPending.first())
+
+        repo.setNickname("x", "Kitchen")
+        repo.setNickname("x", " ")
+        assertEquals(emptyMap(), repo.nicknames.first())
+    }
 }

@@ -15,6 +15,7 @@ import space.opensensor.shell.FilesKey
 import space.opensensor.shell.HistoryKey
 import space.opensensor.shell.ScanKey
 import space.opensensor.shell.SettingsKey
+import space.opensensor.shell.SetupKey
 import space.opensensor.shell.TabNavigator
 import space.opensensor.shell.TodayKey
 import space.opensensor.ui.debug.DebugScreen
@@ -27,6 +28,7 @@ import space.opensensor.ui.history.HistoryScreen
 import space.opensensor.ui.permissions.rememberLanGranted
 import space.opensensor.ui.scan.ScanScreen
 import space.opensensor.ui.settings.SettingsScreen
+import space.opensensor.ui.setup.SetupRoute
 
 /**
  * The Android host of the shared shell ([AppShell], `:feature:shell`). The shell owns the bottom
@@ -44,7 +46,7 @@ fun MainNavigation(modifier: Modifier = Modifier, level: ShellLevelViewModel = h
 /** Every Android destination. Hilt stays at this edge, the shell never sees it. */
 private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, developer: () -> Boolean) {
     entry<DiscoverKey> {
-        DiscoverRoute(onAddSensor = { nav.toMyDevicesRoot() })
+        DiscoverRoute(onAddSensor = { nav.openSetup() })
     }
     entry<ScanKey> {
         ScanScreen(onConnected = { address -> nav.push(TodayKey(address)) })
@@ -95,6 +97,13 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, develop
             onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
             onOpenFiles = { nav.openSection(FilesKey(key.address)) },
             onDisconnected = { nav.toMyDevicesRoot() },
+        )
+    }
+    entry<SetupKey> { key ->
+        SetupRoute(
+            resume = key.resume,
+            onClose = { nav.popIfTop { it is SetupKey } },
+            onOpenSensor = { address -> nav.popIfTop { it is SetupKey }; nav.push(TodayKey(address)) },
         )
     }
     entry<DebugKey> { key ->

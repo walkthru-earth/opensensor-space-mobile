@@ -4,10 +4,12 @@ Part of [Thing plugins](README.md). Proposal, 2026-10-27.
 
 ## 1. Today
 
-- The 4 step wizard (`FIND → NAME → LOCATION → WIFI → DONE`) exists only in [2026-10-12-stations-ux-design.md](../2026-10-12-stations-ux-design.md) slice 3. There is no `feature/setup`, and `KnownDevice` has no nickname or setup flag. A user adds a sensor by scanning on My devices and opening it. Pairing happens in the OS dialog on first connect. Android writes the known row before the link opens, so a failed pairing leaves a ghost entry.
+- `:feature:setup` holds the wizard (`FIND → NAME → LOCATION → WIFI → DONE`, slice 3 of [2026-10-12-stations-ux-design.md](../2026-10-12-stations-ux-design.md)). `SetupFlows.BOARD` is the `opensensor-board` step list, and `SetupController` walks it over a `SetupPort` on each platform. Add sensor on Discover opens it full screen over My devices (`SetupKey`). Pairing happens in the OS dialog when a sensor is picked on Find. The known row is written only after INFO passed the identity check, so a failed pairing leaves no entry.
+- The nickname (1 to 32 characters) and the pending setup flag live in the phone settings store (`SettingsRepository`), not in `KnownDevice`, so they never reach the sensor or the public feed. Stations cards do not show them yet.
+- Location and Wi-Fi pages reuse `DeviceLocationForm`, `WifiCard` and `LanCard` over the same `DeviceConfigController` as Device settings.
 - Board-specific parts. Find uses the BLE service UUID scan. Pairing has random, fixed and none modes. Wi-Fi join and the LAN token go over Bluetooth only. The sensor sticker is Plantower only.
 - Device settings are a fixed list of cards in `DeviceConfigSection.kt`. The sensor card is gated by one column name.
-- `SET_CONFIG` fields are hardcoded three times. `ConfigPatch.Builder` has one method per key with firmware limits as constants and a closed `ConfigProblem` enum, plus a fixed secret key set and a LAN refusal (`core/protocol/.../DeviceConfig.kt`). Confirmations are four dialog objects and one `when` in `DeviceConfigController.kt`. Change kinds are a closed `DeviceConfigChange` enum.
+- `SET_CONFIG` keys are rows of `ConfigFields` in `core/protocol/.../ConfigField.kt`, each with its secret flag and gate. `SECRET_KEYS` is built from it, and `ConfigFields.merge` lets a schema only tighten a known key. `ConfigPatch.Builder` keeps one typed method per key with firmware limits and the closed `ConfigProblem` enum. `DeviceConfigController.confirm()` sends every confirmed write, and its `DeviceConfigDialog.FIELDS` table maps each gated key to its dialog, checked by a test.
 
 ## 2. Step graph per kind
 
@@ -15,7 +17,7 @@ Each `ThingKind` declares an ordered list of steps. Each step is a shared Compos
 
 ```kotlin
 sealed interface SetupStep { val id: String; val skippable: Boolean }
-// Find, Permission(AccessKind), Pair, Name, Location, Fields(keys), Review, Done
+// Permission(UserAction), Find, Pair, Name, Location, Fields(id, keys), Done
 ```
 
 - A Permission step only binds `PermissionTriggers` to the step's action. It is never a wall.

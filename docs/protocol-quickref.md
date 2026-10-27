@@ -116,8 +116,12 @@ serves. No `desc` means the board serves none, and the phone never asks.
 
 ## CONFIG keys (`DeviceConfig`)
 
-`ble.pair` (random / fixed / none) · `ble.pin` (six ASCII digits; arrives as a number, shown
-zero-padded) · `ble.clear_bonds=1` · `wifi.on` · `wifi.ssid` (1–32 bytes) · `wifi.psk` (≤ 63 bytes,
+Every key the app writes is a row of `ConfigFields` (`core/protocol`) with its secret flag and
+confirm gate. `SECRET_KEYS` and the Device settings confirmations come from that table, and a
+schema may only make a known key stricter.
+
+`ble.pair` (random / fixed / none) · `ble.pin` (six ASCII digits, **write-only**. `CONFIG.ble`
+reports only `pin_set` and `pin_default`) · `ble.clear_bonds=1` · `wifi.on` · `wifi.ssid` (1–32 bytes) · `wifi.psk` (≤ 63 bytes,
 **write-only, never echoed or logged**) · `lan.on` · `lan.rotate_token=1` · Waveshare
 `sensor.vendor=Plantower`, `sensor.model=PMS5003T`, `sensor.serial=PMS5003T-YYYYMMDD` plus 1–9 unit digits,
 `sensor.batch_candidate=0|1`. `CONFIG.sensor` echoes these four fields. A mismatched physical
@@ -187,8 +191,7 @@ that selector. A missing location object is not an unset supported location.
 `ConfigPatch.location` sends only `location.cell`, `location.resolution` and
 `location.country`. SET_CONFIG acknowledges the legacy page; the app then reads
 page 1 and checks its saved values. No raw GPS coordinates cross this API.
-`ConfigPatch.Builder.thingMobility` sends `thing.mobility`, and the firmware splits the file on a
-change. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
+The app does not send `thing.mobility` yet. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
 board keeps in RAM and writes with `location_source` 3. No released firmware accepts it, so the
 app names the key and never sends it.
 Pages 2–4 are firmware time policy/status and server configuration; this app

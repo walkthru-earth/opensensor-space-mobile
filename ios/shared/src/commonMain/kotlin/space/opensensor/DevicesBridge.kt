@@ -209,6 +209,11 @@ class DevicesBridge internal constructor(
 
     internal val known: StateFlow<List<KnownRecord>> get() = records.asStateFlow()
 
+    /** The setup wizard's Find runs the same Bluetooth scan as My devices. */
+    internal fun startFind() = startScan()
+
+    internal fun stopFind() = stopScan()
+
     /**
      * Hears each Collect all change on the main thread, steps ended and steps planned, then (0, 0)
      * once the pass ended. iOS 26 shows a running pass as a continued task (#58).

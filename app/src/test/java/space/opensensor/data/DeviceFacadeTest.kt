@@ -783,6 +783,15 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `a failed pairing leaves no known row`() = harnessTest { h ->
+        h.factory.unavailable = UnavailableKind.PERMISSION_MISSING
+        h.repo.connect(ADDRESS, "OS-6b40")
+        h.until { h.events.isNotEmpty() && !h.repo.busy.value }
+        assertNull(h.repo.session.value)
+        assertNull("no ghost row before enrollment", h.knownDao.get(ADDRESS))
+    }
+
+    @Test
     fun `rejected LAN token is cleared and the Bluetooth session renews it`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
         h.lan.devices.value = mapOf(h.device.thing to h.lanTarget())

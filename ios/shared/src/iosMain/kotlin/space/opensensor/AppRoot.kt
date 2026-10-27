@@ -82,6 +82,7 @@ import space.opensensor.shell.FilesKey
 import space.opensensor.shell.HistoryKey
 import space.opensensor.shell.ScanKey
 import space.opensensor.shell.SettingsKey
+import space.opensensor.shell.SetupKey
 import space.opensensor.shell.ShellBottomBar
 import space.opensensor.shell.TodayKey
 import space.opensensor.today.TodayAction
@@ -211,7 +212,7 @@ internal fun AppRoot(
         AppShell(
             entries = { nav ->
                 entry<DiscoverKey> {
-                    DiscoverEntry(networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.toMyDevicesRoot() })
+                    DiscoverEntry(networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.openSetup() })
                 }
                 entry<ScanKey> {
                     MyDevicesEntry(
@@ -255,6 +256,12 @@ internal fun AppRoot(
                         }
                     } else {
                         LaunchedEffect(key) { nav.popIfTop { it == key } }
+                    }
+                }
+                entry<SetupKey> { key ->
+                    SetupEntry(key.resume, devices, configLinks, requestBluetooth, openSensor, onClose = { nav.popIfTop { it == key } }) { id ->
+                        nav.popIfTop { it == key }
+                        nav.push(TodayKey(id))
                     }
                 }
                 entry<DeviceKey> { key ->

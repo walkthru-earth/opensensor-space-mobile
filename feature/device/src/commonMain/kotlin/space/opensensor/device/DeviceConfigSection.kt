@@ -80,6 +80,7 @@ import space.opensensor.device.resources.msg_token_rotated_stored
 import space.opensensor.device.resources.msg_wifi_off
 import space.opensensor.device.resources.msg_wifi_on
 import space.opensensor.device.resources.msg_wifi_sent
+import space.opensensor.device.resources.msg_wifi_still_joining
 import space.opensensor.device.resources.pairing_none_button
 import space.opensensor.device.resources.pairing_none_confirm
 import space.opensensor.device.resources.pairing_none_title
@@ -316,6 +317,7 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
     DeviceConfigNotice.Rebooting -> getString(Res.string.msg_rebooting)
     DeviceConfigNotice.TokenStored -> getString(Res.string.msg_lan_token_stored)
     is DeviceConfigNotice.TokenRotated -> getString(if (notice.stored) Res.string.msg_token_rotated_stored else Res.string.msg_token_rotated_fetch)
+    DeviceConfigNotice.WifiStillJoining -> getString(Res.string.msg_wifi_still_joining)
 }
 
 /**

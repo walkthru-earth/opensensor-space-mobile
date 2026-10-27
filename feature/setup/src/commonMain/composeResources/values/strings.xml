@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_title">Add sensor</string>
+    <string name="setup_close">Close</string>
+    <string name="setup_back">Back</string>
+    <string name="setup_next">Next</string>
+    <string name="setup_skip">Skip</string>
+    <string name="setup_find_title">Find</string>
+    <string name="setup_find_info">Turn the sensor on and keep the phone close. Pairing opens in a system dialog.</string>
+    <string name="setup_find_start">Look for sensors</string>
+    <string name="setup_find_searching">Looking nearby</string>
+    <string name="setup_find_empty">No sensors found yet</string>
+    <string name="setup_added">Added</string>
+    <string name="setup_pairing">Pairing</string>
+    <string name="setup_retry">Try again</string>
+    <string name="setup_fail_update">Update firmware to add this sensor.</string>
+    <string name="setup_fail_pairing">Pairing did not finish. Try again.</string>
+    <string name="setup_fail_unreachable">Could not reach the sensor. Move closer.</string>
+    <string name="setup_fail_bluetooth">Bluetooth is needed to find sensors.</string>
+    <string name="setup_name_title">Name</string>
+    <string name="setup_name_label">Nickname</string>
+    <string name="setup_name_info">Stays on this phone. Leave it empty to use the sensor name.</string>
+    <string name="setup_name_too_long">Up to 32 characters.</string>
+    <string name="setup_location_title">Location</string>
+    <string name="setup_wifi_title">Wi-Fi</string>
+    <string name="setup_waiting">Connecting to the sensor</string>
+    <string name="setup_done_title">All set</string>
+    <string name="setup_done_open">Open sensor</string>
+    <string name="setup_leave_title">Leave setup?</string>
+    <string name="setup_leave_body">The sensor stays added. Finish setup later from its card.</string>
+    <string name="setup_leave">Leave</string>
+    <string name="setup_stay">Stay</string>
+</resources>

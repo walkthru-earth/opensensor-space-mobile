@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_title">إضافة مستشعر</string>
+    <string name="setup_close">إغلاق</string>
+    <string name="setup_back">رجوع</string>
+    <string name="setup_next">التالي</string>
+    <string name="setup_skip">تخطٍّ</string>
+    <string name="setup_find_title">البحث</string>
+    <string name="setup_find_info">شغّل المستشعر وأبقِ الهاتف قريبًا. يفتح الاقتران في نافذة النظام.</string>
+    <string name="setup_find_start">ابحث عن المستشعرات</string>
+    <string name="setup_find_searching">جارٍ البحث بالقرب</string>
+    <string name="setup_find_empty">لم يُعثر على مستشعرات بعد</string>
+    <string name="setup_added">مضاف</string>
+    <string name="setup_pairing">جارٍ الاقتران</string>
+    <string name="setup_retry">حاول مجددًا</string>
+    <string name="setup_fail_update">حدّث البرنامج الثابت لإضافة هذا المستشعر.</string>
+    <string name="setup_fail_pairing">لم يكتمل الاقتران. حاول مجددًا.</string>
+    <string name="setup_fail_unreachable">تعذّر الوصول إلى المستشعر. اقترب منه.</string>
+    <string name="setup_fail_bluetooth">يلزم البلوتوث للعثور على المستشعرات.</string>
+    <string name="setup_name_title">الاسم</string>
+    <string name="setup_name_label">اسم مستعار</string>
+    <string name="setup_name_info">يبقى على هذا الهاتف. اتركه فارغًا لاستخدام اسم المستشعر.</string>
+    <string name="setup_name_too_long">حتى 32 حرفًا.</string>
+    <string name="setup_location_title">الموقع</string>
+    <string name="setup_wifi_title">Wi-Fi</string>
+    <string name="setup_waiting">جارٍ الاتصال بالمستشعر</string>
+    <string name="setup_done_title">اكتمل الإعداد</string>
+    <string name="setup_done_open">افتح المستشعر</string>
+    <string name="setup_leave_title">مغادرة الإعداد؟</string>
+    <string name="setup_leave_body">يبقى المستشعر مضافًا. أكمل الإعداد لاحقًا من بطاقته.</string>
+    <string name="setup_leave">مغادرة</string>
+    <string name="setup_stay">بقاء</string>
+</resources>

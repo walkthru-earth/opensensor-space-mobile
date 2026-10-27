@@ -14,8 +14,10 @@ import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.protocol.BleConfig
+import space.opensensor.data.protocol.ConfigFields
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.ConfigProblem
+import space.opensensor.data.protocol.Confirm
 import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LanConfig
@@ -27,6 +29,7 @@ import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -42,13 +45,13 @@ private val v2Info = DeviceInfo(
 
 private fun config(wifiState: String = "off", sensor: SensorConfig? = null) = ConfigSnapshot(
     config = DeviceConfig(
-        ble = BleConfig(pair = "random", pin = 123456, pinDefault = 0, bonds = 1, display = 1),
+        ble = BleConfig(pair = "random", pinSet = 1, pinDefault = 0, bonds = 1, display = 1),
         wifi = WifiConfig(on = 1, ssid = "home", pskSet = 1, state = wifiState),
         lan = LanConfig(on = 1, port = 47390, host = "os-6b40", clients = 0),
         sensor = sensor,
     ),
     rebootRequired = false,
-    rawJson = "{\"ble\":{\"pin\":123456}}",
+    rawJson = "{\"ble\":{\"pin_set\":1}}",
     atEpochMs = 1L,
 )
 
@@ -362,6 +365,30 @@ class DeviceConfigControllerTest {
         source.snapshot.value = source.snapshot.value.copy(config = config(wifiState = "connecting"))
         advanceTimeBy(DeviceConfigController.WIFI_POLL_MS * (DeviceConfigController.WIFI_POLL_ATTEMPTS + 5))
         assertEquals(DeviceConfigController.WIFI_POLL_ATTEMPTS, source.calls.size)
+    }
+
+    @Test
+    fun aJoinStillConnectingAfterThePollSaysSoOnce() = runTest {
+        val source = FakeSource()
+        val c = controller(source)
+        val notices = collectNotices(c)
+        source.snapshot.value = source.snapshot.value.copy(config = config(wifiState = "connecting"))
+        advanceTimeBy(DeviceConfigController.WIFI_POLL_MS * (DeviceConfigController.WIFI_POLL_ATTEMPTS + 5))
+        assertEquals(listOf<DeviceConfigNotice>(DeviceConfigNotice.WifiStillJoining), notices)
+    }
+
+    @Test
+    fun everyConfirmedKeyInTheTableHasADialog() {
+        for (field in ConfigFields.ALL) {
+            when (val confirm = field.confirm) {
+                Confirm.Never -> continue
+                Confirm.Always -> assertNotNull(DeviceConfigDialog.forField(field.key, "1"), field.key)
+                is Confirm.When -> assertNotNull(DeviceConfigDialog.forField(field.key, confirm.value), field.key)
+            }
+        }
+        for (dialog in DeviceConfigDialog.FIELDS) assertTrue(dialog.field.needsConfirm(dialog.value), dialog.key)
+        assertNull(DeviceConfigDialog.forField(ConfigFields.BLE_PAIR, "random"))
+        assertNull(DeviceConfigDialog.forField(ConfigFields.WIFI_ON, "1"))
     }
 
     @Test
