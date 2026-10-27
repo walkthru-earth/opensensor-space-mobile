@@ -11,9 +11,10 @@ import space.opensensor.collection.CollectionScope
 import space.opensensor.collection.KeepAliveKind
 import space.opensensor.data.background.AndroidKeepAlive.ServiceLoss
 import space.opensensor.data.lan.WifiLeases
+import space.opensensor.model.ThingId
 
 class AndroidKeepAliveTest {
-    private val intent = CollectionIntent(1, "dev", CollectionScope.All, CollectionOrigin.USER_TAP)
+    private val intent = CollectionIntent(1, ThingId.BleAddress("dev"), CollectionScope.All, CollectionOrigin.USER_TAP)
 
     @Test
     fun `service lease holds through all owners and duplicate close`() {

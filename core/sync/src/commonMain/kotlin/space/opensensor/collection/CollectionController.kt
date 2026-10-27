@@ -37,6 +37,7 @@ import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkClosedException
 import space.opensensor.link.LinkTimeoutException
 import space.opensensor.link.describe
+import space.opensensor.model.ThingId
 import space.opensensor.storage.StorageException
 import space.opensensor.sync.SyncLock
 import space.opensensor.sync.nowEpochMs
@@ -82,7 +83,8 @@ sealed interface StartResult {
  */
 @OptIn(ExperimentalAtomicApi::class)
 class CollectionController(
-    val device: String,
+    /** The board this controller collects. Its address opens the link and is recorded with the files. */
+    val device: ThingId.BleAddress,
     private val links: LinkProvider,
     private val collector: ArchiveCollector,
     private val keepAlive: KeepAlive,
@@ -304,7 +306,7 @@ class CollectionController(
     private suspend fun attemptOnce(run: Run, attempt: Int, progressed: () -> Unit): CollectionSummary {
         val intent = run.intent
         advance(run, CollectionState.Preparing(intent, PrepareStep.CONNECT, attempt), null)
-        val link = run.link ?: links.connect(device, intent.linkPreference).also { run.link = it }
+        val link = run.link ?: links.connect(device.address, intent.linkPreference).also { run.link = it }
         advance(run, CollectionState.Preparing(intent, PrepareStep.CLOCK, attempt), link.kind)
         if (intent.clockConfirmed) setClock(intent, link)
         advance(run, CollectionState.Preparing(intent, PrepareStep.LIST, attempt), link.kind)
@@ -315,7 +317,7 @@ class CollectionController(
         advance(run, CollectionState.Preparing(intent, PrepareStep.PLAN, attempt), link.kind)
         val planned = planFrom(link.thing, listing, onlyName)
         note("collection ${intent.id} planned ${planned.plan.missingCount} of ${planned.plan.entries.size} file(s)")
-        val summary = collector.transfer(link.session, planned, link.thing, device, link.maxRead, onOutcome = { outcome ->
+        val summary = collector.transfer(link.session, planned, link.thing, device.address, link.maxRead, onOutcome = { outcome ->
             val previous = run.outcomes[outcome.name]
             // Repaired receipts may re-plan a committed file. Reuse must not erase this run's
             // earlier new success when adapters derive partial-run counts from these outcomes.

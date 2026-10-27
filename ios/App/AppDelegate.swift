@@ -90,8 +90,10 @@ final class AppServices {
             }
         },
         protect: { [weak self] device, id, unattended in
-            MainActor.assumeIsolated {
-                KotlinBoolean(value: self?.protect(device: device, id: id.int64Value, unattended: unattended.boolValue) ?? false)
+            // The address is a Sendable String, so it crosses into the main actor.
+            let address = device.address
+            return MainActor.assumeIsolated {
+                KotlinBoolean(value: self?.protect(device: address, id: id.int64Value, unattended: unattended.boolValue) ?? false)
             }
         },
         unprotect: { [weak self] id in MainActor.assumeIsolated { self?.unprotect(id.int64Value) } }
@@ -173,8 +175,9 @@ final class AppServices {
         autoSync.forget(peripheral: peripheral)
         if let device {
             // Ends a run of this sensor that no transport still tracks, so nothing retries later.
-            runs.stop(device: device)
-            runs.dropInterrupted(device: device)
+            let board = ModelThingId.BleAddress(address: device)
+            runs.stop(device: board)
+            runs.dropInterrupted(device: board)
             lan.disconnect(device: device)
             credentials.remove(device: device)
         }
@@ -237,7 +240,7 @@ final class AppServices {
         if let device { lan.disconnect(device: device) }
         bluetooth.close(id: id, device: device)
         // Ends a run of this sensor that no transport still tracks, so nothing retries later.
-        if let device { runs.stop(device: device) }
+        if let device { runs.stop(device: ModelThingId.BleAddress(address: device)) }
     }
 
     /// The last page of this sensor is gone. Its Bluetooth link and Wi-Fi session close now, or
@@ -261,7 +264,7 @@ final class AppServices {
             return
         }
         if lan.command(device: device, command: command) { return }
-        if lan.hasSession(device: device) || runs.isActive(device: device) {
+        if lan.hasSession(device: device) || runs.isActive(device: ModelThingId.BleAddress(address: device)) {
             bluetooth.state.today.commandRefused()
             return
         }
@@ -278,7 +281,7 @@ final class AppServices {
             bluetooth.state.today.commandRefused()
             return
         }
-        if runs.isActive(device: device) {
+        if runs.isActive(device: ModelThingId.BleAddress(address: device)) {
             bluetooth.state.today.commandRefused()
         } else if let name = lan.connectedSession(device: device) {
             lan.sync(name: name)
@@ -292,7 +295,7 @@ final class AppServices {
     }
 
     func syncOneFile(id: String, name: String) {
-        guard let device = devices.deviceFor(peripheral: id), !runs.isActive(device: device) else { return }
+        guard let device = devices.deviceFor(peripheral: id), !runs.isActive(device: ModelThingId.BleAddress(address: device)) else { return }
         if let session = lan.connectedSession(device: device) {
             lan.sync(name: session, onlyName: name)
         } else if !lan.hasSession(device: device), bluetooth.deviceId == device {
@@ -304,7 +307,7 @@ final class AppServices {
         guard let device = devices.deviceFor(peripheral: id) else { return }
         // The shared controller finds the user's run by the sensor in every phase, also while it
         // reconnects with no connection. Collect all and Auto-sync keep their own cancel.
-        runs.stopUserRun(device: device)
+        runs.stopUserRun(device: ModelThingId.BleAddress(address: device))
     }
 
     /// The open connection's shared link to this sensor, Wi-Fi first. Debug, Device settings and
@@ -359,7 +362,7 @@ final class AppServices {
     private func protectionExpired(device: String, id: Int64) {
         // A continued Collect all task launched since, and it keeps the app running.
         if autoSync.collectAllContinues { return unprotect(id) }
-        if runs.interrupt(device: device), let words = pausedWords {
+        if runs.interrupt(device: ModelThingId.BleAddress(address: device)), let words = pausedWords {
             autoSync.notifyPaused(title: words.title, body: words.body)
         }
         unprotect(id)
@@ -397,7 +400,7 @@ final class AppServices {
     /// One try to start an interrupted run. A page the user reopened over Bluetooth for another
     /// sensor keeps the link, so that resume skips Bluetooth.
     private func resume(_ interrupted: InterruptedRun) -> ResumeTry {
-        let device = interrupted.device
+        let device = interrupted.device.address
         let onlyName = interrupted.onlyName
         let pageDevice = livePage.page.flatMap { devices.deviceFor(peripheral: $0.id) }
         let bluetoothFree = livePage.letsResumeUseBluetooth(device: device, pageDevice: pageDevice)

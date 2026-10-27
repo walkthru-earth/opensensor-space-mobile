@@ -18,9 +18,11 @@ import space.opensensor.data.local.database.checkpointDurably
 import space.opensensor.data.local.database.openAppDatabase
 import space.opensensor.data.sync.ListCursorState
 import space.opensensor.data.sync.ListCursors
+import space.opensensor.data.sync.ThingSource
+import space.opensensor.data.sync.ThingSources
 
 /**
- * The iOS [index], [pruned] marks and list [cursors], the shared Room tables in `<dir>/opensensor.db`. The database opens
+ * The iOS [index], [pruned] marks, list [cursors] and Thing [sources], the shared Room tables in `<dir>/opensensor.db`. The database opens
  * on first use, and the first call of any port waits for [LegacyReceiptImport] to finish, so no
  * reader sees the index before the older receipts are in. Only the first pass checkpoints the database,
  * before it writes [IMPORT_MARKER]. Once [IMPORT_SETTLED] exists no launch walks the archive or
@@ -80,6 +82,15 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
     val cursors: ListCursors = object : ListCursors {
         override suspend fun get(thing: String): ListCursorState? = ready().let { roomCursors.get(thing) }
         override suspend fun put(state: ListCursorState) = ready().let { roomCursors.put(state) }
+    }
+
+    private val roomSources by lazy { RoomThingSources(database.thingSourceDao()) }
+
+    /** Where each Thing's data comes from, by Thing UUID (#223). */
+    val sources: ThingSources = object : ThingSources {
+        override suspend fun get(thing: String): ThingSource? = ready().let { roomSources.get(thing) }
+        override suspend fun all(): List<ThingSource> = ready().let { roomSources.all() }
+        override suspend fun recordIfAbsent(source: ThingSource): Boolean = ready().let { roomSources.recordIfAbsent(source) }
     }
 
     /** Closes the database, for tests. The app keeps it open for the life of the process. */

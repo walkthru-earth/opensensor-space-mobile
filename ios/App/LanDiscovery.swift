@@ -339,7 +339,7 @@ final class LanDiscovery {
         state.lanSyncStarted(name: name)
         report(name, connected: true, busy: true, notice: .lanListing)
         let handle = runs.collect(
-            device: device, onlyName: onlyName, prefer: .lan, origin: origin,
+            device: ModelThingId.BleAddress(address: device), onlyName: onlyName, prefer: .lan, origin: origin,
             progress: { [weak self] update in
                 MainActor.assumeIsolated { self?.runProgressed(name, token: token, update) }
             },
@@ -708,7 +708,7 @@ extension LanDiscovery {
             done(.skipped("no wifi access"))
             return
         }
-        if runs?.isActive(device: device.device) == true {
+        if runs?.isActive(device: ModelThingId.BleAddress(address: device.device)) == true {
             done(.skipped("in use"))
             return
         }

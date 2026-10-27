@@ -1,13 +1,16 @@
 package space.opensensor.collection
 
+import space.opensensor.model.ThingId
+
 /**
  * What the user or a worker asked for. [id] is unique per request, so a Stop or a timer that names
- * an older request never touches a newer one. [device] is the hardware id the files are recorded
- * with. [clockConfirmed] means the phone may send its time when the device clock needs it.
+ * an older request never touches a newer one. [device] is the [ThingId] the phone collects from, a
+ * [ThingId.BleAddress] for a board. [clockConfirmed] means the phone may send its time when the
+ * device clock needs it.
  */
 data class CollectionIntent(
     val id: Long,
-    val device: String,
+    val device: ThingId,
     val scope: CollectionScope,
     val origin: CollectionOrigin,
     val clockConfirmed: Boolean = false,

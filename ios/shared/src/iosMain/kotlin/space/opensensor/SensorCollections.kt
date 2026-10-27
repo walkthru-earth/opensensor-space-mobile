@@ -31,6 +31,7 @@ import space.opensensor.data.protocol.Frame
 import space.opensensor.data.sync.CollectionSummary
 import space.opensensor.data.sync.FileOutcome
 import space.opensensor.data.sync.FileProblem
+import space.opensensor.model.ThingId
 import space.opensensor.strings.resources.Res
 import space.opensensor.strings.resources.companion_lan_paused
 import space.opensensor.strings.resources.companion_lan_sync_paused
@@ -72,10 +73,10 @@ class SensorCollections internal constructor(
     private val ids = AtomicLong(0)
 
     /** Guarded by [lock]. */
-    private val controllers = HashMap<String, CollectionController>()
+    private val controllers = HashMap<ThingId.BleAddress, CollectionController>()
 
     /** Runs the OS interrupted, by device, until a controller accepts one again. Guarded by [lock]. */
-    private val interrupted = LinkedHashMap<String, InterruptedRun>()
+    private val interrupted = LinkedHashMap<ThingId.BleAddress, InterruptedRun>()
 
     /** How Swift starts an interrupted run, set while the app is on screen. Guarded by [lock]. */
     private var resumer: ((InterruptedRun) -> ResumeOutcome)? = null
@@ -91,7 +92,7 @@ class SensorCollections internal constructor(
      * attempt to one transport. [origin] says who started it. Call on the main thread.
      */
     fun collect(
-        device: String,
+        device: ThingId.BleAddress,
         onlyName: String?,
         prefer: LinkPreference,
         origin: RunOrigin,
@@ -111,7 +112,7 @@ class SensorCollections internal constructor(
             clockConfirmed = true,
             linkPreference = prefer,
         )
-        IosSyncDiagnostics.record(device, "sync", "${prefer.name.lowercase()} ${if (onlyName == null) "all files" else "one file"}")
+        IosSyncDiagnostics.record(device.address, "sync", "${prefer.name.lowercase()} ${if (onlyName == null) "all files" else "one file"}")
         if (controller.start(intent) is StartResult.Busy) {
             locked { requests.remove(id) }
             scope.launch(callbacks) { finished(SyncResult(SyncEnd.IN_USE, 0, 0, 0)) }
@@ -130,11 +131,11 @@ class SensorCollections internal constructor(
      * purpose. It ends the run in every phase, also while it waits to retry or a dial is in flight,
      * so no later dial or transfer happens. Other devices keep their runs.
      */
-    fun stop(device: String) {
+    fun stop(device: ThingId.BleAddress) {
         locked {
             // A deliberate stop also ends a run the OS interrupted, so it never resumes.
-            interrupted.keys.removeAll { it.equals(device, ignoreCase = true) }
-            controllers.entries.filter { it.key.equals(device, ignoreCase = true) }.map { it.value }
+            interrupted.keys.removeAll { it.sameBoard(device) }
+            controllers.entries.filter { it.key.sameBoard(device) }.map { it.value }
         }.forEach { it.stop(StopSource.APP) }
     }
 
@@ -143,10 +144,10 @@ class SensorCollections internal constructor(
      * phase, also while the link is gone and the run waits to retry or a dial is in flight. Collect
      * all and Auto-sync runs keep their own cancel. Call on the main thread.
      */
-    fun stopUserRun(device: String) {
+    fun stopUserRun(device: ThingId.BleAddress) {
         locked {
             requests.entries
-                .filter { (_, request) -> request.origin == RunOrigin.USER && request.device.equals(device, ignoreCase = true) }
+                .filter { (_, request) -> request.origin == RunOrigin.USER && request.device.sameBoard(device) }
                 .mapNotNull { (id, request) -> controllers[request.device]?.let { it to id } }
         }.forEach { (controller, id) -> controller.stop(StopSource.USER, id) }
     }
@@ -156,7 +157,7 @@ class SensorCollections internal constructor(
      * [space.opensensor.collection.SyncEndReason.INTERRUPTED], keeps its saved files and
      * partials, and waits until [resumeInterrupted] gets it accepted. False when no such run is active.
      */
-    fun interrupt(device: String): Boolean {
+    fun interrupt(device: ThingId.BleAddress): Boolean {
         val (controller, id) = locked {
             val controller = controllers[device] ?: return false
             val id = controller.state.value.intentId ?: return false
@@ -215,7 +216,7 @@ class SensorCollections internal constructor(
     }
 
     /** Forgets an interrupted run of [device], as when the user closed or forgot the sensor. */
-    fun dropInterrupted(device: String) {
+    fun dropInterrupted(device: ThingId.BleAddress) {
         locked { interrupted.remove(device) }
     }
 
@@ -224,7 +225,7 @@ class SensorCollections internal constructor(
      * asks before it closes a link or lets another run take the device. The device matches in any
      * letter case, as in [stop]. Call on the main thread.
      */
-    fun isActive(device: String): Boolean = locked { requests.values.any { it.device.equals(device, ignoreCase = true) } }
+    fun isActive(device: ThingId.BleAddress): Boolean = locked { requests.values.any { it.device.sameBoard(device) } }
 
     private suspend fun deliver(controller: CollectionController, id: Long, request: Request) {
         val ticks = Channel<SyncProgress>(Channel.CONFLATED)
@@ -256,14 +257,14 @@ class SensorCollections internal constructor(
             resultOf(terminal, request)
         }
         withContext(NonCancellable + callbacks) {
-            IosSyncDiagnostics.record(controller.device, "result", "${result.end.name.lowercase()} · ${result.saved}/${result.files} saved")
+            IosSyncDiagnostics.record(controller.device.address, "result", "${result.end.name.lowercase()} · ${result.saved}/${result.files} saved")
             request.finished(result)
             // Its transport is free now, so a run interrupted while this one cleaned up can start.
             retryInterrupted()
         }
     }
 
-    private fun controllerFor(device: String): CollectionController = locked {
+    private fun controllerFor(device: ThingId.BleAddress): CollectionController = locked {
         controllers.getOrPut(device) {
             CollectionController(
                 device = device,
@@ -286,7 +287,7 @@ class SensorCollections internal constructor(
      * Each attempt lists afresh, so the newest listing counts. Only the running request of
      * [device] lists, and a stopped one is cancelled before it could.
      */
-    private fun listed(device: String, files: List<Frame.File>) = locked {
+    private fun listed(device: ThingId.BleAddress, files: List<Frame.File>) = locked {
         val request = controllers[device]?.state?.value?.intentId?.let { requests[it] } ?: return@locked
         request.listed = request.onlyName?.let { name -> files.count { it.name == name } } ?: files.size
     }
@@ -337,7 +338,7 @@ class SensorCollections internal constructor(
 
     /** One request's callbacks and what it settled. [outcomes] and [listed] are guarded by [lock]. */
     private class Request(
-        val device: String,
+        val device: ThingId.BleAddress,
         val onlyName: String?,
         val prefer: LinkPreference,
         val origin: RunOrigin,
@@ -353,6 +354,9 @@ class SensorCollections internal constructor(
         const val MAX_CONCURRENT = 2
     }
 }
+
+/** The same board in any letter case, as Swift and the board may spell the 12 hex `dev` differently. */
+private fun ThingId.BleAddress.sameBoard(other: ThingId.BleAddress): Boolean = address.equals(other.address, ignoreCase = true)
 
 /** Who started a run. The Stop button ends only [USER] runs, Disconnect and Forget end every run. */
 enum class RunOrigin {
@@ -379,6 +383,6 @@ enum class ResumeOutcome {
 }
 
 /** A run the OS interrupted off screen. [onlyName] is set for a one-file sync from Files. */
-class InterruptedRun internal constructor(val device: String, val onlyName: String?, val prefer: LinkPreference) {
+class InterruptedRun internal constructor(val device: ThingId.BleAddress, val onlyName: String?, val prefer: LinkPreference) {
     override fun toString(): String = "InterruptedRun(${prefer.name.lowercase()}, ${if (onlyName == null) "all files" else "one file"})"
 }

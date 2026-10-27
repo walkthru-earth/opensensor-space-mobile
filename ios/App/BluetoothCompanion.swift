@@ -434,7 +434,7 @@ final class BluetoothCompanion {
         state.bluetoothSyncStarted()
         let origin: RunOrigin = backgroundId != nil ? .autoSync : collectId != nil ? .collectAll : .user
         let handle = runs.collect(
-            device: device, onlyName: onlyName, prefer: .ble, origin: origin,
+            device: ModelThingId.BleAddress(address: device), onlyName: onlyName, prefer: .ble, origin: origin,
             progress: { [weak self] update in
                 MainActor.assumeIsolated {
                     guard let self, self.runToken == token else { return }

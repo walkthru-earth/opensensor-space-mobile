@@ -23,7 +23,7 @@ class AppDatabaseFileTest {
     fun cleanUp() = deleteTempDir(dir)
 
     @Test
-    fun rowsSurviveAReopenAtSchemaVersion2() = runTest {
+    fun rowsSurviveAReopenAtSchemaVersion3() = runTest {
         val record = ArchiveRecord("thing-a", "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device", utcRows = 3, lastUtcNs = 42)
         val mark = PrunedFile("thing-a", "year=2026/month=10/day=02/data.parquet", 7, 8, 9)
         val cursor = ListCursorState("thing-a", ListCursor(ByteArray(ListCursor.BYTES) { it.toByte() }), 11, 2)
@@ -40,7 +40,7 @@ class AppDatabaseFileTest {
             assertEquals(listOf(mark), RoomPrunedFiles(again.prunedFileDao()).observeAll().first())
             assertEquals(cursor, RoomListCursors(again.listCursorDao()).get("thing-a"))
             val version = again.useReaderConnection { c -> c.usePrepared("PRAGMA user_version") { it.step(); it.getLong(0) } }
-            assertEquals(2L, version)
+            assertEquals(3L, version)
         } finally {
             again.close()
         }

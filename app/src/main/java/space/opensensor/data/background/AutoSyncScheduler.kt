@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import space.opensensor.data.history.DeriveBackfill
 import space.opensensor.data.local.database.KnownDeviceDao
+import space.opensensor.model.ThingId
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -94,7 +95,7 @@ class AutoSyncScheduler internal constructor(
     suspend fun syncNow(address: String, trigger: SyncTrigger = SyncTrigger.MANUAL): Enqueue {
         val name = deviceWorkName(address, trigger)
         if (queue.pending(name)) return Enqueue.ALREADY_QUEUED
-        val request = oneTime(workDataOf(SyncWorker.KEY_ADDRESS to address, SyncWorker.KEY_TRIGGER to trigger.name))
+        val request = oneTime(workDataOf(SyncWorker.KEY_THING to ThingId.BleAddress(address).key, SyncWorker.KEY_TRIGGER to trigger.name))
         // Triggered runs queue under their own name so a presence event is not swallowed by a
         // manual run the user just started; at most one of each is pending per device.
         queue.enqueue(name, request)
