@@ -78,19 +78,14 @@ class SyncWorker @AssistedInject constructor(
         return ForegroundInfo(notificationId, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
-    override suspend fun doWork(): Result {
-        if (targetOf(inputData) == RunTarget.Unreadable) {
-            // A one board run must never widen to every board, so it ends with nothing done.
-            Log.w(TAG, "auto-sync input names a board it cannot read, run skipped")
-            return Result.success()
-        }
-        val result = boundedWorkerRun(MAX_RUN_MS) { protection -> runProtected(protection) }
-        if (result != null) return result
+    override suspend fun doWork(): Result = dispatch(inputData) { run ->
+        val result = boundedWorkerRun(MAX_RUN_MS) { protection -> runProtected(protection, run) }
+        if (result != null) return@dispatch result
         Log.i(TAG, "auto-sync deadline reached; releasing worker quota")
-        return retryOrGiveUp()
+        retryOrGiveUp()
     }
 
-    private suspend fun runProtected(protection: KeepAlive): Result {
+    private suspend fun runProtected(protection: KeepAlive, run: WorkerRun): Result {
         var foreground = false
         try {
             setForeground(getForegroundInfo())
@@ -122,12 +117,11 @@ class SyncWorker @AssistedInject constructor(
                         }
                 }
                 try {
-                    val trigger = inputData.getString(KEY_TRIGGER) ?: (if (onlyAddress() != null || inputData.getBoolean(KEY_ALL_KNOWN, false)) SyncTrigger.MANUAL.name else "PERIODIC")
-                    Log.i(TAG, "auto-sync run: trigger=$trigger")
+                    Log.i(TAG, "auto-sync run: trigger=${run.trigger ?: "PERIODIC"}")
                     AutoSyncRunner(gateway.forRun(owner, protection) { workerStopSource(stopReason) }, log = { Log.i(TAG, it) }).run(
-                        onlyAddress = onlyAddress(),
-                        allKnown = inputData.getBoolean(KEY_ALL_KNOWN, false),
-                        lanOnly = inputData.getBoolean(KEY_LAN_ONLY, false),
+                        onlyAddress = run.onlyAddress,
+                        allKnown = run.allKnown,
+                        lanOnly = run.lanOnly,
                     )
                 } finally {
                     mirror.cancel()
@@ -143,7 +137,7 @@ class SyncWorker @AssistedInject constructor(
             if (!foreground) runCatching { notificationManager.cancel(notificationId) }
         }
 
-        if (inputData.getString(KEY_TRIGGER) == null && onlyAddress() == null && !inputData.getBoolean(KEY_ALL_KNOWN, false)) {
+        if (run.trigger == null) {
             // Periodic run: the cheapest place to re-arm the offloaded flag scan, which a Bluetooth
             // toggle silently drops (stop + start, de-duplicated by the receiver).
             suspendRunCatching { advertScan.ensureRegisteredNow() }.onFailure { Log.w(TAG, "flag scan re-register failed: ${it::class.simpleName}") }
@@ -158,9 +152,6 @@ class SyncWorker @AssistedInject constructor(
         }
         return if (report.transientFailure) retryOrGiveUp() else Result.success()
     }
-
-    /** The address of the one board this run is for, or null for every eligible one. */
-    private fun onlyAddress(): String? = (targetOf(inputData) as? RunTarget.One)?.board?.address
 
     /** Backed-off retry for transient trouble, bounded so a flaky link cannot keep the radio busy all period. */
     private fun retryOrGiveUp(): Result =
@@ -190,6 +181,24 @@ class SyncWorker @AssistedInject constructor(
             val key = input.getString(KEY_THING) ?: return RunTarget.Every
             val board = ThingId.parse(key) as? ThingId.BleAddress ?: return RunTarget.Unreadable
             return RunTarget.One(board)
+        }
+
+        /**
+         * Reads [input] and hands [run] what to collect. A board named in a form this build cannot
+         * read ends the run with nothing done, because a one board run must never widen to every board.
+         */
+        internal suspend fun dispatch(input: Data, run: suspend (WorkerRun) -> Result): Result {
+            val onlyAddress = when (val target = targetOf(input)) {
+                RunTarget.Unreadable -> {
+                    Log.w(TAG, "auto-sync input names a board it cannot read, run skipped")
+                    return Result.success()
+                }
+                is RunTarget.One -> target.board.address
+                RunTarget.Every -> null
+            }
+            val allKnown = input.getBoolean(KEY_ALL_KNOWN, false)
+            val trigger = input.getString(KEY_TRIGGER) ?: if (onlyAddress != null || allKnown) SyncTrigger.MANUAL.name else null
+            return run(WorkerRun(onlyAddress, allKnown, input.getBoolean(KEY_LAN_ONLY, false), trigger))
         }
 
         /** Input data: a manual run over every known device ("Collect from all loggers"). */
@@ -224,6 +233,12 @@ internal fun workerStopSource(reason: Int): StopSource =
         WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT -> StopSource.FGS_TIMEOUT
         else -> StopSource.SYSTEM
     }
+
+/**
+ * One [SyncWorker] run as read from its input. [onlyAddress] is the one board it is for, or null for
+ * every eligible board. [trigger] is null on a periodic run.
+ */
+internal data class WorkerRun(val onlyAddress: String?, val allKnown: Boolean, val lanOnly: Boolean, val trigger: String?)
 
 /** Which boards one [SyncWorker] run is for, read from its input. */
 internal sealed interface RunTarget {

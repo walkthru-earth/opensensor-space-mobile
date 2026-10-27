@@ -149,4 +149,7 @@
     <string name="discover_sheet_collapse">Show less</string>
     <string name="discover_clear_filter">Clear filter</string>
     <string name="discover_near_me_none">Location not found</string>
+    <string name="discover_own_heading">Your sensors</string>
+    <string name="discover_own_unnamed">Sensor</string>
+    <string name="discover_own_show">Show %1$s on the map</string>
 </resources>

@@ -30,7 +30,10 @@ import space.opensensor.data.ble.SecretNeedsBluetoothException
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.ble.WifiUnavailableException
 import space.opensensor.data.protocol.ConfigPatch
+import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
+import space.opensensor.data.sync.ThingPlaces
+import space.opensensor.data.sync.recordFrom
 import space.opensensor.device.DeviceConfigChange
 import space.opensensor.device.DeviceConfigCommand
 import space.opensensor.device.DeviceConfigNotice
@@ -82,6 +85,8 @@ internal class IosDeviceConfigSource(
     private val devices: DevicesBridge,
     private val links: DeviceConfigLinks,
     private val scope: CoroutineScope,
+    /** Each fixed Thing's saved cell, for its pin on Discover (#226). Only the cell, never coordinates. */
+    private val places: ThingPlaces,
 ) : DeviceConfigSource {
     private val lent = Mutex()
     private val config = MutableStateFlow<ConfigSnapshot?>(null)
@@ -247,7 +252,7 @@ internal class IosDeviceConfigSource(
 
     override suspend fun readLocation(): space.opensensor.data.protocol.LocationConfig? {
         if (state.syncBusy) throw IllegalStateException("a sync holds the link")
-        val result = borrow { it.getLocation() ?: LOCATION_UNSUPPORTED } ?: throw IllegalStateException("link busy")
+        val result = borrow { recordPlace(it.getLocationPage()) ?: LOCATION_UNSUPPORTED } ?: throw IllegalStateException("link busy")
         return result.takeUnless { it === LOCATION_UNSUPPORTED }
     }
 
@@ -257,10 +262,17 @@ internal class IosDeviceConfigSource(
         try {
             val result = borrow {
                 config.value = it.setConfig(patch)
-                it.getLocation() ?: LOCATION_UNSUPPORTED
+                recordPlace(it.getLocationPage()) ?: LOCATION_UNSUPPORTED
             } ?: throw IllegalStateException("link busy")
             return result.takeUnless { it === LOCATION_UNSUPPORTED }
         } finally { working.value = false }
+    }
+
+    /** Keeps this sensor's Discover pin in step with the location [page] it returned. */
+    private suspend fun recordPlace(page: DeviceConfig?): space.opensensor.data.protocol.LocationConfig? {
+        val thing = devices.thingFor(address)
+        if (page != null && !thing.isNullOrBlank()) places.recordFrom(thing, page, now())
+        return page?.location
     }
 
     override suspend fun applySensorConfig(patch: ConfigPatch): ConfigSnapshot {

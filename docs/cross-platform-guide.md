@@ -479,7 +479,7 @@ Everything not listed here is shared Kotlin and behaves the same.
 | A run the user started, off screen | Foreground service | A UIKit background task. When iOS ends it the run stops as interrupted, keeps its bytes and starts again when the app is back |
 | Turn Bluetooth on | System enable dialog | Not possible for apps. The system power alert and shared copy explain it |
 | Bluetooth settings after a failed bond | Bluetooth settings intent | No public URL. Shared repair copy and the app settings link |
-| Forget a sensor | Keeps the system bond | Drops the app record, Keychain access and Auto-sync. The dialog says to remove the bond in iOS Settings |
+| Forget a sensor | Keeps the system bond | Drops the app record, Keychain access, Auto-sync and the Discover cell. The dialog says to remove the bond in iOS Settings |
 | Local network permission | Runtime permission on API 37 and later | No status API. A `PolicyDenied` browse result counts as denied |
 | Notifications permission | Asked from Sync or the Auto-sync switch | Asked from the Auto-sync switch only |
 | LAN token at rest | Encrypted with an Android Keystore key | Keychain, `AfterFirstUnlockThisDeviceOnly` |

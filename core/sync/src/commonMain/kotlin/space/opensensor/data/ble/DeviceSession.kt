@@ -341,8 +341,14 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
     suspend fun getConfig(): ConfigSnapshot = config(Request.GetConfig, "GET_CONFIG")
 
     /** Null on firmware which ignores the page selector; malformed-request also means unsupported. */
-    suspend fun getLocation(): space.opensensor.data.protocol.LocationConfig? = try {
-        config(Request.GetLocation, "GET_CONFIG location").config.location
+    suspend fun getLocation(): space.opensensor.data.protocol.LocationConfig? = getLocationPage()?.location
+
+    /**
+     * The whole `GET_CONFIG` location page, its `location` and `thing` objects, or null where
+     * [getLocation] is null.
+     */
+    suspend fun getLocationPage(): space.opensensor.data.protocol.DeviceConfig? = try {
+        config(Request.GetLocation, "GET_CONFIG location").config
     } catch (e: DeviceErrorException) {
         if (e.protocolError == ProtocolError.MALFORMED_REQUEST || e.protocolError == ProtocolError.UNKNOWN_OPCODE) null else throw e
     }

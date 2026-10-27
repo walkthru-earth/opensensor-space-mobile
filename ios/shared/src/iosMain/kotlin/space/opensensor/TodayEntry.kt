@@ -79,10 +79,11 @@ internal fun TodayEntry(
                     controller.disconnect()
                     onNavigate(TodayAction.OpenDevices)
                 }
-                // Drops the record and its Wi-Fi access, then closes the links through Swift.
+                // Drops the cells, then the record and its Wi-Fi access, then closes the links through Swift.
+                // It outlives this screen, as Android's Forget runs in its app scope.
                 TodayAction.Forget -> {
                     controller.disconnect()
-                    devices.forgetNow(address)
+                    devices.forgetLater(address)
                     onNavigate(TodayAction.OpenDevices)
                 }
                 else -> onNavigate(action)

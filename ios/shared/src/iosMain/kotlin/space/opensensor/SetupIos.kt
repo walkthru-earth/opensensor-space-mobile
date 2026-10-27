@@ -80,7 +80,7 @@ private class SetupHolder(devices: DevicesBridge, openSensor: (String) -> Unit, 
 private class SetupConfigHolder(address: String, devices: DevicesBridge, links: DeviceConfigLinks) : ViewModel() {
     val controller = DeviceConfigController(
         scope = viewModelScope,
-        source = IosDeviceConfigSource(address, devices.state, devices, links, viewModelScope),
+        source = IosDeviceConfigSource(address, devices.state, devices, links, viewModelScope, IosArchive.places),
         detailLevel = settingsRepository.detailLevel,
         readOnReady = true,
     )
