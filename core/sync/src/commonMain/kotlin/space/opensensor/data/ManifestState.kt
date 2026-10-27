@@ -60,4 +60,19 @@ sealed interface ManifestState {
 
     /** Transition: the refresh succeeded. */
     fun loaded(files: List<Frame.File>, end: Frame.ListEnd, atEpochMs: Long): ManifestState = Loaded(files, end, atEpochMs)
+
+    /**
+     * Transition: an incremental `LIST_SINCE` named only [files], the new ones. They join [last] in
+     * place by name, the card counters come from [end] and the age stays that of the last whole
+     * listing, which alone shows what the device dropped. Without a [last] there is no listing to
+     * show, so the state is [Idle].
+     */
+    fun withNew(files: List<Frame.File>, end: Frame.ListEnd): ManifestState {
+        val base = last ?: return Idle
+        val fresh = files.associateBy { it.name }
+        val kept = base.files.map { fresh[it.name] ?: it }
+        val known = base.files.mapTo(HashSet()) { it.name }
+        val merged = kept + files.filter { it.name !in known }
+        return Loaded(merged, Frame.ListEnd(merged.size.toLong(), base.end.partials, end.sdKib, end.sdUsedKib), base.atEpochMs)
+    }
 }

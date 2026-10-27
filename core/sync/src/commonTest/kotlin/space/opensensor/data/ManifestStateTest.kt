@@ -101,4 +101,20 @@ class ManifestStateTest {
         assertTrue(plan.entries.all { it.state == FileSyncState.REMOVED })
         assertTrue(loaded.confirmsAllSynced(plan))
     }
+
+    @Test
+    fun anIncrementalListingJoinsTheLastWholeOneByName() {
+        val a = Frame.File(10, "a.parquet")
+        val b = Frame.File(20, "b.parquet")
+        val loaded = ManifestState.Loaded(listOf(a, b), Frame.ListEnd(2, 1, 100, 10), 5)
+
+        val merged = loaded.withNew(listOf(Frame.File(30, "b.parquet"), Frame.File(40, "c.parquet")), Frame.ListEnd(2, 0, 100, 12))
+
+        assertEquals(
+            ManifestState.Loaded(listOf(a, Frame.File(30, "b.parquet"), Frame.File(40, "c.parquet")), Frame.ListEnd(3, 1, 100, 12), 5),
+            merged,
+        )
+        assertEquals(merged, ManifestState.Loading(loaded).withNew(listOf(Frame.File(30, "b.parquet"), Frame.File(40, "c.parquet")), Frame.ListEnd(2, 0, 100, 12)))
+        assertEquals(ManifestState.Idle, ManifestState.Idle.withNew(listOf(a), Frame.ListEnd(1, 0, 0, 0)))
+    }
 }

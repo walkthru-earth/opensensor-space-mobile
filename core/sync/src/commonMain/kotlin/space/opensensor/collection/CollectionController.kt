@@ -31,6 +31,7 @@ import space.opensensor.data.sync.CollectionSummary
 import space.opensensor.data.sync.FileOutcome
 import space.opensensor.data.sync.InsufficientSpaceException
 import space.opensensor.data.sync.PlannedCollection
+import space.opensensor.data.sync.SyncListing
 import space.opensensor.link.AuthKind
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkClosedException
@@ -94,8 +95,11 @@ class CollectionController(
     private val log: (String) -> Unit = {},
     /** Runs before Done with the link and leases held. Optional refresh faults belong to the adapter. */
     private val onFinalizing: suspend (CollectionLink, CollectionSummary) -> Unit = { _, _ -> },
-    /** Delivers each fresh listing before planning, including when archive planning later fails. */
-    private val onListed: (CollectionLink, List<Frame.File>, Frame.ListEnd) -> Unit = { _, _, _ -> },
+    /**
+     * Delivers each fresh listing before planning, including when archive planning later fails. An
+     * incremental `LIST_SINCE` listing is not [SyncListing.whole] and names only the new files.
+     */
+    private val onListed: (CollectionLink, SyncListing) -> Unit = { _, _ -> },
     /** Delivers each settled file even if a later session failure prevents a terminal summary. */
     private val onOutcome: (CollectionIntent, FileOutcome) -> Unit = { _, _ -> },
     /** One terminal notification per request, independent of StateFlow conflation. Faults are isolated. */
@@ -296,7 +300,7 @@ class CollectionController(
         }
     }
 
-    /** Connect, clock, a fresh `LIST`, plan and transfer. Throws what ended the attempt. */
+    /** Connect, clock, a fresh listing, plan, transfer and settle the cursor. Throws what ended the attempt. */
     private suspend fun attemptOnce(run: Run, attempt: Int, progressed: () -> Unit): CollectionSummary {
         val intent = run.intent
         advance(run, CollectionState.Preparing(intent, PrepareStep.CONNECT, attempt), null)
@@ -304,12 +308,12 @@ class CollectionController(
         advance(run, CollectionState.Preparing(intent, PrepareStep.CLOCK, attempt), link.kind)
         if (intent.clockConfirmed) setClock(intent, link)
         advance(run, CollectionState.Preparing(intent, PrepareStep.LIST, attempt), link.kind)
-        val (files, end) = link.session.list()
-        currentCoroutineContext().ensureActive()
-        onListed(link, files, end)
-        advance(run, CollectionState.Preparing(intent, PrepareStep.PLAN, attempt), link.kind)
         val onlyName = (intent.scope as? CollectionScope.One)?.name
-        val planned = planFrom(link.thing, files, onlyName)
+        val listing = collector.list(link.session, link.thing, onlyName)
+        currentCoroutineContext().ensureActive()
+        onListed(link, listing)
+        advance(run, CollectionState.Preparing(intent, PrepareStep.PLAN, attempt), link.kind)
+        val planned = planFrom(link.thing, listing, onlyName)
         note("collection ${intent.id} planned ${planned.plan.missingCount} of ${planned.plan.entries.size} file(s)")
         val summary = collector.transfer(link.session, planned, link.thing, device, link.maxRead, onOutcome = { outcome ->
             val previous = run.outcomes[outcome.name]
@@ -326,12 +330,13 @@ class CollectionController(
             if (p.receivedBytes > 0) progressed()
             advance(run, CollectionState.Transferring(intent, p, link.kind), link.kind)
         }
+        collector.settle(link.thing, listing, summary)
         return summary.copy(newFiles = run.newFiles, newBytes = run.newBytes, outcomes = run.outcomes.values.toList())
     }
 
     /** The plan touches only this phone's archive, so a fault there is a storage fault. */
-    private suspend fun planFrom(thing: String, files: List<Frame.File>, onlyName: String?): PlannedCollection = try {
-        collector.plan(thing, files, onlyName)
+    private suspend fun planFrom(thing: String, listing: SyncListing, onlyName: String?): PlannedCollection = try {
+        collector.plan(thing, listing.files, onlyName, listing.whole)
     } catch (e: CancellationException) {
         throw e
     } catch (e: InsufficientSpaceException) {

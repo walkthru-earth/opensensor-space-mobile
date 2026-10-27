@@ -26,6 +26,7 @@ import space.opensensor.collection.LinkPreference
 import space.opensensor.data.archive.IosArchiveDatabase
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
+import space.opensensor.data.protocol.ListCursor
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ParquetVerify
 import space.opensensor.data.protocol.ProtocolError
@@ -175,6 +176,51 @@ class SensorSyncTest {
         assertEquals(SyncEnd.COMPLETE, result.end)
         assertEquals(0, result.saved)
         assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.LIST), requests)
+    }
+
+    @Test
+    fun aBoardWithListSinceGetsTheSavedCursorOnTheNextSync() {
+        val cursored = SensorSync(store, database.index, Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget(), cursors = database.cursors)
+        // Mount epoch 42 in the first 4 bytes, the rest opaque.
+        val next = ListCursor(
+            ByteArray(ListCursor.BYTES) { i ->
+                if (i == 0) {
+                    42.toByte()
+                } else if (i < 4) {
+                    0.toByte()
+                } else {
+                    i.toByte()
+                }
+            }
+        )
+        val sent = ArrayList<ListCursor>()
+        fun board() = sensor { link, req ->
+            when (req[0].toInt() and 0xFF) {
+                Opcode.STATUS -> true.also { link.offerStatus("{\"utc\":1,\"clk\":3,\"clk_age_s\":60,\"ls\":42}") }
+                Opcode.LIST_SINCE -> true.also {
+                    val cursor = ListCursor(req.copyOfRange(1, req.size))
+                    sent += cursor
+                    val listed = if (cursor.isZero) files else emptyMap()
+                    listed.forEach { (name, bytes) -> link.reply(Frame.File(bytes.size.toLong(), name)) }
+                    link.reply(Frame.ListSinceEnd(listed.size.toLong(), 0, 0, 0, if (cursor.isZero) Frame.ListSinceEnd.FLAG_FULL else 0, next))
+                }
+                else -> false
+            }
+        }
+        fun runOn(link: IosLink): SyncResult = runBlocking {
+            val done = CompletableDeferred<SyncResult>()
+            cursored.start(link, thing, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
+            withTimeout(20_000) { done.await() }
+        }
+
+        assertEquals(2, runOn(board()).saved)
+        val second = runOn(board())
+
+        assertEquals(SyncEnd.COMPLETE, second.end)
+        assertEquals(2, second.files, "the two files already here still count")
+        assertEquals(0, second.saved)
+        assertEquals(listOf(ListCursor.ZERO, next), sent)
+        assertFalse(Opcode.LIST in requests)
     }
 
     @Test

@@ -84,6 +84,7 @@ import space.opensensor.data.protocol.hexToBytes
 import space.opensensor.data.protocol.toHex
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.data.sync.ReadWindow
+import space.opensensor.data.sync.SyncListing
 import space.opensensor.data.sync.SyncPlan
 import space.opensensor.link.AuthKind
 import space.opensensor.link.DisconnectCause
@@ -1324,8 +1325,13 @@ class DeviceLinkOwner @Inject constructor(
         _manifest.update { it.refreshing() }
     }
 
-    internal fun collectionListed(session: DeviceSession, files: List<Frame.File>, end: Frame.ListEnd) {
-        if (_session.value === session) _manifest.value = ManifestState.Loaded(files, end, clock.nowEpochMs())
+    internal fun collectionListed(session: DeviceSession, listing: SyncListing) {
+        if (_session.value !== session) return
+        if (listing.whole) {
+            _manifest.value = ManifestState.Loaded(listing.files, listing.end, clock.nowEpochMs())
+        } else {
+            _manifest.update { it.withNew(listing.files, listing.end) }
+        }
     }
 
     /**

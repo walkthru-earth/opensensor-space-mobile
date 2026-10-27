@@ -32,6 +32,7 @@ import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileOutcome
 import space.opensensor.data.sync.FileProblem
 import space.opensensor.data.sync.InsufficientSpaceException
+import space.opensensor.data.sync.ListCursors
 import space.opensensor.data.sync.SyncEngine
 import space.opensensor.data.sync.failed
 import space.opensensor.designsystem.nowEpochMillis
@@ -81,8 +82,10 @@ class SensorSync internal constructor(
      * the tombstones of files removed in Settings.
      */
     coordinator: DeviceCoordinator = DeviceCoordinator(),
+    /** Where each station's incremental list left off. */
+    cursors: ListCursors = ListCursors.None,
 ) {
-    internal val collector = ArchiveCollector(store, index, SyncEngine(store, index, coordinator = coordinator, log = ::syncLog), budget)
+    internal val collector = ArchiveCollector(store, index, SyncEngine(store, index, coordinator = coordinator, log = ::syncLog), budget, cursors = cursors)
     private val scope = CoroutineScope(SupervisorJob())
     private val lock = NSLock()
 
@@ -142,8 +145,8 @@ class SensorSync internal constructor(
                         // A broken pipe will still fail the normal LIST/transfer checks.
                         syncLog("automatic UTC unavailable, ${e::class.simpleName}; collecting original files")
                     }
-                    val (files, _) = session.list()
-                    val planned = collector.plan(thing, files, onlyName)
+                    val listing = collector.list(session, thing, onlyName)
+                    val planned = collector.plan(thing, listing.files, onlyName, listing.whole)
                     val summary = collector.transfer(session, planned, thing, device, maxRead, onOutcome = { outcomes.record(it) }) { p: CollectionProgress ->
                         listed = p.filesTotal
                         if (initial < 0) initial = p.filesDone
@@ -156,6 +159,7 @@ class SensorSync internal constructor(
                             ticks.trySend(SyncProgress(p.filesDone, p.filesTotal, p.fileBytes, p.receivedBytes, p.bytesPerSecond, p.bytesTotal))
                         }
                     }
+                    collector.settle(thing, listing, summary)
                     resultOf(summary, (done - initial.coerceAtLeast(0)))
                 }
             } catch (e: CancellationException) {

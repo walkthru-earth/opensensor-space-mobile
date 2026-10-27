@@ -6,9 +6,15 @@ import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveStore
 import space.opensensor.archive.PrunedFile
 import space.opensensor.archive.PrunedFiles
+import space.opensensor.data.ble.DeviceErrorException
 import space.opensensor.data.ble.DeviceSession
 import space.opensensor.data.protocol.Frame
+import space.opensensor.data.protocol.FrameCodec
+import space.opensensor.data.protocol.ListCursor
+import space.opensensor.data.protocol.ProtocolError
 import space.opensensor.storage.StorageBudget
+import space.opensensor.sync.nowEpochMs
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.TimeSource
 
 /** Why one listed file was not saved. The collection went on with the next file. */
@@ -79,10 +85,25 @@ data class CollectionSummary(
 }
 
 /**
- * One full collection over an open [DeviceSession]: `LIST`, plan against the archive, then every
- * missing file through the [SyncEngine], oldest dated partition first. The session is a view on
- * its link and holds no protocol state, so a view made per run shares the link's drain and owed
- * `CLOSE`. A file that cannot be saved fails alone and is reported in the summary. A link,
+ * The listing one collection plans from. [whole] means it named every file the device holds, from
+ * plain `LIST` or a `full` `LIST_SINCE`, so a name missing from it proves the file is gone. [sent]
+ * is the cursor `LIST_SINCE` was asked with and [next] the one its `LIST_SINCE_END` returned, both
+ * null after plain `LIST`.
+ */
+class SyncListing(
+    val files: List<Frame.File>,
+    val end: Frame.ListEnd,
+    val whole: Boolean,
+    val sent: ListCursor? = null,
+    val next: ListCursor? = null,
+)
+
+/**
+ * One collection over an open [DeviceSession]: a listing ([list]), plan against the archive, then
+ * every missing file through the [SyncEngine], oldest dated partition first. The session is a view on
+ * its link, so a view made per run shares the link's drain and owed `CLOSE`. The `ls` comes from the
+ * view's [DeviceSession.latestStatus] when it has one. A session kept across runs may hold an older
+ * `ls`, which is safe because the board itself answers `full` for a cursor of another mount. A file that cannot be saved fails alone and is reported in the summary. A link,
  * protocol or session fault (a refused token, a busy sensor) ends the run by throwing, and the
  * partials written so far resume on the next run.
  *
@@ -95,6 +116,10 @@ data class CollectionSummary(
  * file's writer lease, so a removal that lands after this plan still wins. A whole listing that no longer has the name forgets the record, so a
  * later file under that name downloads. The collector never asks the device to delete, rename or
  * rewrite a file.
+ *
+ * [list] asks `LIST_SINCE` with the station's saved cursor in [cursors] when the board advertises it
+ * (STATUS `ls`), and plain `LIST` otherwise. [settle] saves the next cursor only after a run that
+ * left nothing worth listing again. See docs/sync-engine.md.
  */
 class ArchiveCollector(
     private val store: ArchiveStore,
@@ -106,6 +131,8 @@ class ArchiveCollector(
     private val archivedIdentities: suspend (String) -> List<ArchivedIdentity> = { thing ->
         index.observeThing(thing).first().map { ArchivedIdentity(it.thing, it.name, it.bytes, it.crc32) }
     },
+    private val cursors: ListCursors = ListCursors.None,
+    private val clock: () -> Long = ::nowEpochMs,
 ) {
     /** The engine's coordinator, the one owner of this archive's admission, locks and tombstones. */
     val coordinator: DeviceCoordinator get() = engine.coordinator
@@ -119,17 +146,103 @@ class ArchiveCollector(
         onlyName: String? = null,
         onProgress: (CollectionProgress) -> Unit,
     ): CollectionSummary {
-        val (files, _) = session.list()
-        val planned = plan(thing, files, onlyName)
-        return transfer(session, planned, thing, sourceDevice, maxRead, onProgress = onProgress)
+        val listing = list(session, thing, onlyName)
+        val planned = plan(thing, listing.files, onlyName, listing.whole)
+        return transfer(session, planned, thing, sourceDevice, maxRead, onProgress = onProgress).also { settle(thing, listing, it) }
     }
 
     /**
-     * Plans one run from a fresh `LIST` result against the archive and reserves room for it.
-     * [onlyName] narrows the run to that listed file. Throws [InsufficientSpaceException] when
-     * the missing bytes do not fit, before anything is opened.
+     * The listing for one run. [onlyName] and a board without `LIST_SINCE` take plain `LIST`. Else
+     * `LIST_SINCE` goes out with the saved cursor, or with [ListCursor.ZERO] for a whole listing
+     * when there is none, the card changed (`ls` differs from its mount epoch or is 0), this phone
+     * holds no file of [thing], or the audit is due. `ERROR` 11 falls back to `LIST`, and `ERROR` 1
+     * on a saved cursor asks again with the zero cursor. Any other failure throws as `LIST` does.
      */
-    suspend fun plan(thing: String, files: List<Frame.File>, onlyName: String? = null): PlannedCollection {
+    suspend fun list(session: DeviceSession, thing: String, onlyName: String? = null): SyncListing {
+        if (onlyName != null || session.payloadMax < FrameCodec.LIST_SINCE_END_BYTES) return plainList(session)
+        val epoch = (session.latestStatus ?: session.freshStatus()?.first)?.listSinceEpoch ?: return plainList(session)
+        val saved = savedCursor(thing)
+        val cursor = if (saved == null || epoch == 0L || saved.cursor.mountEpoch != epoch || auditDue(saved) || !holdsFiles(thing)) {
+            ListCursor.ZERO
+        } else {
+            saved.cursor
+        }
+        return try {
+            listSince(session, cursor)
+        } catch (e: DeviceErrorException) {
+            when {
+                e.frame.code == ProtocolError.UNKNOWN_OPCODE.code -> plainList(session)
+                e.frame.code == ProtocolError.MALFORMED_REQUEST.code && !cursor.isZero -> listSince(session, ListCursor.ZERO)
+                else -> throw e
+            }
+        }
+    }
+
+    private suspend fun plainList(session: DeviceSession): SyncListing {
+        val (files, end) = session.list()
+        return SyncListing(files, end, whole = true)
+    }
+
+    private suspend fun listSince(session: DeviceSession, cursor: ListCursor): SyncListing {
+        val (files, end) = session.listSince(cursor)
+        return SyncListing(files, end.toListEnd(), whole = cursor.isZero || end.full, sent = cursor, next = end.next)
+    }
+
+    /** A cursor that cannot be read counts as none, so the run takes a whole listing. */
+    private suspend fun savedCursor(thing: String): ListCursorState? = try {
+        cursors.get(thing)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
+    }
+
+    /** An archive this phone cleared needs every file again, so an unreadable index counts as empty. */
+    private suspend fun holdsFiles(thing: String): Boolean = try {
+        thing in index.things()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        false
+    }
+
+    /** Once a day, or every [AUDIT_EVERY_SYNCS] runs, a whole listing catches what a cursor can miss. */
+    private fun auditDue(saved: ListCursorState): Boolean {
+        val age = clock() - saved.wholeAtEpochMs
+        return age !in 0 until AUDIT_INTERVAL_MS || saved.sinceWhole + 1 >= AUDIT_EVERY_SYNCS
+    }
+
+    /**
+     * Saves the next cursor of a `LIST_SINCE` run once [summary] left nothing a later listing must
+     * name again. Only an unsafe name or a local conflict may stay unsaved, a retry of those cannot
+     * succeed. A run that throws never gets here, so the board lists the same files next time. A
+     * failed write keeps the old cursor, which only lists more.
+     */
+    suspend fun settle(thing: String, listing: SyncListing, summary: CollectionSummary) {
+        val next = listing.next ?: return
+        if (summary.notSaved.any { it.problem != FileProblem.INVALID_ENTRY && it.problem != FileProblem.LOCAL_CONFLICT }) return
+        try {
+            val state = if (listing.whole) {
+                ListCursorState(thing, next, clock(), 0)
+            } else {
+                val saved = cursors.get(thing) ?: return
+                saved.copy(cursor = next, sinceWhole = saved.sinceWhole + 1)
+            }
+            cursors.put(state)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Kept for the next run, which lists from the older cursor.
+        }
+    }
+
+    /**
+     * Plans one run from a fresh listing against the archive and reserves room for it.
+     * [onlyName] narrows the run to that listed file. [whole] is false for an incremental
+     * `LIST_SINCE`, which proves nothing about names it does not carry. Throws
+     * [InsufficientSpaceException] when the missing bytes do not fit, before anything is opened.
+     */
+    suspend fun plan(thing: String, files: List<Frame.File>, onlyName: String? = null, whole: Boolean = true): PlannedCollection {
         val scopedFiles = if (onlyName == null) files else files.filter { it.name == onlyName }
         if (onlyName != null && scopedFiles.isEmpty()) {
             return PlannedCollection(SyncPlan(emptyList(), emptyList()), listOf(FileNotSaved(onlyName, FileProblem.REFUSED)), unlisted = true)
@@ -138,7 +251,7 @@ class ArchiveCollector(
         val plan = SyncPlanner.plan(thing, scopedFiles, archived, store.partialLengths(thing), pruned.forThing(thing))
         // Only a whole listing proves a name is gone. A record that cannot be dropped stays until the
         // next run, which never stops this one, since the device does not list that file now.
-        if (onlyName == null) plan.unlistedRemoved.forEach { forgetRemoved(it) }
+        if (onlyName == null && whole) plan.unlistedRemoved.forEach { forgetRemoved(it) }
         val notSaved = plan.entries.mapNotNull { entry ->
             when (entry.state) {
                 FileSyncState.INVALID_NAME -> FileNotSaved(entry.name, FileProblem.INVALID_ENTRY)
@@ -147,7 +260,10 @@ class ArchiveCollector(
             }
         }
         budget.requireRoom(plan.missingBytes)
-        return PlannedCollection(plan, notSaved)
+        // An incremental listing names only what changed, so the files already here still count
+        // toward the run's total, as they would after a whole listing.
+        val held = if (whole) 0 else (archived.mapTo(HashSet()) { it.name } - scopedFiles.mapTo(HashSet()) { it.name }).size
+        return PlannedCollection(plan, notSaved, held = held)
     }
 
     private suspend fun forgetRemoved(file: PrunedFile) {
@@ -176,7 +292,7 @@ class ArchiveCollector(
         val plan = planned.plan
         if (planned.unlisted) return CollectionSummary(1, planned.notSaved)
         val notSaved = ArrayList(planned.notSaved)
-        val total = plan.entries.size
+        val total = plan.entries.size + planned.held
         val bytesTotal = plan.missingBytes
         var done = total - plan.toDownload.size
         var received = 0L
@@ -210,7 +326,14 @@ class ArchiveCollector(
 }
 
 /**
- * One run's plan from a fresh `LIST`. [notSaved] holds the entries reported without a transfer.
- * [unlisted] means the one selected file was not in the listing, so nothing runs.
+ * One run's plan from a fresh listing. [notSaved] holds the entries reported without a transfer.
+ * [unlisted] means the one selected file was not in the listing, so nothing runs. [held] counts the
+ * archived files an incremental listing left out, which join the run's total as already done.
  */
-class PlannedCollection(val plan: SyncPlan, val notSaved: List<FileNotSaved>, val unlisted: Boolean = false)
+class PlannedCollection(val plan: SyncPlan, val notSaved: List<FileNotSaved>, val unlisted: Boolean = false, val held: Int = 0)
+
+/** Audit after a day since the last whole listing. */
+internal val AUDIT_INTERVAL_MS: Long = 24.hours.inWholeMilliseconds
+
+/** Audit on every tenth run, so nine incremental runs follow a whole listing. */
+internal const val AUDIT_EVERY_SYNCS: Int = 10

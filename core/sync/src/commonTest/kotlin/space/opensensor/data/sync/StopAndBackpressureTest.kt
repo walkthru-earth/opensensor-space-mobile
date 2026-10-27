@@ -118,10 +118,11 @@ class StopAndBackpressureTest {
         assertEquals(3, summary.newFiles)
         assertEquals(fake.files.sumOf { it.bytes.size.toLong() }, summary.newBytes)
         fake.files.forEach { assertContentEquals(it.bytes, finalBytes(fake.thing, it.name)) }
-        // Run B's LIST queued behind the owed CLOSE, whose CLOSED came 1.5 s later.
+        // Run B's requests queued behind the owed CLOSE, whose CLOSED came 1.5 s later.
         assertTrue(currentTime - startB >= 1_500, "run B waited ${currentTime - startB} ms")
         val tail = fake.requests.drop(fake.requests.indexOf(Opcode.ABORT))
-        assertEquals(listOf(Opcode.ABORT, Opcode.CLOSE, Opcode.LIST), tail.take(3), "requests ${fake.requests}")
+        // The STATUS that asks whether the board has LIST_SINCE goes first. This board does not.
+        assertEquals(listOf(Opcode.ABORT, Opcode.CLOSE, Opcode.STATUS, Opcode.LIST), tail.take(4), "requests ${fake.requests}")
         assertTrue(events.any { it is LinkEvent.CloseSent }, events.toString())
         assertTrue(events.any { it is LinkEvent.Drained && it.op == Opcode.CLOSE }, events.toString())
         assertTrue(events.none { it is LinkEvent.ForeignDropped }, "no late frame reached run B, $events")

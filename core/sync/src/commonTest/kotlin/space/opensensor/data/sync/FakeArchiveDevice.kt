@@ -16,14 +16,15 @@ import space.opensensor.data.ble.DeviceTransport
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
+import space.opensensor.data.protocol.ListCursor
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ParquetVerify
 import space.opensensor.data.protocol.ProtocolError
 import kotlin.random.Random
 
 /**
- * The file half of a CoreS3 over [DeviceTransport], enough for the engine: LIST, OPEN, READ in CHUNKs of
- * `mtu - 10` bytes and CLOSE. Replies are sent from [scope] like the firmware's storage worker, so
+ * The file half of a CoreS3 over [DeviceTransport], enough for the engine: LIST, LIST_SINCE, OPEN, READ in
+ * CHUNKs of `mtu - 10` bytes and CLOSE. Replies are sent from [scope] like the firmware's storage worker, so
  * a test's virtual clock drives every delay. Fault hooks match Android's debug `FakeTransport`.
  */
 class FakeArchiveDevice(
@@ -99,6 +100,47 @@ class FakeArchiveDevice(
     /** Runs before a LIST is answered, so a test can drop the link mid-preparation. */
     var beforeList: () -> Unit = {}
 
+    /**
+     * The card's FAT serial, sent as STATUS `ls`, and the mount epoch of every cursor this fake
+     * hands out. Null is firmware without LIST_SINCE, which leaves `ls` out and answers `ERROR` 11.
+     */
+    var listSinceEpoch: Long? = null
+
+    /** An `ERROR` to answer this LIST_SINCE cursor with, such as code 1 for a cursor it cannot read. */
+    var refuseListSince: (cursor: ListCursor) -> Frame.Error? = { null }
+
+    /** True to walk everything for this cursor and flag `full`, as firmware does when it cannot trust one. */
+    var listSinceFull: (cursor: ListCursor) -> Boolean = { false }
+
+    /** The cursor of every LIST_SINCE handled, in order. */
+    val listSinceCursors: MutableList<ListCursor> = mutableListOf()
+
+    /** The write sequence of each file, assigned when a LIST_SINCE first sees it or by [touch]. */
+    private val written = mutableMapOf<String, Long>()
+    private var writeSeq = 0L
+
+    /** Marks [name] as written again, so the next incremental LIST_SINCE names it. */
+    fun touch(name: String) {
+        written[name] = ++writeSeq
+    }
+
+    private fun statusJson(): ByteArray = (listSinceEpoch?.let { "{\"ls\":$it}" } ?: "{}").encodeToByteArray()
+
+    /** A cursor of this fake, the mount epoch then the write sequence in its last 8 bytes. */
+    fun cursorAt(seq: Long, mount: Long = listSinceEpoch ?: 0): ListCursor {
+        val bytes = ByteArray(ListCursor.BYTES)
+        for (i in 0 until 4) bytes[i] = (mount ushr (8 * i)).toByte()
+        for (i in 0 until 8) bytes[24 + i] = (seq ushr (8 * i)).toByte()
+        return ListCursor(bytes)
+    }
+
+    private fun seqOf(cursor: ListCursor): Long {
+        val bytes = cursor.bytes
+        var seq = 0L
+        for (i in 0 until 8) seq = seq or ((bytes[24 + i].toLong() and 0xFF) shl (8 * i))
+        return seq
+    }
+
     private val responses = Channel<ByteArray>(Channel.UNLIMITED)
     private val statusUpdates = MutableSharedFlow<ByteArray>(extraBufferCapacity = 1)
     private val state = MutableStateFlow<ConnectionState>(ConnectionState.Ready(mtu))
@@ -123,7 +165,7 @@ class FakeArchiveDevice(
     override suspend fun connect() = Unit
     override suspend fun disconnect() = Unit
     override suspend fun readInfo(): ByteArray = """{"proto":3,"thing":"$thing","max_read":$maxRead}""".encodeToByteArray()
-    override suspend fun readStatus(): ByteArray = "{}".encodeToByteArray()
+    override suspend fun readStatus(): ByteArray = statusJson()
     override suspend fun readLive(): ByteArray = "{}".encodeToByteArray()
     override fun close() {
         responses.close()
@@ -149,7 +191,20 @@ class FakeArchiveDevice(
         when (op) {
             Opcode.ABORT -> if (streaming != 0) abortRequested = true else send(Frame.Aborted(0))
             Opcode.SET_TIME -> clockError?.let(::send) ?: clockAck?.let(::send) ?: send(Frame.Error(op, ProtocolError.MALFORMED_REQUEST.code, ""))
-            Opcode.STATUS -> statusUpdates.emit("{}".encodeToByteArray())
+            Opcode.STATUS -> statusUpdates.emit(statusJson())
+            Opcode.LIST_SINCE -> {
+                val mount = listSinceEpoch ?: return send(Frame.Error(op, ProtocolError.UNKNOWN_OPCODE.code, ""))
+                val cursor = ListCursor(req.copyOfRange(1, req.size))
+                listSinceCursors += cursor
+                refuseListSince(cursor)?.let { return send(it) }
+                files.forEach { if (it.name !in written) written[it.name] = ++writeSeq }
+                val full = cursor.mountEpoch != mount || listSinceFull(cursor)
+                val since = if (full) -1 else seqOf(cursor)
+                val listed = files.filter { written.getValue(it.name) > since }
+                listed.forEach { send(Frame.File(it.bytes.size.toLong(), it.name)) }
+                val flags = if (full) Frame.ListSinceEnd.FLAG_FULL else 0
+                send(Frame.ListSinceEnd(listed.size.toLong(), 0, 0, 0, flags, cursorAt(writeSeq, mount)))
+            }
             Opcode.LIST -> {
                 beforeList()
                 if (listDelayMs > 0) {

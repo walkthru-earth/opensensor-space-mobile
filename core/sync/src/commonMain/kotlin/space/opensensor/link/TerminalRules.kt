@@ -36,6 +36,11 @@ object TerminalRules {
                 is Frame.ListEnd -> Routing.TERMINAL
                 else -> Routing.FOREIGN
             }
+            Opcode.LIST_SINCE -> when (frame) {
+                is Frame.File -> Routing.CONTINUE
+                is Frame.ListSinceEnd -> Routing.TERMINAL
+                else -> Routing.FOREIGN
+            }
             Opcode.OPEN -> terminalIf(frame is Frame.Opened)
             Opcode.READ -> when (frame) {
                 is Frame.Chunk -> Routing.CONTINUE

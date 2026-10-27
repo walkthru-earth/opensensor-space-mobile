@@ -6,7 +6,7 @@
 `DeviceLinkOwner.kt`, `data/archive/` and `data/sync/FileArchive.kt`. iOS `core/archive`
 iosMain and `ios/shared` iosMain `SensorSync.kt`, `IosLink.kt` and `FilesBridge.kt`.
 **Tests:** Shared `LinkSessionTest`, `DeviceSessionTest`, `SyncEngineTest`,
-`ArchiveCollectorTest`, `CollectionControllerTest`, drain, owed CLOSE and window recovery
+`ArchiveCollectorTest`, `ListSinceCollectorTest`, `CollectionControllerTest`, drain, owed CLOSE and window recovery
 regressions. Android facade and `ConcurrentArchiveTest`. iOS simulator `SensorSyncTest`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
@@ -108,12 +108,78 @@ Groups the manifest by `HivePartition` (`Dated` / `Unsynced` boot / `Benchmarks`
 validates names, and diffs against `archived_file` + partials → `SyncPlan.toDownload` and
 `missingBytes`. Android supplies projected `thing`, `name`, `bytes` and `crc32` archive
 identities, not full history rows. Verified files are skipped, so a resume only pulls what
-is missing. Each controller attempt takes a fresh LIST and archive snapshot. A listed file with no
+is missing. Each controller attempt takes a fresh listing and archive snapshot. A listed file with no
 phone copy and a `PrunedFiles` record of the same thing, name and size is `REMOVED`. The user
 removed it in Settings, so it is not downloaded and counts as done. The FILE frame has no CRC, so
-the size is the match. A phone copy always wins. A whole LIST drops the records of names it no
-longer has, since the device dropped that file. A run for one selected file keeps them.
+the size is the match. A phone copy always wins. A whole listing drops the records of names it no
+longer has, since the device dropped that file. A run for one selected file and an incremental
+listing keep them.
 `FileSyncState`: `NOT_SYNCED · PARTIAL · SYNCING · SYNCED · REMOVED · MISMATCH · INVALID_NAME`.
+
+## Incremental listing
+
+`ArchiveCollector.list` picks the listing for each run, on Android and iOS alike. Firmware that
+has `LIST_SINCE` puts `ls`, the card's FAT serial, in STATUS. The collector reads `ls` from the
+status the clock step already fetched on this session, or asks for one. Without `ls` the run sends
+plain `LIST`. With it the run sends `LIST_SINCE` with the station's saved cursor, and the board
+names only the files written since then, then `LIST_SINCE_END` with the next cursor. The cursor is
+32 opaque bytes, kept per thing in the `list_cursor` table (`ListCursors`, `RoomListCursors`).
+The phone reads only its first 4 bytes, the mount epoch, and sends the rest back unchanged.
+
+The run sends the zero cursor, which asks for a whole listing and a first cursor, when
+
+- the station has no saved cursor, or the saved one cannot be read
+- `ls` is 0 (no card) or differs from the saved cursor's mount epoch (a new or reformatted card)
+- this phone holds no file of the station, for example after the archive was cleared
+- the audit is due, 24 h after the last whole listing, on the tenth run since it, or when the
+  phone clock went back before it (`AUDIT_INTERVAL_MS`, `AUDIT_EVERY_SYNCS`)
+
+A reply flagged `full` counts as a whole listing too, since the board walked everything. `ERROR`
+11 is firmware without `LIST_SINCE`, and the run sends plain `LIST`. `ERROR` 1 on a saved cursor
+is a cursor the board cannot read, and the run asks again with the zero cursor. A run for one
+selected file always sends plain `LIST` and leaves the cursor alone.
+
+`DeviceSession.listSince` checks that the count in `LIST_SINCE_END` matches the FILE frames, as
+`LIST` does. The next cursor is saved only after the transfer, and only when every listed file was
+saved, skipped or left for a reason a retry cannot fix (an unsafe name or a local conflict). A run
+that throws, or one with a file that failed, keeps the old cursor, so the board names the same
+files again. A walk that ends early sends no `LIST_SINCE_END`, so nothing is saved. An incremental
+listing proves nothing about names it does not carry, so it never drops a `PrunedFiles` record.
+A file the board keeps refusing, or one whose CRC never matches, holds the cursor where it was.
+Each later run lists from there again, which costs a longer listing but never skips a file, and the
+audit still runs on schedule.
+Every listed file still passes the same size, CRC-32 and `PAR1` checks before it counts as synced.
+The run's file total counts the files already on this phone that an incremental listing left out,
+so progress and the finished message read as after a whole listing.
+The Android Files screen merges an incremental listing into the last whole one by name
+(`ManifestState.withNew`).
+
+```mermaid
+sequenceDiagram
+  participant P as Phone (ArchiveCollector)
+  participant B as Board
+  P->>B: STATUS (or the one from the clock step)
+  B-->>P: status push, ls
+  alt no ls
+    P->>B: LIST
+    B-->>P: FILE x n, LIST_END
+  else ls present
+    Note over P: zero cursor if none saved, ls changed,<br/>no local files or the audit is due
+    P->>B: LIST_SINCE cursor
+    alt ERROR 11
+      P->>B: LIST
+      B-->>P: FILE x n, LIST_END
+    else ERROR 1 on a saved cursor
+      P->>B: LIST_SINCE zero cursor
+      B-->>P: FILE x n, LIST_SINCE_END full, next
+    else answered
+      B-->>P: FILE x k, LIST_SINCE_END flags, next
+    end
+  end
+  P->>B: OPEN, READ, CLOSE per missing file
+  Note over P: size, CRC-32 and PAR1 checked per file
+  Note over P: next cursor saved only when no file failed
+```
 
 ## Integrity (`ParquetVerify`)
 
@@ -227,8 +293,8 @@ below). Views are cheap, so any number of them may share one link. `rawCommand` 
 
 `READ` keeps continuity. A gap marks the window lost, later chunks of that window are dropped
 until `READ_END`, and only then `WindowLostException` is thrown, so a late window never reaches
-the next `READ`. `LIST` checks the count in `LIST_END` and throws `ProtocolViolationException` on
-a mismatch, with the link still Ready.
+the next `READ`. `LIST` and `LIST_SINCE` check the count in `LIST_END` or `LIST_SINCE_END` and
+throw `ProtocolViolationException` on a mismatch, with the link still Ready.
 
 `RequestSpec` allows 20 s between reply frames and normally 15 s for the first frame.
 WIFI_SCAN allows 20 s. OPEN, FLUSH and REBOOT allow 60 s for the first frame. The connection-open deadline is
@@ -402,7 +468,7 @@ and a second request would only queue behind the stale reply. Longer timeouts ar
 either, "link lost" fires on the transport's state change, not on `FRAME_TIMEOUT_MS`.
 
 **Explicit whole-device sync takes a fresh listing (2026-10-10).** Android Sync all and Smart
-Sync reserve the same operation gate before launching, issue `LIST`, and plan directly from the
+Sync reserve the same operation gate before launching, take a fresh listing, and plan directly from the
 returned snapshot and current archive. They never execute a retained `plan` flow from an earlier
 listing, even when that plan has zero missing files. A failed refresh keeps known files visible
 but reports a typed collection failure, starts no download, and cannot emit `UpToDate`. The Files screen

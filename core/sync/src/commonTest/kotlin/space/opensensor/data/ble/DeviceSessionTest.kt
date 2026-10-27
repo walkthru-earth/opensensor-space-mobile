@@ -23,6 +23,7 @@ import kotlinx.coroutines.test.runTest
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
+import space.opensensor.data.protocol.ListCursor
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ProtocolError
 import space.opensensor.data.protocol.Request
@@ -87,6 +88,33 @@ class DeviceSessionTest {
         assertEquals(1L, end.count)
         // LIST_END was consumed as the terminal, so no drain and no ABORT ran in between.
         assertEquals(listOf(Opcode.LIST, Opcode.LIST), p.driver.sent)
+        assertTrue(p.events.none { it is LinkEvent.Abandoned })
+    }
+
+    @Test
+    fun listSinceCountMismatchFailsAndLeavesTheLinkReadyForTheNextListSince() = runTest {
+        val p = peer()
+        val session = p.view()
+        val next = ListCursor(ByteArray(ListCursor.BYTES) { (it + 1).toByte() })
+        p.reply = { op, _ ->
+            if (op == Opcode.LIST_SINCE) emit(Frame.File(12, opened.name), Frame.ListSinceEnd(2, 0, 1024, 0, 0, next))
+        }
+        assertFailsWith<ProtocolViolationException> { session.listSince(ListCursor.ZERO) }
+        assertIs<LinkState.Ready>(p.link.state.value)
+
+        p.reply = { op, _ ->
+            if (op == Opcode.LIST_SINCE) emit(Frame.File(12, opened.name), Frame.File(9, "b.parquet"), Frame.ListSinceEnd(1, 0, 1024, 0, 0, next))
+        }
+        assertFailsWith<ProtocolViolationException> { session.listSince(ListCursor.ZERO) }
+        assertIs<LinkState.Ready>(p.link.state.value)
+
+        p.reply = { op, _ ->
+            if (op == Opcode.LIST_SINCE) emit(Frame.File(12, opened.name), Frame.ListSinceEnd(1, 0, 1024, 0, 0, next))
+        }
+        val (files, end) = session.listSince(ListCursor.ZERO)
+        assertEquals(listOf(Frame.File(12, opened.name)), files)
+        assertEquals(next, end.next)
+        assertEquals(listOf(Opcode.LIST_SINCE, Opcode.LIST_SINCE, Opcode.LIST_SINCE), p.driver.sent)
         assertTrue(p.events.none { it is LinkEvent.Abandoned })
     }
 

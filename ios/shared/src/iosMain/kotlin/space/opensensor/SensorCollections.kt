@@ -274,7 +274,7 @@ class SensorCollections internal constructor(
                 retry = retry,
                 permits = permits,
                 log = { syncLog(it) },
-                onListed = { _, files, _ -> listed(device, files) },
+                onListed = { _, listing -> listed(device, listing.files) },
                 onOutcome = { intent, outcome -> locked { requests[intent.id]?.outcomes?.record(outcome) } },
                 onTerminal = { state -> state.intentId?.let { id -> locked { requests[id] } }?.ended?.complete(state) },
                 onClockSet = ::clockSet,

@@ -298,7 +298,7 @@ starting, so it cannot race a new collection or deliberate disconnect. `cancelRe
 invalidates even an idle retry decided by the watcher but not yet launched.
 
 An active collection suppresses that idle watcher. `CollectionController` owns its typed
-loss handling and retries from CONNECT and a fresh LIST, including loss during preparation.
+loss handling and retries from CONNECT and a fresh listing, including loss during preparation.
 PROCESS stays held through retry waiting and finalization. The foreground service follows
 those leases, not the old `sync.running || reconnecting != null` inference.
 See [collection retry](sync-engine.md#resume-after-a-lost-link).
@@ -330,6 +330,7 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 | Question | Decision |
 | --- | --- |
 | `HELLO.payload_max` ≠ 1024 | Trusted if ≥ 64; longer frames are a framing error that drops the link. Before `HELLO` the cap is 1024. |
+| `LIST_SINCE` on either pipe | The same frames on Bluetooth and LAN. A `payload_max` below 48 cannot carry `LIST_SINCE_END` (the firmware would answer `ERROR` 7), so the app sends plain `LIST` instead. |
 | LAN `readLive()` / `readStatus()` | Nothing can request a `LIVE`, so `readLive` returns the latest push or waits ≤ 15 s; `readStatus` returns the latest push or sends `STATUS` and waits ≤ 10 s. |
 | `WIFI_SCAN_END.status` ≠ 0 | The scan's error (15 → "Wi-Fi unavailable"), not partial success; APs received before it are discarded. |
 | `LOG` slices | Kept as bytes, decoded after concatenation (a boundary may split UTF-8). `LOG_END.returned` ≠ bytes received → "a slice may be missing" but the text is shown (for humans, not data). |
@@ -352,9 +353,9 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 
 ## Automatic UTC on connection
 
-After verified INFO identity and before any archive LIST, Android automatically sends the
+After verified INFO identity and before any archive listing, Android automatically sends the
 phone's UTC through SET_TIME. iOS does the same when its Bluetooth connection becomes ready;
-LAN collection synchronizes before LIST. A successful Bluetooth handshake is reused by the
+LAN collection synchronizes before the listing. A successful Bluetooth handshake is reused by the
 immediately following collection on that connection. A failed handshake leaves UTC unconfirmed and permits collection of original unsynced files
 if the transport survives; later connections retry automatically. Manual clock buttons, consent settings and raw SET_TIME commands
 are unavailable on both platforms.
