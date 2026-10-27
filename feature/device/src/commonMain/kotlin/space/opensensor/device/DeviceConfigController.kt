@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import space.opensensor.data.SensorLabel
 import space.opensensor.data.WifiScanState
+import space.opensensor.data.protocol.ConfigField
+import space.opensensor.data.protocol.ConfigFields
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.ConfigValidationException
 import space.opensensor.data.protocol.PairMode
@@ -28,17 +30,41 @@ import space.opensensor.settings.DetailLevel
 
 /** A question the Device section asks before it changes the device. Only one is open at a time. */
 sealed interface DeviceConfigDialog {
-    /** `REBOOT`. The link drops and comes back. */
+    /** `REBOOT`. The link drops and comes back. Not a config key, so it has no [Field]. */
     data object Reboot : DeviceConfigDialog
 
+    /** The confirmation for one key and value that [ConfigFields] marks as confirmed. */
+    sealed interface Field : DeviceConfigDialog {
+        val key: String
+        val value: String
+        val field: ConfigField get() = checkNotNull(ConfigFields.of(key)) { "$key is not an app key" }
+    }
+
     /** `lan.rotate_token`. Every phone holding the old token loses Wi-Fi access. */
-    data object RotateToken : DeviceConfigDialog
+    data object RotateToken : Field {
+        override val key = ConfigFields.LAN_ROTATE_TOKEN
+        override val value = "1"
+    }
 
     /** `ble.clear_bonds`. Every paired phone pairs again. */
-    data object ForgetBonds : DeviceConfigDialog
+    data object ForgetBonds : Field {
+        override val key = ConfigFields.BLE_CLEAR_BONDS
+        override val value = "1"
+    }
 
     /** `ble.pair=none`. Any phone in range can connect without a passkey. */
-    data object PairingNone : DeviceConfigDialog
+    data object PairingNone : Field {
+        override val key = ConfigFields.BLE_PAIR
+        override val value = PairMode.NONE.wire
+    }
+
+    companion object {
+        val FIELDS: List<Field> = listOf(RotateToken, ForgetBonds, PairingNone)
+
+        /** The dialog for sending [value] to [key], or null when the table asks for none. */
+        fun forField(key: String, value: String): Field? =
+            FIELDS.firstOrNull { it.key == key && it.value == value }?.takeIf { it.field.needsConfirm(value) }
+    }
 }
 
 /**
@@ -91,7 +117,8 @@ class DeviceConfigController(
             }
         }
         // While the sensor reports Wi-Fi `connecting` on a ready link, read the config every 3 s for
-        // up to a minute, so the card shows the join as it happens. Stops when the screen goes.
+        // up to a minute, so the card shows the join as it happens. Stops when the screen goes. A join
+        // still running after the last read says so once, the card keeps the last state.
         scope.launch {
             source.snapshot.map { it.config?.config?.wifi?.wifiState == WifiState.CONNECTING && it.connection.isReady }
                 .distinctUntilChanged()
@@ -100,6 +127,10 @@ class DeviceConfigController(
                         repeat(WIFI_POLL_ATTEMPTS) {
                             delay(WIFI_POLL_MS)
                             source.refreshConfig()
+                        }
+                        delay(WIFI_POLL_MS)
+                        if (source.snapshot.value.config?.config?.wifi?.wifiState == WifiState.CONNECTING) {
+                            _notices.tryEmit(DeviceConfigNotice.WifiStillJoining)
                         }
                     }
                 }
@@ -123,7 +154,7 @@ class DeviceConfigController(
             location.value = if (config == null) {
                 DeviceLocationState(supported = false)
             } else {
-                DeviceLocationState(supported = true, draft = DeviceLocationDraft.from(config))
+                DeviceLocationState(supported = true, draft = DeviceLocationDraft.from(config), saved = config.hasCell())
             }
         } catch (e: CancellationException) {
             throw e
@@ -166,18 +197,19 @@ class DeviceConfigController(
                 val confirmed = source.writeLocation(patch)
                 val matches = confirmed != null && confirmed.cell.orEmpty() == draft.cell &&
                     confirmed.resolution == draft.resolution && confirmed.country.orEmpty() == draft.country
-                location.value = loc.copy(working = false, result = if (matches) DeviceLocationResult.SAVED else DeviceLocationResult.NOT_CONFIRMED)
+                location.value = loc.copy(
+                    working = false,
+                    result = if (matches) DeviceLocationResult.SAVED else DeviceLocationResult.NOT_CONFIRMED,
+                    saved = if (confirmed != null) confirmed.hasCell() else loc.saved,
+                )
             } catch (e: CancellationException) { throw e } catch (_: Exception) { location.value = loc.copy(working = false, result = DeviceLocationResult.FAILED) }
         }
     }
 
-    /** Mode `none` opens its confirmation first. The other modes are sent as they are. */
+    /** A mode the table confirms (`none`) opens its dialog first. The other modes are sent as they are. */
     fun savePairing(choice: PairingChoice) {
         if (!now.canEdit) return
-        if (choice.mode == PairMode.NONE) {
-            _dialog.value = DeviceConfigDialog.PairingNone
-            return
-        }
+        if (open(ConfigFields.BLE_PAIR, choice.mode.wire)) return
         apply(DeviceConfigChange.PAIRING) {
             blePair(choice.mode)
             if (choice.mode == PairMode.FIXED && !choice.pin.isNullOrEmpty()) blePin(choice.pin)
@@ -189,16 +221,30 @@ class DeviceConfigController(
     }
 
     fun requestRotateToken() {
-        if (now.canDisrupt) _dialog.value = DeviceConfigDialog.RotateToken
+        open(ConfigFields.LAN_ROTATE_TOKEN, "1")
     }
 
     fun requestForgetBonds() {
-        if (now.canDisrupt) _dialog.value = DeviceConfigDialog.ForgetBonds
+        open(ConfigFields.BLE_CLEAR_BONDS, "1")
     }
 
     /**
+     * Opens the dialog [ConfigFields] asks for before [value] goes to [key], when the link allows it
+     * now. Returns whether the send waits for a confirmation, so the caller sends nothing itself.
+     */
+    private fun open(key: String, value: String): Boolean {
+        val dialog = DeviceConfigDialog.forField(key, value) ?: return false
+        if (allows(now, dialog.field)) _dialog.value = dialog
+        return true
+    }
+
+    /** A key that cuts the link or a transfer needs a quiet link, any other an editable one. */
+    private fun allows(s: DeviceConfigUiState, field: ConfigField): Boolean = if (field.disrupts) s.canDisrupt else s.canEdit
+
+    /**
      * The user confirmed the open dialog. The dialog closes first, so a second tap sends nothing. The
-     * link is checked again, because a sync may have started while the dialog was open.
+     * link is checked again against the [ConfigFields] table, because a sync may have started while
+     * the dialog was open.
      */
     fun confirm() {
         val open = _dialog.value ?: return
@@ -206,14 +252,15 @@ class DeviceConfigController(
         val s = now
         when (open) {
             DeviceConfigDialog.Reboot -> if (s.canDisrupt) source.reboot() else _notices.tryEmit(DeviceConfigNotice.Busy)
-            DeviceConfigDialog.RotateToken -> if (s.canDisrupt) source.rotateToken() else _notices.tryEmit(DeviceConfigNotice.Busy)
-            DeviceConfigDialog.ForgetBonds -> if (s.canDisrupt) source.clearBonds() else _notices.tryEmit(DeviceConfigNotice.Busy)
-            DeviceConfigDialog.PairingNone -> if (s.canEdit) {
-                apply(DeviceConfigChange.PAIRING) { blePair(PairMode.NONE) }
-            } else {
-                _notices.tryEmit(DeviceConfigNotice.Busy)
-            }
+            is DeviceConfigDialog.Field -> if (allows(s, open.field)) send(open) else _notices.tryEmit(DeviceConfigNotice.Busy)
         }
+    }
+
+    /** The send behind each confirmed [DeviceConfigDialog.Field]. */
+    private fun send(dialog: DeviceConfigDialog.Field) = when (dialog) {
+        DeviceConfigDialog.RotateToken -> source.rotateToken()
+        DeviceConfigDialog.ForgetBonds -> source.clearBonds()
+        DeviceConfigDialog.PairingNone -> apply(DeviceConfigChange.PAIRING) { blePair(PairMode.NONE) }
     }
 
     /** Cancel, or a tap outside. Nothing is sent. */

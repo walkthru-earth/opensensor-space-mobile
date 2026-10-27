@@ -51,6 +51,14 @@ data class DebugKey(val address: String) : AppKey
 @Serializable
 data class FileMetricsKey(val thing: String, val name: String) : AppKey
 
+/**
+ * The Add sensor wizard (`:feature:setup`), full screen over My devices. [resume] reopens Finish
+ * setup for an added sensor at Location. [pick] is a new sensor tapped on My devices, which the
+ * wizard pairs at once, then opens Name.
+ */
+@Serializable
+data class SetupKey(val resume: String? = null, val pick: String? = null, val pickName: String? = null) : AppKey
+
 /** Saves every [AppKey] in a back stack, the same way on Android and iOS. */
 @OptIn(ExperimentalSerializationApi::class)
 val AppNavConfig: SavedStateConfiguration = SavedStateConfiguration {

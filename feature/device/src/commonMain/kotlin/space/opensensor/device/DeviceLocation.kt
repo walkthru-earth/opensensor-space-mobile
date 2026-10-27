@@ -45,7 +45,19 @@ data class DeviceLocationState(
     val working: Boolean = false,
     val draft: DeviceLocationDraft = DeviceLocationDraft(),
     val result: DeviceLocationResult? = null,
+    /** The board confirmed a valid `location.cell`, read back or acknowledged after Save. */
+    val saved: Boolean = false,
 )
+
+/**
+ * A valid H3 cell whose resolution is the one the board reports for it and no finer than the maximum.
+ * Country is optional and does not count.
+ */
+fun LocationConfig.hasCell(): Boolean {
+    val hex = cell?.takeIf { Regex("[0-9a-f]{15}").matches(it) } ?: return false
+    val res = H3Index.resolution(H3Index.fromHex(hex))
+    return res in 0..15 && (cellResolution == null || cellResolution == res) && res <= (resolution ?: 15)
+}
 
 /** Tap-only, cancellable foreground location. The implementation returns only a coarsened cell. */
 class DeviceLocationRequest(val access: RuntimeAccess, val cell: suspend (resolution: Int) -> String?)

@@ -64,5 +64,10 @@ internal class BleConnectionFailure {
 
         fun needsPairingRepair(state: ConnectionState): Boolean = state is ConnectionState.Failed &&
             (isRepairStatus(state.gattStatus) || state.reason.startsWith("Bluetooth pairing needs repair."))
+
+        /** The link owner refused INFO for a `proto` below 3, before the identity check wrote a row. */
+        const val FIRMWARE_UPDATE_MESSAGE = "firmware update required"
+
+        fun needsFirmwareUpdate(state: ConnectionState): Boolean = state is ConnectionState.Failed && state.reason == FIRMWARE_UPDATE_MESSAGE
     }
 }

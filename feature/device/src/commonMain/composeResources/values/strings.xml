@@ -36,7 +36,7 @@
     <string name="msg_sensor_not_confirmed">The sensor did not confirm the sticker.</string>
     <string name="msg_sensor_saved_off">Sticker saved. Batch estimate off.</string>
     <string name="msg_sensor_saved_on">Sticker saved. Batch estimate on.</string>
-    <string name="pairing_default_pin">The PIN is still the default %1$s. Change it.</string>
+    <string name="pairing_default_pin">The PIN is still the old default. Set a new one.</string>
     <string name="pairing_display">display found at first boot</string>
     <string name="pairing_fixed">Fixed PIN. One 6 digit PIN you choose. For sensors without a screen.</string>
     <string name="pairing_hide_pin">Hide PIN</string>
@@ -160,6 +160,7 @@
     <string name="msg_lan_token_stored">Wi-Fi token stored on this phone.</string>
     <string name="msg_token_rotated_stored">Token changed and the new one stored on this phone.</string>
     <string name="msg_token_rotated_fetch">Token changed. Use Fetch token to store the new one.</string>
+    <string name="msg_wifi_still_joining">Still joining Wi-Fi. Check the name and password.</string>
     <string name="config_problem_pin">The PIN is exactly 6 digits.</string>
     <string name="config_problem_ssid_empty">Enter the network name.</string>
     <string name="config_problem_ssid_long">The network name is too long. The limit is 32 bytes.</string>
@@ -183,7 +184,8 @@
     <string name="location_precision_info">Lower resolution covers a larger area. The default, resolution 8, covers about 0.74 km² on average. Phone location is approximate.</string>
     <string name="location_fine_warning">Fine cells can reveal a specific place. A small cell does not make the phone fix more accurate. Public sharing has a separate resolution limit.</string>
     <string name="location_country">Country code</string>
-    <string name="location_country_info">Optional ISO country code declared by you, such as EG. It does not guarantee NTP server residency.</string>
+    <string name="location_country_info">Optional. Two letters, such as GH.</string>
+    <string name="wifi_psk_short">At least 8 characters</string>
     <string name="location_fresh_required">Use phone location again before saving a finer cell</string>
     <string name="location_fix_failed">No fresh location available. Check location access and try again.</string>
     <string name="location_locating">Getting location</string>

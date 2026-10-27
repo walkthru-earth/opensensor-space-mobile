@@ -55,7 +55,7 @@ class FrameCodecV2Test {
 
     @Test
     fun `CONFIG decodes flags and json`() {
-        val json = """{"ble":{"pair":"fixed","pin":123456,"pin_default":1,"bonds":1,"display":0}}"""
+        val json = """{"ble":{"pair":"fixed","pin_set":1,"pin_default":1,"bonds":1,"display":0}}"""
         val frame = FrameCodec.decode(("40" + "01" + json.encodeToByteArray().toHex()).hexToBytes()) as Frame.Config
         assertTrue(frame.rebootRequired)
         assertEquals(json, frame.json)

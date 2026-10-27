@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 /** Fixed wire vectors, not just encoder/decoder round trips. Executed on JVM and iOS. */
@@ -92,6 +93,6 @@ class PortableProtocolTest {
 
     @Test fun missingReadingsAndUnknownProfileStayUnavailable() {
         assertNull(LiveSample.parse("{}")["pm25"])
-        assertEquals("001234", BleConfig(pin = 1234).pinText)
+        assertFalse(BleConfig(pinSet = 0).hasPin)
     }
 }
