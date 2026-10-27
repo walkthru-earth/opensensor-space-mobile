@@ -84,6 +84,7 @@ import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.LanFraming
 import space.opensensor.data.protocol.Opcode
+import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.data.sync.ArchiveCollector
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
@@ -363,6 +364,29 @@ class DeviceFacadeTest {
         h.device.mobility = "moving"
         h.repo.readLocation()
         assertTrue("a moving Thing shows no pin", h.places.all.isEmpty())
+    }
+
+    @Test
+    fun `a location save keeps the pin the page it reads back gives`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        val saved = h.repo.writeLocation(ConfigPatch.build { location("85283473fffffff", 8, "") })
+        assertEquals("85283473fffffff", saved?.cell)
+        assertEquals(listOf(h.device.thing to "85283473fffffff"), h.places.all.map { it.thing to it.cell })
+        h.repo.writeLocation(ConfigPatch.build { thingMobility(ThingMobility.MOVING) })
+        assertTrue("a Thing saved as moving shows no pin", h.places.all.isEmpty())
+    }
+
+    @Test
+    fun `forgetting a Thing removes its saved cell`() = harnessTest { h ->
+        h.device.locationCell = "85283473fffffff"
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        h.repo.readLocation()
+        assertEquals(1, h.places.all.size)
+        h.repo.forget(ADDRESS)
+        assertNull(h.knownDao.get(ADDRESS))
+        assertTrue("no cell of a forgotten Thing stays on the phone", h.places.all.isEmpty())
     }
 
     /** [ThingPlaces] in memory. */

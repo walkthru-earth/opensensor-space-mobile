@@ -467,8 +467,8 @@ Thing UUID or name, and the public source never carries an own Thing. A test hol
 
 The cell comes from `thing_place` on the phone ([data model](data-model.md)), written when Device
 settings reads or saves the location. A moving Thing, or one with no well formed cell, has no pin. A
-forgotten sensor loses its pin, because the host joins the places with the Things the phone still
-knows. A Thing set up before this build shows once its location is next read. The source is rebuilt
+forgotten sensor loses its pin, because Forget deletes its cells and the host joins the places with
+the Things the phone still knows. A Thing set up before this build shows once its location is next read. The source is rebuilt
 off the main thread, and only when a Thing, its cell or its last update changes. No request leaves
 the phone for it and nothing is published.
 

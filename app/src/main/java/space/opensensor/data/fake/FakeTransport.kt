@@ -98,7 +98,7 @@ class FakeTransport(
     private val display = 1
     private var wifiOn = false
 
-    /** The location page `GET_CONFIG 1` answers, the saved cell and mobility. Tests set them. */
+    /** The location page `GET_CONFIG 1` answers, the saved cell and mobility. Tests and `SET_CONFIG` set them. */
     @Volatile var locationCell = ""
 
     @Volatile var mobility = "fixed"
@@ -435,6 +435,10 @@ class FakeTransport(
                 "wifi.on", "lan.on" -> v == "0" || v == "1"
                 "wifi.ssid" -> v.toByteArray().size in 1..32
                 "wifi.psk" -> v.toByteArray().size <= 63
+                "location.cell" -> v.isEmpty() || Regex("[0-9a-f]{15}").matches(v)
+                "location.resolution" -> v.toIntOrNull() in 0..15
+                "location.country" -> v.isEmpty() || Regex("[A-Z]{2}").matches(v)
+                "thing.mobility" -> v == "fixed" || v == "moving"
                 else -> false
             }
             if (!ok) return k
@@ -450,6 +454,8 @@ class FakeTransport(
                 "wifi.ssid" -> { ssid = v; wifiChanged = true }
                 "wifi.psk" -> { pskSet = v.isNotEmpty(); wifiChanged = true }
                 "lan.on" -> { lanOn = v == "1"; logLine("LAN ${if (lanOn) "ON" else "OFF"}") }
+                "location.cell" -> locationCell = v
+                "thing.mobility" -> mobility = v
             }
         }
         logLine("CONFIG SET keys=${parsed.joinToString(",") { it.first }}")

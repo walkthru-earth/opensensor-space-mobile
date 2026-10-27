@@ -1730,7 +1730,10 @@ class DeviceLinkOwner @Inject constructor(
                 // Revoke the live session before deleting credentials and enrollment.
                 closeSessionLocked()
                 tokenPolicy.clear(address)
-                knownDeviceDao.get(address)?.companionAssociationId?.let { companionPresence.disassociate(address, it) }
+                val known = knownDeviceDao.get(address)
+                known?.companionAssociationId?.let { companionPresence.disassociate(address, it) }
+                // No cell of a forgotten Thing stays on the phone, from any of its epochs.
+                (listOfNotNull(known?.thing) + thingEpochDao.forDevice(address).map { it.thing }).distinct().forEach { places.remove(it) }
                 knownDeviceDao.delete(address)
             }
         } finally {

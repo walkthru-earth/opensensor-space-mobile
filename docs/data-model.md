@@ -155,8 +155,9 @@ lease and the iOS bridges name the Thing they reach by a `ThingId` (`:core:model
 Discover draws it as a pin and nothing else reads it. A location read or save in Device settings
 writes the row through `ThingPlaces.recordFrom` (`:core:sync`, `RoomThingPlaces`). A Thing that is
 moving, or names no well formed cell, loses its row. It holds the cell only, never the cell centre or
-a fix, and it never leaves the phone. The Discover host joins it with `known_device` on Android and
-the saved records on iOS, so a forgotten sensor shows no pin.
+a fix, and it never leaves the phone. Forget deletes the rows of every Thing the sensor named, the
+current one and older epochs, so no cell of a forgotten sensor stays on the phone. The Discover
+host also joins it with `known_device` on Android and the saved records on iOS.
 `pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the
 device lists the same name and size and the phone has no copy. Settings › Storage › Removed files ›
 Download again empties it. Both phones use this table through `RoomPrunedFiles`, behind the `PrunedFiles` port in
