@@ -121,6 +121,8 @@ android {
     testOptions {
         // Lets JVM tests exercise classes that call android.util.Log (TcpLinkDriver loopback test).
         unitTests.isReturnDefaultValues = true
+        // ManifestPermissionsTest reads the source manifest, so an edited manifest reruns it.
+        unitTests.all { it.inputs.file("src/main/AndroidManifest.xml").withPropertyName("manifest").withPathSensitivity(PathSensitivity.RELATIVE) }
     }
 
     lint {
