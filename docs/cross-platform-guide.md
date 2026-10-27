@@ -355,8 +355,13 @@ less than their 1.0 size and body text breaks only between words. It also sweeps
 at font scale 2.0 and 3.1. `BandColumnChartSemanticsTest` in
 `:feature:history` `iosTest` walks the bar chart node by node, `BandColumnChartGestureTest` checks
 that a vertical swipe over it scrolls the page while a sideways drag scrubs and a tap picks one bar,
-`FileRowSemanticsTest` in `:feature:files` `iosTest` checks that a file row has no tap of its own and
-offers Share, Sync and Metrics as 48 dp buttons that name the file, and `SettingsRowSemanticsTest` in
+`DayRingSemanticsTest` walks the Day ring one hour at a time after its summary, with the WHO step
+only above Simple and every hour node on the ring at font scale 2.0, `ChartNodeBoundsTest` also checks
+that every Month calendar day is a 48 dp target, `ThingChipsSemanticsTest` checks that only Developer
+reads the full thing id, and `WhoCueTest` in `commonTest` pins the WHO step fill share and the 3 to 1
+mark border. `FileRowSemanticsTest` in `:feature:files` `iosTest` checks that a file row has no tap of
+its own and offers Share, Sync and Metrics as 48 dp buttons that name the file, `ListFailedCardTest`
+checks that Try again asks the sensor to list again, and `SettingsRowSemanticsTest` in
 `:feature:settings` `iosTest` checks the merged Storage rows, their 48 dp height and the button
 names (`verifyIos`). Host tests cannot render
 Compose without Robolectric, so the Android check is the phone walk below.

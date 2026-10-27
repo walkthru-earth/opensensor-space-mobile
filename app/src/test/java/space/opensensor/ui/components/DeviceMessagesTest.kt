@@ -32,6 +32,16 @@ class DeviceMessagesTest {
     }
 
     @Test
+    fun `a byte count uses the same units as Files and rolls over after rounding`() {
+        assertEquals(
+            UiText.Res(R.string.msg_not_enough_space, listOf(UiText.Res(R.string.unit_megabytes, listOf("1.0")))),
+            DeviceMessage.NotEnoughSpace(1_048_575).toUiText(),
+        )
+        assertEquals(UiText.Res(R.string.unit_kilobytes, listOf("1.5")), bytesText(1536))
+        assertEquals(UiText.Res(R.string.unit_bytes, listOf("512")), bytesText(512))
+    }
+
+    @Test
     fun `a saved setting names the change and nests it when a restart is needed`() {
         assertEquals(UiText.Res(R.string.msg_pin_saved), DeviceMessage.ConfigSaved(ConfigChange.PIN).toUiText())
         assertEquals(

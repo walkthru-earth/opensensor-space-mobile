@@ -53,7 +53,9 @@ data class HistoryUiState(
 
     /**
      * True while the visible span starts after the first archived day, so "Earlier" can still reach
-     * a reading. [DaySpan.firstDayS] is a UTC midnight, the earliest a reading can be.
+     * a reading. [DaySpan.firstDayS] is a UTC midnight, the earliest a reading can be. It comes
+     * from the derived day tiers, so while the tiers still catch up after a big sync Earlier can stay
+     * off for a moment, and it turns on once they reach the first archived day.
      */
     val canPageBack: Boolean get() = days.firstDayS?.let { window.fromS > it } ?: false
 }

@@ -336,10 +336,10 @@ private fun RowsCard(state: RowsState, onPage: (Long) -> Unit) {
 
 @Composable
 private fun RowScope.Cell(text: String, weight: Float, mono: Boolean = false) {
-    // Wraps between words in its column instead of cutting a value off.
+    // Wraps between words in its column instead of cutting a value off, 4 dp from the next column.
     BodyText(
         text,
-        modifier = Modifier.weight(weight),
+        modifier = Modifier.weight(weight).padding(end = 4.dp),
         style = MaterialTheme.typography.bodySmall.copy(fontFamily = if (mono) FontFamily.Monospace else null),
     )
 }

@@ -351,4 +351,9 @@
 
     <!-- The Debug screen copy lives in feature/debug composeResources. -->
     <string name="conn_pairing_repair">يحتاج إقران Bluetooth إلى إصلاح. إذا أُعيد ضبط هذا المستشعر أو أُعيد تثبيت برنامجه الثابت، فانسَه في إعدادات Bluetooth في Android ثم أقرنه مجددًا. ملفاتك المؤرشفة محفوظة.</string>
+    <!-- Byte counts in steps of 1024, the same words as Files (core/units byteSize). -->
+    <string name="unit_bytes">%1$s بايت</string>
+    <string name="unit_kilobytes">%1$s كيلوبايت</string>
+    <string name="unit_megabytes">%1$s ميغابايت</string>
+    <string name="unit_gigabytes">%1$s غيغابايت</string>
 </resources>

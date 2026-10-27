@@ -268,7 +268,7 @@ fun historyTitle(): String = stringResource(Res.string.history_title)
  * the first characters of the thing id and reads the full id. Simple and Detailed read the label only.
  */
 @Composable
-private fun ThingChips(state: HistoryUiState, level: DetailLevel, onSelect: (String) -> Unit) {
+internal fun ThingChips(state: HistoryUiState, level: DetailLevel, onSelect: (String) -> Unit) {
     Column {
         Text(stringResource(Res.string.history_from), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

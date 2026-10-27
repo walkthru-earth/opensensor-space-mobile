@@ -19,9 +19,9 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.TimeZone
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.HistoryColumn
 import space.opensensor.data.history.HistoryRange
-import space.opensensor.data.history.Metrics
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -50,7 +50,7 @@ class BandColumnChartGestureTest {
                     Spacer(Modifier.height(80.dp))
                     BandColumnChart(
                         day,
-                        Metrics.PM25,
+                        AirMetrics.PM25,
                         HistoryRange.DAY,
                         0,
                         24 * HOUR,

@@ -62,7 +62,7 @@
     <string name="debug_log_refresh">Refresh</string>
     <!-- Debug log card button after the log could not be read. -->
     <string name="debug_log_retry">Try again</string>
-    <string name="debug_log_idle">Fetches the newest 8 KiB of the device serial log. Text for humans, not an API.</string>
+    <string name="debug_log_idle">Fetches the newest 8 KB of the device serial log. Text for humans, not an API.</string>
     <string name="debug_log_loading">Fetching…</string>
     <string name="debug_log_failed">Could not read the device log. %1$s</string>
     <string name="debug_log_summary">%1$d B returned of %2$d B logged since boot</string>

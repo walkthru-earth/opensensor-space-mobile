@@ -30,6 +30,16 @@ internal fun AirMood.color(): Color = step.color()
 /** The step colour of [value] on this metric's scale, or [neutral] for a metric without one. */
 internal fun MetricSpec.valueColor(value: Double, neutral: Color): Color = stepOf(value)?.color() ?: neutral
 
+/**
+ * How much of a mark a WHO step fills, the cue that does not rely on colour. The cleanest step fills
+ * a little over a third, each step after it more, the last step all of it. A metric without a WHO
+ * scale (null) fills the whole mark.
+ */
+internal fun whoStepShare(step: WhoStep?): Float =
+    if (step == null) 1f else MIN_STEP_SHARE + (1f - MIN_STEP_SHARE) * step.ordinal / (WhoStep.entries.size - 1)
+
+private const val MIN_STEP_SHARE = 0.35f
+
 /** Ink drawn on a band colour, whichever of dark or light contrasts more. */
 internal fun onBand(band: Color): Color = designSystemOnBand(band)
 

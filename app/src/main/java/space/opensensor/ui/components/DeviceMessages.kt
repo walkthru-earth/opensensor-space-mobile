@@ -97,7 +97,7 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
     is DeviceMessage.SyncFinished -> plural(R.plurals.msg_sync_finished, total.toLong(), synced, total)
     DeviceMessage.SyncStopped -> res(R.string.msg_sync_stopped)
     is DeviceMessage.SyncEnded -> res(reason.toStringRes())
-    is DeviceMessage.NotEnoughSpace -> res(R.string.msg_not_enough_space, formatBytes(shortBytes))
+    is DeviceMessage.NotEnoughSpace -> res(R.string.msg_not_enough_space, bytesText(shortBytes))
     is DeviceMessage.UnplacedReadings -> plural(R.plurals.msg_unplaced, rows, rows)
     DeviceMessage.ClockSet -> res(R.string.msg_clock_set)
     is DeviceMessage.Finalized -> plural(R.plurals.msg_finalized, rows.toLong(), rows, files)

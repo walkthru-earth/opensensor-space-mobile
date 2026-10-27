@@ -331,24 +331,7 @@ fun FilesScreen(
                     }
                 }
                 manifest is ManifestState.Error && listing == null -> item(key = "list-failed") {
-                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            PeacockIcon(PeacockExpression.CONCERNED, Modifier.size(48.dp))
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                // Announced once when the list fails, the retry button sits right under it.
-                                BodyText(
-                                    if (level.developer) stringResource(Res.string.files_list_failed_detail, manifest.message) else stringResource(Res.string.files_list_failed_simple),
-                                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                )
-                                OutlinePillButton(
-                                    stringResource(Res.string.files_retry),
-                                    onClick = { onDeviceAction(DeviceFilesAction.Refresh) },
-                                    enabled = ready,
-                                )
-                            }
-                        }
-                    }
+                    ListFailedCard(manifest.message, level, ready, onDeviceAction)
                 }
             }
             if (listing == null && groups.isEmpty() && idleHint == null && manifest is ManifestState.Idle) {
@@ -542,6 +525,28 @@ private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
     }
 }
 
+/**
+ * The card shown when the sensor could not list its files, announced once, with Try again right
+ * under the message, which sends [DeviceFilesAction.Refresh]. Try again shows only while the sensor
+ * link is [ready], without a link the header already says to connect.
+ */
+@Composable
+internal fun ListFailedCard(message: String, level: DetailLevel, ready: Boolean, onDeviceAction: (DeviceFilesAction) -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PeacockIcon(PeacockExpression.CONCERNED, Modifier.size(48.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                BodyText(
+                    if (level.developer) stringResource(Res.string.files_list_failed_detail, message) else stringResource(Res.string.files_list_failed_simple),
+                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                if (ready) OutlinePillButton(stringResource(Res.string.files_retry), onClick = { onDeviceAction(DeviceFilesAction.Refresh) })
+            }
+        }
+    }
+}
+
 @Composable
 internal fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean, showDetail: Boolean, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)?) {
     val scheme = MaterialTheme.colorScheme
@@ -611,7 +616,7 @@ internal fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean
 /** The states a file row offers to sync, a fresh file, a partial copy, or one whose checksum did not match. */
 private val SYNCABLE = setOf(FileSyncState.NOT_SYNCED, FileSyncState.PARTIAL, FileSyncState.MISMATCH)
 
-/** One compact action on a file row, a 48 dp target around an 18 dp icon, spoken by [label]. */
+/** One compact action on a file row, a 48 dp target around a 20 dp icon, spoken by [label]. */
 @Composable
 private fun RowAction(icon: ImageVector, label: String, onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = Modifier.touchTarget()) {
