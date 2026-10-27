@@ -45,8 +45,9 @@ No phone run of these changes is recorded yet.
   pages and bad time values no longer stop a History chart (#127, #133, #171). Sync and History
   memory is bounded and the READ window adapts per link (#134). DELTA and BYTE_STREAM_SPLIT pages
   decode, with a disk block cache (#103).
-- PM2.5. EPA humidity corrected PM2.5 is the default (#140). Pure QC rules flag suspect PM readings,
-  part of #91 (#139).
+- PM2.5. EPA humidity corrected PM2.5 is the default (#140). Pure QC rules flag suspect PM readings
+  (#139). The Today hero is judged on the EPA NowCast of the last 12 hours and its live value is
+  checked over a rolling window, host tests only (#93, #91).
 - Devices. The CoreS3 v6.13 LIVE dictionary is mapped (#150). Live and status take a long read when
   the MTU cannot notify a full snapshot (#173). Passphrase and PIN patches go over Bluetooth only
   (#167). The fixed PIN is masked and credential entry stays out of captures (#165). Forget says it

@@ -44,7 +44,8 @@ class LargeTextFitTest {
     private val sample = LiveSample.parse(
         """{"pms":4,"pm25":148.9,"pm1":88.0,"pm10":201.0,"c25":180.0,"rh":55.0,"t":31.5,"n03":12345,"n05":6789,"n1":2345,"n25":678}""",
     )
-    private val reading = TodayUiState(TodaySnapshot(info = waveshare, live = sample), DetailLevel.DETAILED).reading
+    private val state = TodayUiState(TodaySnapshot(info = waveshare, live = sample), DetailLevel.DETAILED)
+    private val reading = state.reading
 
     private val hasAnyText = SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)
 
@@ -93,7 +94,7 @@ class LargeTextFitTest {
 
     @Test
     fun theHeroKeepsTheNumberUnitAndMoodWholeAtDoubleText() = runComposeUiTest {
-        show { MetricHeroCard(reading, receivedAtEpochMs = null, level = DetailLevel.DETAILED) }
+        show { MetricHeroCard(state.airReading, reading, receivedAtEpochMs = null, level = DetailLevel.DETAILED) }
         assertEveryTextFits(minTexts = 4)
         // The peacock moves above the number, so the value, unit and name get the whole card width.
         val card = onNodeWithTag("card").getUnclippedBoundsInRoot()

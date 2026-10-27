@@ -11,8 +11,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import space.opensensor.family.air.Pm25NowCast
 import space.opensensor.settings.DetailLevel
 
 /** A question Today asks before it changes the device. Only one is open at a time. */
@@ -27,14 +29,19 @@ sealed interface TodayDialog {
     data object Forget : TodayDialog
 }
 
-/** Shared Today state and confirmed flush actions. Device UTC synchronizes automatically. */
+/**
+ * Shared Today state and confirmed flush actions. Device UTC synchronizes automatically. [nowCast]
+ * is the PM2.5 NowCast of the connected thing ([pm25NowCast]), the quality flags of the live sample
+ * come from the snapshots themselves ([withLiveQc]).
+ */
 class TodayController(
     private val scope: CoroutineScope,
     private val source: TodaySource,
     detailLevel: Flow<DetailLevel>,
+    nowCast: Flow<Pm25NowCast?> = flowOf(null),
 ) {
-    val state: StateFlow<TodayUiState> = combine(source.snapshot, detailLevel) { snapshot, level ->
-        TodayUiState(snapshot, level)
+    val state: StateFlow<TodayUiState> = combine(source.snapshot.withLiveQc(), detailLevel, nowCast) { (snapshot, flags), level, cast ->
+        TodayUiState(snapshot, level, nowCast = cast, liveFlags = flags)
     }.stateIn(scope, SharingStarted.Eagerly, TodayUiState(source.snapshot.value))
 
     private val _dialog = MutableStateFlow<TodayDialog?>(null)

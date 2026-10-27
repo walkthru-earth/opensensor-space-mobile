@@ -56,7 +56,7 @@ flowchart TB
 
 No `:core` module names air quality. `:family:air` (#188) holds the WHO 2021 scales and palette,
 the EPA PM2.5 correction, the moods, the named air metrics, the PM sensor status and sticker, the
-public cell summary and `QcRules`. It plugs in through the generic seams. `AirFamily` is a
+public cell summary, the PM NowCast (`PmNowCast`) and the quality checks (`QcRules`, `LiveQc`). It plugs in through the generic seams. `AirFamily` is a
 `DerivedMetricProvider` that names its scales and capabilities, and `AirDiscover.COLLECTION` is the
 bundled Discover scale set (`DiscoverCollection.installBundled`). Each app entry point installs it
 at launch with one call, `AirFamily.install(kinds.metricProviders)`, when it builds its Thing kinds
@@ -235,11 +235,26 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
   `.verified.json` beside it still fits 255 bytes. The shared
   `SyncPlanner` uses it on both platforms.
 
+### PM NowCast in `:family:air`
+
+`PmNowCast.of(hourly)` is the US EPA NowCast for particles as AirNow publishes it
+([#93](https://github.com/walkthru-earth/opensensor-space-mobile/issues/93)). It reads the 12 hourly
+means before the running hour, needs two of the three latest, weighs each older hour by the lowest
+over the highest hour floored at 0.5, leaves a missing hour out of both sums, and truncates PM2.5 to
+0.1 µg/m³ and PM10 to 1 µg/m³. `pm25NowCast` in `:feature:today` feeds it the 12 whole UTC hours of
+the phone archive's hourly tier before the current UTC hour, corrected PM2.5 first, then raw. Each
+hour counts when any verified row is in it, there is no completeness threshold.
+
 ### PM quality checks in `:family:air`
 
 `QcRules.flags(rows)` returns one `QcFlags` bitmask per `QcRow` and never changes a value
-([#91](https://github.com/walkthru-earth/opensensor-space-mobile/issues/91)). It is not wired yet.
-The indexer, the daily builder and the Detailed info icon adopt it in the next slice.
+([#91](https://github.com/walkthru-earth/opensensor-space-mobile/issues/91)). `LiveQc` runs it over a
+rolling window of the last 40 valid LIVE samples of one thing. LIVE is the same row the board
+queues for storage, so the window gives the checks their neighbours. A sample read again (the same
+`seq` and `mono`) joins once, and a new device or thing starts a new window. `TodayController` feeds
+the flags of the newest sample to `NowReading`. A spike needs the row after it, so the newest live
+sample is never a spike. The flags are not stored yet. The indexer and the daily builder do not
+carry them, so History and Discover show no flags.
 
 | Bit | Flag | Rule |
 | --- | --- | --- |
