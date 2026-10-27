@@ -4,8 +4,9 @@ package space.opensensor.discover
 data class Place(val name: String, val country: String, val lat: Double, val lng: Double, val ar: String = "")
 
 /**
- * A small built-in list of large cities, enough to move the map in this slice. The full bundled
- * list (GeoNames cities of 15,000 people or more, CC BY 4.0, credited in About) replaces it later.
+ * A small built-in list of large cities and the main Ghana cities, enough to move the map in this
+ * slice. The full bundled list (GeoNames cities of 15,000 people or more, CC BY 4.0, credited in
+ * About) replaces it later.
  */
 object Places {
     val all: List<Place> = listOf(
@@ -21,6 +22,7 @@ object Places {
         Place("Bogotá", "Colombia", 4.711, -74.0721, "بوغوتا"),
         Place("Buenos Aires", "Argentina", -34.6037, -58.3816, "بوينس آيرس"),
         Place("Cairo", "Egypt", 30.0444, 31.2357, "القاهرة"),
+        Place("Cape Coast", "Ghana", 5.1053, -1.2466, "كيب كوست"),
         Place("Cape Town", "South Africa", -33.9249, 18.4241, "كيب تاون"),
         Place("Casablanca", "Morocco", 33.5731, -7.5898, "الدار البيضاء"),
         Place("Chicago", "United States", 41.8781, -87.6298, "شيكاغو"),
@@ -30,6 +32,7 @@ object Places {
         Place("Istanbul", "Türkiye", 41.0082, 28.9784, "إسطنبول"),
         Place("Jakarta", "Indonesia", -6.2088, 106.8456, "جاكرتا"),
         Place("Johannesburg", "South Africa", -26.2041, 28.0473, "جوهانسبرغ"),
+        Place("Kumasi", "Ghana", 6.6885, -1.6244, "كوماسي"),
         Place("Lagos", "Nigeria", 6.5244, 3.3792, "لاغوس"),
         Place("Lima", "Peru", -12.0464, -77.0428, "ليما"),
         Place("Lisbon", "Portugal", 38.7223, -9.1393, "لشبونة"),
@@ -52,6 +55,9 @@ object Places {
         Place("Singapore", "Singapore", 1.3521, 103.8198, "سنغافورة"),
         Place("Stockholm", "Sweden", 59.3293, 18.0686, "ستوكهولم"),
         Place("Sydney", "Australia", -33.8688, 151.2093, "سيدني"),
+        Place("Takoradi", "Ghana", 4.8845, -1.7554, "تاكورادي"),
+        Place("Tamale", "Ghana", 9.4008, -0.8393, "تامالي"),
+        Place("Tema", "Ghana", 5.6698, -0.0166, "تيما"),
         Place("Tokyo", "Japan", 35.6762, 139.6503, "طوكيو"),
         Place("Toronto", "Canada", 43.6532, -79.3832, "تورونتو"),
         Place("Tunis", "Tunisia", 36.8065, 10.1815, "تونس"),

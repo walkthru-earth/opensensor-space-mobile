@@ -143,8 +143,8 @@ Zero taps shows the map, the metric chips, the time slider, the legend, the Samp
 toggle, and the sheet at peek height. Nothing else. Every explanation sits behind
 an info button.
 
-- **Top bar.** A search field ("Search places") and an "Add your sensor" icon button (`+`). The
-  `+` is the only place on Discover that starts pairing, apart from the first-run card.
+- **Top bar.** A search field ("Search places") and an "Add your sensor" icon button with a
+  sensor icon. It is the only place on Discover that starts pairing, apart from the first-run card.
 - **Metric chips.** One row. The chips are built from the properties the visible cells actually
   report, ranked by how many visible cells report them, so the row adapts to any sensor family.
   At most three property chips show, then a "More" chip opens the sheet at full height with every
@@ -153,13 +153,14 @@ an info button.
   property and category id the app knows is named in the app's language (`DiscoverLabels.kt`),
   on chips, legends, the sheet and what screen readers say. An id the app does not know shows
   the column title of the discover Collection, else the feed's own label.
-- **Time slider.** A 44dp pill on the left edge of the map, not in the chip row. At rest it
+- **Time slider.** A 48 dp pill on the left edge of the map, not in the chip row. At rest it
   shows only the chosen window. A touch grows it into one snap stop per window the feed on
   screen offers, 1h at the top, then 24h and 7d (Real has no 1h stop, and a 1h choice moves to
   24h on screen while the saved window stays), with a tinted thumb that follows a vertical drag (a haptic tick at each stop).
-  Tap a stop to pick it. It folds back about two seconds after the last touch. Screen readers get
-  one control named Time window, its state is the full window name, and its actions pick the
-  others. The chip row holds metrics only.
+  Each stop is a 48 dp target. Tap a stop to pick it, which folds the pill. It stays open until a
+  window is picked, the end of a drag picks the nearest stop, and tapping the chosen stop folds it
+  with no change. Screen readers get one button named Time window, its state is the full window
+  name, a double tap opens or folds it, and its actions pick the others. The chip row holds metrics only.
 - **Legend (Detailed and Developer, #189).** Bottom left, just above the sheet, a floating card with the
   label and unit. The legend follows the scale the feed publishes for the property
   (`opensensor:scale` on its `__mean` column, see the discover Collection below), never the
@@ -178,13 +179,16 @@ an info button.
   and says "No health scale published". Practice followed, Mazama Science "Qualitative display
   of air quality data", the South Coast AQMD accessible AQI scale, and the EPA Fire and Smoke
   map (`CellScale` and `StepScale` in `:core:publicfeed`).
+- **Legend size.** Both legends are at most 270 dp wide. They take all the width but the one
+  48 dp column of zoom and Near me beside them, and the attribution sits on its own line below,
+  so it never narrows them.
 - **Legend (Simple, 2026-10-12).** For a WHO scale the floating card shows the six mood
   words with their colours, titled with the property, and no numbers. Its info sheet explains
   the moods without naming the guideline body and points to Detailed in Settings. A property
   without a health scale keeps the gradient legend. The card is one accessibility node that
   reads the title and the six words.
 - **In view at Simple (2026-10-12).** The spread chart becomes a mood strip, one block per mood
-  as wide as its number of areas, no axis. Tapping a block filters the map and the list to that
+  as wide as its number of areas, no axis, with its mood word under it. Tapping a block filters the map and the list to that
   mood, tapping it again or tapping the map lets go, and changing the property clears it too.
   A property without a health scale shows no chart at Simple. List rows name the mood word.
   The strip is one accessibility node, and its touch targets are 48 dp when tappable.
@@ -218,13 +222,20 @@ an info button.
   touch target. Choosing 24 hours in Real saves it even while a saved last hour is shown as
   24 hours. "Sample data" still
   heads every cell sheet while the feed on screen is the sample, and the info button explains the
-  feed on screen. `DiscoverController.onSourceSettings`, `chooseSource` and `retry`.
-- **Attribution.** "© OpenStreetMap" bottom right, visible at launch. It collapses to an info
+  feed on screen. At peek the area list shows it as a one line tag above the chart title, so the
+  chart stays in sight and the tag is never cut at a large font. `DiscoverController.onSourceSettings`, `chooseSource` and `retry`.
+- **Zoom.** A compact floating pair of Zoom in and Zoom out buttons bottom right, above Near me,
+  each a 48 dp target with its own spoken name, so the map never needs a pinch. One step per tap.
+  The map holds pinch and the buttons to the same zoom 1 to 16. With Reduce Motion on, zoom, place search and Near me move the camera
+  without an animation.
+- **Attribution.** "© OpenStreetMap" bottom right under the map controls, visible at launch. It collapses to an info
   button after the first pan or after 5 seconds, as the OSMF guidelines allow. In Real mode it
   also shows "Data OpenAQ", which stays while Real is on screen and opens
   https://docs.openaq.org/resources/licenses.
 - **First run.** The peek area holds one card instead of the summary. A 48 dp peacock, one line
   "Public sensors near you, shown as areas", and two actions "Add your sensor" and "Explore".
+  On the sample feed a one line "Sample data" tag sits over the heading beside the peacock, so
+  the actions stay inside the peek.
   Either action dismisses it for good. The card carries no numbers. The mascot stays away from
   charts and numbers at Detailed and Developer. At Simple the cell sheet places it beside the
   mood word and its one value, the only exception.
@@ -238,7 +249,10 @@ Sheet heights.
 | Full (expanded, large detent) | Same list, scrollable | Metrics plus the device list (crowd rule met) |
 
 Tapping a cell opens the sheet at half height. Tapping the map outside a cell returns to peek.
-Back returns sheet to peek before it leaves the screen. On Android this is a
+The sheet header is a 48 dp button with a chevron, named Show more or Show less, so one tap opens
+the sheet or returns it to peek without a drag. Back from the full property list of a cell
+returns to that cell. Otherwise Back clears the selection and returns the sheet to peek before it
+leaves the screen. On Android this is a
 `BottomSheetScaffold` standard sheet. On iOS the same Compose sheet is drawn, sized to match
 the medium and large detents.
 
@@ -305,7 +319,9 @@ identical on Android and iOS, and every one carries a spoken summary of its valu
 - **Chart and map cross filter.** Touch and slide across the spread chart to read each bar (its
   range, how many areas it holds and the step). While a bar is touched, areas outside it fade
   on the map and the list keeps only its areas. A tap pins the bar, a second tap or a tap on the
-  map outside any area lets go. The other way, tapping an area marks it on the chart, and panning
+  map outside any area lets go. While a bar is pinned a visible Clear filter button lets go too.
+  Screen readers get one action per bar that pins it, and Clear filter first while one is pinned.
+  The other way, tapping an area marks it on the chart, and panning
   redraws the chart for the areas in view. The map filters with a style expression on each
   cell's mean (`v` in the GeoJSON), so nothing is rebuilt while a finger moves.
 - **Spread chart.** A histogram of the chosen metric's cell means in view. For a step scale whose
@@ -321,7 +337,10 @@ identical on Android and iOS, and every one carries a spoken summary of its valu
   drawn as the map's viridis scale, clamped at the 5th and 95th percentile like the cells. End
   values sit under the axis. With a cell selected its bin turns ink (outlined in ink for step
   bars), an ink rule and a ringed dot in the cell colour mark its mean, and a band below the
-  axis spans its min to max. "Higher than N% of areas in view" follows when three or more areas
+  axis spans its min to max. The step axis track and range row tracks are hollow outlines and the
+  band is solid ink, so every mark reaches 3 to 1 on the sheet in light and dark (`chartColors`).
+  Range row labels wrap to two lines, and edge labels shrink to share the width instead of
+  overlapping. "Higher than N% of areas in view" follows when three or more areas
   report the metric. With nothing selected the same chart, unmarked, sits above the list of
   cells.
 - **Step names.** Colour never carries a step alone. The cell headline, each row of the
@@ -399,8 +418,9 @@ The map never asks for location at launch. It opens on the first of these that e
    lands on the right country or metro for most people, and on a continent overview otherwise,
    like Google Maps zooming out to an overview.
 
-Search uses a bundled place list (GeoNames cities with population 15,000 or more, licensed
-CC BY 4.0, credited in About). Search is local, so typing never leaves the phone.
+Search uses a small built-in list of large cities and the main Ghana cities (Accra, Cape Coast,
+Kumasi, Takoradi, Tamale and Tema), named in English and Arabic (`Places.kt`). Search is local, so
+typing never leaves the phone.
 
 **"Near me" (owner decision 2026-10-08).** A map button that asks for approximate location only
 at the moment it is tapped, because a time-zone guess fails for large zones and store rules
@@ -423,7 +443,9 @@ allow it cleanly. Precise location is never requested on either platform.
   (`NearMe.android.kt` asks for `ACCESS_COARSE_LOCATION` alone, `NearMe.ios.kt` calls
   `requestWhenInUseAuthorization`). No provider exists before the tap. After a grant the camera
   moves to the centre of the resolution 6 cell holding the first fix (`nearMeTarget`), at zoom
-  10.5, and the puck follows the fix while the map is open. `DiscoverPrefs` saves only the
+  10.5, and the puck follows the fix while the map is open. A fix that does not arrive within
+  15 seconds leaves the map where it is. A "Location not found" note shows beside the button
+  until the next tap, and screen readers hear it as the button's state in a polite live region. `DiscoverPrefs` saves only the
   camera, and the camera never holds the fix, so the saved view is at most a coarse cell centre.
 
 - Decline. The map stays where it is and search remains. Asking again happens only on the next

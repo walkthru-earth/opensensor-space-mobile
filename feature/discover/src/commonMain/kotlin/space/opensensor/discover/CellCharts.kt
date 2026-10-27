@@ -15,11 +15,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,9 +47,11 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.spokenList
+import space.opensensor.designsystem.swatchBorderColor
+import space.opensensor.designsystem.touchTarget
 import space.opensensor.publicfeed.CellScale
 import space.opensensor.publicfeed.FeedProperty
 import space.opensensor.publicfeed.FeedWindow
@@ -126,8 +134,9 @@ internal fun SpreadChart(
     val haptics = LocalHapticFeedback.current
     val ink = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val bar = ink.copy(alpha = 0.22f)
-    val track = ink.copy(alpha = 0.12f)
+    val colors = chartColors(MaterialTheme.colorScheme)
+    val bar = colors.bar
+    val track = colors.track
     val stops = remember(domain, scale) { rampStops(domain, scale) }
     val hereColor = here?.let { Color(scale?.color(it) ?: SequentialRamp.at(0.5)) }
     // Only a step axis marks values past its end. A percentile axis clamps them, as the map does.
@@ -159,140 +168,169 @@ internal fun SpreadChart(
         if (offScale != null) append(". ").append(offScale)
     }
     val separator = listSeparator()
+    fun binRange(i: Int) = "${formatValue(binFrom(i), property, units)} ${strings.to} ${formatValue(binTo(i), property, units)} $unit"
     val readout = active?.let { i ->
-        val range = "${formatValue(binFrom(i), property, units)} ${strings.to} ${formatValue(binTo(i), property, units)} $unit"
         val step = steps?.stepOf(binMid(i, domain, bins))?.let { strings.stepName(steps, it) }
-        spokenList(listOfNotNull(range, strings.areaCount(counts[i]), step), separator)
+        spokenList(listOfNotNull(binRange(i), strings.areaCount(counts[i]), step), separator)
     }
+    // Screen readers pin a bar through an action, one per bar that holds areas, and let go of it the
+    // same way, since the scrub gesture is for fingers.
+    val clearLabel = strings.clearFilter
+    val binActions = counts.indices.filter { counts[it] > 0 }.map { i ->
+        CustomAccessibilityAction(spokenList(listOf(binRange(i), strings.areaCount(counts[i])), separator)) {
+            pinned = i
+            true
+        }
+    }
+    val actions = if (pinned != null) listOf(CustomAccessibilityAction(clearLabel) { pinned = null; true }) + binActions else binActions
     // The summary is the chart's name. A touched or pinned bar, which also filters the map and the
     // list, is read as its state.
-    Column(
-        modifier.fillMaxWidth().clearAndSetSemantics {
-            contentDescription = spoken
-            if (readout != null) stateDescription = readout
-        },
-    ) {
-        // One label row that never changes height. At rest it names the guideline, while touched it
-        // reads the bar under the finger.
-        val labelStyle = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
-        when {
-            readout != null -> PositionedLabels(listOf((active + 0.5f) / bins to readout), labelStyle, ink)
-            axis != null && guideline != null -> PositionedLabels(listOf(domain.fraction(guideline) to "${guidelineMark(axis, strings)} ${edgeLabel(axis, guideline, property, units)}"), labelStyle, ink)
-            else -> PositionedLabels(listOf(0f to " "), labelStyle, ink)
-        }
-        Spacer(Modifier.height(2.dp))
-        val height = BAR_AREA + 6.dp + AXIS + if (showBand) 6.dp + 10.dp else 0.dp
-        Canvas(
-            Modifier.fillMaxWidth().height(height).pointerInput(bins) {
-                // Touch and slide sideways to read each bar. A tap pins a bar, a second tap on it lets go.
-                // A mostly vertical move is left to the sheet.
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    fun binAt(x: Float) = (x / size.width * bins).toInt().coerceIn(0, bins - 1)
-                    scrub = binAt(down.position.x)
-                    var total = Offset.Zero
-                    var horizontal = false
-                    var tapped = false
-                    while (true) {
-                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) {
-                            tapped = !horizontal
-                            break
-                        }
-                        total += change.positionChange()
-                        if (!horizontal) {
-                            if (abs(total.y) > viewConfiguration.touchSlop && abs(total.y) > abs(total.x)) break
-                            horizontal = abs(total.x) > viewConfiguration.touchSlop
-                        }
-                        if (horizontal) change.consume()
-                        val b = binAt(change.position.x)
-                        if (b != scrub) {
-                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                            scrub = b
-                        }
-                    }
-                    val bin = scrub
-                    if (tapped && bin != null) pinned = if (pinned == bin) null else bin
-                    scrub = null
-                }
+    Column(modifier.fillMaxWidth()) {
+        Column(
+            Modifier.fillMaxWidth().clearAndSetSemantics {
+                contentDescription = spoken
+                if (readout != null) stateDescription = readout
+                customActions = actions
             },
         ) {
-            val barArea = BAR_AREA.toPx()
-            val axisTop = barArea + 6.dp.toPx()
-            val axisH = AXIS.toPx()
-            val gap = 2.dp.toPx()
-            val slot = size.width / bins
-            val peak = (counts.maxOrNull() ?: 0).coerceAtLeast(1)
-            // Bars. Step bars take their step colour with a faint ink edge, so the light steps still
-            // read. Others are thin and grey. The area's own bin is ink (or outlined in ink), so it
-            // reads without colour.
-            counts.forEachIndexed { i, c ->
-                if (c == 0) return@forEachIndexed
-                val h = (barArea * c / peak).coerceAtLeast(2.dp.toPx())
-                val topLeft = Offset(i * slot + gap / 2, barArea - h)
-                val barSize = Size((slot - gap).coerceAtLeast(1f), h)
-                val radius = CornerRadius(2.dp.toPx())
+            // One label row that never changes height. At rest it names the guideline, while touched it
+            // reads the bar under the finger.
+            val labelStyle = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
+            when {
+                readout != null -> PositionedLabels(listOf((active + 0.5f) / bins to readout), labelStyle, ink)
+                axis != null && guideline != null -> PositionedLabels(listOf(domain.fraction(guideline) to "${guidelineMark(axis, strings)} ${edgeLabel(axis, guideline, property, units)}"), labelStyle, ink)
+                else -> PositionedLabels(listOf(0f to " "), labelStyle, ink)
+            }
+            Spacer(Modifier.height(2.dp))
+            val height = BAR_AREA + 6.dp + AXIS + if (showBand) 6.dp + 10.dp else 0.dp
+            Canvas(
+                Modifier.fillMaxWidth().height(height).pointerInput(bins) {
+                    // Touch and slide sideways to read each bar. A tap pins a bar, a second tap on it lets go.
+                    // A mostly vertical move is left to the sheet.
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        fun binAt(x: Float) = (x / size.width * bins).toInt().coerceIn(0, bins - 1)
+                        scrub = binAt(down.position.x)
+                        var total = Offset.Zero
+                        var horizontal = false
+                        var tapped = false
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                tapped = !horizontal
+                                break
+                            }
+                            total += change.positionChange()
+                            if (!horizontal) {
+                                if (abs(total.y) > viewConfiguration.touchSlop && abs(total.y) > abs(total.x)) break
+                                horizontal = abs(total.x) > viewConfiguration.touchSlop
+                            }
+                            if (horizontal) change.consume()
+                            val b = binAt(change.position.x)
+                            if (b != scrub) {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                scrub = b
+                            }
+                        }
+                        val bin = scrub
+                        if (tapped && bin != null) pinned = if (pinned == bin) null else bin
+                        scrub = null
+                    }
+                },
+            ) {
+                val barArea = BAR_AREA.toPx()
+                val axisTop = barArea + 6.dp.toPx()
+                val axisH = AXIS.toPx()
+                val gap = 2.dp.toPx()
+                val slot = size.width / bins
+                val peak = (counts.maxOrNull() ?: 0).coerceAtLeast(1)
+                // Bars. Step bars take their step colour with a faint ink edge, so the light steps still
+                // read. Others are thin and grey. The area's own bin is ink (or outlined in ink), so it
+                // reads without colour.
+                counts.forEachIndexed { i, c ->
+                    if (c == 0) return@forEachIndexed
+                    val h = (barArea * c / peak).coerceAtLeast(2.dp.toPx())
+                    val topLeft = Offset(i * slot + gap / 2, barArea - h)
+                    val barSize = Size((slot - gap).coerceAtLeast(1f), h)
+                    val radius = CornerRadius(2.dp.toPx())
+                    if (steps != null) {
+                        val fill = Color(steps.colorOf(binMid(i, domain, bins)) ?: SequentialRamp.at(0.5))
+                        drawRoundRect(color = fill, topLeft = topLeft, size = barSize, cornerRadius = radius)
+                        val picked = i == (active ?: hereBin)
+                        val edge = if (picked) ink else colors.edge
+                        val stroke = if (picked) 2.dp.toPx() else 1f
+                        drawRoundRect(color = edge, topLeft = topLeft, size = barSize, cornerRadius = radius, style = Stroke(stroke))
+                    } else {
+                        drawRoundRect(color = if (i == (active ?: hereBin)) ink else bar, topLeft = topLeft, size = barSize, cornerRadius = radius)
+                    }
+                }
                 if (steps != null) {
-                    val fill = Color(steps.colorOf(binMid(i, domain, bins)) ?: SequentialRamp.at(0.5))
-                    drawRoundRect(color = fill, topLeft = topLeft, size = barSize, cornerRadius = radius)
-                    val picked = i == (active ?: hereBin)
-                    val edge = if (picked) ink else ink.copy(alpha = 0.35f)
-                    val stroke = if (picked) 2.dp.toPx() else 1f
-                    drawRoundRect(color = edge, topLeft = topLeft, size = barSize, cornerRadius = radius, style = Stroke(stroke))
+                    // A neutral axis. The guideline crosses bars and axis as a dashed ink line.
+                    val half = TRACK_STROKE.toPx() / 2
+                    drawRoundRect(
+                        color = track,
+                        topLeft = Offset(half, axisTop + half),
+                        size = Size(size.width - 2 * half, axisH - 2 * half),
+                        cornerRadius = CornerRadius(axisH / 2),
+                        style = Stroke(TRACK_STROKE.toPx()),
+                    )
+                    if (guideline != null) {
+                        val gx = (domain.fraction(guideline) * size.width).coerceIn(1f, size.width - 1f)
+                        drawLine(ink, Offset(gx, 0f), Offset(gx, axisTop + axisH), strokeWidth = 1.5.dp.toPx(), pathEffect = GUIDE_DASH)
+                    }
+                    if (offScaleMax != null) offScaleCap(Offset(size.width, axisTop + axisH / 2), ink, 5.dp.toPx())
                 } else {
-                    drawRoundRect(color = if (i == (active ?: hereBin)) ink else bar, topLeft = topLeft, size = barSize, cornerRadius = radius)
+                    // The map's scale as the axis.
+                    drawRoundRect(
+                        brush = Brush.horizontalGradient(colorStops = stops, startX = 0f, endX = size.width),
+                        topLeft = Offset(0f, axisTop),
+                        size = Size(size.width, axisH),
+                        cornerRadius = CornerRadius(axisH / 2),
+                    )
+                }
+                active?.let { i ->
+                    val sx = (i + 0.5f) * slot
+                    drawLine(ink, Offset(sx, 0f), Offset(sx, axisTop + axisH), strokeWidth = 1.dp.toPx())
+                }
+                if (here == null || hereColor == null) return@Canvas
+                val x = hereX * size.width
+                drawLine(ink, Offset(x, 0f), Offset(x, axisTop + axisH / 2), strokeWidth = 2.dp.toPx())
+                if (showBand) {
+                    val bandTop = axisTop + axisH + 6.dp.toPx() + 3.dp.toPx()
+                    val left = minX * size.width
+                    val right = maxX * size.width
+                    drawRoundRect(
+                        color = colors.band,
+                        topLeft = Offset(left, bandTop),
+                        size = Size((right - left).coerceAtLeast(BAND.toPx()), BAND.toPx()),
+                        cornerRadius = CornerRadius(BAND.toPx() / 2),
+                    )
+                    drawLine(ink, Offset(x, bandTop - 3.dp.toPx()), Offset(x, bandTop + BAND.toPx() + 3.dp.toPx()), strokeWidth = 2.dp.toPx())
+                }
+                marker(Offset(x, axisTop + axisH / 2), hereColor, ink, 7.dp.toPx())
+            }
+            Spacer(Modifier.height(2.dp))
+            // The bars and the axis run low to high left to right in every language, so the edge labels and
+            // the off-scale note under the end arrow stay left to right too. Their text still shapes as Arabic.
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(Modifier.fillMaxWidth()) {
+                    FitText(low, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                    Spacer(Modifier.weight(1f))
+                    FitText(high, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                }
+                if (offScale != null) {
+                    FitText(offScale, style = MaterialTheme.typography.labelSmall, color = muted, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
                 }
             }
-            if (steps != null) {
-                // A neutral axis. The guideline crosses bars and axis as a dashed ink line.
-                drawRoundRect(color = track, topLeft = Offset(0f, axisTop), size = Size(size.width, axisH), cornerRadius = CornerRadius(axisH / 2))
-                if (guideline != null) {
-                    val gx = (domain.fraction(guideline) * size.width).coerceIn(1f, size.width - 1f)
-                    drawLine(ink, Offset(gx, 0f), Offset(gx, axisTop + axisH), strokeWidth = 1.5.dp.toPx(), pathEffect = GUIDE_DASH)
-                }
-                if (offScaleMax != null) offScaleCap(Offset(size.width, axisTop + axisH / 2), ink, 5.dp.toPx())
-            } else {
-                // The map's scale as the axis.
-                drawRoundRect(
-                    brush = Brush.horizontalGradient(colorStops = stops, startX = 0f, endX = size.width),
-                    topLeft = Offset(0f, axisTop),
-                    size = Size(size.width, axisH),
-                    cornerRadius = CornerRadius(axisH / 2),
-                )
-            }
-            active?.let { i ->
-                val sx = (i + 0.5f) * slot
-                drawLine(ink, Offset(sx, 0f), Offset(sx, axisTop + axisH), strokeWidth = 1.dp.toPx())
-            }
-            if (here == null || hereColor == null) return@Canvas
-            val x = hereX * size.width
-            drawLine(ink, Offset(x, 0f), Offset(x, axisTop + axisH / 2), strokeWidth = 2.dp.toPx())
-            if (showBand) {
-                val bandTop = axisTop + axisH + 6.dp.toPx() + 3.dp.toPx()
-                val left = minX * size.width
-                val right = maxX * size.width
-                drawRoundRect(
-                    color = ink.copy(alpha = 0.5f),
-                    topLeft = Offset(left, bandTop),
-                    size = Size((right - left).coerceAtLeast(BAND.toPx()), BAND.toPx()),
-                    cornerRadius = CornerRadius(BAND.toPx() / 2),
-                )
-                drawLine(ink, Offset(x, bandTop - 3.dp.toPx()), Offset(x, bandTop + BAND.toPx() + 3.dp.toPx()), strokeWidth = 2.dp.toPx())
-            }
-            marker(Offset(x, axisTop + axisH / 2), hereColor, ink, 7.dp.toPx())
         }
-        Spacer(Modifier.height(2.dp))
-        // The bars and the axis run low to high left to right in every language, so the edge labels and
-        // the off-scale note under the end arrow stay left to right too. Their text still shapes as Arabic.
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            Row(Modifier.fillMaxWidth()) {
-                FitText(low, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-                Spacer(Modifier.weight(1f))
-                FitText(high, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-            }
-            if (offScale != null) {
-                FitText(offScale, style = MaterialTheme.typography.labelSmall, color = muted, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
-            }
+        // A pinned bar keeps the map and the list filtered, so letting go is a visible button too.
+        if (pinned != null) {
+            // Ink, not brand blue, which marks only what is chosen.
+            TextButton(
+                onClick = { pinned = null },
+                modifier = Modifier.touchTarget(),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
+            ) { Text(clearLabel) }
         }
     }
 }
@@ -307,7 +345,8 @@ internal fun SpreadChart(
 internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () -> Unit) {
     val p = range.property
     val ink = MaterialTheme.colorScheme.onSurface
-    val track = ink.copy(alpha = 0.12f)
+    val colors = chartColors(MaterialTheme.colorScheme)
+    val track = colors.track
     val dot = Color(range.color)
     val anim = tween<Float>(ANIM_MS)
     val meanX by animateFloatAsState(range.domain.fraction(range.mean), anim)
@@ -327,7 +366,7 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(0.9f)) {
-            FitText(p.shownLabel(), style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            FitText(p.shownLabel(), style = MaterialTheme.typography.bodyLarge)
             FitText(unit, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             if (stepName != null) FitText(stepName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -337,11 +376,12 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
             val y = size.height / 2
             val w = size.width - 2 * r
             val bh = BAND.toPx()
-            drawRoundRect(track, Offset(0f, y - bh / 2), Size(size.width, bh), CornerRadius(bh / 2))
+            val half = TRACK_STROKE.toPx() / 2
+            drawRoundRect(track, Offset(half, y - bh / 2 + half), Size(size.width - 2 * half, bh - 2 * half), CornerRadius(bh / 2), style = Stroke(TRACK_STROKE.toPx()))
             if (hasBand) {
                 val left = r + minX * w
                 val right = r + maxX * w
-                drawRoundRect(ink.copy(alpha = 0.5f), Offset(left, y - bh / 2), Size((right - left).coerceAtLeast(bh), bh), CornerRadius(bh / 2))
+                drawRoundRect(colors.band, Offset(left, y - bh / 2), Size((right - left).coerceAtLeast(bh), bh), CornerRadius(bh / 2))
             }
             if (guideX != null) {
                 val gx = r + guideX * w
@@ -418,16 +458,65 @@ internal fun PositionedLabels(labels: List<Pair<Float, String>>, style: TextStyl
         modifier = modifier.fillMaxWidth(),
     ) { measurables, constraints ->
         val width = constraints.maxWidth
-        val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+        // One label may use the whole width. Several share it. Each gets no more than the closest gap
+        // between two marks and its share of the width, so a large font shrinks each one instead of
+        // letting neighbours overlap.
+        val slot = if (measurables.size > 1 && constraints.hasBoundedWidth) labelSlot(labels.map { it.first }, width) else width
+        val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0, maxWidth = slot)) }
         val height = placeables.maxOfOrNull { it.height } ?: 0
+        val xs = labelPositions(labels.map { it.first }, placeables.map { it.width }, width)
         layout(width, height) {
-            placeables.forEachIndexed { i, p ->
-                val x = (labels[i].first * width - p.width / 2f).roundToInt().coerceIn(0, (width - p.width).coerceAtLeast(0))
-                p.place(x, 0)
-            }
+            placeables.forEachIndexed { i, p -> p.place(xs[i], 0) }
         }
     }
 }
+
+/** The widest a label may be among [fractions] on [width], at most the closest gap and an even share. */
+internal fun labelSlot(fractions: List<Float>, width: Int): Int {
+    val sorted = fractions.sorted()
+    val gap = sorted.zipWithNext { a, b -> (b - a) * width }.minOrNull() ?: width.toFloat()
+    return minOf(gap, width.toFloat() / fractions.size).toInt().coerceAtLeast(0)
+}
+
+/**
+ * Where each label starts, centred on its fraction when there is room. Labels left to right never
+ * overlap and stay inside [width]. A label pushed off its mark moves only as far as its neighbour
+ * needs, which [labelSlot] keeps small. [fractions] are in drawing order, left to right.
+ */
+internal fun labelPositions(fractions: List<Float>, widths: List<Int>, width: Int): List<Int> {
+    val order = fractions.indices.sortedBy { fractions[it] }
+    val xs = IntArray(fractions.size)
+    var end = 0
+    for (i in order) {
+        val wanted = (fractions[i] * width - widths[i] / 2f).roundToInt().coerceIn(0, (width - widths[i]).coerceAtLeast(0))
+        xs[i] = maxOf(wanted, end)
+        end = xs[i] + widths[i]
+    }
+    var start = width
+    for (i in order.reversed()) {
+        xs[i] = minOf(xs[i], start - widths[i]).coerceAtLeast(0)
+        start = xs[i]
+    }
+    return xs.toList()
+}
+
+/**
+ * The neutral marks of the charts, each at 3 to 1 or better against the sheet and the legend
+ * surface so they read without colour. The [track] is drawn as an outline only, so the filled
+ * [band] on it stands apart by its fill as well as its colour.
+ */
+@Immutable
+internal data class ChartColors(val bar: Color, val track: Color, val band: Color, val edge: Color)
+
+internal fun chartColors(scheme: ColorScheme): ChartColors = ChartColors(
+    bar = scheme.outline,
+    track = scheme.outline,
+    band = scheme.onSurface,
+    edge = swatchBorderColor(scheme),
+)
+
+// The track outline. Thin, so the filled band and the bars carry the weight.
+private val TRACK_STROKE = 1.dp
 
 /** A bold value marker. An ink ring around a fill in the map colour, legible on any surface. */
 private fun DrawScope.marker(center: Offset, fill: Color, ink: Color, radius: Float) {

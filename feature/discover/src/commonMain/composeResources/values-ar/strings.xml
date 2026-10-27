@@ -161,4 +161,10 @@
     <string name="discover_property_no2">NO2</string>
     <string name="discover_category_air">الهواء</string>
     <string name="discover_category_weather">الطقس</string>
+    <string name="discover_zoom_in">تكبير</string>
+    <string name="discover_zoom_out">تصغير</string>
+    <string name="discover_sheet_expand">عرض المزيد</string>
+    <string name="discover_sheet_collapse">عرض أقل</string>
+    <string name="discover_clear_filter">إلغاء التصفية</string>
+    <string name="discover_near_me_none">تعذّر تحديد الموقع</string>
 </resources>
