@@ -21,10 +21,11 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.TimeZone
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.HistoryColumn
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.MetricSpec
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.settings.DetailLevel
 import space.opensensor.units.UnitFormatter
 import space.opensensor.units.UnitSystem
@@ -40,6 +41,10 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalTestApi::class)
 class BandColumnChartFontScaleTest {
+    init {
+        AirFamily.install()
+    }
+
     private class Case(val name: String, val metric: MetricSpec, val range: HistoryRange, val spanS: Long, val peak: Float, val units: UnitFormatter = UnitFormatter.Metric)
 
     private class Locale(val name: String, val direction: LayoutDirection, val labels: (DetailLevel) -> List<String>)

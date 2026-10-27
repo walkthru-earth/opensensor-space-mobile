@@ -2,6 +2,8 @@ package space.opensensor.data.history
 
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -10,6 +12,10 @@ import kotlin.test.assertEquals
  * instants come from Python `zoneinfo` for America/New_York.
  */
 class CalendarWindowTest {
+    init {
+        AirFamily.install()
+    }
+
     private val newYork = TimeZone.of("America/New_York")
 
     @Test

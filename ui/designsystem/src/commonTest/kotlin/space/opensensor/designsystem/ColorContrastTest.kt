@@ -2,8 +2,8 @@ package space.opensensor.designsystem
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

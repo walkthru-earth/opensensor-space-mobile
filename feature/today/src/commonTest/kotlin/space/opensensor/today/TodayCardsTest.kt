@@ -3,12 +3,13 @@ package space.opensensor.today
 import space.opensensor.collection.SyncEndReason
 import space.opensensor.data.SyncProgress
 import space.opensensor.data.ble.ConfigSnapshot
-import space.opensensor.data.history.pmsStatus
 import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
 import space.opensensor.data.protocol.SensorConfig
 import space.opensensor.data.sync.FileOutcome
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.pmsStatus
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.TodayCard.BATCH_ESTIMATE
 import space.opensensor.today.TodayCard.BOARD
@@ -29,6 +30,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TodayCardsTest {
+    init {
+        AirFamily.install()
+    }
+
     private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809")
     private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9")
     private val particleSample = LiveSample.parse("""{"pms":4,"pm25":14.9}""")

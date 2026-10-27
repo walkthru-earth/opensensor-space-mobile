@@ -4,10 +4,11 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.airquality.WhoStep
-import space.opensensor.data.history.AirMood
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.designsystem.moodWord
+import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.WhoStep
+import space.opensensor.family.air.stepOf
 import space.opensensor.history.resources.Res
 import space.opensensor.history.resources.who_step_above_it1
 import space.opensensor.history.resources.who_step_guideline
@@ -22,7 +23,7 @@ import space.opensensor.designsystem.relativeLuminance as designSystemRelativeLu
 import space.opensensor.designsystem.textColorOnSurface as designSystemTextColorOnSurface
 
 // History's WHO colour helpers delegate to :ui:designsystem (ColorContrast.kt). The ARGB values live
-// only in :core:airquality (WhoStep).
+// only in :family:air (WhoStep).
 
 internal fun WhoStep.color(): Color = designSystemColor()
 

@@ -1,7 +1,10 @@
 package space.opensensor.discover
 
-import space.opensensor.airquality.WhoGuidelines
-import space.opensensor.airquality.WhoStep
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.WhoGuidelines
+import space.opensensor.family.air.WhoStep
+import space.opensensor.family.air.stepOf
+import space.opensensor.family.air.who
 import space.opensensor.model.LocalizedText
 import space.opensensor.model.Scale
 import space.opensensor.model.ScaleStep
@@ -20,6 +23,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CellChartMathTest {
+    init {
+        AirFamily.install()
+    }
+
     // A feed describes PM with the scales the app ships ([DiscoverCollection.BUNDLED]).
     private val pm = DiscoverCollection.BUNDLED.describe(listOf(FeedProperty("pm25", "PM2.5", "µg/m³", "Air", 1.0))).single()
     private val pm10 = DiscoverCollection.BUNDLED.describe(listOf(FeedProperty("pm10", "PM10", "µg/m³", "Air", 1.0))).single()

@@ -1,8 +1,11 @@
 package space.opensensor.discover
 
-import space.opensensor.airquality.HealthScale
-import space.opensensor.airquality.MoodBlock
-import space.opensensor.airquality.WhoStep
+import space.opensensor.family.air.MoodBlock
+import space.opensensor.family.air.WhoStep
+import space.opensensor.family.air.rangeOf
+import space.opensensor.family.air.stepOf
+import space.opensensor.family.air.who
+import space.opensensor.model.HealthScale
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.CellScale
 import space.opensensor.publicfeed.FeedProperty

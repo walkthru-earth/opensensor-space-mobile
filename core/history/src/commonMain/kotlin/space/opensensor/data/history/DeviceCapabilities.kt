@@ -3,12 +3,11 @@ package space.opensensor.data.history
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveReading
 import space.opensensor.data.protocol.LiveSample
-import space.opensensor.data.protocol.PmsStatus
 import space.opensensor.model.AppProfile
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
 import space.opensensor.model.Capability
-import space.opensensor.model.Family
+import space.opensensor.model.DerivedMetricProvider
 import space.opensensor.model.Role
 import space.opensensor.model.Thing
 import space.opensensor.model.ThingDatastream
@@ -26,12 +25,9 @@ import space.opensensor.model.ThingDatastream
  * - [Capability.LIVE] is a resolved [thing].
  * - [Capability.CONFIG] is protocol v2 or later: pairing, Wi-Fi, LAN and bonds can be edited.
  * - [Capability.SENSOR_IDENTITY] is a template with the `sensor_serial_code` column, a board that
- *   stores the fitted PM module's sticker (`sensor` config) and can opt in to a batch estimate.
- * - [Capability.BATCH_ESTIMATE] is a template that writes the unvalidated Plantower batch estimate
- *   column, the only boards whose live view may show it (still gated by the board's opt-in, see
- *   [showsBatchEstimate]).
- * - [Capability.PARTICLES] is an `air` profile whose LIVE shows a physical PM2.5 on the PM2.5 scale,
- *   see [showsAirCards].
+ *   stores the fitted sensor module's sticker (`sensor` config) and can opt in to a batch estimate.
+ * - Every other capability is a family's ([DerivedMetricProvider.capabilitiesOf]), from the
+ *   providers [Metrics] installed.
  */
 data class DeviceCapabilities(
     val thing: Thing?,
@@ -41,22 +37,9 @@ data class DeviceCapabilities(
 
     val configurable: Boolean get() = Capability.CONFIG in capabilities
     val sensorIdentity: Boolean get() = Capability.SENSOR_IDENTITY in capabilities
-    val batchEstimate: Boolean get() = Capability.BATCH_ESTIMATE in capabilities
 
     /** [sample] read through [thing], or null without both. */
     fun reading(sample: LiveSample?): LiveReading? = LiveReading.of(sample, thing)
-
-    /**
-     * The particle cards (mood, PM2.5) apply with [Capability.PARTICLES], once a sample carries the PM
-     * sensor state. A sample without the `pms_status` key (the board has no such field) or with status
-     * ABSENT does not. A `null` status is no reading now, never a missing sensor, so an overflow sample
-     * keeps the particle cards with their values cleared.
-     */
-    fun showsAirCards(sample: LiveSample?): Boolean {
-        if (Capability.PARTICLES !in capabilities) return false
-        val reading = LiveReading.of(sample, thing) ?: return false
-        return reading.carries(AirMetrics.PMS_STATUS) && reading.pmsStatus != PmsStatus.ABSENT
-    }
 
     /** The temperature LIVE shows, null when it shows none. */
     val temperature: ThingDatastream? get() = thing?.live?.temperature?.let { thing.datastream(it.name) }
@@ -67,11 +50,8 @@ data class DeviceCapabilities(
     /** True when the LIVE temperature is the air around the board, a physical measurement, not the board's own. */
     val ambientTemperature: Boolean get() = temperature?.datastream?.role == Role.PHYSICAL_MEASUREMENT
 
-    /** The batch estimate card: a bundled template with the column and the board's acknowledged opt-in (`1`). */
-    fun showsBatchEstimate(boardBatchCandidate: Int?): Boolean = batchEstimate && boardBatchCandidate == 1
-
     companion object {
-        /** The column that holds the fitted PM module's sticker serial. */
+        /** The column that holds the fitted sensor module's sticker serial. */
         const val SENSOR_SERIAL_COLUMN = "sensor_serial_code"
 
         /** Nothing known yet (no `INFO`): no live interpretation, no configuration. */
@@ -93,24 +73,15 @@ data class DeviceCapabilities(
             return DeviceCapabilities(thing, capabilitiesOf(joined, proto = info.proto ?: 1))
         }
 
-        /** The capabilities of [thing] on a board speaking sync protocol [proto]. */
-        fun capabilitiesOf(thing: Thing?, proto: Int): Set<Capability> = buildSet {
+        /** The capabilities of [thing] on a board speaking sync protocol [proto], with the [providers]' own. */
+        fun capabilitiesOf(thing: Thing?, proto: Int, providers: List<DerivedMetricProvider> = Metrics.providers): Set<Capability> = buildSet {
             if (proto >= 2) add(Capability.CONFIG)
             if (thing == null) return@buildSet
             if (thing.datastream(SENSOR_SERIAL_COLUMN) != null) add(Capability.SENSOR_IDENTITY)
             // LIVE and what it shows need a reviewed profile, a derived one only names columns.
             if (thing.profile.isDerived) return@buildSet
             add(Capability.LIVE)
-            if (thing.datastream(AirMetrics.BATCH_ESTIMATE_COLUMN) != null) add(Capability.BATCH_ESTIMATE)
-            if (thing.profile.family == Family.AIR && thing.showsPm25Live()) add(Capability.PARTICLES)
-        }
-
-        /** The profile scale id of PM2.5. */
-        private const val PM25_SCALE = "pm25"
-
-        /** A physical PM2.5 measurement on the PM2.5 scale that LIVE shows. */
-        private fun Thing.showsPm25Live(): Boolean = datastreams.any {
-            it.scaleId == PM25_SCALE && it.datastream.role == Role.PHYSICAL_MEASUREMENT && it.datastream.liveKey in live.keys
+            providers.forEach { addAll(it.capabilitiesOf(thing)) }
         }
     }
 }

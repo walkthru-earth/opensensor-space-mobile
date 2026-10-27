@@ -4,8 +4,11 @@ import space.opensensor.data.history.LiveFixtures.cores3
 import space.opensensor.data.history.LiveFixtures.waveshare
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.batchEstimate
+import space.opensensor.family.air.showsAirCards
+import space.opensensor.family.air.showsBatchEstimate
 import space.opensensor.model.Capability
-import space.opensensor.model.Family
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -14,6 +17,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DeviceCapabilitiesTest {
+    init {
+        AirFamily.install()
+    }
+
     @Test fun noInfoMeansNothingIsAssumed() {
         assertEquals(DeviceCapabilities.NONE, DeviceCapabilities.from(null))
         assertNull(DeviceCapabilities.NONE.reading(LiveSample.parse("""{"pms":4,"pm25":3}""")))
@@ -22,7 +29,7 @@ class DeviceCapabilitiesTest {
 
     @Test fun waveshareHasEveryCapability() {
         val caps = DeviceCapabilities.from(waveshare)
-        assertEquals(Family.AIR, caps.thing?.profile?.family)
+        assertEquals(AirFamily.FAMILY, caps.thing?.profile?.family)
         assertEquals("ambient_temperature_c", caps.temperature?.name)
         assertTrue(caps.ambientTemperature)
         assertEquals("relative_humidity_percent", caps.humidity?.name)
@@ -87,11 +94,11 @@ class DeviceCapabilitiesTest {
     @Test
     fun `the air boards carry the particles capability and CoreS3 has no config`() {
         assertEquals(
-            setOf(Capability.LIVE, Capability.CONFIG, Capability.SENSOR_IDENTITY, Capability.BATCH_ESTIMATE, Capability.PARTICLES),
+            setOf(Capability.LIVE, Capability.CONFIG, Capability.SENSOR_IDENTITY, AirFamily.BATCH_ESTIMATE, AirFamily.PARTICLES),
             DeviceCapabilities.from(waveshare).capabilities,
         )
         val coreS3 = DeviceCapabilities.from(cores3)
-        assertTrue(Capability.PARTICLES in coreS3)
+        assertTrue(AirFamily.PARTICLES in coreS3)
         assertFalse(Capability.CONFIG in coreS3)
         assertEquals(emptySet(), DeviceCapabilities.NONE.capabilities)
     }

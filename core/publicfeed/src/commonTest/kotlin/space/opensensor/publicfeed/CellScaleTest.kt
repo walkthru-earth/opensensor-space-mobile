@@ -1,7 +1,9 @@
 package space.opensensor.publicfeed
 
-import space.opensensor.airquality.WhoGuidelines
-import space.opensensor.airquality.WhoStep
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.WhoGuidelines
+import space.opensensor.family.air.WhoStep
+import space.opensensor.family.air.who
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -9,6 +11,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CellScaleTest {
+    init {
+        AirFamily.install()
+    }
+
     private fun row(h3: Long, vararg means: Pair<String, Double>) =
         CellRow(h3, 3, 0L, means.associate { (id, v) -> id to CellStat(1, v, v, v) })
 

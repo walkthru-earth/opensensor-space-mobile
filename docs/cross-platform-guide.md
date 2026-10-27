@@ -140,7 +140,7 @@ signal blue and teal) and `app/globals.css` (type and shape). The apps follow it
 | Layer | Owner | Notes |
 | --- | --- | --- |
 | Brand tokens (colour roles, type, radii, spacing) | `:ui:designsystem` `commonMain`, values copied from the website registry | Light and dark from the same role names (`main`, `ink`, `paper`, `surface`, `accent`, `deep`, `text`, `muted`, `border`) |
-| Scientific colours (health scales) | `:core:airquality` `WhoGuidelines` and `WhoStep` | WHO 2021 guideline and interim targets, one colour-blind checked palette, never derived from brand colours, never changed for aesthetics |
+| Scientific colours (health scales) | `:family:air` `WhoGuidelines` and `WhoStep` | WHO 2021 guideline and interim targets, one colour-blind checked palette, never derived from brand colours, never changed for aesthetics |
 | Material 3 theme | `:ui:designsystem` maps tokens to a `ColorScheme`, `Typography` and `Shapes` | Android and iOS render the same theme through Compose |
 | Fonts | Quicksand (Latin) and Cairo (Arabic), both OFL variable TTFs, Compose resources in `:ui:designsystem` with their licence texts | No runtime font download, the app works offline. Same faces and weights on Android and iOS |
 | Floating controls | `:ui:designsystem` `FloatingControls.kt` | One style for every control over content, see below |
@@ -181,7 +181,7 @@ renders in the default purple.
 ### Health scales and charts (the global data rule)
 
 Every value that has a published health scale is judged against it, the same way on the map,
-in charts, on cards and in the peacock expression. The scale lives once in `:core:airquality`.
+in charts, on cards and in the peacock expression. The scale lives once in `:family:air`.
 
 - **WHO 2021, cited.** PM2.5 and PM10 use the WHO global air quality guidelines (2021), the
   24-hour guideline and its four interim targets (PM2.5 15, 25, 37.5, 50, 75 µg/m³. PM10 45,
@@ -191,7 +191,7 @@ in charts, on cards and in the peacock expression. The scale lives once in `:cor
 - **PM2.5 corrected by default.** A row with a valid relative humidity (finite, 0 to 100 %)
   shows the US EPA corrected PM2.5 for PurpleAir style PMS sensors (Barkjohn et al. 2021, the
   US-wide piecewise equation the EPA uses on the AirNow Fire and Smoke Map), computed from
-  `pm25_cf1_ug_m3` and `relative_humidity_percent` by `EpaPm25Correction` in `:core:airquality`.
+  `pm25_cf1_ug_m3` and `relative_humidity_percent` by `EpaPm25Correction` in `:family:air`.
   Each row is corrected before averaging, never the average. A negative result clamps to 0 and
   there is no extrapolation. A row without a valid RH, every CoreS3 row and every Discover value
   (the public feed has no humidity) shows the atmospheric value, labelled raw. Every PM2.5 card

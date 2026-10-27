@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
  * {"ble":{"pair":"random","pin_set":1,"pin_default":0,"bonds":1,"display":1},
  *  "wifi":{"on":1,"ssid":"home","psk_set":1,"state":"connected","ip":"192.168.1.42","rssi":-58,"mac":"e0..6b40"},
  *  "lan":{"on":1,"port":47390,"host":"os-6b40","clients":0},
- *  "sensor":{"vendor":"Plantower","model":"PMS5003T","serial":"PMS5003T-202604081332","batch_candidate":0}}
+ *  "sensor":{"vendor":"Acme","model":"X1","serial":"X1-0042","batch_candidate":0}}
  * ```
  */
 @Serializable
@@ -59,7 +59,7 @@ enum class ThingMobility(val wire: String) {
     }
 }
 
-/** Board-provisioned identity of the replaceable PM module. Not a calibration certificate. */
+/** Board-provisioned identity of the replaceable sensor module. Not a calibration certificate. */
 @Serializable
 data class SensorConfig(
     val vendor: String? = null,
@@ -219,16 +219,18 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
 
         fun rotateToken(): Builder = add(ConfigFields.LAN_ROTATE_TOKEN, "1")
 
-        /** Waveshare's current UART/parser contract is specifically Plantower PMS5003T. */
-        fun sensorIdentity(serial: String, enableBatchCandidate: Boolean): Builder {
-            val normalized = serial.trim().uppercase()
-            if (!Regex("PMS5003T-[0-9]{9,17}").matches(normalized)) {
-                throw ConfigValidationException(ConfigProblem.STICKER_FORMAT, "sensor sticker must be PMS5003T-YYYYMMDD plus 1 to 9 unit digits")
-            }
-            add(ConfigFields.SENSOR_VENDOR, "Plantower")
-            add(ConfigFields.SENSOR_MODEL, "PMS5003T")
-            add(ConfigFields.SENSOR_SERIAL, normalized)
-            return add(ConfigFields.SENSOR_BATCH_CANDIDATE, if (enableBatchCandidate) "1" else "0")
+        /**
+         * The replaceable sensor module's identity. A family checks its own sticker format first and
+         * calls this with the checked values.
+         */
+        fun sensorIdentity(vendor: String, model: String, serial: String, batchCandidate: Boolean): Builder {
+            requireSingleLine(vendor, "sensor vendor")
+            requireSingleLine(model, "sensor model")
+            requireSingleLine(serial, "sensor serial")
+            add(ConfigFields.SENSOR_VENDOR, vendor)
+            add(ConfigFields.SENSOR_MODEL, model)
+            add(ConfigFields.SENSOR_SERIAL, serial)
+            return add(ConfigFields.SENSOR_BATCH_CANDIDATE, if (batchCandidate) "1" else "0")
         }
 
         fun build(): ConfigPatch = ConfigPatch(lines.toList())

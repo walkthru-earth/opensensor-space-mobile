@@ -7,6 +7,8 @@ import space.opensensor.data.history.parquet.ParquetFile
 import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.history.parquet.ParquetWriter
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.model.BoardTemplate
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -23,6 +25,10 @@ import kotlin.test.assertTrue
  * An independent loop over the same rows is the oracle for every 15 minute, hourly and daily bucket.
  */
 class CurrentBoardFilesTest {
+    init {
+        AirFamily.install()
+    }
+
     private val thing = "board-thing"
     private val day = 20_000L
 

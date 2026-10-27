@@ -17,7 +17,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
-import space.opensensor.airquality.ThingSummary
+import space.opensensor.family.air.PublicSummary
+import space.opensensor.family.air.ThingSummary
 import space.opensensor.publicfeed.CellFreshness
 import space.opensensor.publicfeed.CellGeoJson
 import space.opensensor.publicfeed.CellRow
@@ -31,7 +32,6 @@ import space.opensensor.publicfeed.H3Index
 import space.opensensor.publicfeed.LatLng
 import space.opensensor.publicfeed.PropertyRanking
 import space.opensensor.publicfeed.PublicFeed
-import space.opensensor.publicfeed.PublicSummary
 import space.opensensor.publicfeed.TimeZoneRegions
 import space.opensensor.publicfeed.ViewportCover
 import space.opensensor.settings.DiscoverSource

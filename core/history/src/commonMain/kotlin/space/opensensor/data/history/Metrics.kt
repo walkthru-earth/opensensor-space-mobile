@@ -1,9 +1,5 @@
 package space.opensensor.data.history
 
-import space.opensensor.airquality.AirDerivedMetrics
-import space.opensensor.airquality.HealthScale
-import space.opensensor.airquality.WhoGuidelines
-import space.opensensor.airquality.WhoStep
 import space.opensensor.model.Aggregate
 import space.opensensor.model.AppProfile
 import space.opensensor.model.Basis
@@ -12,6 +8,7 @@ import space.opensensor.model.BundledCatalog
 import space.opensensor.model.Datastream
 import space.opensensor.model.DerivedMetric
 import space.opensensor.model.DerivedMetricProvider
+import space.opensensor.model.HealthScale
 import space.opensensor.model.LocalizedText
 import space.opensensor.model.PlausibleRange
 import space.opensensor.model.RowFormula
@@ -45,8 +42,8 @@ data class MetricSpec(
     /** The template's `opensensor:plausible_range`, the axis bounds of a neutral chart. */
     val plausibleRange: PlausibleRange? = null,
     /**
-     * The published health scale (WHO 2021 for PM2.5 and PM10) that colours and names a value, or
-     * null for a metric shown in a neutral colour. Its property id and unit must match [property].
+     * The published health scale a family names ([DerivedMetricProvider.scales]) that colours and
+     * names a value, or null for a metric shown in a neutral colour. Its property id and unit must match [property].
      */
     val healthScale: HealthScale? = null,
     /** The quantity this metric measures, the health scale key. Two views of one quantity share it. */
@@ -98,11 +95,6 @@ data class MetricSpec(
     /** The label in [language], else the English one. */
     fun label(language: String): String = labels?.get(language) ?: label
 
-    /** The WHO step of [value], or null for a neutral metric or a non-finite value. */
-    fun stepOf(value: Double): WhoStep? = healthScale?.stepOf(value)
-
-    fun moodOf(value: Double): AirMood? = stepOf(value)?.let { AirMood.of(it) }
-
     /**
      * This metric as [template] defines it, with that template's gate and settle time, or null when
      * the template lacks a source column, stores it in another unit or rolls it up another way. A file
@@ -123,24 +115,22 @@ data class MetricSpec(
  * knowledge comes from the profile's scale ids and from the [providers] of derived metrics.
  */
 object Metrics {
-    /** The providers the catalog applies until an app entry point installs its own. */
-    val DEFAULT_PROVIDERS: List<DerivedMetricProvider> = listOf(AirDerivedMetrics)
-
     /** The installed providers and the catalog built from them on first read. */
     private class Installed(val providers: List<DerivedMetricProvider>) {
         val catalog: List<MetricSpec> by lazy { catalogOf(BundledCatalog.templates, providers) }
     }
 
+    /** No family until an app entry point installs its own, so every column stays neutral. */
     @Volatile
-    private var installed = Installed(DEFAULT_PROVIDERS)
+    private var installed = Installed(emptyList())
 
     /** The derived metric providers the catalog applies, in order. */
     val providers: List<DerivedMetricProvider> get() = installed.providers
 
     /**
-     * Makes [providers] the ones the [catalog] applies, the derived metrics of the app's Thing kinds
-     * (`ThingKinds.installMetrics` in `:core:thing`). Each app entry point calls it once at launch,
-     * before any screen reads a metric, since the named specs of `AirMetrics` keep what they first read.
+     * Makes [providers] the ones the [catalog] applies, the app's families and then the derived
+     * metrics of its Thing kinds. A family's own install calls it once at each app's launch, before
+     * any screen reads a metric, since a family's named specs keep what they first read.
      */
     fun install(providers: List<DerivedMetricProvider>) {
         installed = Installed(providers.distinct())
@@ -152,9 +142,16 @@ object Metrics {
     /** The aggregate the tiers apply to [ds]. A missing aggregate is a mean, an unknown one a point (rule 5). */
     fun rollupOf(ds: Datastream): Aggregate = if (ds.aggregate == null) Aggregate.MEAN else ds.rollup
 
-    /** The metric for [ds] under [profile]. [basis] marks a column with a derived corrected view. */
-    fun of(ds: Datastream, profile: AppProfile, basis: Basis? = null): MetricSpec {
-        val scale = profile.scales[ds.name]?.let(WhoGuidelines::forProperty)
+    /** Every health scale the [providers] publish, by scale id. The first provider that names an id keeps it. */
+    fun scalesOf(providers: List<DerivedMetricProvider> = this.providers): Map<String, HealthScale> =
+        providers.reversed().fold(emptyMap()) { acc, p -> acc + p.scales }
+
+    /**
+     * The metric for [ds] under [profile]. [basis] marks a column with a derived corrected view. The
+     * profile's scale id picks one of [scales], and an id no family publishes leaves the column neutral.
+     */
+    fun of(ds: Datastream, profile: AppProfile, basis: Basis? = null, scales: Map<String, HealthScale> = scalesOf()): MetricSpec {
+        val scale = profile.scales[ds.name]?.let(scales::get)
         val labels = profile.labels[ds.name]
         return MetricSpec(
             id = ds.name,
@@ -188,22 +185,23 @@ object Metrics {
         providers: List<DerivedMetricProvider> = this.providers,
     ): List<MetricSpec> {
         val derived = providers.flatMap { it.derive(template) }
+        val scales = scalesOf(providers)
         val views = derived.mapNotNullTo(HashSet()) { it.viewOf }
         val columns = LinkedHashSet<String>()
         profile.primary.filterTo(columns) { it !in profile.hidden && template.datastream(it) != null }
         template.datastreams.filter { it.role?.isMeasurement == true && it.name !in profile.hidden }.mapTo(columns) { it.name }
-        val stored = columns.mapNotNull { name -> template.datastream(name)?.let { of(it, profile, if (name in views) Basis.RAW else null) } }
-        val metrics = derived.map { of(it, template, profile) } + stored
+        val stored = columns.mapNotNull { name -> template.datastream(name)?.let { of(it, profile, if (name in views) Basis.RAW else null, scales) } }
+        val metrics = derived.map { of(it, template, profile, scales) } + stored
         val repeated = metrics.groupingBy { it.id }.eachCount().filterValues { it > 1 }.keys
         require(repeated.isEmpty()) { "metric ids repeat on ${template.dict}: ${repeated.joinToString()}" }
         return metrics
     }
 
     /** [metric] on [template], sharing the profile unit, scale and primary flag of the column it is a view of. */
-    private fun of(metric: DerivedMetric, template: BoardTemplate, profile: AppProfile): MetricSpec {
+    private fun of(metric: DerivedMetric, template: BoardTemplate, profile: AppProfile, scales: Map<String, HealthScale>): MetricSpec {
         val ds = metric.datastream
         val from = ds.sourceColumns
-        val shown = metric.viewOf?.let(template::datastream)?.let { of(it, profile) }
+        val shown = metric.viewOf?.let(template::datastream)?.let { of(it, profile, scales = scales) }
         return MetricSpec(
             id = ds.name,
             column = from.first(),

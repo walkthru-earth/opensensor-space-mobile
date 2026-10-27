@@ -34,8 +34,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.airquality.MoodBlock
-import space.opensensor.airquality.WhoStep
 import space.opensensor.designsystem.resources.Res
 import space.opensensor.designsystem.resources.list_separator
 import space.opensensor.designsystem.resources.mood_fair
@@ -54,6 +52,8 @@ import space.opensensor.designsystem.resources.mood_strip_selected
 import space.opensensor.designsystem.resources.mood_thick
 import space.opensensor.designsystem.resources.mood_thick_line
 import space.opensensor.designsystem.resources.value_not_available
+import space.opensensor.family.air.MoodBlock
+import space.opensensor.family.air.WhoStep
 
 internal fun moodWordRes(step: WhoStep?): StringResource = when (step) {
     WhoStep.GUIDELINE -> Res.string.mood_fresh

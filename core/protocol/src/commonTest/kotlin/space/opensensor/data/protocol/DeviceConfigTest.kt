@@ -136,7 +136,7 @@ class DeviceConfigTest {
 
     @Test
     fun `sensor identity patch and board echo agree`() {
-        val patch = ConfigPatch.build { sensorIdentity("pms5003t-202604081332", true) }
+        val patch = ConfigPatch.build { sensorIdentity("Plantower", "PMS5003T", "PMS5003T-202604081332", true) }
         assertEquals(
             "sensor.vendor=Plantower\nsensor.model=PMS5003T\nsensor.serial=PMS5003T-202604081332\nsensor.batch_candidate=1\n",
             patch.encode(),

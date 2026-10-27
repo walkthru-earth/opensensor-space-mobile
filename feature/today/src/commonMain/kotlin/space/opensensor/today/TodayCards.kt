@@ -34,24 +34,16 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.airquality.AirDerivedMetrics
-import space.opensensor.airquality.Pm25Basis
 import space.opensensor.data.SyncProgress
 import space.opensensor.data.ble.ConfigSnapshot
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.DeviceCapabilities
-import space.opensensor.data.history.NowReading
 import space.opensensor.data.history.TodaySoFar
-import space.opensensor.data.history.pmValid
-import space.opensensor.data.history.pmsStatus
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
 import space.opensensor.data.protocol.LiveReading
 import space.opensensor.data.protocol.LiveSample
-import space.opensensor.data.protocol.PlantowerBatchCandidate
-import space.opensensor.data.protocol.PmsStatus
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BigValue
 import space.opensensor.designsystem.BodyText
@@ -76,6 +68,14 @@ import space.opensensor.designsystem.pm25CorrectionInfo
 import space.opensensor.designsystem.pm25Label
 import space.opensensor.designsystem.rememberNowMillis
 import space.opensensor.designsystem.spokenList
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.NowReading
+import space.opensensor.family.air.PlantowerBatchCandidate
+import space.opensensor.family.air.Pm25Basis
+import space.opensensor.family.air.PmsStatus
+import space.opensensor.family.air.pmValid
+import space.opensensor.family.air.pmsStatus
 import space.opensensor.model.ThingDatastream
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.resources.Res
@@ -207,7 +207,7 @@ internal fun particleBins(reading: LiveReading?): List<Pair<String, String>> =
     PARTICLE_BINS.filter { (_, column) -> reading?.declares(column) == true }
 
 /** The CF=1 PM1, PM2.5 and PM10 columns, a Developer line on the readings card. */
-private val CF1_COLUMNS = listOf("pm1_cf1_ug_m3", AirDerivedMetrics.PM25_CF1, "pm10_cf1_ug_m3")
+private val CF1_COLUMNS = listOf("pm1_cf1_ug_m3", AirFamily.PM25_CF1, "pm10_cf1_ug_m3")
 
 private val PARTICLE_BINS = listOf(
     ">0.3" to "particles_gt03_per_01l",
@@ -317,8 +317,8 @@ internal fun MetricHeroCard(
                         NowReading.Waiting -> PeacockExpression.CONFUSED
                         is NowReading.SensorNotReady -> when (reading.status) {
                             PmsStatus.WARMING -> PeacockExpression.WORKING
-                            PmsStatus.STALE -> PeacockExpression.SLEEPING
-                            PmsStatus.ABSENT, PmsStatus.ERROR -> PeacockExpression.CONCERNED
+                            PmsStatus.STALE, PmsStatus.SLEEPING -> PeacockExpression.SLEEPING
+                            PmsStatus.ABSENT, PmsStatus.ERROR, PmsStatus.MODEL_MISMATCH -> PeacockExpression.CONCERNED
                             PmsStatus.VALID -> PeacockExpression.CONFUSED
                         }
                     },

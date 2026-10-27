@@ -13,7 +13,6 @@ flowchart TB
     PQ[":core:parquet<br/>reader + writer, ByteReader, RangeSource, page index, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
     NT[":core:net<br/>HTTP range source, OkHttp and NSURLSession"]
     MO1[":core:model<br/>board templates, app profiles, datastreams, scales, thing join"]
-    AQ[":core:airquality<br/>WHO 2021 scales and palette, PM quality checks"]
     HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
     PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample, OpenAQ live feed"]
     UN[":core:units<br/>display units, axis ticks"]
@@ -23,6 +22,9 @@ flowchart TB
     SY1[":core:sync<br/>LinkSession, SyncEngine, ArchiveCollector, CollectionController"]
     SC[":core:stac<br/>one STAC File Item per synced device file"]
     TH[":core:thing<br/>ThingKind contract, board kind, ThingKinds registry, PublishGate, PlatformNeedsTable"]
+  end
+  subgraph family["Sensor families, JVM and iOS"]
+    AQ[":family:air<br/>WHO 2021 scales and palette, EPA correction, moods, air metrics, PM quality checks"]
   end
   subgraph ui["Compose Multiplatform, Android and iOS"]
     DS[":ui:designsystem<br/>tokens, theme, fonts, floating controls"]
@@ -36,8 +38,9 @@ flowchart TB
   IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the iOS bridges, static OpenSensorShared framework"]
   SY1 --> PR & AR1
   AR1 --> PR & PQ & ST
-  HI --> PQ & PR & AQ
-  PF --> PQ & AQ & NT
+  HI --> PQ & PR & MO1
+  PF --> PQ & NT
+  AQ --> HI & PF & PR & MO1
   NT --> PQ
   SC --> HI & PF & PR
   TH --> SC & HI & PR & MO1
@@ -46,13 +49,23 @@ flowchart TB
   SE --> UN & ST
   FS --> SE & DS
   SH --> DS
-  APP --> TH & SY1 & ST & HI & PF & UN & DI & DS & SE & FS & PM & SH
-  IS --> TH & SY1 & AR1 & HI & PR & UN & DI & DS & SE & FS & PM & SH
+  APP --> AQ & TH & SY1 & ST & HI & PF & UN & DI & DS & SE & FS & PM & SH
+  IS --> AQ & TH & SY1 & AR1 & HI & PR & UN & DI & DS & SE & FS & PM & SH
   IOS --> IS
 ```
 
-`:core:history` exposes `:core:parquet`, `:core:protocol` and `:core:airquality` as `api`, and
-`:core:publicfeed` exposes `:core:parquet`, `:core:airquality`, `:core:net` (its
+No `:core` module names air quality. `:family:air` (#188) holds the WHO 2021 scales and palette,
+the EPA PM2.5 correction, the moods, the named air metrics, the PM sensor status and sticker, the
+public cell summary and `QcRules`. It plugs in through the generic seams. `AirFamily` is a
+`DerivedMetricProvider` that names its scales and capabilities, and `AirDiscover.COLLECTION` is the
+bundled Discover scale set (`DiscoverCollection.installBundled`). Each app entry point installs it
+at launch with one call, `AirFamily.install(kinds.metricProviders)`, when it builds its Thing kinds
+(`ThingModule` on Android, `ThingKindsIos.kt` on iOS). Core
+modules use it in their tests only, as the real fixture of the air boards. `CoreStaysAirFreeTest`
+in `:family:air` fails the gate when a production source under `core/` names an air term.
+
+`:core:history` exposes `:core:parquet` and `:core:protocol` as `api`, and
+`:core:publicfeed` exposes `:core:parquet`, `:core:net` (its
 `OpenAqAggregatesFeed` takes an `HttpRangeEngine` and reads through `HttpRangeSource`) and
 kotlinx-datetime (daily rows carry a local date). `:core:net` exposes `:core:parquet`. Android
 `DiscoverViewModel` (`OkHttpRangeEngine`) and iOS `AppRoot` (`UrlSessionRangeEngine`) each build one
@@ -199,7 +212,7 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `net` | HTTP range reads through OkHttp on JVM and NSURLSession on iOS |
 | `history` | Metric registry, indexing, aggregation, calendars, grouped `DayPass`, daily output and persistent tiers |
 | `publicfeed` | Discover feed, H3, viewport cover and sample data |
-| `units`, `airquality` | Display units, axis ticks, WHO 2021 scales and the PM quality checks (`QcRules`) |
+| `units` | Display units and axis ticks |
 | `storage` | Durable/Derived/Scratch roots, atomic no-replace commits, free-space budget, quota and memory pressure |
 | `archive` | Layout, verifier, records and store/index ports. Android uses file adapters, iosMain supplies `IosArchiveStore` and `LegacyReceiptImport` |
 | `database` | Room KMP schema v1 (`AppDatabase`, entities, DAOs) on the bundled SQLite driver, `RoomArchiveIndex` and `RoomPrunedFiles` for both phones. iosMain opens `Application Support/database/opensensor.db` through `IosArchiveDatabase` |
@@ -222,7 +235,7 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
   `.verified.json` beside it still fits 255 bytes. The shared
   `SyncPlanner` uses it on both platforms.
 
-### PM quality checks in `:core:airquality`
+### PM quality checks in `:family:air`
 
 `QcRules.flags(rows)` returns one `QcFlags` bitmask per `QcRow` and never changes a value
 ([#91](https://github.com/walkthru-earth/opensensor-space-mobile/issues/91)). It is not wired yet.

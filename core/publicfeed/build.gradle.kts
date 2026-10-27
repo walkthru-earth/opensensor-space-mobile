@@ -14,8 +14,6 @@ kotlin {
             api(project(":core:parquet"))
             // ByteBudgetLru and MemoryPressure bound the bundled sample cache (#61).
             api(project(":core:storage"))
-            // The WHO 2021 HealthScale of a WHO cited step scale (StepScale.who) for the mood surfaces.
-            api(project(":core:airquality"))
             // The discover Collection is read with the shared STAC model (Scale, ThingCollection).
             api(project(":core:model"))
             // OpenAqAggregatesFeed takes an HttpRangeEngine and reads through HttpRangeSource.
@@ -25,6 +23,8 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
+            // Tests only. The bundled sample and the OpenAQ fixtures are described by the air family's scales.
+            implementation(project(":family:air"))
             implementation(libs.kotlinx.coroutines.test)
         }
         jvmMain.dependencies {

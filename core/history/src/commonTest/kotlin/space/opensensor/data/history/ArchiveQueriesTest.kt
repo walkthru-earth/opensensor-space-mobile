@@ -9,6 +9,8 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -16,6 +18,10 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ArchiveQueriesTest {
+    init {
+        AirFamily.install()
+    }
+
     private val zone = TimeZone.UTC
 
     @Test

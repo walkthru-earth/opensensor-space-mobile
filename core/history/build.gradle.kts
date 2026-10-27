@@ -20,8 +20,6 @@ kotlin {
             api(project(":core:sync"))
             // HistoryStartup applies the feed block quota of the public feed cache after the janitor.
             api(project(":core:net"))
-            // WHO 2021 health scales (edges, steps, colours) are part of the MetricSpec and AirMood API.
-            api(project(":core:airquality"))
             // TimeZone and LocalDate are part of the public HistoryWindow and Columns API.
             api(libs.kotlinx.datetime)
             // Query switching in ArchiveQueries is a Flow operator.
@@ -34,6 +32,8 @@ kotlin {
             kotlin.srcDir("src/legacyFooterFixtures/kotlin")
         }
         commonTest.dependencies {
+            // Tests only. The board fixtures are air boards, so their metrics come from the air family.
+            implementation(project(":family:air"))
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.test)
         }

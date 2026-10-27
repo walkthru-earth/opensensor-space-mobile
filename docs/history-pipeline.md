@@ -101,12 +101,15 @@ first, and `Metrics.defaultOf` opens History on the first of them.
 **Derived metrics come from providers.** A `DerivedMetricProvider` (`:core:model`) reads a template
 and returns `DerivedMetric`s, each a derived `Datastream` with a label, a `RowFormula` over its
 `derived.from` columns and an optional stored column it is a view of. `Metrics.providers` lists them.
-Each app installs its Thing kinds' providers at launch (`ThingKinds.installMetrics`, `Metrics.install`),
-which rebuilds the catalog. Today that is only `AirDerivedMetrics` in `:core:airquality`, which derives `pm25_epa` when the template
-stores `pm25_cf1_ug_m3` and `relative_humidity_percent`. Scales come from
-`WhoGuidelines.forProperty`, so a template without PM columns builds its metrics and the catalog
-(`Metrics.catalogOf`) with no air metric. The named air specs (`AirMetrics.PM25` and the rest in
-`:core:history`) resolve from the catalog on first use, never while it is built.
+Each app installs its sensor families and its Thing kinds' providers at launch with one call,
+`AirFamily.install(kinds.metricProviders)`. That call runs `Metrics.install` itself, which rebuilds the catalog. Nothing is
+installed by default, so every column stays neutral until then. Today the one family is `AirFamily`
+in `:family:air`, which derives `pm25_epa` when the template stores `pm25_cf1_ug_m3` and
+`relative_humidity_percent`. A provider also names its health scales (`DerivedMetricProvider.scales`,
+keyed by the profile's scale id) and the capabilities it adds to a Thing (`capabilitiesOf`). A
+template without PM columns builds its metrics and the catalog (`Metrics.catalogOf`) with no air
+metric. The named air specs (`AirMetrics.PM25` and the rest in `:family:air`) resolve from the
+catalog on every read, never while it is built.
 
 `Metrics.all` is the union of the bundled templates. Where two boards describe one column, the first
 keeps its unit and aggregate. Tiers, daily files, the History picker and the charts iterate these
@@ -165,7 +168,7 @@ PMS concentrations are **INT32** µg/m³ in the files; only IMU/temperature/humi
 
 **Corrected PM2.5 (#92).** `pm25_epa` is a view of the same rows, not a stored column. A derived spec
 (`MetricSpec.derived`) passes every row and its `auxColumn` through `MetricSpec.valueOf(raw, aux)`,
-whose `formula` for `pm25_epa` calls `EpaPm25Correction.correct(cf1, rh)` from `:core:airquality`. The `Aggregator` (Android and iOS
+whose `formula` for `pm25_epa` calls `EpaPm25Correction.correct(cf1, rh)` from `:family:air`. The `Aggregator` (Android and iOS
 tiers), `FileSummary` and both `HistorySeriesReader` paths (raw rows and daily files) correct each
 row before any mean, min or max. A row without a valid RH yields no corrected value, so a thing
 without humidity has no `pm25_epa` buckets and every screen falls back to `pm25`, labelled raw.
@@ -289,11 +292,11 @@ cross midnight. See [UTC reconciliation](time-reconciliation.md).
 
 ## Friendly layer (`AirMood`, `NowReading`)
 
-Six moods, one per step of the WHO 2021 Air Quality Guidelines PM2.5 scale (`:core:airquality`,
+Six moods, one per step of the WHO 2021 Air Quality Guidelines PM2.5 scale (`:family:air`,
 `WhoGuidelines.PM25`, 24-hour means). Edges **15 · 25 · 37.5 · 50 · 75 µg/m³**, inclusive from below
 as WHO states them ("at or below 15 meets the guideline"): `FRESH` "Fresh air" (guideline) · `FAIR`
 (IT-4) · `HAZY` "Getting hazy" (IT-3) · `POOR` (IT-2) · `SMOKY` (IT-1) · `THICK` "Thick smoke" (above
-IT-1). The edges are never repeated in `:core:history` or the app. Each has a
+IT-1). The edges are never repeated in `:core` or the app. Each has a
 title, one line of advice and a comparison, colour is never the only carrier. `NowReading.of(reading)`
 puts the sensor state first (`pms_status ≠ 4` → words, never a number). "Right now" is a 10-second
 snapshot; "Today so far" is the **local** day folded from the hourly tier with its coverage.
@@ -388,7 +391,7 @@ controller over a fake archive. It runs as the Android host test and on the iOS 
 | Edit… | Affects… |
 | --- | --- |
 | A bundled template or app profile, or `Metrics` | `metric_bucket.metricId` strings, picker chips and the default metric, `DailyDerivedBuilder` columns, Now card if PM2.5; bump `DERIVE_VERSION` |
-| `WhoGuidelines` edges (`:core:airquality`) | `AirMood`, `MetricSpec.healthScale`, chart axis snap and colours, Home/Today moods, calendar colours, Discover |
+| `WhoGuidelines` edges (`:family:air`) | `AirMood`, `MetricSpec.healthScale`, chart axis snap and colours, Home/Today moods, calendar colours, Discover |
 | `Aggregator` semantics | `DERIVE_VERSION`, `AggregationTest`, `HistoryDeriverTest` |
 | `TimeEstimate` | day signatures (anchor), dashed drawing, daily file's estimated column |
 | `Columns.slotSeconds` / `axisMax` | every chart; `ColumnsTest` |

@@ -108,7 +108,7 @@ object CellFreshness {
 
 /**
  * Builds the one GeoJSON source of the map. Each cell is a polygon with properties `h3` (hex),
- * `color` (fill from [CellScale], a fixed WHO step colour or the percentile ramp, absent when the
+ * `color` (fill from [CellScale], a fixed step colour or the percentile ramp, absent when the
  * cell does not measure the property), `measured` and `stale`.
  * Built off the main thread after the camera rests.
  */

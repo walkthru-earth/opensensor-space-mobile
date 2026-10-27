@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.TimeZone
-import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.ArchiveDayQuery
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.HistorySeries
@@ -21,7 +20,8 @@ import space.opensensor.data.history.localDateOf
 import space.opensensor.data.history.startOfDay
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.designsystem.nowEpochMillis
-import space.opensensor.model.Capability
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 
 /** Epoch second of the current local midnight in [zone]. */
 internal fun currentDayStart(zone: TimeZone, nowS: Long = nowEpochMillis() / 1000): Long = startOfDay(localDateOf(nowS, zone), zone)
@@ -42,7 +42,7 @@ fun localDayStarts(zone: TimeZone, periodMs: Long = 60_000): Flow<Long> = flow {
  */
 fun todayMetrics(capabilities: DeviceCapabilities): List<MetricSpec> {
     val thing = capabilities.thing ?: return emptyList()
-    if (Capability.PARTICLES in capabilities) return listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25)
+    if (AirFamily.PARTICLES in capabilities) return listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25)
     val primary = thing.primary.firstOrNull() ?: return emptyList()
     return listOfNotNull(Metrics.of(thing.template, thing.profile).firstOrNull { it.id == primary.name })
 }

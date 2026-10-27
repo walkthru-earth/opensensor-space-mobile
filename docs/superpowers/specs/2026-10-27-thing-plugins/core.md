@@ -12,7 +12,8 @@ Ready for plugins.
 
 Tied to boards or air quality.
 - The family registry and capabilities named in `docs/devices-and-discovery.md` do not exist as types.
-- Done in #220. `Metrics.kt` takes scales from `WhoGuidelines.forProperty` and derived metrics from `DerivedMetricProvider`s (`:core:model`), with `AirDerivedMetrics` in `:core:airquality`. A template without PM columns builds the catalog. `DeviceCapabilities` holds a `Capability` set (`live`, `config`, `sensor-identity`, `batch-estimate`, `particles`). `PMS_STATUS` moved to `AirMetrics` in `:core:history`.
+- Done in #220. `Metrics.kt` takes scales from `WhoGuidelines.forProperty` and derived metrics from `DerivedMetricProvider`s (`:core:model`), with the air one in `:core:airquality`. A template without PM columns builds the catalog. `DeviceCapabilities` holds a `Capability` set.
+- Done in #188. `:family:air` holds all air science, the WHO scales, the EPA correction, the moods, `AirMetrics`, `PmsStatus`, the Plantower sticker and batch estimate, `PublicSummary` and `QcRules`. `AirFamily` is the family's `DerivedMetricProvider`, which also names its scales (`scales`) and its capabilities (`batch-estimate`, `particles`). Core keeps a generic `HealthScale` and the `live`, `config` and `sensor-identity` capabilities. Each app installs the family at launch with one call, `AirFamily.install(kinds.metricProviders)`, which runs `Metrics.install` and `DiscoverCollection.installBundled`. `CoreStaysAirFreeTest` pins it.
 - Done in #222 and #224. `:core:thing` holds `ThingKind`, `DataSource` (`PullSync`, `RemoteFeed`, `PrivateRead`, no `LocalSampling` until #228), `PublishPolicy`, `OpenSensorBoardKind`, the `ThingKinds` list each app builds and `PublishGate`, the only caller of `FileItems`. `PullSync` holds no `LinkProvider` yet, the board's links stay in `DeviceFacade` and `SensorCollections`. `Metrics.install` takes the kinds' providers. `MetricSpec.basis` is the generic `Basis` (`RAW`, `CORRECTED`) of `:core:model`, and only a `pm25` spec gets the PM2.5 label.
 - `TodayCards.kt` lists CF1 columns by name. `TodaySoFarFlow.kt` asks for PM2.5 directly. `LiveColumns` picks temperature and humidity by unit.
 - `KnownDevice` is keyed by Bluetooth address. `TransportKind` is a closed enum (`BLE`, `LAN`, `FAKE`). `CollectionLink` wraps a wire `DeviceSession`, so `CollectionController` and `SyncEngine` only speak the firmware protocol.
@@ -95,7 +96,7 @@ Data only.
 
 Code.
 - A new `DataSource`, `LinkDriver` or sampler.
-- A derivation such as the EPA PM2.5 correction, moved into a `DerivedMetricProvider` keyed by `Family`. The air one lives in `:core:airquality`, so `Metrics.of` becomes generic.
+- A derivation such as the EPA PM2.5 correction, moved into a `DerivedMetricProvider` keyed by `Family`. The air one lives in `:family:air`, so `Metrics.of` is generic.
 - A hero composable, registered by `profile.hero` (see [screens-and-map.md](screens-and-map.md)).
 
 ## 6. Identity and versioning

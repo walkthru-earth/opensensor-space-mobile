@@ -1,6 +1,5 @@
 package space.opensensor.thing
 
-import space.opensensor.airquality.AirDerivedMetrics
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.data.protocol.LanProtocol
@@ -22,7 +21,8 @@ object OpenSensorBoardKind : ThingKind {
 
     override val source: DataSource = DataSource.PullSync(PublishPolicy.OptInCcBy(maxRes = PUBLISHED_MAX_RES, trimSessionEnds = false))
 
-    override val derivedMetrics: List<DerivedMetricProvider> = listOf(AirDerivedMetrics)
+    /** None of its own. The families the app installs name what its sensors derive ([ThingKinds.metricProviders]). */
+    override val derivedMetrics: List<DerivedMetricProvider> = emptyList()
 
     override fun recognize(evidence: Evidence): Recognition? = when (evidence) {
         is Evidence.BleAdvert -> if (evidence.serviceUuids.any { it.equals(DeviceGatt.SERVICE, ignoreCase = true) }) Recognition(id) else null
