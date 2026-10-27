@@ -222,6 +222,9 @@ class DeviceLinkOwner @Inject constructor(
      * shows while none runs is the outcome of the last connect, even when it equals the one before.
      */
     private val _connectsRunning = MutableStateFlow(0)
+
+    /** A [forget] holds the command slot, so a UI [connect] is refused until it ends. Guarded by stateLock. */
+    private var forgetting = false
     val connectsRunning: StateFlow<Int> = _connectsRunning.asStateFlow()
 
     @Volatile private var closing = false
@@ -393,13 +396,13 @@ class DeviceLinkOwner @Inject constructor(
      * reason fall back to BLE and say so. [preference] = [TransportPreference.BLE_ONLY] skips LAN
      * (needed for `GET_TOKEN`, which is BLE-only by contract). [TransportPreference.LAN_ONLY]
      * never falls back to Bluetooth when that permission is unavailable. False when a collection
-     * holds the device and the connect was refused. An accepted connect clears the last failure.
+     * holds the device or a forget runs and the connect was refused. An accepted connect clears the last failure.
      */
     fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO): Boolean {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
         var previous: Job? = null
         val job = stateLock.withLock {
-            if (_collectionActive.value) {
+            if (_collectionActive.value || forgetting) {
                 refuseBusy()
                 return false
             }
@@ -1745,6 +1748,7 @@ class DeviceLinkOwner @Inject constructor(
             return@withContext false
         }
         try {
+            stateLock.withLock { forgetting = true }
             uiConnectionWanted.set(false)
             val claim = connectionIntent.claim()
             cancelPendingConnect()
@@ -1762,6 +1766,7 @@ class DeviceLinkOwner @Inject constructor(
                 true
             }
         } finally {
+            stateLock.withLock { forgetting = false }
             endCommand()
         }
     }
