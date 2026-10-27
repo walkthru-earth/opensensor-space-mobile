@@ -479,6 +479,25 @@ class SemanticsTest {
     }
 
     @Test
+    fun switchRowIsOneLabelledSwitchNodeThatTogglesFromAnywhere() = runComposeUiTest {
+        var checked = false
+        setContent {
+            MaterialTheme {
+                SwitchRow("Wi-Fi sync", checked = checked, onCheckedChange = { checked = it }, modifier = Modifier.testTag("row"))
+            }
+        }
+        val row = onNodeWithTag("row")
+        row.assert(hasRole(Role.Switch)).assertHeightIsAtLeast(48.dp)
+        // The label and the switch merge, so the screen reader says the label with the state.
+        row.assert(hasText("Wi-Fi sync"))
+        row.assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, androidx.compose.ui.state.ToggleableState.Off))
+        row.fetchSemanticsNode().config[SemanticsActions.OnClick].action?.invoke()
+        kotlin.test.assertTrue(checked)
+        // No second focus stop for the bare switch.
+        kotlin.test.assertEquals(1, onAllNodes(hasRole(Role.Switch)).fetchSemanticsNodes().size)
+    }
+
+    @Test
     fun systemReduceMotionNotificationUpdatesStateAndPeacockSkipsEntranceTransition() = runComposeUiTest {
         val originalReader = iosReduceMotionReader
         try {

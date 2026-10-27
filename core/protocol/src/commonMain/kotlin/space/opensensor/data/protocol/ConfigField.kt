@@ -27,6 +27,9 @@ sealed interface FieldType {
     data object Country : FieldType
 }
 
+/** The settings card a key belongs to, so a refusal names the card instead of the wire key. */
+enum class ConfigGroup { PAIRING, WIFI, LAN, LOCATION, SENSOR, OTHER }
+
 /** When the firmware applies a key. */
 enum class Applies { IMMEDIATELY, NEXT_SAMPLE, NEXT_BOOT, ONCE }
 
@@ -108,6 +111,16 @@ object ConfigFields {
     private val byKey: Map<String, ConfigField> = ALL.associateBy { it.key }
 
     fun of(key: String): ConfigField? = byKey[key]
+
+    /** The card [key] is set from, by its prefix. A key the app does not know is [ConfigGroup.OTHER]. */
+    fun groupOf(key: String): ConfigGroup = when (key.substringBefore('.', missingDelimiterValue = "")) {
+        "ble" -> ConfigGroup.PAIRING
+        "wifi" -> ConfigGroup.WIFI
+        "lan" -> ConfigGroup.LAN
+        "location", "thing" -> ConfigGroup.LOCATION
+        "sensor" -> ConfigGroup.SENSOR
+        else -> ConfigGroup.OTHER
+    }
 
     /** Keys whose values are secrets under the app floor alone. */
     val SECRET_KEYS: Set<String> = ALL.filter { it.secret }.map { it.key }.toSet()

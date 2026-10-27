@@ -22,6 +22,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -304,10 +305,13 @@ internal fun MetricHeroCard(
     val mood = (reading as? NowReading.Reading)?.takeIf { showsMood(it, level) }?.mood
     val averaging = (reading as? NowReading.Reading)?.averaging ?: Averaging.LIVE
     val onCard = MaterialTheme.colorScheme.onPrimaryContainer
-    val quiet = onCard.copy(alpha = 0.85f)
+    val quiet = heroQuiet(onCard, MaterialTheme.colorScheme.primaryContainer)
+    val fontScale = LocalDensity.current.fontScale
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val portraitSize = if (maxWidth < 340.dp) 136.dp else 176.dp
+        // Large text or a narrow card puts the peacock above the number, so the value keeps the width.
+        val stacked = heroStacked(maxWidth, fontScale)
         BrandCard(tone = CardTone.HERO) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val title = stringResource(if (fresh) Res.string.now_right_now else Res.string.now_last_reading)
@@ -320,7 +324,7 @@ internal fun MetricHeroCard(
                 FreshnessLabel(receivedAtEpochMs, color = quiet)
             }
             Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            val portrait: @Composable () -> Unit = {
                 PeacockPortrait(
                     expression = when (reading) {
                         is NowReading.Reading -> if (!fresh) {
@@ -340,10 +344,11 @@ internal fun MetricHeroCard(
                     },
                     size = portraitSize,
                 )
-                Spacer(Modifier.width(14.dp))
+            }
+            val body: @Composable (Modifier) -> Unit = { bodyModifier ->
                 when (reading) {
                     // Value, unit and metric name read as one element ("12, µg/m³, PM2.5").
-                    is NowReading.Reading -> Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                    is NowReading.Reading -> Column(bodyModifier.semantics(mergeDescendants = true) {}) {
                         val value = fmtPm(reading.primary)
                         FitText(
                             value,
@@ -366,13 +371,26 @@ internal fun MetricHeroCard(
                     NowReading.Waiting -> BodyText(
                         stringResource(Res.string.now_waiting),
                         style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.weight(1f),
+                        modifier = bodyModifier,
                         heading = true,
                     )
-                    is NowReading.SensorNotReady -> Column(Modifier.weight(1f)) {
+                    is NowReading.SensorNotReady -> Column(bodyModifier) {
                         BodyText(reading.status.titleText(), style = MaterialTheme.typography.headlineSmall, heading = true)
                         BodyText(reading.status.hintText(), style = MaterialTheme.typography.bodyMedium, color = quiet)
                     }
+                }
+            }
+            if (stacked) {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    portrait()
+                    Spacer(Modifier.height(8.dp))
+                    body(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    portrait()
+                    Spacer(Modifier.width(14.dp))
+                    body(Modifier.weight(1f))
                 }
             }
             if (reading is NowReading.Reading && level.detailed && reading.flags != QcFlags.NONE) {
