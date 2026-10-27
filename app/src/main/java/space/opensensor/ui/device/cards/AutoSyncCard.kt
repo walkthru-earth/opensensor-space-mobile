@@ -1,15 +1,8 @@
 package space.opensensor.ui.device.cards
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -21,6 +14,7 @@ import space.opensensor.designsystem.CardHeader
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.StatLine
+import space.opensensor.designsystem.SwitchRow
 import space.opensensor.designsystem.WarningNote
 import space.opensensor.ui.device.DeviceUiState
 
@@ -41,28 +35,25 @@ fun AutoSyncCard(
     val level = state.detailLevel
     val minutes = AutoSyncScheduler.PERIOD_MINUTES
     BrandCard(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                val title = stringResource(R.string.autosync_title)
-                CardHeader(
-                    title,
-                    info = InfoContent(
-                        title,
-                        listOfNotNull(
-                            stringResource(R.string.autosync_explain),
-                            stringResource(R.string.autosync_wake_explain).takeIf { state.companionSupported },
-                            stringResource(R.string.autosync_wake_ble_drop).takeIf { state.companionSupported },
-                        ),
-                    ),
-                )
-                Text(
-                    pluralStringResource(if (state.autoSync) R.plurals.autosync_on else R.plurals.autosync_off, minutes.toInt(), minutes),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Switch(checked = state.autoSync, onCheckedChange = onToggle, enabled = known != null)
-        }
+        val title = stringResource(R.string.autosync_title)
+        CardHeader(
+            title,
+            info = InfoContent(
+                title,
+                listOfNotNull(
+                    stringResource(R.string.autosync_explain),
+                    stringResource(R.string.autosync_wake_explain).takeIf { state.companionSupported },
+                    stringResource(R.string.autosync_wake_ble_drop).takeIf { state.companionSupported },
+                ),
+            ),
+        )
+        // The state line names the switch, so the row is one Role.Switch node that reads both.
+        SwitchRow(
+            pluralStringResource(if (state.autoSync) R.plurals.autosync_on else R.plurals.autosync_off, minutes.toInt(), minutes),
+            checked = state.autoSync,
+            onCheckedChange = onToggle,
+            enabled = known != null,
+        )
         if (state.autoSync && !state.autoSyncReachable) {
             Spacer(Modifier.height(8.dp))
             WarningNote(stringResource(R.string.autosync_unreachable))

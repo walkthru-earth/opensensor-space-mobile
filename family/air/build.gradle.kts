@@ -4,7 +4,8 @@ import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTes
 // The WHO 2021 guideline scales with their interim targets and the one colour-blind checked palette,
 // the EPA PM2.5 correction and the derived metrics it feeds (AirFamily), the moods and the Now card,
 // the named air metrics, the PM sensor status and sticker, the Plantower batch estimate, the public
-// cell summary and the pure quality checks for suspect PM readings (QcRules, #91, not wired yet).
+// cell summary, the EPA NowCast of the last 12 hours (PmNowCast, #93) and the pure quality checks
+// for suspect PM readings (QcRules over a rolling live window in LiveQc, #91).
 // Core reaches it only through the generic seams the app installs (DerivedMetricProvider,
 // DiscoverCollection.installBundled). Pure commonMain for JVM and iOS.
 plugins {

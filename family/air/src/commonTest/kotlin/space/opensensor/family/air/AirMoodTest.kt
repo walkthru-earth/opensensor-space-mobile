@@ -120,4 +120,48 @@ class AirMoodTest {
             assertEquals(30.0, dry.primary, 0.0)
         }
     }
+
+    @Test
+    fun `a NowCast is the number and the mood and the live value shows second`() {
+        // #93. Live corrected 27.64 (HAZY) under a NowCast of 12.0 (FRESH).
+        val live = LiveFixtures.waveshare("""{"seq":8,"mono":8,"pms":4,"pm25":30,"c25":40,"rh":50}""")
+        val r = NowReading.of(live, Pm25NowCast(12.0, Pm25Basis.CORRECTED)) as NowReading.Reading
+        assertEquals(Averaging.NOWCAST, r.averaging)
+        assertEquals(12.0, r.primary, 0.0)
+        assertEquals(AirMood.FRESH, r.mood)
+        assertEquals(Pm25Basis.CORRECTED, r.basis)
+        assertEquals(27.64, r.live, 1e-6)
+        assertEquals(Pm25Basis.CORRECTED, r.liveBasis)
+        assertEquals(30.0, r.raw!!, 0.0)
+        // The live value keeps its own basis under a NowCast of another one.
+        val dry = NowReading.of(LiveFixtures.cores3("""{"seq":9,"mono":9,"pms":4,"pm25":30}"""), Pm25NowCast(40.0, Pm25Basis.RAW)) as NowReading.Reading
+        assertEquals(AirMood.POOR, dry.mood)
+        assertEquals(Pm25Basis.RAW, dry.liveBasis)
+        assertEquals(30.0, dry.live, 0.0)
+        // Without a NowCast the live value is the number.
+        val plain = NowReading.of(live) as NowReading.Reading
+        assertEquals(Averaging.LIVE, plain.averaging)
+        assertEquals(plain.live, plain.primary, 0.0)
+    }
+
+    @Test
+    fun `the sensor state still comes before a NowCast`() {
+        val warming = LiveFixtures.waveshare("""{"seq":1,"mono":1,"pms":1,"pm25":null}""")
+        assertTrue(NowReading.of(warming, Pm25NowCast(12.0, Pm25Basis.RAW)) is NowReading.SensorNotReady)
+        assertEquals(NowReading.Waiting, NowReading.of(null, Pm25NowCast(12.0, Pm25Basis.RAW)))
+    }
+
+    @Test
+    fun `a flagged live value is not rated but a NowCast still is`() {
+        // #91. Flags never change the number.
+        val live = LiveFixtures.waveshare("""{"seq":10,"mono":10,"pms":4,"pm25":30}""")
+        val flagged = NowReading.of(live, flags = QcFlags.HIGH_HUMIDITY) as NowReading.Reading
+        assertFalse(flagged.rated)
+        assertEquals(30.0, flagged.primary, 0.0)
+        assertEquals(QcFlags.HIGH_HUMIDITY, flagged.flags)
+        assertTrue((NowReading.of(live) as NowReading.Reading).rated)
+        val cast = NowReading.of(live, Pm25NowCast(12.0, Pm25Basis.RAW), QcFlags.HIGH_HUMIDITY) as NowReading.Reading
+        assertTrue(cast.rated)
+        assertEquals(QcFlags.HIGH_HUMIDITY, cast.flags)
+    }
 }

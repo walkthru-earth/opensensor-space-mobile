@@ -10,7 +10,10 @@ import space.opensensor.data.sync.ClockQuality
 import space.opensensor.designsystem.moodLineRes
 import space.opensensor.designsystem.moodWord
 import space.opensensor.family.air.AirMood
+import space.opensensor.family.air.Averaging
+import space.opensensor.family.air.NowReading
 import space.opensensor.family.air.PmsStatus
+import space.opensensor.family.air.QcFlags
 import space.opensensor.family.air.formatPm
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.resources.Res
@@ -49,6 +52,12 @@ import space.opensensor.today.resources.mood_smoky_advice
 import space.opensensor.today.resources.mood_smoky_like
 import space.opensensor.today.resources.mood_thick_advice
 import space.opensensor.today.resources.mood_thick_like
+import space.opensensor.today.resources.now_basis_live
+import space.opensensor.today.resources.now_basis_nowcast
+import space.opensensor.today.resources.now_basis_nowcast_simple
+import space.opensensor.today.resources.now_nowcast_note
+import space.opensensor.today.resources.now_nowcast_note_simple
+import space.opensensor.today.resources.now_snapshot_note
 import space.opensensor.today.resources.pms_absent_hint
 import space.opensensor.today.resources.pms_absent_title
 import space.opensensor.today.resources.pms_error_hint
@@ -62,6 +71,10 @@ import space.opensensor.today.resources.pms_stale_title
 import space.opensensor.today.resources.pms_valid_title
 import space.opensensor.today.resources.pms_warming_hint
 import space.opensensor.today.resources.pms_warming_title
+import space.opensensor.today.resources.qc_flatline
+import space.opensensor.today.resources.qc_high_humidity
+import space.opensensor.today.resources.qc_pm25_above_pm10
+import space.opensensor.today.resources.qc_spike
 import space.opensensor.today.resources.transport_ble
 import space.opensensor.today.resources.transport_fake
 import space.opensensor.today.resources.transport_lan
@@ -153,6 +166,29 @@ internal fun AirMood.titleText(): String = moodWord(step)
  */
 internal fun heroLineRes(mood: AirMood, level: DetailLevel): StringResource =
     if (level.detailed) mood.adviceRes() else moodLineRes(mood.step)
+
+/** The hero's one line on what its number averages (#93). Simple never names the method. */
+internal fun averagingLineRes(averaging: Averaging, level: DetailLevel): StringResource = when (averaging) {
+    Averaging.NOWCAST -> if (level.detailed) Res.string.now_basis_nowcast else Res.string.now_basis_nowcast_simple
+    Averaging.LIVE -> Res.string.now_basis_live
+}
+
+/** The first line of the hero's info sheet, what its number averages. */
+internal fun averagingNoteRes(averaging: Averaging, level: DetailLevel): StringResource = when (averaging) {
+    Averaging.NOWCAST -> if (level.detailed) Res.string.now_nowcast_note else Res.string.now_nowcast_note_simple
+    Averaging.LIVE -> Res.string.now_snapshot_note
+}
+
+/** Whether the hero shows the mood of [reading]. Simple leaves out the mood of a flagged live value (#91). */
+internal fun showsMood(reading: NowReading.Reading, level: DetailLevel): Boolean = reading.rated || level.detailed
+
+/** One line per quality check that [flags] failed, in bit order. */
+internal fun qcReasonRes(flags: Int): List<StringResource> = listOfNotNull(
+    Res.string.qc_pm25_above_pm10.takeIf { flags and QcFlags.PM25_ABOVE_PM10 != 0 },
+    Res.string.qc_flatline.takeIf { flags and QcFlags.FLATLINE != 0 },
+    Res.string.qc_spike.takeIf { flags and QcFlags.SPIKE != 0 },
+    Res.string.qc_high_humidity.takeIf { flags and QcFlags.HIGH_HUMIDITY != 0 },
+)
 
 /** The hero's info sheet body. Only the detailed levels name the WHO step. */
 internal fun nowInfoBodyRes(level: DetailLevel): StringResource =

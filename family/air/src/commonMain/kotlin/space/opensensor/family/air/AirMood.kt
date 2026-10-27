@@ -9,8 +9,9 @@ import space.opensensor.model.HealthScale
  * and a familiar comparison. The edges live only in `:family:air` and are inclusive from
  * below, as WHO states them ("at or below 15 µg/m³ meets the guideline").
  *
- * The WHO values are 24-hour means. A mood is **not** an AQI, and the live number is a 10-second
- * snapshot, not a 24-hour mean, so the Now card reads it against the scale and says so.
+ * The WHO values are 24-hour means. A mood is **not** an AQI. The Now card reads the EPA NowCast of
+ * the last 12 hours against the scale when the phone archive has it ([PmNowCast], #93), else the
+ * live 10-second snapshot, and says which one in a short line.
  *
  * Kept free of Android so the same table drives the iOS app and the unit tests.
  */
@@ -43,7 +44,19 @@ enum class AirMood(
     }
 }
 
-/** What the Now card should say about the live sample — the sensor's own state comes first. */
+/** What the Now card's number averages, stated on the card in one short line (#93). */
+enum class Averaging {
+    /** The live 10-second sample. */
+    LIVE,
+
+    /** The EPA NowCast of the last 12 hourly means ([PmNowCast]). */
+    NOWCAST,
+}
+
+/** A PM2.5 NowCast of one thing, from the hourly tier of [basis]. */
+data class Pm25NowCast(val value: Double, val basis: Pm25Basis)
+
+/** What the Now card should say, the sensor's own state comes first. */
 sealed interface NowReading {
     /** No sample yet, or the link is quiet. */
     data object Waiting : NowReading
@@ -52,18 +65,38 @@ sealed interface NowReading {
     data class SensorNotReady(val status: PmsStatus, val hint: String) : NowReading
 
     /**
-     * A valid PM2.5 reading and its mood. [primary] is the value shown, the EPA corrected PM2.5 when the
-     * sample carries a valid RH, else the raw one, as [basis] says. [raw] is the sensor's own
-     * atmospheric PM2.5, shown second in the Detailed level.
+     * A valid PM2.5 reading and its mood. [primary] is the value shown and judged, the NowCast when
+     * [averaging] is [Averaging.NOWCAST], else the live value. [basis] says which PM2.5 [primary] is.
+     * [live] is the live sample's value, the EPA corrected PM2.5 when the sample carries a valid RH,
+     * else the raw one, as [liveBasis] says. [raw] is the sensor's own atmospheric PM2.5 now. Both
+     * show second in the Detailed level. [flags] are the [QcFlags] of the live sample ([LiveQc]),
+     * and never change a value.
      */
-    data class Reading(val primary: Double, val mood: AirMood, val basis: Pm25Basis = Pm25Basis.RAW, val raw: Double? = primary) : NowReading
+    data class Reading(
+        val primary: Double,
+        val mood: AirMood,
+        val basis: Pm25Basis = Pm25Basis.RAW,
+        val raw: Double? = primary,
+        val averaging: Averaging = Averaging.LIVE,
+        val live: Double = primary,
+        val liveBasis: Pm25Basis = basis,
+        val flags: Int = QcFlags.NONE,
+    ) : NowReading {
+        /**
+         * Whether the mood rates [primary]. A NowCast always is. A live value is not when a quality
+         * check flagged it, so Simple leaves its WHO step out (#91).
+         */
+        val rated: Boolean get() = averaging == Averaging.NOWCAST || flags == QcFlags.NONE
+    }
 
     companion object {
         /**
          * The Now card for [live], read by column through the thing template. No reading, an
-         * overflow sample (every value null) or an unknown dictionary is [Waiting].
+         * overflow sample (every value null) or an unknown dictionary is [Waiting]. A [nowCast]
+         * becomes the number and the mood once the sensor reports valid, the live value then shows
+         * second. [flags] are the quality flags of the live sample.
          */
-        fun of(live: LiveReading?): NowReading {
+        fun of(live: LiveReading?, nowCast: Pm25NowCast? = null, flags: Int = QcFlags.NONE): NowReading {
             if (live == null) return Waiting
             val status = live.pmsStatus ?: return Waiting
             if (status != PmsStatus.VALID) return SensorNotReady(status, hint(status))
@@ -71,8 +104,13 @@ sealed interface NowReading {
             // The correction reads the CF=1 PM2.5 and the sensor's RH, the inputs it was fitted on.
             val corrected = EpaPm25Correction.correct(live.value(AirFamily.PM25_CF1), live.value(AirFamily.RELATIVE_HUMIDITY))
             val pm = corrected ?: raw ?: return Waiting
+            val liveBasis = if (corrected != null) Pm25Basis.CORRECTED else Pm25Basis.RAW
+            nowCast?.let { cast ->
+                val mood = AirMood.ofOrNull(cast.value) ?: return@let
+                return Reading(cast.value, mood, cast.basis, raw, Averaging.NOWCAST, pm, liveBasis, flags)
+            }
             val mood = AirMood.ofOrNull(pm) ?: return Waiting
-            return Reading(pm, mood, if (corrected != null) Pm25Basis.CORRECTED else Pm25Basis.RAW, raw)
+            return Reading(pm, mood, liveBasis, raw, Averaging.LIVE, pm, liveBasis, flags)
         }
 
         private fun hint(status: PmsStatus): String = when (status) {

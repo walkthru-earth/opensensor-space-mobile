@@ -160,7 +160,12 @@
     <string name="config_problem_line_break">Line breaks are not allowed here.</string>
     <string name="msg_bonds_cleared">The sensor forgot all paired phones. You pair again on the next Bluetooth connection.</string>
     <string name="msg_saved_after_reboot">%1$s. Bluetooth changes apply after a restart.</string>
-    <string name="msg_config_key_rejected">The sensor refused %1$s. Nothing was changed.</string>
+    <string name="msg_config_rejected_pairing">The sensor refused the pairing settings. Nothing was changed.</string>
+    <string name="msg_config_rejected_wifi">The sensor refused the Wi-Fi settings. Nothing was changed.</string>
+    <string name="msg_config_rejected_lan">The sensor refused the Wi-Fi sync settings. Nothing was changed.</string>
+    <string name="msg_config_rejected_location">The sensor refused the location. Nothing was changed.</string>
+    <string name="msg_config_rejected_sensor">The sensor refused the sensor details. Nothing was changed.</string>
+    <string name="msg_config_rejected_other">The sensor refused this setting. Nothing was changed.</string>
     <string name="msg_secret_needs_bluetooth">Passwords and PINs go over Bluetooth only.</string>
 
     <!-- Device messages from the data layer (data/DeviceMessage.kt, mapped in components/DeviceMessages.kt) -->

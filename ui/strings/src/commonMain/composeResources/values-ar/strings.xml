@@ -55,7 +55,7 @@
     <string name="companion_ble_connect_failed">تعذّر الاتصال. تأكد من أن المستشعر قريب ومتاح للإقران.</string>
     <string name="companion_ble_sensor_gone">انقطع اتصال المستشعر. ابحث عنه مرة أخرى لإعادة الاتصال.</string>
     <string name="companion_ble_service_missing">تعذّر فتح خدمة OpenSensor Sync.</string>
-    <string name="companion_ble_characteristics_missing">تنقص هذا المستشعر خصائص القراءة المباشرة المطلوبة.</string>
+    <string name="companion_ble_characteristics_missing">لا يرسل هذا المستشعر قراءات مباشرة يمكن لهذا التطبيق قراءتها.</string>
     <string name="companion_ble_notify_failed">تعذّر تفعيل الإشعارات. تحقق من رمز PIN للإقران وحاول مرة أخرى.</string>
     <string name="companion_ble_read_failed">تعذّرت القراءة من المستشعر. تحقق من رمز PIN للإقران وحاول مرة أخرى.</string>
     <string name="companion_ble_pairing_removed">أعاد المستشعر ضبط الإقران. انسَه من إعدادات iOS ثم Bluetooth، ثم أقرنه مرة أخرى.</string>

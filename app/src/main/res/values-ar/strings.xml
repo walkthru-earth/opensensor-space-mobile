@@ -173,7 +173,12 @@
     <string name="config_problem_line_break">لا يُسمح بفواصل الأسطر هنا.</string>
     <string name="msg_bonds_cleared">نسي المستشعر كل الهواتف المقترنة. ستُقرن من جديد عند اتصال Bluetooth التالي.</string>
     <string name="msg_saved_after_reboot">%1$s. تُطبّق تغييرات Bluetooth بعد إعادة التشغيل.</string>
-    <string name="msg_config_key_rejected">رفض المستشعر %1$s. لم يتغيّر شيء.</string>
+    <string name="msg_config_rejected_pairing">رفض المستشعر إعدادات الاقتران. لم يتغيّر شيء.</string>
+    <string name="msg_config_rejected_wifi">رفض المستشعر إعدادات Wi-Fi. لم يتغيّر شيء.</string>
+    <string name="msg_config_rejected_lan">رفض المستشعر إعدادات المزامنة عبر Wi-Fi. لم يتغيّر شيء.</string>
+    <string name="msg_config_rejected_location">رفض المستشعر الموقع. لم يتغيّر شيء.</string>
+    <string name="msg_config_rejected_sensor">رفض المستشعر بيانات وحدة الاستشعار. لم يتغيّر شيء.</string>
+    <string name="msg_config_rejected_other">رفض المستشعر هذا الإعداد. لم يتغيّر شيء.</string>
     <string name="msg_secret_needs_bluetooth">تُرسل كلمات المرور والرموز عبر Bluetooth فقط.</string>
 
     <!-- Device messages from the data layer (data/DeviceMessage.kt, mapped in components/DeviceMessages.kt) -->

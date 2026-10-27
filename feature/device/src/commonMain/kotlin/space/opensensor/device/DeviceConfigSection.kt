@@ -30,6 +30,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
+import space.opensensor.data.protocol.ConfigFields
+import space.opensensor.data.protocol.ConfigGroup
 import space.opensensor.data.protocol.ConfigProblem
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.InfoNote
@@ -51,7 +53,12 @@ import space.opensensor.device.resources.device_screen_title
 import space.opensensor.device.resources.lan_reconnect_ble
 import space.opensensor.device.resources.msg_bonds_cleared
 import space.opensensor.device.resources.msg_busy
-import space.opensensor.device.resources.msg_config_key_rejected
+import space.opensensor.device.resources.msg_config_rejected_lan
+import space.opensensor.device.resources.msg_config_rejected_location
+import space.opensensor.device.resources.msg_config_rejected_other
+import space.opensensor.device.resources.msg_config_rejected_pairing
+import space.opensensor.device.resources.msg_config_rejected_sensor
+import space.opensensor.device.resources.msg_config_rejected_wifi
 import space.opensensor.device.resources.msg_failed_get_config
 import space.opensensor.device.resources.msg_failed_get_token
 import space.opensensor.device.resources.msg_failed_reboot
@@ -294,7 +301,17 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
         )
         if (notice.rebootRequired) getString(Res.string.msg_saved_after_reboot, line) else line
     }
-    is DeviceConfigNotice.KeyRejected -> getString(Res.string.msg_config_key_rejected, notice.key)
+    // Names the card, never the wire key.
+    is DeviceConfigNotice.KeyRejected -> getString(
+        when (ConfigFields.groupOf(notice.key)) {
+            ConfigGroup.PAIRING -> Res.string.msg_config_rejected_pairing
+            ConfigGroup.WIFI -> Res.string.msg_config_rejected_wifi
+            ConfigGroup.LAN -> Res.string.msg_config_rejected_lan
+            ConfigGroup.LOCATION -> Res.string.msg_config_rejected_location
+            ConfigGroup.SENSOR -> Res.string.msg_config_rejected_sensor
+            ConfigGroup.OTHER -> Res.string.msg_config_rejected_other
+        },
+    )
     DeviceConfigNotice.SecretNeedsBluetooth -> getString(Res.string.msg_secret_needs_bluetooth)
     is DeviceConfigNotice.Rejected -> getString(
         when (notice.command) {

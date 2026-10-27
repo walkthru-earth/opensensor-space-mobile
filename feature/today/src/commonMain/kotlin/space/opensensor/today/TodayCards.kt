@@ -22,6 +22,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -52,6 +53,7 @@ import space.opensensor.designsystem.CardHeader
 import space.opensensor.designsystem.CardTone
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.FitText
+import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.PeacockExpression
@@ -70,10 +72,12 @@ import space.opensensor.designsystem.rememberNowMillis
 import space.opensensor.designsystem.spokenList
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.Averaging
 import space.opensensor.family.air.NowReading
 import space.opensensor.family.air.PlantowerBatchCandidate
 import space.opensensor.family.air.Pm25Basis
 import space.opensensor.family.air.PmsStatus
+import space.opensensor.family.air.QcFlags
 import space.opensensor.family.air.pmValid
 import space.opensensor.family.air.pmsStatus
 import space.opensensor.model.ThingDatastream
@@ -130,11 +134,14 @@ import space.opensensor.today.resources.fresh_none
 import space.opensensor.today.resources.fresh_stale
 import space.opensensor.today.resources.fresh_updated
 import space.opensensor.today.resources.now_last_reading
+import space.opensensor.today.resources.now_live_value
 import space.opensensor.today.resources.now_right_now
 import space.opensensor.today.resources.now_sample_number
-import space.opensensor.today.resources.now_snapshot_note
+import space.opensensor.today.resources.now_unrated_simple
 import space.opensensor.today.resources.now_waiting
 import space.opensensor.today.resources.particles_title
+import space.opensensor.today.resources.qc_flagged
+import space.opensensor.today.resources.qc_note
 import space.opensensor.today.resources.readings_absent
 import space.opensensor.today.resources.readings_cf1
 import space.opensensor.today.resources.readings_title
@@ -279,41 +286,54 @@ internal fun FreshnessLabel(receivedAtEpochMs: Long?, color: Color = MaterialThe
 }
 
 /**
- * The hero of Today: PM2.5 right now, corrected when the live RH is valid and raw otherwise, as a peacock, a big number, the mood in words and
- * one line of advice. The sensor's own state comes before any number. Colour is never the only
- * carrier, the mood is also a word and a character expression.
+ * The hero of Today, PM2.5 now as a peacock, a big number, the mood in words and one line of
+ * advice. The number is the NowCast of the last 12 hours when the phone archive has them, else the
+ * live sample, corrected when its RH is valid and raw otherwise, and one short line says which
+ * (#93). The sensor's own state comes before any number. A live sample a quality check flagged
+ * (#91) keeps its number, Detailed says why it is suspect and Simple leaves its mood out. Colour is
+ * never the only carrier, the mood is also a word and a character expression.
  */
 @Composable
 internal fun MetricHeroCard(
+    reading: NowReading,
     live: LiveReading?,
     receivedAtEpochMs: Long?,
     level: DetailLevel,
     modifier: Modifier = Modifier,
 ) {
-    val reading = NowReading.of(live)
     val fresh = rememberIsFresh(receivedAtEpochMs)
-    val mood = (reading as? NowReading.Reading)?.mood
+    val mood = (reading as? NowReading.Reading)?.takeIf { showsMood(it, level) }?.mood
+    val averaging = (reading as? NowReading.Reading)?.averaging ?: Averaging.LIVE
     val onCard = MaterialTheme.colorScheme.onPrimaryContainer
-    val quiet = onCard.copy(alpha = 0.85f)
+    val quiet = heroQuiet(onCard, MaterialTheme.colorScheme.primaryContainer)
+    val fontScale = LocalDensity.current.fontScale
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val portraitSize = if (maxWidth < 340.dp) 136.dp else 176.dp
+        // Large text or a narrow card puts the peacock above the number, so the value keeps the width.
+        val stacked = heroStacked(maxWidth, fontScale)
         BrandCard(tone = CardTone.HERO) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val title = stringResource(if (fresh) Res.string.now_right_now else Res.string.now_last_reading)
                 CardHeader(
                     title,
                     modifier = Modifier.weight(1f),
-                    info = InfoContent(title, stringResource(Res.string.now_snapshot_note), stringResource(nowInfoBodyRes(level)), pm25CorrectionInfo()),
+                    info = InfoContent(title, stringResource(averagingNoteRes(averaging, level)), stringResource(nowInfoBodyRes(level)), pm25CorrectionInfo()),
                     color = quiet,
                 )
                 FreshnessLabel(receivedAtEpochMs, color = quiet)
             }
             Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            val portrait: @Composable () -> Unit = {
                 PeacockPortrait(
                     expression = when (reading) {
-                        is NowReading.Reading -> if (fresh) peacockExpressionFor(mood) else PeacockExpression.SLEEPING
+                        is NowReading.Reading -> if (!fresh) {
+                            PeacockExpression.SLEEPING
+                        } else if (mood == null) {
+                            PeacockExpression.CONFUSED
+                        } else {
+                            peacockExpressionFor(mood)
+                        }
                         NowReading.Waiting -> PeacockExpression.CONFUSED
                         is NowReading.SensorNotReady -> when (reading.status) {
                             PmsStatus.WARMING -> PeacockExpression.WORKING
@@ -324,10 +344,11 @@ internal fun MetricHeroCard(
                     },
                     size = portraitSize,
                 )
-                Spacer(Modifier.width(14.dp))
+            }
+            val body: @Composable (Modifier) -> Unit = { bodyModifier ->
                 when (reading) {
                     // Value, unit and metric name read as one element ("12, µg/m³, PM2.5").
-                    is NowReading.Reading -> Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                    is NowReading.Reading -> Column(bodyModifier.semantics(mergeDescendants = true) {}) {
                         val value = fmtPm(reading.primary)
                         FitText(
                             value,
@@ -336,25 +357,47 @@ internal fun MetricHeroCard(
                             maxLines = 1,
                         )
                         FitText("${pm25Label(reading.basis)}  ${AirMetrics.PM25.unit}", style = MaterialTheme.typography.titleMedium, color = quiet)
-                        // Detailed shows the sensor's own value second, under the corrected one.
+                        // Every level says what the number averages, in one short line.
+                        FitText(stringResource(averagingLineRes(reading.averaging, level)), style = MaterialTheme.typography.bodyMedium, color = quiet)
+                        if (level.detailed && reading.averaging == Averaging.NOWCAST) {
+                            FitText(stringResource(Res.string.now_live_value, fmtPm(reading.live)), style = MaterialTheme.typography.bodyMedium, color = quiet)
+                        }
+                        // Detailed shows the sensor's own value second, under the corrected live one.
                         val raw = reading.raw
-                        if (level.detailed && reading.basis == Pm25Basis.CORRECTED && raw != null) {
+                        if (level.detailed && reading.liveBasis == Pm25Basis.CORRECTED && raw != null) {
                             FitText("${pm25Label(Pm25Basis.RAW)}  ${fmtPm(raw)}", style = MaterialTheme.typography.bodyMedium, color = quiet)
                         }
                     }
                     NowReading.Waiting -> BodyText(
                         stringResource(Res.string.now_waiting),
                         style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.weight(1f),
+                        modifier = bodyModifier,
                         heading = true,
                     )
-                    is NowReading.SensorNotReady -> Column(Modifier.weight(1f)) {
+                    is NowReading.SensorNotReady -> Column(bodyModifier) {
                         BodyText(reading.status.titleText(), style = MaterialTheme.typography.headlineSmall, heading = true)
                         BodyText(reading.status.hintText(), style = MaterialTheme.typography.bodyMedium, color = quiet)
                     }
                 }
             }
-            if (reading is NowReading.Reading) {
+            if (stacked) {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    portrait()
+                    Spacer(Modifier.height(8.dp))
+                    body(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    portrait()
+                    Spacer(Modifier.width(14.dp))
+                    body(Modifier.weight(1f))
+                }
+            }
+            if (reading is NowReading.Reading && level.detailed && reading.flags != QcFlags.NONE) {
+                Spacer(Modifier.height(8.dp))
+                QcFlagLine(reading.flags, quiet)
+            }
+            if (reading is NowReading.Reading && mood != null) {
                 Spacer(Modifier.height(16.dp))
                 // The mood and its comparison read as one element.
                 Row(
@@ -362,11 +405,15 @@ internal fun MetricHeroCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    MoodPill(reading.mood)
-                    BodyText(reading.mood.comparisonText(), style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.weight(1f))
+                    MoodPill(mood)
+                    BodyText(mood.comparisonText(), style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(12.dp))
-                BodyText(stringResource(heroLineRes(reading.mood, level)), style = MaterialTheme.typography.bodyLarge)
+                BodyText(stringResource(heroLineRes(mood, level)), style = MaterialTheme.typography.bodyLarge)
+            } else if (reading is NowReading.Reading) {
+                // Simple leaves the step of a flagged live value out, the number still shows as measured.
+                Spacer(Modifier.height(16.dp))
+                BodyText(stringResource(Res.string.now_unrated_simple), style = MaterialTheme.typography.bodyLarge)
             }
             if (level.developer) {
                 live?.sample?.seq?.let {
@@ -374,6 +421,20 @@ internal fun MetricHeroCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Detailed and Developer only. One short line that the live sample is suspect, with an info icon
+ * that lists each check it failed (#91). The value itself is shown as measured.
+ */
+@Composable
+private fun QcFlagLine(flags: Int, color: Color) {
+    val title = stringResource(Res.string.qc_flagged)
+    val reasons = qcReasonRes(flags).map { stringResource(it) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        BodyText(title, style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.weight(1f, fill = false))
+        InfoButton(InfoContent(title, reasons + stringResource(Res.string.qc_note)), tint = color)
     }
 }
 

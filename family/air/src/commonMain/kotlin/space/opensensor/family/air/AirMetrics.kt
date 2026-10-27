@@ -22,8 +22,8 @@ object AirMetrics {
 
     /** The sensor's own atmospheric PM2.5, as stored. */
     val PM25: MetricSpec get() = named(AirFamily.PM25_ATMOSPHERIC)
-    val PM10: MetricSpec get() = named("pm10_atmospheric_ug_m3")
-    val PM1: MetricSpec get() = named("pm1_atmospheric_ug_m3")
+    val PM10: MetricSpec get() = named(AirFamily.PM10_ATMOSPHERIC)
+    val PM1: MetricSpec get() = named(AirFamily.PM1_ATMOSPHERIC)
 
     /** Optional Plantower batch equation, gated separately and never used as the primary PM2.5 reading. */
     val PM25_BATCH_ESTIMATE: MetricSpec get() = named(BATCH_ESTIMATE_COLUMN)
