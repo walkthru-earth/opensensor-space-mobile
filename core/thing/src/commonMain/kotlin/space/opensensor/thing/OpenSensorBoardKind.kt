@@ -21,7 +21,7 @@ object OpenSensorBoardKind : ThingKind {
 
     override val source: DataSource = DataSource.PullSync(PublishPolicy.OptInCcBy(maxRes = PUBLISHED_MAX_RES, trimSessionEnds = false))
 
-    /** None of its own. The families the app installs name what its sensors derive ([ThingKinds.installMetrics]). */
+    /** None of its own. The families the app installs name what its sensors derive ([ThingKinds.metricProviders]). */
     override val derivedMetrics: List<DerivedMetricProvider> = emptyList()
 
     override fun recognize(evidence: Evidence): Recognition? = when (evidence) {

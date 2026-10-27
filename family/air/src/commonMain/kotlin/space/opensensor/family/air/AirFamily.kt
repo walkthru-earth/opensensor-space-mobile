@@ -71,8 +71,10 @@ object AirFamily : DerivedMetricProvider {
     /**
      * Installs the air family where the generic core reads families. History's metrics, scales and
      * capabilities ([Metrics.install], with [others] after it) and the scales Discover ships for a feed
-     * without a Collection ([DiscoverCollection.installBundled]). Each app entry point calls it once at
-     * launch, before any screen reads a metric.
+     * without a Collection ([DiscoverCollection.installBundled]). It is the one install path of both
+     * apps. Android's ThingModule and iOS's launchThingKinds call it once at launch with their Thing
+     * kinds' derived metric providers as [others], before any screen reads a metric. Tests call it with
+     * none.
      */
     fun install(others: List<DerivedMetricProvider> = emptyList()) {
         Metrics.install(listOf(this) + others)

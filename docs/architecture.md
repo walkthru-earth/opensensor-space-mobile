@@ -59,7 +59,8 @@ the EPA PM2.5 correction, the moods, the named air metrics, the PM sensor status
 public cell summary and `QcRules`. It plugs in through the generic seams. `AirFamily` is a
 `DerivedMetricProvider` that names its scales and capabilities, and `AirDiscover.COLLECTION` is the
 bundled Discover scale set (`DiscoverCollection.installBundled`). Each app entry point installs it
-at launch next to its Thing kinds (`ThingModule` on Android, `ThingKindsIos.kt` on iOS). Core
+at launch with one call, `AirFamily.install(kinds.metricProviders)`, when it builds its Thing kinds
+(`ThingModule` on Android, `ThingKindsIos.kt` on iOS). Core
 modules use it in their tests only, as the real fixture of the air boards. `CoreStaysAirFreeTest`
 in `:family:air` fails the gate when a production source under `core/` names an air term.
 

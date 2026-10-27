@@ -15,10 +15,10 @@ class CoreStaysAirFreeTest {
     private val airTerm = Regex(
         listOf(
             """\bWHO\b""", "Who[A-Z_]", """\bwho[A-Z_-]""",
-            """\bEPA\b""", "EPA_", "_EPA", "Epa[A-Z]", """\bepa\b""", """_epa\b""",
-            "[Pp]lantower", "PLANTOWER", "PMS[0-9A-Z_]", "Pms[A-Z]", "pms_",
+            """\bEPA\b""", "EPA_", "_EPA", "Epa[A-Z]", """\bepa\b""", """\bepa[A-Z]""", """_epa\b""",
+            "[Pp]lantower", "PLANTOWER", "PMS[0-9A-Z_]", "Pms[A-Z]", "pms_", """\bpms[A-Za-z0-9]""",
             "[Mm]ood", "MOOD",
-            "PM[0-9]", "pm[0-9]", "Pm[0-9]", """\bPM\b""", """\bpm\b""", """\bPm\b""", """[a-z]Pm\b""", "[a-z]Pm[A-Z]",
+            "PM[0-9]", "pm[0-9]", "Pm[0-9]", """\bPM\b""", """\bpm\b""", """\bPm\b""", """\bpm[A-Z]""", """[a-z]Pm\b""", "[a-z]Pm[A-Z]",
             "airquality", "family[.]air", ":family:air",
         ).joinToString("|"),
     )

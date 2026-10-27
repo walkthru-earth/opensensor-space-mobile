@@ -128,10 +128,9 @@ object Metrics {
     val providers: List<DerivedMetricProvider> get() = installed.providers
 
     /**
-     * Makes [providers] the ones the [catalog] applies, the app's families and the derived metrics of
-     * its Thing kinds (`ThingKinds.installMetrics` in `:core:thing`). Each app entry point calls it
-     * once at launch, before any screen reads a metric, since a family's named specs keep what they
-     * first read.
+     * Makes [providers] the ones the [catalog] applies, the app's families and then the derived
+     * metrics of its Thing kinds. A family's own install calls it once at each app's launch, before
+     * any screen reads a metric, since a family's named specs keep what they first read.
      */
     fun install(providers: List<DerivedMetricProvider>) {
         installed = Installed(providers.distinct())

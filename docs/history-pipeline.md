@@ -102,7 +102,7 @@ first, and `Metrics.defaultOf` opens History on the first of them.
 and returns `DerivedMetric`s, each a derived `Datastream` with a label, a `RowFormula` over its
 `derived.from` columns and an optional stored column it is a view of. `Metrics.providers` lists them.
 Each app installs its sensor families and its Thing kinds' providers at launch
-(`ThingKinds.installMetrics(families)`, `Metrics.install`), which rebuilds the catalog. Nothing is
+(`AirFamily.install(kinds.metricProviders)`, then `Metrics.install`), which rebuilds the catalog. Nothing is
 installed by default, so every column stays neutral until then. Today the one family is `AirFamily`
 in `:family:air`, which derives `pm25_epa` when the template stores `pm25_cf1_ug_m3` and
 `relative_humidity_percent`. A provider also names its health scales (`DerivedMetricProvider.scales`,

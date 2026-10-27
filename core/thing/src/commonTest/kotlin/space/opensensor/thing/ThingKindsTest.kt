@@ -93,12 +93,12 @@ class ThingKindsTest {
         assertEquals(listOf<DerivedMetricProvider>(AirFamily), kinds.metricProviders)
         assertEquals(emptyList(), OpenSensorBoardKind.derivedMetrics)
         try {
-            ThingKinds(listOf(healthKind)).installMetrics()
+            Metrics.install(ThingKinds(listOf(healthKind)).metricProviders)
             assertNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
-            kinds.installMetrics()
+            Metrics.install(kinds.metricProviders)
             assertEquals(listOf<DerivedMetricProvider>(AirFamily), Metrics.providers)
             assertNotNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
-            ThingKinds(listOf(OpenSensorBoardKind)).installMetrics(families = listOf(AirFamily))
+            AirFamily.install(kinds.metricProviders)
             assertEquals(listOf<DerivedMetricProvider>(AirFamily), Metrics.providers)
         } finally {
             Metrics.install(emptyList())

@@ -14,8 +14,8 @@ data class ObservedProperty(val id: String, val standardName: String? = null) {
 
 /**
  * The instrument that produces a datastream. [procedure] is the template's `opensensor:procedure`,
- * such as `pmsa003`. [board] is the board template id that carries it, since the same sensor model
- * on two boards can be wired and calibrated differently.
+ * the model of the sensor that measures it. [board] is the board template id that carries it, since
+ * the same sensor model on two boards can be wired and calibrated differently.
  */
 data class Sensor(val procedure: String, val board: String? = null) {
     init {

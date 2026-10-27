@@ -50,7 +50,7 @@ are coarsened to their parent. `PublishGate` in `thing/` is its only caller.
 `thing/` (`:core:thing`, #219) holds the `ThingKind` contract, its `DataSource` and `PublishPolicy`,
 `OpenSensorBoardKind` (#222) and the `ThingKinds` registry. Each app builds that registry as a plain
 list, Android in `data/di/ThingModule` and iOS in `ThingKindsIos.kt` from `AppServices`, with no self
-registration. `ThingKinds.installMetrics` hands the kinds' `DerivedMetricProvider`s to `Metrics.install`,
+registration. Each app hands `ThingKinds.metricProviders` to `AirFamily.install`, which passes the family and then the kinds' `DerivedMetricProvider`s to `Metrics.install`,
 which rebuilds the catalog. `PublishGate` (#224) issues a ticket only for a `Recording` kind with
 `OptInCcBy` whose Thing the owner opted in (`UploadConsent`, none by default), then builds that file's
 Item at the policy's `maxRes` (7 for the board), asking consent again so an opt out stops it. Health, feeds and anything else get none. It never
