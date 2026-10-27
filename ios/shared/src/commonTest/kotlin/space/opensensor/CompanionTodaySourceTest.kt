@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import space.opensensor.collection.SyncEndReason
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.today.SyncMood
 import space.opensensor.today.TodayArchive
@@ -232,7 +233,7 @@ class CompanionTodaySourceTest {
         state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
         val calls = Calls()
         // The other sensor's day, as a thing flow that is not guarded would read it.
-        val source = source(state, calls, mutableListOf(), flowOf(TodaySoFar(30f, 12, 0.5f)))
+        val source = source(state, calls, mutableListOf(), flowOf(TodaySoFar(30f, 12, 0.5f, AirMetrics.PM25)))
         state.connectionStarted("other")
         assertTrue(state.receiveInfo("{\"proto\":3,\"dev\":\"665544332211\",\"thing\":\"st2\"}"))
         state.receiveLive("{\"pms\":4,\"pm25\":30.0}")

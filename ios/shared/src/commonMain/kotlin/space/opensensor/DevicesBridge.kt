@@ -2,14 +2,20 @@ package space.opensensor
 
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.data.DeviceContinuityPolicy
+import space.opensensor.data.history.LatestDay
 import space.opensensor.devices.ActiveLink
 import space.opensensor.devices.ArchiveGlance
 import space.opensensor.devices.CollectAllPlan
@@ -72,7 +78,7 @@ internal object IosKnown {
     fun forget(records: List<KnownRecord>, peripheral: String): List<KnownRecord> =
         records.filterNot { it.peripheral.equals(peripheral, ignoreCase = true) }
 
-    /** Files and the newest sync per thing, as Android reads its Room index. iOS has no day mean yet. */
+    /** Files and the newest sync per thing, as Android reads its Room index. [withDays] adds the day. */
     fun glance(records: List<ArchiveRecord>): Map<String, ArchiveGlance> =
         records.groupBy { it.thing }.mapValues { (_, list) ->
             ArchiveGlance(
@@ -81,6 +87,18 @@ internal object IosKnown {
                 lastDataUtcNs = list.mapNotNull { it.lastUtcNs }.maxOrNull(),
             )
         }
+
+    /**
+     * [glances] with each thing's latest day from [latestDay], the line Android fills from Room. The
+     * files show at once and each day joins once its tiers answer.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun withDays(glances: Flow<Map<String, ArchiveGlance>>, latestDay: (String) -> Flow<LatestDay?>): Flow<Map<String, ArchiveGlance>> {
+        val days = glances.map { it.keys }.distinctUntilChanged().flatMapLatest { things ->
+            if (things.isEmpty()) flowOf(emptyMap()) else combine(things.map { t -> latestDay(t).map { t to it } }) { it.toMap() }
+        }.onStart { emit(emptyMap()) }
+        return combine(glances, days) { g, d -> g.mapValues { (thing, glance) -> glance.copy(lastDay = d[thing]) } }
+    }
 
     /** One record per line, tab separated. The sixth field records older thing epochs. */
     fun encode(records: List<KnownRecord>): String = records.joinToString("\n") { r ->
@@ -198,6 +216,7 @@ class DevicesBridge internal constructor(
     private val stopScan: () -> Unit,
     private val forget: (peripheral: String, device: String?) -> Unit,
     private val collect: (id: String, wifiName: String?) -> Unit,
+    private val latestDay: (thing: String) -> Flow<LatestDay?> = { flowOf(null) },
 ) {
     private val records = MutableStateFlow(IosKnown.decode(storage.load()))
     private val credentials = MutableStateFlow<List<KnownRecord>>(emptyList())
@@ -416,7 +435,6 @@ class DevicesBridge internal constructor(
 
     private val store = object : KnownDeviceStore {
         override val devices: Flow<List<KnownSensor>> = combine(records, credentials) { r, c -> IosKnown.merge(r, c) }
-        override suspend fun forget(id: String) = forgetNow(id)
     }
 
     private val radio = object : DeviceRadio {
@@ -444,5 +462,5 @@ class DevicesBridge internal constructor(
 
     /** A controller for one My devices entry, cleared with its scope. */
     internal fun controller(scope: CoroutineScope): DevicesController =
-        DevicesController(scope, store, radio, archive.map(IosKnown::glance), collectPort)
+        DevicesController(scope, store, radio, IosKnown.withDays(archive.map(IosKnown::glance), latestDay), collectPort)
 }

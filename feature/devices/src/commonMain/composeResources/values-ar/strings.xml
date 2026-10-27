@@ -10,11 +10,6 @@
     <string name="scan_connections">متصل الآن</string>
     <string name="scan_button_scan">ابحث</string>
     <string name="scan_button_stop">إيقاف</string>
-    <string name="scan_options">خيارات الجهاز</string>
-    <string name="scan_forget">إزالة</string>
-    <string name="scan_forget_title">هل تريد نسيان %1$s؟</string>
-    <string name="scan_forget_body">يزيله من هذا التطبيق. تبقى الملفات التي جُمعت. لإلغاء الاقتران تمامًا، انسَه أيضًا من إعدادات Bluetooth في هاتفك.</string>
-    <string name="scan_forget_button">إزالة الجهاز</string>
     <string name="scan_unnamed">مستشعر بلا اسم</string>
     <string name="scan_tag_paired">مقترن</string>
     <string name="scan_tag_known">معروف</string>
@@ -60,9 +55,9 @@
     <string name="scan_bluetooth_off">Bluetooth متوقف. شغّله وابحث مرة أخرى.</string>
     <string name="scan_local_network_denied">الوصول إلى الشبكة المحلية متوقف. اسمح به في الإعدادات للعثور على المستشعرات عبر Wi-Fi.</string>
     <string name="scan_archive_day">%1$s، %2$s %3$s %4$s في %5$s</string>
+    <string name="scan_archive_day_plain">%1$s %2$s %3$s في %4$s</string>
     <string name="scan_archive_coverage">%1$s من اليوم</string>
     <string name="devices_on_wifi">على شبكة Wi-Fi لديك</string>
-    <string name="devices_forget_bond_ios">يحتفظ iOS بإقران Bluetooth. أزله من الإعدادات ثم Bluetooth.</string>
 
     <string name="conn_pairing">جارٍ الإقران. أدخل الرمز الظاهر على المستشعر</string>
     <string name="conn_link_lost">انقطع الاتصال. جارٍ إعادة الاتصال تلقائيًا…</string>

@@ -92,6 +92,10 @@ fun TodayRoute(
                         bluetooth.run { controller.reconnect() }
                     }
                 }
+                TodayAction.Forget -> {
+                    viewModel.forget()
+                    onDisconnected()
+                }
                 TodayAction.SmartSync -> notificationPermission.ensureThen { controller.smartSync() }
                 TodayAction.StopSync -> controller.stopSync()
             }

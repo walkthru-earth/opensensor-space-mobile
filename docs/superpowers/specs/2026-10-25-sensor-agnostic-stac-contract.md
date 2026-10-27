@@ -277,7 +277,7 @@ App profile fields, outside any published schema. One small JSON file per digest
 | --- | --- | --- |
 | `family` | Family id such as `air`, `weather`, `soil`, `water`, `noise`, routes to a family plugin | `DeviceCapabilities.showsParticles`, schema prefix checks |
 | `primary` | Ordered list of default columns for Today, History and Devices | `Metrics.primary` |
-| `hero` | Optional hero card id that a family plugin renders, for example the air mood face | `TodayCard.NOW_AIR` |
+| `hero` | Optional hero card id that a family plugin renders, for example the air mood face | `HeroRegistry`, `air-mood` |
 | `display_step` | Display step per column. Integer columns show integers, so no default of one decimal | `FeedProperty.precision` |
 | `labels` | Column labels in en and ar | string resources |
 

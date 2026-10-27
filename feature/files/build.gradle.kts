@@ -37,5 +37,9 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
+        // File row semantics tests render headless on the iOS simulator (verifyIos), as in :feature:history.
+        iosTest.dependencies {
+            implementation(libs.compose.ui.test)
+        }
     }
 }

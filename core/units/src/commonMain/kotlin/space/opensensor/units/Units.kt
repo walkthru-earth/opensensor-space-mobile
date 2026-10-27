@@ -1,6 +1,7 @@
 package space.opensensor.units
 
 import kotlin.math.abs
+import kotlin.math.round
 import kotlin.math.roundToLong
 
 /**
@@ -121,6 +122,16 @@ class UnitFormatter(system: UnitSystem) {
     fun decimals(unit: String): Int? = UnitConversion.displayDecimals(unit, system)
 
     fun converts(unit: String): Boolean = UnitConversion.converts(unit, system)
+
+    /**
+     * [value] in [unit] as this system shows it, rounded to the profile's display [step], which
+     * prints with [stepDecimals] decimals. A unit this system converts keeps its own decimals.
+     */
+    fun format(value: Double, unit: String, step: Double, stepDecimals: Int): String {
+        val shown = value(value, unit)
+        val decimals = decimals(unit)
+        return if (decimals != null) formatFixed(shown, decimals) else formatFixed(round(shown / step) * step, stepDecimals)
+    }
 
     companion object {
         val Metric = UnitFormatter(UnitSystem.METRIC)

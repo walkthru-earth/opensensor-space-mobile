@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeTopAppBar
@@ -31,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,7 +58,6 @@ import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.MascotGuide
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.devices.resources.Res
-import space.opensensor.devices.resources.devices_forget_bond_ios
 import space.opensensor.devices.resources.devices_on_wifi
 import space.opensensor.devices.resources.info_collect_background
 import space.opensensor.devices.resources.info_collect_body
@@ -74,9 +73,6 @@ import space.opensensor.devices.resources.scan_collect_all
 import space.opensensor.devices.resources.scan_collect_running
 import space.opensensor.devices.resources.scan_connections
 import space.opensensor.devices.resources.scan_failed
-import space.opensensor.devices.resources.scan_forget_body
-import space.opensensor.devices.resources.scan_forget_button
-import space.opensensor.devices.resources.scan_forget_title
 import space.opensensor.devices.resources.scan_known
 import space.opensensor.devices.resources.scan_local_network_denied
 import space.opensensor.devices.resources.scan_nearby
@@ -87,17 +83,15 @@ import space.opensensor.devices.resources.scan_welcome_body
 import space.opensensor.devices.resources.scan_welcome_title
 import space.opensensor.permissions.RuntimeAccess
 import space.opensensor.settings.DetailLevel
-import space.opensensor.strings.resources.action_cancel
 import space.opensensor.strings.resources.perm_open_settings
 import space.opensensor.strings.resources.tab_my_devices
+import space.opensensor.units.UnitFormatter
 import space.opensensor.strings.resources.Res as SharedRes
 
 /** What differs between the two apps on this screen. */
 data class DevicesPlatform(
     /** Android runs Collect all in a background worker with a notification, iOS while the app is open. */
     val collectInBackground: Boolean,
-    /** iOS cannot remove the system Bluetooth bond, so the Forget dialog says where to do it. */
-    val explainSystemBond: Boolean,
 )
 
 /**
@@ -107,7 +101,7 @@ data class DevicesPlatform(
  *
  * Bluetooth is asked for only from a tap on Scan or Collect from all. Opening a sensor never asks,
  * see [openThing]. Once it is allowed and the radio is on, the screen scans while it is visible
- * and stops when it leaves.
+ * and stops when it leaves. [units] shows the archive day means in the owner's unit system.
  */
 @Composable
 fun MyDevicesScreen(
@@ -120,6 +114,7 @@ fun MyDevicesScreen(
     topActions: @Composable RowScope.() -> Unit = {},
     onScanTap: (() -> Unit)? = null,
     onOpenLocalNetworkSettings: (() -> Unit)? = null,
+    units: UnitFormatter = UnitFormatter.Metric,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var explicitScan by remember { mutableStateOf(false) }
@@ -133,169 +128,167 @@ fun MyDevicesScreen(
 
     fun open(id: String, name: String?) = openThing(id, name, bluetooth, onAction)
 
-    Scaffold(
-        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            LargeTopAppBar(
-                // One line, shrunk to fit, so "أجهزتي" never leaves its last letter behind (#144).
-                title = { FitText(stringResource(SharedRes.string.tab_my_devices), Modifier.semantics { heading() }) },
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    InfoButton(
-                        InfoContent(
-                            stringResource(Res.string.info_connect_title),
-                            stringResource(Res.string.info_connect_body1),
-                            stringResource(Res.string.info_connect_body2),
-                            stringResource(Res.string.info_privacy),
-                        ),
-                    )
-                    topActions()
-                },
-            )
-        },
-        // Scan floats at the end below the list, not over it. The list stops above it, so no row is
-        // ever under it, at rest or scrolled, at any font size (#146).
-        bottomBar = {
-            val onClick = {
-                if (showStop) {
-                    explicitScan = false
-                    onAction(DevicesAction.StopScan)
-                } else {
-                    explicitScan = true
-                    // A declined Bluetooth request still allows a local Wi-Fi browse.
-                    val start = { if (onScanTap == null) onAction(DevicesAction.StartScan) else onScanTap() }
-                    bluetooth.run(onDeclined = start, action = start)
-                }
-            }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(ScaffoldDefaults.contentWindowInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                    .padding(horizontal = 16.dp, vertical = FloatingControl.Margin),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                FloatingTextButton(
-                    text = stringResource(if (showStop) Res.string.scan_button_stop else Res.string.scan_button_scan),
-                    onClick = onClick,
-                    modifier = Modifier.testTag(SCAN_BUTTON_TAG),
-                    primary = !showStop,
-                    icon = { Icon(if (showStop) AppIcons.Stop else AppIcons.Radar, contentDescription = null) },
+    CompositionLocalProvider(LocalArchiveUnits provides units) {
+        Scaffold(
+            modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                LargeTopAppBar(
+                    // One line, shrunk to fit, so "أجهزتي" never leaves its last letter behind (#144).
+                    title = { FitText(stringResource(SharedRes.string.tab_my_devices), Modifier.semantics { heading() }) },
+                    scrollBehavior = scrollBehavior,
+                    actions = {
+                        InfoButton(
+                            InfoContent(
+                                stringResource(Res.string.info_connect_title),
+                                stringResource(Res.string.info_connect_body1),
+                                stringResource(Res.string.info_connect_body2),
+                                stringResource(Res.string.info_privacy),
+                            ),
+                        )
+                        topActions()
+                    },
                 )
-            }
-        },
-    ) { padding ->
-        val list = state.list
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding()),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = padding.calculateTopPadding() + 8.dp,
-                bottom = 8.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (list.active.isNotEmpty()) {
-                item(key = "active-header") { Eyebrow(stringResource(Res.string.scan_connections), heading = true) }
-                items(list.active, key = { "a:" + it.id }) { link ->
-                    ActiveRow(link, onClick = { open(link.id, link.name) })
+            },
+            // Scan floats at the end below the list, not over it. The list stops above it, so no row is
+            // ever under it, at rest or scrolled, at any font size (#146).
+            bottomBar = {
+                val onClick = {
+                    if (showStop) {
+                        explicitScan = false
+                        onAction(DevicesAction.StopScan)
+                    } else {
+                        explicitScan = true
+                        // A declined Bluetooth request still allows a local Wi-Fi browse.
+                        val start = { if (onScanTap == null) onAction(DevicesAction.StartScan) else onScanTap() }
+                        bluetooth.run(onDeclined = start, action = start)
+                    }
                 }
-            }
-            item(key = "progress") {
-                AnimatedVisibility(visible = state.scanning) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            }
-            state.scanProblem?.let { problem ->
-                item(key = "problem") {
-                    // Appears while the user waits on a scan, so screen readers hear it without moving focus.
-                    Surface(
-                        color = MaterialTheme.colorScheme.errorContainer,
-                        shape = MaterialTheme.shapes.large,
-                        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(
-                                stringResource(
-                                    when (problem) {
-                                        ScanProblem.BLUETOOTH_OFF -> Res.string.scan_bluetooth_off
-                                        ScanProblem.LOCAL_NETWORK_DENIED -> Res.string.scan_local_network_denied
-                                        ScanProblem.FAILED -> Res.string.scan_failed
-                                    },
-                                ),
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                            )
-                            if (problem == ScanProblem.LOCAL_NETWORK_DENIED && onOpenLocalNetworkSettings != null) {
-                                TextButton(onClick = onOpenLocalNetworkSettings) {
-                                    Text(stringResource(SharedRes.string.perm_open_settings))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(ScaffoldDefaults.contentWindowInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                        .padding(horizontal = 16.dp, vertical = FloatingControl.Margin),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    FloatingTextButton(
+                        text = stringResource(if (showStop) Res.string.scan_button_stop else Res.string.scan_button_scan),
+                        onClick = onClick,
+                        modifier = Modifier.testTag(SCAN_BUTTON_TAG),
+                        primary = !showStop,
+                        icon = { Icon(if (showStop) AppIcons.Stop else AppIcons.Radar, contentDescription = null) },
+                    )
+                }
+            },
+        ) { padding ->
+            val list = state.list
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding()),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = padding.calculateTopPadding() + 8.dp,
+                    bottom = 8.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (list.active.isNotEmpty()) {
+                    item(key = "active-header") { Eyebrow(stringResource(Res.string.scan_connections), heading = true) }
+                    items(list.active, key = { "a:" + it.id }) { link ->
+                        ActiveRow(link, onClick = { open(link.id, link.name) })
+                    }
+                }
+                item(key = "progress") {
+                    AnimatedVisibility(visible = state.scanning) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                }
+                state.scanProblem?.let { problem ->
+                    item(key = "problem") {
+                        // Appears while the user waits on a scan, so screen readers hear it without moving focus.
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = MaterialTheme.shapes.large,
+                            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+                        ) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text(
+                                    stringResource(
+                                        when (problem) {
+                                            ScanProblem.BLUETOOTH_OFF -> Res.string.scan_bluetooth_off
+                                            ScanProblem.LOCAL_NETWORK_DENIED -> Res.string.scan_local_network_denied
+                                            ScanProblem.FAILED -> Res.string.scan_failed
+                                        },
+                                    ),
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                                if (problem == ScanProblem.LOCAL_NETWORK_DENIED && onOpenLocalNetworkSettings != null) {
+                                    TextButton(onClick = onOpenLocalNetworkSettings) {
+                                        Text(stringResource(SharedRes.string.perm_open_settings))
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            if (list.nearby.isEmpty()) {
-                // The peacock guides the empty moments, a first run or nothing nearby.
-                item(key = "guide") {
-                    if (list.knownCount == 0) {
-                        MascotGuide(stringResource(Res.string.scan_welcome_title), stringResource(Res.string.scan_welcome_body), expression = PeacockExpression.WELCOME)
-                    } else {
-                        MascotGuide(stringResource(Res.string.scan_none_nearby_title), stringResource(Res.string.scan_none_nearby_body), expression = PeacockExpression.CONFUSED)
+                if (list.nearby.isEmpty()) {
+                    // The peacock guides the empty moments, a first run or nothing nearby.
+                    item(key = "guide") {
+                        if (list.knownCount == 0) {
+                            MascotGuide(stringResource(Res.string.scan_welcome_title), stringResource(Res.string.scan_welcome_body), expression = PeacockExpression.WELCOME)
+                        } else {
+                            MascotGuide(stringResource(Res.string.scan_none_nearby_title), stringResource(Res.string.scan_none_nearby_body), expression = PeacockExpression.CONFUSED)
+                        }
                     }
+                } else {
+                    item(key = "nearby-header") { Eyebrow(stringResource(Res.string.scan_nearby), heading = true) }
                 }
-            } else {
-                item(key = "nearby-header") { Eyebrow(stringResource(Res.string.scan_nearby), heading = true) }
-            }
-            items(list.nearby, key = { "n:" + it.id }) { row ->
-                NearbyRow(
-                    row = row,
-                    level = level,
-                    onClick = { open(row.id, row.name) },
-                    onForget = { onAction(DevicesAction.RequestForget(row.id, row.name)) },
-                )
-            }
-
-            if (list.known.isNotEmpty()) {
-                item(key = "known-header") {
-                    Spacer(Modifier.height(8.dp))
-                    Eyebrow(stringResource(Res.string.scan_known), heading = true)
-                }
-                items(list.known, key = { "k:" + it.id }) { row ->
-                    KnownRow(
+                items(list.nearby, key = { "n:" + it.id }) { row ->
+                    NearbyRow(
                         row = row,
                         level = level,
                         onClick = { open(row.id, row.name) },
-                        onForget = { onAction(DevicesAction.RequestForget(row.id, row.name)) },
                     )
                 }
-            }
 
-            if (list.wifiOnly.isNotEmpty()) {
-                item(key = "wifi-header") {
-                    Spacer(Modifier.height(8.dp))
-                    Eyebrow(stringResource(Res.string.devices_on_wifi), heading = true)
+                if (list.known.isNotEmpty()) {
+                    item(key = "known-header") {
+                        Spacer(Modifier.height(8.dp))
+                        Eyebrow(stringResource(Res.string.scan_known), heading = true)
+                    }
+                    items(list.known, key = { "k:" + it.id }) { row ->
+                        KnownRow(
+                            row = row,
+                            level = level,
+                            onClick = { open(row.id, row.name) },
+                        )
+                    }
                 }
-                items(list.wifiOnly, key = { "w:" + it.name }) { sensor -> WifiOnlyRow(sensor, level) }
-            }
 
-            // Several sensors, one pass over all of them, Wi-Fi first, then Bluetooth, one link per thing.
-            if (state.showCollectAll) {
-                item(key = "collect") {
-                    CollectAllRow(
-                        count = list.knownCount,
-                        running = state.collecting,
-                        inBackground = platform.collectInBackground,
-                        onClick = {
-                            // Bluetooth steps need the permission. Declining still runs the Wi-Fi steps.
-                            bluetooth.run(onDeclined = { onAction(DevicesAction.CollectAll) }) { onAction(DevicesAction.CollectAll) }
-                        },
-                    )
+                if (list.wifiOnly.isNotEmpty()) {
+                    item(key = "wifi-header") {
+                        Spacer(Modifier.height(8.dp))
+                        Eyebrow(stringResource(Res.string.devices_on_wifi), heading = true)
+                    }
+                    items(list.wifiOnly, key = { "w:" + it.name }) { sensor -> WifiOnlyRow(sensor, level) }
+                }
+
+                // Several sensors, one pass over all of them, Wi-Fi first, then Bluetooth, one link per thing.
+                if (state.showCollectAll) {
+                    item(key = "collect") {
+                        CollectAllRow(
+                            count = list.knownCount,
+                            running = state.collecting,
+                            inBackground = platform.collectInBackground,
+                            onClick = {
+                                // Bluetooth steps need the permission. Declining still runs the Wi-Fi steps.
+                                bluetooth.run(onDeclined = { onAction(DevicesAction.CollectAll) }) { onAction(DevicesAction.CollectAll) }
+                            },
+                        )
+                    }
                 }
             }
         }
     }
-
-    state.forget?.let { target -> ForgetDialog(target, platform.explainSystemBond, onAction) }
 }
 
 /** Test tag of the Scan button. */
@@ -337,25 +330,4 @@ private fun CollectAllRow(count: Int, running: Boolean, inBackground: Boolean, o
             ),
         )
     }
-}
-
-@Composable
-private fun ForgetDialog(target: ForgetTarget, explainSystemBond: Boolean, onAction: (DevicesAction) -> Unit) {
-    val name = target.name ?: stringResource(Res.string.scan_unnamed)
-    AlertDialog(
-        onDismissRequest = { onAction(DevicesAction.CancelForget) },
-        title = { Text(stringResource(Res.string.scan_forget_title, name), Modifier.semantics { heading() }) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.scan_forget_body))
-                if (explainSystemBond) Text(stringResource(Res.string.devices_forget_bond_ios))
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onAction(DevicesAction.ConfirmForget) }) { Text(stringResource(Res.string.scan_forget_button)) }
-        },
-        dismissButton = {
-            TextButton(onClick = { onAction(DevicesAction.CancelForget) }) { Text(stringResource(SharedRes.string.action_cancel)) }
-        },
-    )
 }

@@ -1,6 +1,7 @@
 {
   "dict": "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7",
   "family": "air",
+  "hero": "air-mood",
   "primary": [
     "pm25_atmospheric_ug_m3",
     "pm10_atmospheric_ug_m3",

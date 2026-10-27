@@ -303,4 +303,9 @@
 
     <!-- The Debug screen copy lives in feature/debug composeResources. -->
     <string name="conn_pairing_repair">Bluetooth pairing needs repair. If this sensor was reset or reflashed, forget it in Android Bluetooth settings and pair again. Your archived files are kept.</string>
+    <!-- Byte counts in steps of 1024, the same words as Files (core/units byteSize). -->
+    <string name="unit_bytes">%1$s B</string>
+    <string name="unit_kilobytes">%1$s KB</string>
+    <string name="unit_megabytes">%1$s MB</string>
+    <string name="unit_gigabytes">%1$s GB</string>
 </resources>

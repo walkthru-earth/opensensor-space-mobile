@@ -60,7 +60,7 @@ Smallest first. Each step passes `./gradlew --no-daemon verify` with no behaviou
 | # | Step | Tracking |
 | --- | --- | --- |
 | 1 | Capability set from `DeviceCapabilities`, air metrics moved out of `Metrics.kt` into a provider, no `requireNotNull` crash, `PMS_STATUS` out of `:core:protocol` | [#220](https://github.com/walkthru-earth/opensensor-space-mobile/issues/220) |
-| 2 | Generic Stations cards and a `profile.hero` slot, `lastDayPrimaryMean` in place of `lastDayPm25Mean` | [#221](https://github.com/walkthru-earth/opensensor-space-mobile/issues/221) |
+| 2 | Generic Stations cards and a `profile.hero` slot, a `LatestDay` of the main metric on My devices | [#221](https://github.com/walkthru-earth/opensensor-space-mobile/issues/221) |
 | 3 | `:core:thing` with one kind, `opensensor-board`, wrapping today's path, plus a registry count test on the iOS simulator | [#222](https://github.com/walkthru-earth/opensensor-space-mobile/issues/222) |
 | 4 | Room `thing_source` table keyed by Thing UUID, identity off the Bluetooth address | [#223](https://github.com/walkthru-earth/opensensor-space-mobile/issues/223) |
 | 5 | `PublishGate` as the first caller of `FileItems` | [#224](https://github.com/walkthru-earth/opensensor-space-mobile/issues/224) |

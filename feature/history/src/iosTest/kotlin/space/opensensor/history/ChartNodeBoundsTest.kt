@@ -77,6 +77,28 @@ class ChartNodeBoundsTest {
         CalendarHeatmap(march, AirMetrics.PM25, marchFrom, marchTo, onPickDay = {}, zone = TimeZone.UTC)
     }
 
+    @Test
+    fun monthCalendarDaysAreFullTouchTargets() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Box(Modifier.width(360.dp)) {
+                    CalendarHeatmap(march, AirMetrics.PM25, marchFrom, marchTo, onPickDay = {}, zone = TimeZone.UTC)
+                }
+            }
+        }
+        waitForIdle()
+        val minPx = with(density) { 48.dp.toPx() } - SLACK_PX
+        val nodes = ArrayList<SemanticsNode>()
+        fun walk(node: SemanticsNode) {
+            if (node.config.getOrElseNullable(SemanticsProperties.Role) { null } == Role.Button) nodes += node
+            node.children.forEach(::walk)
+        }
+        walk(onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        assertEquals(march.size, nodes.size)
+        val small = nodes.filter { it.boundsInRoot.height < minPx || it.boundsInRoot.width < minPx }
+        assertTrue(small.isEmpty(), small.joinToString("\n") { "${it.config[SemanticsProperties.ContentDescription]} ${it.boundsInRoot}" })
+    }
+
     /** A bar node spans the plot height, so only its horizontal centre is the bar's. */
     private fun checkBars(count: Int, chart: @Composable () -> Unit) = check(count, vertical = false, chart)
 

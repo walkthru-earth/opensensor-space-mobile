@@ -23,10 +23,10 @@ internal class CompanionToday(val state: CompanionState, val actions: CompanionL
  * same reader History uses.
  */
 private class TodayHolder(today: CompanionToday, devices: DevicesBridge, address: String, settings: SettingsRepository) : ViewModel() {
-    // The one link may hold another sensor. Its thing must not fill this sensor's Today so far.
-    private val thing = snapshotFlow {
+    // The one link may hold another sensor. Its INFO must not fill this sensor's Today so far.
+    private val info = snapshotFlow {
         val lan = today.state.connectedLanForThing(devices.thingFor(address))
-        lan?.let(today.state.lanInfo::get)?.thing ?: today.state.info?.thing?.takeIf { today.state.selectedId == address }
+        lan?.let(today.state.lanInfo::get) ?: today.state.info?.takeIf { today.state.selectedId == address }
     }
     val controller = TodayController(
         scope = viewModelScope,
@@ -35,7 +35,7 @@ private class TodayHolder(today: CompanionToday, devices: DevicesBridge, address
             state = today.state,
             address = address,
             archive = IosArchive.index.observeAll(),
-            todaySoFar = todaySoFar(thing, IosArchive.reader::observeHourlyDay),
+            todaySoFar = todaySoFar(info, IosArchive.reader::observeHourlyDay),
             actions = today.actions,
             thingFor = devices::thingFor,
             nameFor = devices::nameFor,
@@ -45,8 +45,8 @@ private class TodayHolder(today: CompanionToday, devices: DevicesBridge, address
 }
 
 /**
- * Today of one Bluetooth sensor (`:feature:today`), the screen Android shows. Smart Sync, Reconnect
- * and Disconnect run here. Every other action goes to [onNavigate]. Reconnect is the tap that asks
+ * Today of one Bluetooth sensor (`:feature:today`), the screen Android shows. Smart Sync, Reconnect,
+ * Disconnect and Forget run here. Every other action goes to [onNavigate]. Reconnect is the tap that asks
  * for Bluetooth, since opening the sensor from My devices never does (#147).
  */
 @Composable
@@ -64,6 +64,8 @@ internal fun TodayEntry(
     TodayScreen(
         controller = controller,
         units = remember(units) { UnitFormatter(units) },
+        // iOS cannot remove the system Bluetooth bond, so the Forget dialog says so.
+        explainSystemBond = true,
         onAction = { action ->
             when (action) {
                 TodayAction.SmartSync -> controller.smartSync()
@@ -73,6 +75,12 @@ internal fun TodayEntry(
                 // The sensor keeps recording. My devices shows it as known.
                 TodayAction.Disconnect -> {
                     controller.disconnect()
+                    onNavigate(TodayAction.OpenDevices)
+                }
+                // Drops the record and its Wi-Fi access, then closes the links through Swift.
+                TodayAction.Forget -> {
+                    controller.disconnect()
+                    devices.forgetNow(address)
                     onNavigate(TodayAction.OpenDevices)
                 }
                 else -> onNavigate(action)

@@ -8,17 +8,20 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.TimeZone
-import space.opensensor.airquality.Pm25Basis
 import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.ArchiveDayQuery
+import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
+import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.history.archiveQueryResults
 import space.opensensor.data.history.localDateOf
 import space.opensensor.data.history.startOfDay
+import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.designsystem.nowEpochMillis
+import space.opensensor.model.Capability
 
 /** Epoch second of the current local midnight in [zone]. */
 internal fun currentDayStart(zone: TimeZone, nowS: Long = nowEpochMillis() / 1000): Long = startOfDay(localDateOf(nowS, zone), zone)
@@ -32,28 +35,47 @@ fun localDayStarts(zone: TimeZone, periodMs: Long = 60_000): Flow<Long> = flow {
 }.distinctUntilChanged()
 
 /**
- * Today so far for the connected [thing], the local calendar day like the History Day view, from
- * the hourly tier of the phone archive. The EPA corrected PM2.5 mean when the day has one, else raw. Null until the archive has a mean for this thing and day.
- * A thing or day change drops the old answer first, so a value never shows under the wrong device.
- * Both apps feed it their own [observeHourlyDay] (the shared `HistorySeriesReader`).
+ * The metrics Today so far averages for [capabilities], in preference order. An air board with
+ * particles takes the EPA corrected PM2.5 and falls back to raw. Any other thing takes the metric of
+ * its first visible primary column, so a soil board averages its soil reading. Empty when the thing
+ * is unknown or shows no primary.
+ */
+fun todayMetrics(capabilities: DeviceCapabilities): List<MetricSpec> {
+    val thing = capabilities.thing ?: return emptyList()
+    if (Capability.PARTICLES in capabilities) return listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25)
+    val primary = thing.primary.firstOrNull() ?: return emptyList()
+    return listOfNotNull(Metrics.of(thing.template, thing.profile).firstOrNull { it.id == primary.name })
+}
+
+/** One Today so far read, the day of a thing and the metrics to try in order. */
+private data class TodayQuery(val day: ArchiveDayQuery, val metrics: List<MetricSpec>)
+
+/**
+ * Today so far for the connected device [info], the local calendar day like the History Day view,
+ * from the hourly tier of the phone archive. The first of [todayMetrics] that has a mean wins. Null
+ * until the archive has a mean for this thing and day. A thing or day change drops the old answer
+ * first, so a value never shows under the wrong device. Both apps feed it their own
+ * [observeHourlyDay] (the shared `HistorySeriesReader`).
  */
 fun todaySoFar(
-    thing: Flow<String?>,
+    info: Flow<DeviceInfo?>,
     observeHourlyDay: (thing: String, metric: MetricSpec, window: HistoryWindow) -> Flow<HistorySeries>,
     zone: TimeZone = TimeZone.currentSystemDefault(),
     dayStarts: Flow<Long> = localDayStarts(zone),
-): Flow<TodaySoFar?> =
-    combine(thing.distinctUntilChanged(), dayStarts) { s, start -> ArchiveDayQuery(s, start, zone) }
+): Flow<TodaySoFar?> {
+    val things = info.map { it?.thing to todayMetrics(DeviceCapabilities.from(it)) }.distinctUntilChanged()
+    return combine(things, dayStarts) { (thing, metrics), start -> TodayQuery(ArchiveDayQuery(thing, start, zone), metrics) }
         .archiveQueryResults { query ->
-            val id = query.thing
-            if (id == null) {
+            val id = query.day.thing
+            if (id == null || query.metrics.isEmpty()) {
                 flowOf(null)
             } else {
-                // Corrected PM2.5 when the day has rows with a valid RH, else raw, labelled by its basis.
-                combine(observeHourlyDay(id, AirMetrics.PM25_CORRECTED, query.window), observeHourlyDay(id, AirMetrics.PM25, query.window)) { corrected, raw ->
-                    val series = if (corrected.mean != null) corrected else raw
-                    series.mean?.let { TodaySoFar(it, series.validRows.toInt(), series.coverage, series.metric.basis ?: Pm25Basis.RAW) }
+                combine(query.metrics.map { observeHourlyDay(id, it, query.day.window) }) { all ->
+                    all.firstNotNullOfOrNull { series ->
+                        series.mean?.let { TodaySoFar(it, series.validRows.toInt(), series.coverage, series.metric) }
+                    }
                 }
             }
         }
         .map { it.value }
+}
