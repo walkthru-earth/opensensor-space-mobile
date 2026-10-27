@@ -5,6 +5,7 @@ import space.opensensor.data.history.Metrics
 import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LanProtocol
+import space.opensensor.data.sync.ThingSource
 import space.opensensor.model.Capability
 import space.opensensor.model.DerivedMetricProvider
 import space.opensensor.publicfeed.BundledSampleFeed
@@ -35,6 +36,12 @@ val localOnlyKind = FakeKind("local-only", DataSource.PullSync(PublishPolicy.Nev
 class ThingKindsTest {
     /** The CoreS3 dictionary, pinned. */
     private val coreS3Dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
+
+    @Test
+    fun theBoardSourceIsTheOneTheVersion3MigrationWrites() {
+        // core:database Migration2To3 writes these literals for every Thing stored before version 3.
+        assertEquals(ThingSource("thing-a", "opensensor-board", 1, "{}"), OpenSensorBoardKind.sourceFor("thing-a"))
+    }
 
     @Test
     fun theBoardKindPassesTheContract() {

@@ -9,7 +9,11 @@ actual fun inMemoryAppDatabase(): AppDatabase = AppDatabase.configured(Room.inMe
 
 actual fun fileAppDatabase(path: String): AppDatabase = openAppDatabase(path)
 
-actual fun newTempDir(): String = NSTemporaryDirectory().trimEnd('/') + "/app-database-test-" + NSUUID().UUIDString()
+/** Made on disk, as on Android, so a test can write its own database file in it first. */
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+actual fun newTempDir(): String = (NSTemporaryDirectory().trimEnd('/') + "/app-database-test-" + NSUUID().UUIDString()).also {
+    NSFileManager.defaultManager.createDirectoryAtPath(it, withIntermediateDirectories = true, attributes = null, error = null)
+}
 
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 actual fun deleteTempDir(dir: String) {

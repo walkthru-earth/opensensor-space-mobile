@@ -367,7 +367,7 @@ final class AutoSync {
     private func isOwned(_ id: String) -> Bool {
         if bluetooth.isHeld(id: id) { return true }
         guard let device = devices.deviceFor(peripheral: id) else { return false }
-        return runs?.isActive(device: device) == true || lan.hasSession(device: device)
+        return runs?.isActive(device: ModelThingId.BleAddress(address: device)) == true || lan.hasSession(device: device)
     }
 
     /// Cancels the run going now. With [handle], only when that run is still the current one, so

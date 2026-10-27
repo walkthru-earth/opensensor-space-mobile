@@ -30,6 +30,7 @@ import space.opensensor.data.SyncProgress
 import space.opensensor.data.collectionProgress
 import space.opensensor.data.coroutines.suspendRunCatching
 import space.opensensor.data.history.HistoryDeriver
+import space.opensensor.model.ThingId
 import java.util.UUID
 
 /**
@@ -115,10 +116,10 @@ class SyncWorker @AssistedInject constructor(
                         }
                 }
                 try {
-                    val trigger = inputData.getString(KEY_TRIGGER) ?: (if (inputData.getString(KEY_ADDRESS) != null || inputData.getBoolean(KEY_ALL_KNOWN, false)) SyncTrigger.MANUAL.name else "PERIODIC")
+                    val trigger = inputData.getString(KEY_TRIGGER) ?: (if (onlyThing() != null || inputData.getBoolean(KEY_ALL_KNOWN, false)) SyncTrigger.MANUAL.name else "PERIODIC")
                     Log.i(TAG, "auto-sync run: trigger=$trigger")
                     AutoSyncRunner(gateway.forRun(owner, protection) { workerStopSource(stopReason) }, log = { Log.i(TAG, it) }).run(
-                        onlyAddress = inputData.getString(KEY_ADDRESS),
+                        onlyAddress = onlyThing()?.address,
                         allKnown = inputData.getBoolean(KEY_ALL_KNOWN, false),
                         lanOnly = inputData.getBoolean(KEY_LAN_ONLY, false),
                     )
@@ -136,7 +137,7 @@ class SyncWorker @AssistedInject constructor(
             if (!foreground) runCatching { notificationManager.cancel(notificationId) }
         }
 
-        if (inputData.getString(KEY_TRIGGER) == null && inputData.getString(KEY_ADDRESS) == null && !inputData.getBoolean(KEY_ALL_KNOWN, false)) {
+        if (inputData.getString(KEY_TRIGGER) == null && onlyThing() == null && !inputData.getBoolean(KEY_ALL_KNOWN, false)) {
             // Periodic run: the cheapest place to re-arm the offloaded flag scan, which a Bluetooth
             // toggle silently drops (stop + start, de-duplicated by the receiver).
             suspendRunCatching { advertScan.ensureRegisteredNow() }.onFailure { Log.w(TAG, "flag scan re-register failed: ${it::class.simpleName}") }
@@ -151,6 +152,9 @@ class SyncWorker @AssistedInject constructor(
         }
         return if (report.transientFailure) retryOrGiveUp() else Result.success()
     }
+
+    /** The one board this run is for, or null for every eligible one. */
+    private fun onlyThing(): ThingId.BleAddress? = inputData.getString(KEY_THING)?.let(ThingId::parse) as? ThingId.BleAddress
 
     /** Backed-off retry for transient trouble, bounded so a flaky link cannot keep the radio busy all period. */
     private fun retryOrGiveUp(): Result =
@@ -172,8 +176,8 @@ class SyncWorker @AssistedInject constructor(
         /** Retries (with the request's exponential backoff) within one period before waiting for the next. */
         const val MAX_RETRIES = BackgroundSyncPolicy.MAX_RETRIES
 
-        /** Input data: restrict a manual run to this Bluetooth address (switch on or off). Absent for periodic runs. */
-        const val KEY_ADDRESS = "address"
+        /** Input data: restrict a run to this board, a [ThingId.key] of its Bluetooth address. Absent for periodic runs. */
+        const val KEY_THING = "thing"
 
         /** Input data: a manual run over every known device ("Collect from all loggers"). */
         const val KEY_ALL_KNOWN = "all_known"

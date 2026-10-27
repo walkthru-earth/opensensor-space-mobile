@@ -39,6 +39,7 @@ import space.opensensor.data.history.UtcDayRange
 import space.opensensor.data.history.info
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.ListCursors
+import space.opensensor.data.sync.ThingSources
 import space.opensensor.discover.MapCache
 import space.opensensor.net.BlockCache
 import space.opensensor.net.DiskBlockStore
@@ -80,6 +81,9 @@ internal object IosArchive {
 
     /** Where each station's incremental list left off, beside the index. */
     val cursors: ListCursors get() = database.cursors
+
+    /** Where each Thing's data comes from, by Thing UUID, beside the index. */
+    val sources: ThingSources get() = database.sources
 
     // Tiers persist beside the derived day files, so a cold History open decodes only new days (#63).
     val tiers: ArchiveHistoryTiers by lazy {
@@ -355,7 +359,7 @@ internal fun clockAnchorFollowUp(scope: CoroutineScope, history: HistoryOrchestr
  */
 fun sharedSensorSync(): SensorSync {
     IosArchive.startIndexRepair()
-    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, coordinator = IosArchive.coordinator, cursors = IosArchive.cursors)
+    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, coordinator = IosArchive.coordinator, cursors = IosArchive.cursors, sources = IosArchive.sources)
 }
 
 /** `Library/Caches` of this app. */

@@ -119,7 +119,7 @@ class SyncListing(
  *
  * [list] asks `LIST_SINCE` with the station's saved cursor in [cursors] when the board advertises it
  * (STATUS `ls`), and plain `LIST` otherwise. [settle] saves the next cursor only after a run that
- * left nothing worth listing again. See docs/sync-engine.md.
+ * left nothing worth listing again. [list] also records the Thing's source first ([recordSource]). See docs/sync-engine.md.
  */
 class ArchiveCollector(
     private val store: ArchiveStore,
@@ -133,6 +133,11 @@ class ArchiveCollector(
     },
     private val cursors: ListCursors = ListCursors.None,
     private val clock: () -> Long = ::nowEpochMs,
+    /**
+     * Records the [ThingSource] of a Thing this phone collects, before its first listing. Each app
+     * adds the board kind's source to its [ThingSources] unless the Thing has one (#223).
+     */
+    private val recordSource: suspend (thing: String) -> Unit = {},
 ) {
     /** The engine's coordinator, the one owner of this archive's admission, locks and tombstones. */
     val coordinator: DeviceCoordinator get() = engine.coordinator
@@ -159,6 +164,7 @@ class ArchiveCollector(
      * on a saved cursor asks again with the zero cursor. Any other failure throws as `LIST` does.
      */
     suspend fun list(session: DeviceSession, thing: String, onlyName: String? = null): SyncListing {
+        noteSource(thing)
         if (onlyName != null || session.payloadMax < FrameCodec.LIST_SINCE_END_BYTES) return plainList(session)
         val epoch = (session.latestStatus ?: session.freshStatus()?.first)?.listSinceEpoch ?: return plainList(session)
         val saved = savedCursor(thing)
@@ -186,6 +192,17 @@ class ArchiveCollector(
     private suspend fun listSince(session: DeviceSession, cursor: ListCursor): SyncListing {
         val (files, end) = session.listSince(cursor)
         return SyncListing(files, end.toListEnd(), whole = cursor.isZero || end.full, sent = cursor, next = end.next)
+    }
+
+    /** A source that cannot be written now is written on a later run, the collection goes on. */
+    private suspend fun noteSource(thing: String) {
+        try {
+            recordSource(thing)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Recorded on the next run.
+        }
     }
 
     /** A cursor that cannot be read counts as none, so the run takes a whole listing. */
