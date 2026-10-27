@@ -26,7 +26,7 @@ internal object PreviewFakes {
         fw = "idf-waveshare-parquet-v2.9",
         schema = "waveshare-sim7670g-telemetry-v5",
         cols = 62,
-        dict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7",
+        dict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809",
         thing = "4f1c2a9e-0000-4000-8000-1234567890ab",
         dev = "a1b2c3d4e5f6",
         boot = "0123456789abcdef0123456789abcdef",

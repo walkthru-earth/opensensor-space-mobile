@@ -29,12 +29,12 @@ class HistoryIndexer internal constructor(
     archivedFileDao: ArchivedFileDao,
     coordinator: DeviceCoordinator,
     /** Resolves each file's board template from its footer, for the index and for [HistoryDeriver]. */
-    val templates: FileTemplates = FileTemplates.BUNDLED,
+    val templates: FileTemplates = FileTemplates.SERVED,
     /** Gets each indexed file's footer `template.sha256`, see [BoardDescriptors.confirm]. */
     onTemplateDigest: suspend (String) -> Unit = {},
 ) {
     @Inject constructor(archive: FileArchive, archivedFileDao: ArchivedFileDao, coordinator: DeviceCoordinator, boardDescriptors: BoardDescriptors) :
-        this(archive, archivedFileDao, coordinator, FileTemplates.BUNDLED, boardDescriptors::confirm)
+        this(archive, archivedFileDao, coordinator, FileTemplates.SERVED, boardDescriptors::confirm)
 
     val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
 

@@ -31,7 +31,7 @@ class HistoryRepository internal constructor(
     /** Coverage counts only the elapsed part of a window holding now. Tests pin it. */
     nowEpochS: () -> Long,
     /** Resolves each file's board template from its footer. Tests read old fixtures through their own. */
-    private val templates: FileTemplates = FileTemplates.BUNDLED,
+    private val templates: FileTemplates = FileTemplates.SERVED,
 ) {
     @Inject constructor(archive: FileArchive, archivedFileDao: ArchivedFileDao, bucketDao: MetricBucketDao, derived: DerivedDayFiles) :
         this(archive, archivedFileDao, bucketDao, derived, { System.currentTimeMillis() / 1_000 })

@@ -4,6 +4,17 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../opensensor-space-firmware/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-27, templates at opensensor-space-firmware da9bd03 (code only)
+
+Host tests and the iOS simulator only. No phone run is recorded.
+
+- The bundled templates are byte copies of opensensor-space-firmware da9bd03 `docs/shared/templates`.
+  Waveshare moves to `a8605aaf…` and both template digests change (#182). `FirmwareTemplatesTest`
+  fails when a local firmware checkout has other templates.
+- History reads a file by a template its board served before a bundled one. A dict with no reviewed
+  profile has no LIVE view, no hero and no Today so far.
+- To check on phones. Waveshare LIVE labels, History metrics and Today so far on da9bd03 firmware.
+
 ## 2026-10-26, Thing contract and dictionary v7 templates (code only)
 
 Host tests and the iOS simulator only. No phone run is recorded.
