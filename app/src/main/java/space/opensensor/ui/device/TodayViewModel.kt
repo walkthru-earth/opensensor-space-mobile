@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import space.opensensor.data.ArchiveTimeSummary
 import space.opensensor.data.DeviceConnectionManager
 import space.opensensor.data.DeviceEvent
@@ -30,6 +31,7 @@ import space.opensensor.data.ble.ConfigSnapshot
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.DeviceSession
 import space.opensensor.data.ble.TransportKind
+import space.opensensor.data.coroutines.ApplicationScope
 import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.history.HistoryRepository
 import space.opensensor.data.history.TodaySoFar
@@ -57,6 +59,7 @@ class TodayViewModel @AssistedInject constructor(
     settings: AppSettings,
     history: HistoryRepository,
     knownDeviceDao: KnownDeviceDao,
+    @ApplicationScope private val appScope: CoroutineScope,
 ) : ViewModel() {
     @AssistedFactory
     interface Factory {
@@ -80,7 +83,7 @@ class TodayViewModel @AssistedInject constructor(
         repository = repository,
         address = deviceAddress,
         enrolled = enrolled,
-        todaySoFar = todaySoFar(repository.info.map { it?.thing }, history::observeHourlyDay),
+        todaySoFar = todaySoFar(repository.info, history::observeHourlyDay),
     )
 
     val controller = TodayController(
@@ -88,6 +91,11 @@ class TodayViewModel @AssistedInject constructor(
         source = source,
         detailLevel = settings.detailLevel,
     )
+
+    /** Forgets this device. It runs in the app scope, so leaving Today never cancels it. */
+    fun forget() {
+        appScope.launch { repository.forget(deviceAddress) }
+    }
 
     fun reconnectLanOnly() = repository.connect(deviceAddress, controller.state.value.snapshot.name, preference = TransportPreference.LAN_ONLY)
 }

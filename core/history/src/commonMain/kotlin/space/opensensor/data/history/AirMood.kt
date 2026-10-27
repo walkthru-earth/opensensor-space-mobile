@@ -92,10 +92,8 @@ sealed interface NowReading {
 }
 
 /**
- * "Today so far" from the hourly tier, a real average with its coverage, or nothing. [basis] says
- * whether the mean is of corrected rows or, when the day has no valid RH, of raw ones.
+ * "Today so far" from the hourly tier, a real average of the thing's main [metric] with its coverage,
+ * or nothing. For an air board [metric] is the corrected PM2.5 when the day has rows with a valid RH,
+ * else the raw one, and its [MetricSpec.basis] says which.
  */
-data class TodaySoFar(val pm25Mean: Float, val validRows: Int, val coverage: Float, val basis: Pm25Basis = Pm25Basis.RAW) {
-    /** Read against the WHO 24-hour scale. A part-day mean is not yet a 24-hour mean. */
-    val mood: AirMood get() = AirMood.of(pm25Mean.toDouble())
-}
+data class TodaySoFar(val primaryMean: Float, val validRows: Int, val coverage: Float, val metric: MetricSpec)

@@ -10,18 +10,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,11 +24,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.data.history.AirMetrics
-import space.opensensor.data.history.AirMood
+import space.opensensor.data.history.Metrics
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoButton
@@ -69,12 +63,11 @@ import space.opensensor.devices.resources.month_8
 import space.opensensor.devices.resources.month_9
 import space.opensensor.devices.resources.scan_archive_coverage
 import space.opensensor.devices.resources.scan_archive_day
+import space.opensensor.devices.resources.scan_archive_day_plain
 import space.opensensor.devices.resources.scan_background
 import space.opensensor.devices.resources.scan_collecting
 import space.opensensor.devices.resources.scan_files
-import space.opensensor.devices.resources.scan_forget
 import space.opensensor.devices.resources.scan_no_clock
-import space.opensensor.devices.resources.scan_options
 import space.opensensor.devices.resources.scan_seen
 import space.opensensor.devices.resources.scan_synced
 import space.opensensor.devices.resources.scan_tag_known
@@ -124,7 +117,7 @@ internal fun ActiveRow(link: ActiveLink, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, onForget: () -> Unit) {
+internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -146,13 +139,13 @@ internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, 
             }
             Spacer(Modifier.width(12.dp))
             row.rssi?.let { SignalBars(it, showDbm = level.developer) }
-            if (row.known) ForgetMenu(onForget) else Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(12.dp))
         }
     }
 }
 
 @Composable
-internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, onForget: () -> Unit) {
+internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -175,8 +168,9 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, o
                 if (level.developer && row.archive == null) row.thing?.let { Mono(it.take(8)) }
                 ArchiveLine(row.archive, level)
             }
-            Icon(AppIcons.Link, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            ForgetMenu(onForget)
+            // Opens the sensor's page, where Forget lives.
+            Icon(AppIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f))
+            Spacer(Modifier.width(12.dp))
         }
     }
 }
@@ -212,35 +206,36 @@ private fun wifiTagText(tag: WifiTag): String =
     stringResource(if (tag == WifiTag.WITH_ACCESS) Res.string.scan_tag_on_lan else Res.string.scan_tag_on_lan_no_token)
 
 /**
- * From the archive on this phone, never from a live link. The last UTC day with valid readings as
- * a mood, or the file count and the last sync when the platform has no day mean. The "synced N ago"
- * part is a leaf that owns the 1 Hz clock.
+ * From the archive on this phone, never from a live link. The last UTC day with valid readings,
+ * with its WHO mood when the metric has a health scale and a neutral dot otherwise, or the file
+ * count and the last sync when the platform has no day mean. The "synced N ago" part is a leaf
+ * that owns the 1 Hz clock.
  */
 @Composable
 private fun ArchiveLine(glance: ArchiveGlance?, level: DetailLevel) {
     glance ?: return
-    val mean = glance.lastDayPm25Mean
+    val mean = glance.lastDayPrimaryMean
     val dayStart = glance.lastDayStartS
-    val mood = mean?.let { AirMood.ofOrNull(it.toDouble()) }
+    val metric = glance.lastDayMetric?.let(Metrics::byId)
+    val step = metric?.takeIf { it.banded }?.let { m -> mean?.let { m.stepOf(it.toDouble()) } }
     val files = pluralStringResource(Res.plurals.scan_files, glance.files, glance.files)
     val syncedTemplate = stringResource(Res.string.scan_synced)
     val ago = agoFormatter()
-    if (mean != null && mood != null && dayStart != null) {
-        val metric = AirMetrics.PM25
+    if (mean != null && metric != null && dayStart != null && (!metric.banded || step != null)) {
         val (day, month) = DeviceText.utcDayMonth(dayStart)
-        val base = stringResource(
-            Res.string.scan_archive_day,
-            moodWord(mood.step),
-            pm25Label(glance.lastDayPm25Basis),
-            formatFixed(mean.toDouble(), 0),
-            metric.unit,
-            "$day ${stringResource(MONTHS[month - 1])}",
-        )
+        val label = metric.basis?.let { pm25Label(it) } ?: metric.label(Locale.current.language)
+        val value = formatFixed(mean.toDouble(), if (metric.banded) 0 else 1)
+        val date = "$day ${stringResource(MONTHS[month - 1])}"
+        val base = if (step != null) {
+            stringResource(Res.string.scan_archive_day, moodWord(step), label, value, metric.unit, date)
+        } else {
+            stringResource(Res.string.scan_archive_day_plain, label, value, metric.unit, date)
+        }
         val coverage = glance.lastDayCoverage?.takeIf { level.detailed }
             ?.let { ", " + stringResource(Res.string.scan_archive_coverage, "${(it * 100).toInt()} %") } ?: ""
         val fileCount = if (level.detailed) ", $files" else ""
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-            StatusDot(Color(mood.step.color))
+            StatusDot(step?.let { Color(it.color) } ?: MaterialTheme.colorScheme.onSurfaceVariant)
             val synced = glance.lastSyncedMs
             if (synced != null) {
                 TickingText(
@@ -299,21 +294,6 @@ private fun agoFormatter(): (Long) -> String {
                 AgoUnit.DAYS -> DeviceText.fill(days, n)
             }
         }
-    }
-}
-
-@Composable
-private fun ForgetMenu(onForget: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
-    IconButton(onClick = { menu = true }) { Icon(AppIcons.MoreVert, contentDescription = stringResource(Res.string.scan_options)) }
-    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-        DropdownMenuItem(
-            text = { Text(stringResource(Res.string.scan_forget)) },
-            onClick = {
-                menu = false
-                onForget()
-            },
-        )
     }
 }
 

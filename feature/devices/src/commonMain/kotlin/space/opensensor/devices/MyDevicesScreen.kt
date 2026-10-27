@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeTopAppBar
@@ -58,7 +57,6 @@ import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.MascotGuide
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.devices.resources.Res
-import space.opensensor.devices.resources.devices_forget_bond_ios
 import space.opensensor.devices.resources.devices_on_wifi
 import space.opensensor.devices.resources.info_collect_background
 import space.opensensor.devices.resources.info_collect_body
@@ -74,9 +72,6 @@ import space.opensensor.devices.resources.scan_collect_all
 import space.opensensor.devices.resources.scan_collect_running
 import space.opensensor.devices.resources.scan_connections
 import space.opensensor.devices.resources.scan_failed
-import space.opensensor.devices.resources.scan_forget_body
-import space.opensensor.devices.resources.scan_forget_button
-import space.opensensor.devices.resources.scan_forget_title
 import space.opensensor.devices.resources.scan_known
 import space.opensensor.devices.resources.scan_local_network_denied
 import space.opensensor.devices.resources.scan_nearby
@@ -87,7 +82,6 @@ import space.opensensor.devices.resources.scan_welcome_body
 import space.opensensor.devices.resources.scan_welcome_title
 import space.opensensor.permissions.RuntimeAccess
 import space.opensensor.settings.DetailLevel
-import space.opensensor.strings.resources.action_cancel
 import space.opensensor.strings.resources.perm_open_settings
 import space.opensensor.strings.resources.tab_my_devices
 import space.opensensor.strings.resources.Res as SharedRes
@@ -96,8 +90,6 @@ import space.opensensor.strings.resources.Res as SharedRes
 data class DevicesPlatform(
     /** Android runs Collect all in a background worker with a notification, iOS while the app is open. */
     val collectInBackground: Boolean,
-    /** iOS cannot remove the system Bluetooth bond, so the Forget dialog says where to do it. */
-    val explainSystemBond: Boolean,
 )
 
 /**
@@ -251,7 +243,6 @@ fun MyDevicesScreen(
                     row = row,
                     level = level,
                     onClick = { open(row.id, row.name) },
-                    onForget = { onAction(DevicesAction.RequestForget(row.id, row.name)) },
                 )
             }
 
@@ -265,7 +256,6 @@ fun MyDevicesScreen(
                         row = row,
                         level = level,
                         onClick = { open(row.id, row.name) },
-                        onForget = { onAction(DevicesAction.RequestForget(row.id, row.name)) },
                     )
                 }
             }
@@ -294,8 +284,6 @@ fun MyDevicesScreen(
             }
         }
     }
-
-    state.forget?.let { target -> ForgetDialog(target, platform.explainSystemBond, onAction) }
 }
 
 /** Test tag of the Scan button. */
@@ -337,25 +325,4 @@ private fun CollectAllRow(count: Int, running: Boolean, inBackground: Boolean, o
             ),
         )
     }
-}
-
-@Composable
-private fun ForgetDialog(target: ForgetTarget, explainSystemBond: Boolean, onAction: (DevicesAction) -> Unit) {
-    val name = target.name ?: stringResource(Res.string.scan_unnamed)
-    AlertDialog(
-        onDismissRequest = { onAction(DevicesAction.CancelForget) },
-        title = { Text(stringResource(Res.string.scan_forget_title, name), Modifier.semantics { heading() }) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.scan_forget_body))
-                if (explainSystemBond) Text(stringResource(Res.string.devices_forget_bond_ios))
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onAction(DevicesAction.ConfirmForget) }) { Text(stringResource(Res.string.scan_forget_button)) }
-        },
-        dismissButton = {
-            TextButton(onClick = { onAction(DevicesAction.CancelForget) }) { Text(stringResource(SharedRes.string.action_cancel)) }
-        },
-    )
 }

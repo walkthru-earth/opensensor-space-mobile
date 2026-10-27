@@ -411,7 +411,6 @@ class DevicesBridge internal constructor(
 
     private val store = object : KnownDeviceStore {
         override val devices: Flow<List<KnownSensor>> = combine(records, credentials) { r, c -> IosKnown.merge(r, c) }
-        override suspend fun forget(id: String) = forgetNow(id)
     }
 
     private val radio = object : DeviceRadio {

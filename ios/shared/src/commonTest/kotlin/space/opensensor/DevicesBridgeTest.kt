@@ -121,7 +121,7 @@ class DevicesBridgeTest {
         assertEquals(2, glance.getValue("s").files)
         assertEquals(3L, glance.getValue("s").lastSyncedMs)
         assertEquals(100L, glance.getValue("s").lastDataUtcNs)
-        assertNull(glance.getValue("s").lastDayPm25Mean, "iOS has no day mean yet")
+        assertNull(glance.getValue("s").lastDayPrimaryMean, "iOS has no day mean yet")
         assertEquals(1, glance.getValue("t").files)
     }
 

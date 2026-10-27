@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,7 +27,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
@@ -36,6 +40,7 @@ import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.FitText
 import space.opensensor.today.resources.Res
 import space.opensensor.today.resources.action_cancel
@@ -54,6 +59,13 @@ import space.opensensor.today.resources.msg_rejected_set_time
 import space.opensensor.today.resources.nav_debug
 import space.opensensor.today.resources.nav_devices
 import space.opensensor.today.resources.nav_disconnect
+import space.opensensor.today.resources.today_forget
+import space.opensensor.today.resources.today_forget_body
+import space.opensensor.today.resources.today_forget_bond_ios
+import space.opensensor.today.resources.today_forget_button
+import space.opensensor.today.resources.today_forget_title
+import space.opensensor.today.resources.today_forget_unnamed
+import space.opensensor.today.resources.today_more
 import space.opensensor.today.resources.today_thing_short
 import space.opensensor.units.UnitFormatter
 
@@ -61,7 +73,7 @@ import space.opensensor.units.UnitFormatter
  * What Today hands back to its platform: navigation, and the two actions that may need an OS
  * permission first. The platform asks for Bluetooth before [Reconnect] and for notifications before
  * [SmartSync], then calls [TodayController.reconnect] or [TodayController.smartSync]. [Disconnect]
- * is the platform's to run because it also leaves the screen.
+ * and [Forget] are the platform's to run because they also leave the screen.
  */
 sealed interface TodayAction {
     data object OpenHistory : TodayAction
@@ -71,6 +83,9 @@ sealed interface TodayAction {
     data object OpenDevices : TodayAction
     data object OpenBluetoothSettings : TodayAction
     data object Disconnect : TodayAction
+
+    /** The user confirmed Forget. The platform forgets the sensor on this phone and leaves Today. */
+    data object Forget : TodayAction
     data object Reconnect : TodayAction
     data object SmartSync : TodayAction
 
@@ -80,7 +95,8 @@ sealed interface TodayAction {
 
 /**
  * Today on both platforms. Collects the [controller], shows its confirmation dialogs and its
- * notices, and draws [TodayContent]. Finalize requires confirmation; device UTC is automatic.
+ * notices, and draws [TodayContent]. Finalize and Forget require confirmation. Device UTC is
+ * automatic. [explainSystemBond] adds the iOS line that the system keeps the Bluetooth pairing.
  */
 @Composable
 fun TodayScreen(
@@ -89,6 +105,7 @@ fun TodayScreen(
     onAction: (TodayAction) -> Unit,
     modifier: Modifier = Modifier,
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    explainSystemBond: Boolean = false,
 ) {
     val state by controller.state.collectAsState()
     val dialog by controller.dialog.collectAsState()
@@ -104,9 +121,21 @@ fun TodayScreen(
         modifier = modifier,
         onAction = onAction,
         onRequestFlush = controller::requestFlush,
+        onRequestForget = controller::requestForget,
     )
 
-    dialog?.let { TodayDialogs(it, onConfirm = controller::confirm, onDismiss = controller::dismiss) }
+    dialog?.let { open ->
+        TodayDialogs(
+            open,
+            name = state.snapshot.name,
+            explainSystemBond = explainSystemBond,
+            onConfirm = {
+                controller.confirm()
+                if (open == TodayDialog.Forget) onAction(TodayAction.Forget)
+            },
+            onDismiss = controller::dismiss,
+        )
+    }
 }
 
 /** A notice in words, or null for one that opens a dialog instead. */
@@ -118,18 +147,54 @@ internal suspend fun noticeText(notice: TodayNotice): String? = when (notice) {
     TodayNotice.Busy -> getString(Res.string.msg_busy)
 }
 
-/** The open confirmation, one at a time. Cancel and Not now send nothing. */
+/** The open confirmation, one at a time. Cancel and Not now send nothing. Titles are headings. */
 @Composable
-internal fun TodayDialogs(dialog: TodayDialog, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+internal fun TodayDialogs(
+    dialog: TodayDialog,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    name: String? = null,
+    explainSystemBond: Boolean = false,
+) {
     when (dialog) {
         TodayDialog.Flush -> AlertDialog(
             onDismissRequest = onDismiss,
             icon = { Icon(AppIcons.Storage, contentDescription = null) },
-            title = { Text(stringResource(Res.string.flush)) },
-            text = { Text(stringResource(Res.string.flush_confirm)) },
-            confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(Res.string.flush_button)) } },
-            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.action_cancel)) } },
+            title = { BodyText(stringResource(Res.string.flush), heading = true) },
+            text = { BodyText(stringResource(Res.string.flush_confirm)) },
+            confirmButton = { TextButton(onClick = onConfirm) { FitText(stringResource(Res.string.flush_button)) } },
+            dismissButton = { TextButton(onClick = onDismiss) { FitText(stringResource(Res.string.action_cancel)) } },
         )
+        TodayDialog.Forget -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { BodyText(stringResource(Res.string.today_forget_title, name ?: stringResource(Res.string.today_forget_unnamed)), heading = true) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BodyText(stringResource(Res.string.today_forget_body))
+                    if (explainSystemBond) BodyText(stringResource(Res.string.today_forget_bond_ios))
+                }
+            },
+            confirmButton = { TextButton(onClick = onConfirm) { FitText(stringResource(Res.string.today_forget_button)) } },
+            dismissButton = { TextButton(onClick = onDismiss) { FitText(stringResource(Res.string.action_cancel)) } },
+        )
+    }
+}
+
+/** More options in the thing header. Forget lives here, on the sensor's own page (#117). */
+@Composable
+private fun MoreMenu(onForget: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(AppIcons.MoreVert, contentDescription = stringResource(Res.string.today_more)) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(Res.string.today_forget)) },
+                onClick = {
+                    open = false
+                    onForget()
+                },
+            )
+        }
     }
 }
 
@@ -147,6 +212,7 @@ fun TodayContent(
     onRequestFlush: () -> Unit,
     modifier: Modifier = Modifier,
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    onRequestForget: () -> Unit = {},
 ) {
     val snapshot = state.snapshot
     val level = state.level
@@ -202,6 +268,7 @@ fun TodayContent(
                             } else {
                                 IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(Res.string.nav_disconnect)) }
                             }
+                            MoreMenu(onForget = onRequestForget)
                         },
                     )
                     DeviceSectionTabs(DeviceTab.TODAY) { tab ->
@@ -240,8 +307,7 @@ fun TodayContent(
                     state.cards.forEach { card ->
                         item(key = card.key) {
                             when (card) {
-                                TodayCard.NOW_AIR -> MetricHeroCard(reading, receivedAt, level)
-                                TodayCard.NOW_ENVIRONMENT -> EnvironmentCard(state.liveSupport, capabilities, reading, receivedAt, hero = true)
+                                TodayCard.NOW -> state.presenter.Hero(state, Modifier)
                                 TodayCard.TODAY_SO_FAR -> TodaySoFarCard(snapshot.todaySoFar, clockMissing = snapshot.status?.utcSynced == false, level = level)
                                 TodayCard.ENVIRONMENT -> EnvironmentCard(state.liveSupport, capabilities, reading, receivedAt, hero = false)
                                 TodayCard.SMART_SYNC -> SmartSyncCard(
@@ -262,7 +328,15 @@ fun TodayContent(
                                 TodayCard.BATCH_ESTIMATE -> BatchEstimateCard(reading, receivedAt, snapshot.config)
                                 TodayCard.READINGS -> ReadingsCard(reading, receivedAt, level)
                                 TodayCard.PARTICLES -> ParticlesCard(reading)
-                                TodayCard.BOARD -> BoardCard(state.liveSupport, reading, capabilities, level)
+                                TodayCard.METRICS -> MetricsCard(state)
+                                TodayCard.BOARD -> BoardCard(
+                                    support = state.liveSupport,
+                                    live = reading,
+                                    capabilities = capabilities,
+                                    power = state.power,
+                                    showTemperature = state.presenter.boardTemperature(state),
+                                    level = level,
+                                )
                                 TodayCard.STORAGE -> StorageCard(snapshot.status, snapshot.statusAtEpochMs, level)
                                 TodayCard.DEVICE_INFO -> DeviceInfoCard(
                                     name = snapshot.name,

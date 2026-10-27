@@ -96,8 +96,14 @@ build and `verify` only. No phone run against the new firmware yet.
   reading now and shows a dash, as does a declared key missing from a sample. Cards follow the
   template declaration, and an overflow sample clears every live value. CoreS3
   board temperature comes from `imu_t`, Waveshare air temperature from `t`. Particle bins show only
-  the board's keys. Before `INFO` arrives Today waits quietly and never says unsupported (#152). No
-  screen shows `bstate` yet (#90).
+  the board's keys. Before `INFO` arrives Today waits quietly and never says unsupported (#152). The
+  board card shows the battery state from the template classes, Waveshare `bstate` and CoreS3
+  `chg` (#90).
+- Today cards come from the template and the app profile `primary` list (#221, #187). The profile
+  `hero` picks the hero through `HeroRegistry`. The bundled air boards name `air-mood`, the peacock
+  with WHO moods. Any other thing gets `GenericMetricHero`, its first primary reading at the
+  profile display step, and a metrics card for the rest. My devices rows show the last day mean of
+  any metric `Metrics.byId` resolves. Forget moved from the My devices rows to the Today menu.
 - Index reopen. Room v11 and the one time iOS receipt import index rows without UTC rows again. A derive pass
   before that back-fill keeps every day a waiting row may fill (`StationDays.held`), on Android and
   iOS. `ArchiveRecord.isIndexed` is the one indexed test, and `withUtcBetween` uses it in SQL.

@@ -97,9 +97,9 @@ class ScanViewModel @Inject constructor(
                 lastSyncedMs = g.lastSyncedMs,
                 lastDataUtcNs = g.lastDataUtcNs,
                 lastDayStartS = day?.startEpochS,
-                lastDayPm25Mean = day?.mean,
+                lastDayPrimaryMean = day?.mean,
                 lastDayCoverage = day?.let { d -> Resolution.DAY.expectedRows(d.sampleIntervalMs).takeIf { it > 0 }?.let { (d.validRows.toFloat() / it).coerceIn(0f, 1f) } },
-                lastDayPm25Basis = basis,
+                lastDayMetric = day?.let { if (basis == Pm25Basis.CORRECTED) AirMetrics.PM25_CORRECTED.id else AirMetrics.PM25.id },
             )
         }
     }
@@ -119,8 +119,6 @@ class ScanViewModel @Inject constructor(
         override val devices: Flow<List<KnownSensor>> = knownDeviceDao.observeAll().map { rows ->
             rows.map { KnownSensor(it.address, it.name, it.thing, it.lastSeenEpochMs, hasWifiAccess = it.hasLanToken) }
         }
-
-        override suspend fun forget(id: String) = manager.controller(id).forget(id)
     }
 
     private val radio = object : DeviceRadio {

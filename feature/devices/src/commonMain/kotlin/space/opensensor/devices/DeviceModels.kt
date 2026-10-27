@@ -1,7 +1,6 @@
 package space.opensensor.devices
 
 import androidx.compose.runtime.Immutable
-import space.opensensor.airquality.Pm25Basis
 
 /**
  * A Bluetooth advertisement seen in the current scan. [id] is the platform's peripheral id (the
@@ -49,7 +48,7 @@ data class ActiveLink(
 
 /**
  * What the archive on this phone says about one thing, never a live link. The last UTC day with
- * valid readings, its PM2.5 mean and coverage when the platform computes them.
+ * valid readings, the mean of its main metric and coverage when the platform computes them.
  */
 @Immutable
 data class ArchiveGlance(
@@ -57,10 +56,13 @@ data class ArchiveGlance(
     val lastSyncedMs: Long?,
     val lastDataUtcNs: Long?,
     val lastDayStartS: Long? = null,
-    val lastDayPm25Mean: Float? = null,
+    val lastDayPrimaryMean: Float? = null,
     val lastDayCoverage: Float? = null,
-    /** Whether that mean is the EPA corrected PM2.5 or the raw sensor value, so the line labels it. */
-    val lastDayPm25Basis: Pm25Basis = Pm25Basis.RAW,
+    /**
+     * The metric id of that mean, resolved with `Metrics.byId` for its label, unit and health scale.
+     * For air it is the EPA corrected PM2.5 or the raw sensor value, so the line labels which.
+     */
+    val lastDayMetric: String? = null,
 )
 
 /** Why the last scan stopped early. */
@@ -102,10 +104,6 @@ data class DeviceList(
     val isEmpty: Boolean get() = active.isEmpty() && nearby.isEmpty() && known.isEmpty() && wifiOnly.isEmpty()
 }
 
-/** The sensor a Forget confirmation is open for. */
-@Immutable
-data class ForgetTarget(val id: String, val name: String?)
-
 /** Everything the screen draws. */
 @Immutable
 data class DevicesUiState(
@@ -113,7 +111,6 @@ data class DevicesUiState(
     val scanning: Boolean = false,
     val scanProblem: ScanProblem? = null,
     val collecting: Boolean = false,
-    val forget: ForgetTarget? = null,
 ) {
     /** Collect all shows from two known sensors, one sensor syncs from its own row. */
     val showCollectAll: Boolean get() = list.knownCount >= 2
@@ -126,8 +123,5 @@ sealed interface DevicesAction {
 
     /** Open the sensor. [connect] is false when Bluetooth is not ready, so it opens on its archive. */
     data class Open(val id: String, val name: String?, val connect: Boolean) : DevicesAction
-    data class RequestForget(val id: String, val name: String?) : DevicesAction
-    data object ConfirmForget : DevicesAction
-    data object CancelForget : DevicesAction
     data object CollectAll : DevicesAction
 }

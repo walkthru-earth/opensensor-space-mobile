@@ -19,6 +19,12 @@ import space.opensensor.settings.DetailLevel
 sealed interface TodayDialog {
     /** Finalize the buffered rows with `FLUSH`. */
     data object Flush : TodayDialog
+
+    /**
+     * Forget this sensor on this phone. Collected files stay. Confirm only closes it, the platform
+     * forgets through [TodayAction.Forget] because it also leaves the screen.
+     */
+    data object Forget : TodayDialog
 }
 
 /** Shared Today state and confirmed flush actions. Device UTC synchronizes automatically. */
@@ -47,6 +53,11 @@ class TodayController(
         if (canCommand()) _dialog.value = TodayDialog.Flush
     }
 
+    /** Opens the Forget confirmation. It needs no link, a sensor out of range can be forgotten too. */
+    fun requestForget() {
+        _dialog.value = TodayDialog.Forget
+    }
+
     /** Collect. The engine synchronizes the device clock automatically. */
     fun smartSync() {
         if (!source.snapshot.value.thing.canCommand) return
@@ -65,6 +76,7 @@ class TodayController(
         _dialog.value = null
         when (open) {
             TodayDialog.Flush -> source.flush()
+            TodayDialog.Forget -> Unit
         }
     }
 

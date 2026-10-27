@@ -73,7 +73,7 @@ Device-changing tools and the confirmation each one reaches. Every one first sho
 | `propose_lan(on)` | `setLanOn(on)` | the card is the confirmation |
 | `propose_location()` | opens the empty location form. The cell comes only from the user's own Use phone location tap, then Save, `saveLocation()` | the form's own fix and Save. The model never supplies a device cell |
 | `propose_flush` | `TodayController.requestFlush()` opens `TodayDialog.Flush`, then `TodayController.confirm()` | its existing dialog |
-| `propose_forget` | `DevicesController` opens `ForgetDialog`, then `ConfirmForget` | its existing dialog and test |
+| `propose_forget` | `TodayController.requestForget` opens the Forget dialog, then `confirm` | its existing dialog and test |
 
 Never tools. `join_wifi` (carries a PSK), token fetch, raw debug commands, anything that takes or returns coordinates.
 

@@ -15,8 +15,7 @@ import space.opensensor.today.TodayCard.BOARD
 import space.opensensor.today.TodayCard.CLOCK
 import space.opensensor.today.TodayCard.DEVICE_INFO
 import space.opensensor.today.TodayCard.ENVIRONMENT
-import space.opensensor.today.TodayCard.NOW_AIR
-import space.opensensor.today.TodayCard.NOW_ENVIRONMENT
+import space.opensensor.today.TodayCard.NOW
 import space.opensensor.today.TodayCard.PARTICLES
 import space.opensensor.today.TodayCard.READINGS
 import space.opensensor.today.TodayCard.SMART_SYNC
@@ -47,7 +46,7 @@ class TodayCardsTest {
     @Test
     fun simpleShowsTheHeroTodaySyncAndClock() {
         assertEquals(
-            listOf(NOW_AIR, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK),
+            listOf(NOW, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK),
             state(waveshare, particleSample, DetailLevel.SIMPLE).cards,
         )
     }
@@ -55,7 +54,7 @@ class TodayCardsTest {
     @Test
     fun detailedAddsMeasurementsBoardStorageAndDevice() {
         assertEquals(
-            listOf(NOW_AIR, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK, READINGS, PARTICLES, BOARD, STORAGE, DEVICE_INFO),
+            listOf(NOW, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK, READINGS, PARTICLES, BOARD, STORAGE, DEVICE_INFO),
             state(waveshare, particleSample, DetailLevel.DETAILED).cards,
         )
     }
@@ -72,20 +71,19 @@ class TodayCardsTest {
     fun aBoardTemperatureDeviceGetsTheEnvironmentHeroAndNoParticleCards() {
         // A CoreS3 sample without a PM sensor reports board temperature only, so neither the mood nor the ambient card applies.
         val boardOnly = LiveSample.parse("""{"pms":0,"imu_t":31.0}""")
-        assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, boardOnly, DetailLevel.SIMPLE).cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, boardOnly, DetailLevel.SIMPLE).cards)
         assertEquals(
-            listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK, BOARD, STORAGE, DEVICE_INFO),
+            listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK, BOARD, STORAGE, DEVICE_INFO),
             state(cores3, boardOnly, DetailLevel.DETAILED).cards,
         )
         // With its PM sensor the CoreS3 gets the mood but never the ambient card.
-        assertEquals(listOf(NOW_AIR, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, particleSample, DetailLevel.SIMPLE).cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, particleSample, DetailLevel.SIMPLE).cards)
     }
 
     @Test
     fun anAbsentParticleSensorNeverShowsAMood() {
         val cards = state(waveshare, absentSensor, DetailLevel.DETAILED).cards
-        assertEquals(NOW_ENVIRONMENT, cards.first())
-        assertFalse(NOW_AIR in cards)
+        assertEquals(NOW, cards.first())
         assertFalse(PARTICLES in cards)
         assertFalse(READINGS in cards)
     }
@@ -93,7 +91,7 @@ class TodayCardsTest {
     @Test
     fun noLiveSampleYetKeepsTheTopOfTheList() {
         val cards = state(waveshare, null, DetailLevel.SIMPLE).cards
-        assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK), cards)
     }
 
     @Test
@@ -172,7 +170,7 @@ class TodayCardsTest {
         assertNull(state.capabilities.thing)
         assertNull(state.reading)
         assertEquals(LiveSupport.UNSUPPORTED, state.liveSupport)
-        assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), state.cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK), state.cards)
     }
 
     @Test

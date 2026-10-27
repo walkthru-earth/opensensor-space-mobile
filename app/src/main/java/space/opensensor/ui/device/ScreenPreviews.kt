@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import space.opensensor.data.SyncProgress
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
+import space.opensensor.data.history.AirMetrics
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
@@ -51,7 +52,7 @@ internal object PreviewFakes {
             liveAtEpochMs = now - 4_000,
             archive = TodayArchive(files = 142),
             sync = SyncProgress(finishedAtEpochMs = now - 60_000),
-            todaySoFar = TodaySoFar(pm25Mean = 11.2f, validRows = 3100, coverage = 0.62f),
+            todaySoFar = TodaySoFar(primaryMean = 11.2f, validRows = 3100, coverage = 0.62f, metric = AirMetrics.PM25),
         ),
         level = level,
     )

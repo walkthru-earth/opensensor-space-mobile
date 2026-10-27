@@ -24,13 +24,13 @@ import space.opensensor.ui.permissions.rememberBluetoothAccess
 import space.opensensor.ui.permissions.rememberLocalNetworkAccess
 import space.opensensor.ui.permissions.rememberNotificationPermission
 
-/** Android collects in a background worker. Its Forget dialog keeps the earlier copy, without the iOS bond line. */
-private val AndroidDevices = DevicesPlatform(collectInBackground = true, explainSystemBond = false)
+/** Android collects in a background worker. */
+private val AndroidDevices = DevicesPlatform(collectInBackground = true)
 
 /**
  * The Android route for the shared My devices screen. It binds Bluetooth and Local Network
  * permissions, notification permission for the Collect all worker and debug fake entries. The
- * list, scan lifecycle and Forget confirmation are shared in `:feature:devices`.
+ * list and scan lifecycle are shared in `:feature:devices`.
  */
 @Composable
 fun ScanScreen(

@@ -8,7 +8,7 @@ Part of [Thing plugins](README.md). Proposal, 2026-10-27.
 - `AppProfile` carries `family`, `primary`, `hero`, `display_step`, `scales` and `hidden`, and `Thing.primary` respects the profile order.
 - Hardcoded to air.
   - Only `GENERIC` and `AIR` families exist (`Vocabulary.kt`).
-  - The device row reads `lastDayPm25Mean`, `AirMood` and `Metrics.PM25` (`feature/devices/.../DeviceRows.kt:222`, `DeviceModels.kt:60`).
+  - The device row reads `lastDayPm25Mean`, `AirMood` and `AirMetrics.PM25` or `AirMetrics.PM25_CORRECTED`, the `AirDerivedMetrics` corrected value (`feature/devices/.../DeviceRows.kt:222`, `DeviceModels.kt:60`).
   - The Today hero is PM2.5 only (`feature/today/.../TodayCards.kt`). Mood words are tied to WHO steps.
   - `profile.hero` is parsed (`ModelJson.kt:91`) and read by no screen.
 - Stations cards and the shared Station page are spec only ([2026-10-12-stations-ux-design.md](../2026-10-12-stations-ux-design.md) slice 2).

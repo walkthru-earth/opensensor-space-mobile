@@ -34,6 +34,7 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import space.opensensor.airquality.AirDerivedMetrics
 import space.opensensor.airquality.Pm25Basis
 import space.opensensor.data.SyncProgress
 import space.opensensor.data.ble.ConfigSnapshot
@@ -53,6 +54,7 @@ import space.opensensor.data.protocol.PlantowerBatchCandidate
 import space.opensensor.data.protocol.PmsStatus
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BigValue
+import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.BrandCard
 import space.opensensor.designsystem.CardHeader
 import space.opensensor.designsystem.CardTone
@@ -82,10 +84,17 @@ import space.opensensor.today.resources.batch_title
 import space.opensensor.today.resources.batch_value
 import space.opensensor.today.resources.batch_waiting
 import space.opensensor.today.resources.board_ambient_note
+import space.opensensor.today.resources.board_battery_critical
+import space.opensensor.today.resources.board_battery_low
+import space.opensensor.today.resources.board_battery_ok
+import space.opensensor.today.resources.board_battery_settling
 import space.opensensor.today.resources.board_charging
+import space.opensensor.today.resources.board_discharging
+import space.opensensor.today.resources.board_external_power
 import space.opensensor.today.resources.board_millivolts
 import space.opensensor.today.resources.board_temp
 import space.opensensor.today.resources.board_temp_unsupported
+import space.opensensor.today.resources.board_title
 import space.opensensor.today.resources.board_usb_millivolts
 import space.opensensor.today.resources.clock_actions_explain
 import space.opensensor.today.resources.clock_generation
@@ -147,6 +156,7 @@ import space.opensensor.today.resources.storage_not_mounted
 import space.opensensor.today.resources.storage_open
 import space.opensensor.today.resources.storage_open_row_groups
 import space.opensensor.today.resources.storage_partial
+import space.opensensor.today.resources.storage_problem
 import space.opensensor.today.resources.storage_rotation
 import space.opensensor.today.resources.storage_status_age
 import space.opensensor.today.resources.storage_title
@@ -197,11 +207,7 @@ internal fun particleBins(reading: LiveReading?): List<Pair<String, String>> =
     PARTICLE_BINS.filter { (_, column) -> reading?.declares(column) == true }
 
 /** The CF=1 PM1, PM2.5 and PM10 columns, a Developer line on the readings card. */
-private val CF1_COLUMNS = listOf("pm1_cf1_ug_m3", AirMetrics.PM25_CORRECTED.column, "pm10_cf1_ug_m3")
-
-private const val BATTERY_MV = "battery_mv"
-private const val VBUS_MV = "vbus_mv"
-private const val CHARGING_STATUS = "charging_status"
+private val CF1_COLUMNS = listOf("pm1_cf1_ug_m3", AirDerivedMetrics.PM25_CF1, "pm10_cf1_ug_m3")
 
 private val PARTICLE_BINS = listOf(
     ">0.3" to "particles_gt03_per_01l",
@@ -329,21 +335,22 @@ internal fun MetricHeroCard(
                             color = if (fresh) onCard else quiet,
                             maxLines = 1,
                         )
-                        Text("${pm25Label(reading.basis)}  ${AirMetrics.PM25.unit}", style = MaterialTheme.typography.titleMedium, color = quiet)
+                        FitText("${pm25Label(reading.basis)}  ${AirMetrics.PM25.unit}", style = MaterialTheme.typography.titleMedium, color = quiet)
                         // Detailed shows the sensor's own value second, under the corrected one.
                         val raw = reading.raw
                         if (level.detailed && reading.basis == Pm25Basis.CORRECTED && raw != null) {
-                            Text("${pm25Label(Pm25Basis.RAW)}  ${fmtPm(raw)}", style = MaterialTheme.typography.bodyMedium, color = quiet)
+                            FitText("${pm25Label(Pm25Basis.RAW)}  ${fmtPm(raw)}", style = MaterialTheme.typography.bodyMedium, color = quiet)
                         }
                     }
-                    NowReading.Waiting -> Text(
+                    NowReading.Waiting -> BodyText(
                         stringResource(Res.string.now_waiting),
                         style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.weight(1f).semantics { heading() },
+                        modifier = Modifier.weight(1f),
+                        heading = true,
                     )
                     is NowReading.SensorNotReady -> Column(Modifier.weight(1f)) {
-                        Text(reading.status.titleText(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-                        Text(reading.status.hintText(), style = MaterialTheme.typography.bodyMedium, color = quiet)
+                        BodyText(reading.status.titleText(), style = MaterialTheme.typography.headlineSmall, heading = true)
+                        BodyText(reading.status.hintText(), style = MaterialTheme.typography.bodyMedium, color = quiet)
                     }
                 }
             }
@@ -356,10 +363,10 @@ internal fun MetricHeroCard(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     MoodPill(reading.mood)
-                    Text(reading.mood.comparisonText(), style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.weight(1f))
+                    BodyText(reading.mood.comparisonText(), style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text(stringResource(heroLineRes(reading.mood, level)), style = MaterialTheme.typography.bodyLarge)
+                BodyText(stringResource(heroLineRes(reading.mood, level)), style = MaterialTheme.typography.bodyLarge)
             }
             if (level.developer) {
                 live?.sample?.seq?.let {
@@ -423,7 +430,7 @@ internal fun EnvironmentCard(
 internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: DetailLevel, modifier: Modifier = Modifier) {
     BrandCard(modifier = modifier, tone = CardTone.SOFT) {
         Eyebrow(stringResource(Res.string.today_so_far), heading = true)
-        today?.let { Text(pm25Label(it.basis), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        today?.let { FitText(it.metric.basis?.let { basis -> pm25Label(basis) } ?: it.metric.label(Locale.current.language), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Spacer(Modifier.height(8.dp))
         if (today == null) {
             Text(
@@ -436,7 +443,7 @@ internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: De
         // The current reading owns the page's character. This summary adds the average and coverage.
         Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(stringResource(Res.string.today_average, fmtPm(today.pm25Mean.toDouble())), style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(Res.string.today_average, todayMean(today), LocalTodayUnits.current.unit(today.metric.unit)), style = MaterialTheme.typography.titleLarge)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("${(today.coverage * 100).toInt()} %", style = MaterialTheme.typography.displaySmall)
@@ -697,12 +704,12 @@ internal fun ParticlesCard(live: LiveReading?, modifier: Modifier = Modifier) {
         // Not uppercased. "µ".uppercase() is the Greek capital mu, which once rendered as "(MM)".
         Eyebrow(stringResource(Res.string.particles_title), uppercase = false, heading = true)
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             counts.forEach { (label, n) ->
                 // The count and its size bin read as one element.
                 Column(Modifier.semantics(mergeDescendants = true) {}, horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(n?.toString() ?: NO_VALUE, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FitText(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
             }
         }
@@ -710,70 +717,103 @@ internal fun ParticlesCard(live: LiveReading?, modifier: Modifier = Modifier) {
 }
 
 /**
- * Detailed level: the board's own temperature and the battery. Millivolts and USB voltage are Developer
- * facts. Before `INFO` ([LiveSupport.PENDING]) the note waits quietly and never says unsupported (#152).
+ * Detailed level: the board's own temperature and the battery, both only when the thing has them.
+ * The battery columns come from [BoardPower] by observed property. The battery state (CoreS3
+ * `charging_status`, Waveshare `bstate`) is a word beside the icon, never colour alone. Millivolts
+ * and USB voltage are Developer facts. Before `INFO` ([LiveSupport.PENDING]) the note waits quietly
+ * and never says unsupported (#152).
  */
 @Composable
 internal fun BoardCard(
     support: LiveSupport,
     live: LiveReading?,
     capabilities: DeviceCapabilities,
+    power: BoardPower,
+    showTemperature: Boolean,
     level: DetailLevel,
     modifier: Modifier = Modifier,
 ) {
     val temperature = capabilities.temperature
     BrandCard(modifier = modifier) {
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            Column(Modifier.weight(1f)) {
-                if (temperature != null) {
-                    TemperatureValue(temperature, live)
-                } else {
-                    BigValue(AirMetrics.BOARD_TEMP.label, NO_VALUE, LocalTodayUnits.current.unit(AirMetrics.BOARD_TEMP.unit))
-                }
-                Text(
-                    stringResource(
-                        when {
-                            support == LiveSupport.PENDING -> Res.string.now_waiting
-                            temperature == null -> Res.string.board_temp_unsupported
-                            capabilities.ambientTemperature -> Res.string.board_ambient_note
-                            else -> Res.string.board_temp
-                        },
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            // Battery label, percent and charging state read as one element.
-            Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-                val charging = live?.code(CHARGING_STATUS) == 1
-                Eyebrow(AirMetrics.BATTERY.label, uppercase = false)
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Icon(
-                        if (charging) AppIcons.BatteryChargingFull else AppIcons.BatteryStd,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                    Text(live?.value(AirMetrics.BATTERY.column)?.toLong()?.let { "$it" } ?: NO_VALUE, style = MaterialTheme.typography.displaySmall)
-                    Spacer(Modifier.width(4.dp))
-                    Text(AirMetrics.BATTERY.unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 7.dp))
-                }
-                val chargingText = stringResource(Res.string.board_charging)
-                val millivolts = live?.value(BATTERY_MV)?.toInt()?.let { stringResource(Res.string.board_millivolts, it) }
-                val usb = live?.value(VBUS_MV)?.toInt()?.takeIf { it > 0 }?.let { stringResource(Res.string.board_usb_millivolts, it) }
-                val detail = buildList {
-                    if (charging) add(chargingText)
-                    if (level.developer) {
-                        millivolts?.let(::add)
-                        usb?.let(::add)
+        Eyebrow(stringResource(Res.string.board_title), heading = true)
+        Spacer(Modifier.height(8.dp))
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (showTemperature) {
+                Column(Modifier.weight(1f)) {
+                    if (temperature != null) {
+                        TemperatureValue(temperature, live)
+                    } else {
+                        BigValue(AirMetrics.BOARD_TEMP.label, NO_VALUE, LocalTodayUnits.current.unit(AirMetrics.BOARD_TEMP.unit))
                     }
-                }
-                if (detail.isNotEmpty()) {
-                    Text(spokenList(detail, listSeparator()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    BodyText(
+                        stringResource(
+                            when {
+                                support == LiveSupport.PENDING -> Res.string.now_waiting
+                                temperature == null -> Res.string.board_temp_unsupported
+                                capabilities.ambientTemperature -> Res.string.board_ambient_note
+                                else -> Res.string.board_temp
+                            },
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
+            power.battery?.let { battery -> BatteryValue(battery, power, live, level, Modifier.weight(1f)) }
         }
     }
+}
+
+/** Battery label, percent and state, read as one element. */
+@Composable
+private fun BatteryValue(battery: ThingDatastream, power: BoardPower, live: LiveReading?, level: DetailLevel, modifier: Modifier = Modifier) {
+    val state = power.stateOf(live)
+    Column(modifier.semantics(mergeDescendants = true) {}) {
+        Eyebrow(battery.localLabel(), uppercase = false)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Icon(
+                if (state?.charging == true) AppIcons.BatteryChargingFull else AppIcons.BatteryStd,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            Text(live?.value(battery.name)?.toLong()?.let { "$it" } ?: NO_VALUE, style = MaterialTheme.typography.displaySmall)
+            Spacer(Modifier.width(4.dp))
+            FitText(
+                battery.displayUnit.orEmpty(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 7.dp),
+                maxLines = 1,
+            )
+        }
+        val stateText = state?.let { batteryStateText(it) }
+        val millivolts = power.millivolts?.let { live?.value(it.name) }?.toInt()?.let { stringResource(Res.string.board_millivolts, it) }
+        val usb = power.usbMillivolts?.let { live?.value(it.name) }?.toInt()?.takeIf { it > 0 }?.let { stringResource(Res.string.board_usb_millivolts, it) }
+        val detail = buildList {
+            stateText?.let(::add)
+            if (level.developer) {
+                millivolts?.let(::add)
+                usb?.let(::add)
+            }
+        }
+        if (detail.isNotEmpty()) {
+            BodyText(spokenList(detail, listSeparator()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** The battery state in words. A class the app does not know shows the template's own name. */
+@Composable
+private fun batteryStateText(state: BatteryState): String = when (state.kind) {
+    BatteryState.Kind.CHARGING -> stringResource(Res.string.board_charging)
+    BatteryState.Kind.DISCHARGING -> stringResource(Res.string.board_discharging)
+    BatteryState.Kind.EXTERNAL_POWER -> stringResource(Res.string.board_external_power)
+    BatteryState.Kind.OK -> stringResource(Res.string.board_battery_ok)
+    BatteryState.Kind.LOW -> stringResource(Res.string.board_battery_low)
+    BatteryState.Kind.CRITICAL -> stringResource(Res.string.board_battery_critical)
+    BatteryState.Kind.SETTLING -> stringResource(Res.string.board_battery_settling)
+    BatteryState.Kind.OTHER -> state.name
 }
 
 /**
@@ -797,7 +837,7 @@ internal fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level:
             return@BrandCard
         }
         val warn = MaterialTheme.colorScheme.error
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // `status.fin` counts files finalized since the device booted, not the card total.
             Counter(stringResource(Res.string.storage_files_this_boot), status.fin)
             Counter(stringResource(Res.string.storage_buffered), status.buf?.toLong())
@@ -845,12 +885,27 @@ internal fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level:
 
 @Composable
 private fun Counter(label: String, value: Long?, color: Color? = null) {
-    // The number and its label read as one element.
+    // The number and its label read as one element. A problem count also gets a warning icon, so
+    // colour is never the only cue.
     Column(Modifier.semantics(mergeDescendants = true) {}) {
-        Text(value?.toString() ?: NO_VALUE, style = MaterialTheme.typography.titleLarge, color = color ?: MaterialTheme.colorScheme.onSurface)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (color != null) {
+                Icon(AppIcons.Warning, contentDescription = stringResource(Res.string.storage_problem), tint = color, modifier = Modifier.size(18.dp))
+            }
+            Text(value?.toString() ?: NO_VALUE, style = MaterialTheme.typography.titleLarge, color = color ?: MaterialTheme.colorScheme.onSurface)
+        }
+        FitText(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
+
+/** Today's mean in the reader's units. PM2.5 keeps its own rounding. */
+@Composable
+private fun todayMean(today: TodaySoFar): String =
+    if (today.metric.basis != null) {
+        fmtPm(today.primaryMean.toDouble())
+    } else {
+        fmt(LocalTodayUnits.current.value(today.primaryMean.toDouble(), today.metric.unit))
+    }
 
 /**
  * The device card. Simple names the device and how it is connected. Detailed adds firmware and

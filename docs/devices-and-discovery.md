@@ -56,7 +56,7 @@ Rules.
    properties (which one or two values the device card shows). Adding a family needs no change
    to the sync engine, the screens or the design system.
 6. **Keep wire names.** Opcodes, UUIDs and archive
-   paths stay. New shared types use generic names (`Reading`, `MetricCard`), never `Air*`.
+   paths stay. New shared types use generic names (`Reading`, `GenericMetricHero`), never `Air*`.
 
 ### Adding a device family
 
@@ -77,8 +77,9 @@ Rules.
    derived from that template. A synced file whose footer `template.sha256` differs from the cached
    template's full digest evicts it, and the next connect fetches it again.
 3. If it uses a new transport, follow "Adding a transport" in the cross-platform guide.
-4. Optional. A family may provide a hero component (the air-quality mood face is one). Without
-   one, the generic `MetricCard` is used.
+4. Optional. A family may provide a `FamilyPresenter` with its own hero, registered in
+   `HeroRegistry` under the profile `hero` id (`air-mood` is the air-quality mood face). Without
+   one, `GenericMetricHero` shows the first `primary` reading and a metrics card lists the rest.
 
 ## Part 2. Discover public sensors near you
 

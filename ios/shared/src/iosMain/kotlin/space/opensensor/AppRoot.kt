@@ -148,8 +148,8 @@ private class DevicesHolder(bridge: DevicesBridge) : ViewModel() {
     val controller = bridge.controller(viewModelScope)
 }
 
-/** iOS collects while the app is open and cannot remove the system Bluetooth bond. */
-private val IosDevices = DevicesPlatform(collectInBackground = false, explainSystemBond = true)
+/** iOS collects while the app is open. */
+private val IosDevices = DevicesPlatform(collectInBackground = false)
 
 /** Holds the Debug controller for one Debug entry, cleared when the entry leaves the back stack. */
 private class DebugHolder(address: String, state: CompanionState, openLink: (String) -> IosLink?) : ViewModel() {

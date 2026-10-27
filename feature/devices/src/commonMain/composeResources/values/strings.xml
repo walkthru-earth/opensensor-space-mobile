@@ -10,11 +10,6 @@
     <string name="scan_connections">Connected now</string>
     <string name="scan_button_scan">Scan</string>
     <string name="scan_button_stop">Stop</string>
-    <string name="scan_options">Device options</string>
-    <string name="scan_forget">Forget</string>
-    <string name="scan_forget_title">Forget %1$s?</string>
-    <string name="scan_forget_body">Removes it from this app. Collected files stay. To unpair it fully, also forget it in Bluetooth settings on your phone.</string>
-    <string name="scan_forget_button">Forget device</string>
     <string name="scan_unnamed">Unnamed sensor</string>
     <string name="scan_tag_paired">paired</string>
     <string name="scan_tag_known">known</string>
@@ -44,9 +39,9 @@
     <string name="scan_bluetooth_off">Bluetooth is off. Turn it on and scan again.</string>
     <string name="scan_local_network_denied">Local Network access is off. Allow it in Settings to find sensors on Wi-Fi.</string>
     <string name="scan_archive_day">%1$s, %2$s %3$s %4$s on %5$s</string>
+    <string name="scan_archive_day_plain">%1$s %2$s %3$s on %4$s</string>
     <string name="scan_archive_coverage">%1$s of the day</string>
     <string name="devices_on_wifi">On your Wi-Fi</string>
-    <string name="devices_forget_bond_ios">iOS keeps the Bluetooth pairing. Remove it in Settings, Bluetooth.</string>
 
     <string name="conn_pairing">Pairing. Enter the code shown on the sensor</string>
     <string name="conn_link_lost">Link lost. Reconnecting by itself…</string>
