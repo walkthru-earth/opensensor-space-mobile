@@ -34,6 +34,8 @@ import kotlin.time.TimeSource
  * 4. After a check that read the index, whether it derived or not, the next check waits for [cooldown].
  *    A board that keeps a known dict and rotates its desc therefore costs a bounded number of reads and
  *    passes. Sync-driven derives never wait.
+ * 5. A check whose index read or derive failed keeps the change pending and tries again after the
+ *    cooldown, so a failing index retries at the cooldown's pace and never in a tight loop.
  *
  * [log] gets class names only, never paths or thing ids.
  */
@@ -59,23 +61,32 @@ class TemplateRederive(
 
     /**
      * Watches the templates until cancelled and calls [derive] with the things a change touched, from
-     * the [baseline]. Called once per gate.
+     * the [baseline]. [derive] returns false when it failed, and the change then stays pending. Called
+     * once per gate.
      */
-    suspend fun run(derive: suspend (Set<String>) -> Unit) {
+    suspend fun run(derive: suspend (Set<String>) -> Boolean) {
         var seen = baseline
         templates.changes.debounce(settle).conflate().collect {
-            delay(cooldown.remaining())
-            val now = templates.changes.value
-            val things = affected(seen, now)
-            seen = now
-            if (things.isEmpty()) return@collect
-            generations.update { held -> held + things.associateWith { (held[it] ?: 0L) + 1 } }
-            derive(things)
+            var pending = true
+            while (pending) {
+                delay(cooldown.remaining())
+                val now = templates.changes.value
+                val things = affected(seen, now) ?: continue
+                if (things.isNotEmpty()) {
+                    generations.update { held -> held + things.associateWith { (held[it] ?: 0L) + 1 } }
+                    if (!derive(things)) continue
+                }
+                seen = now
+                pending = false
+            }
         }
     }
 
-    /** The things with an indexed file that resolves to another template under [after] than under [before]. */
-    private suspend fun affected(before: List<BoardTemplate>, after: List<BoardTemplate>): Set<String> {
+    /**
+     * The things with an indexed file that resolves to another template under [after] than under [before],
+     * null when the index read failed.
+     */
+    private suspend fun affected(before: List<BoardTemplate>, after: List<BoardTemplate>): Set<String>? {
         val changed = changed(before, after)
         if (changed.isEmpty() || !named(changed, templates.pinned(before) intersect templates.pinned(after))) return emptySet()
         // The read below is the costly step, so it waits for the cooldown even when it finds nothing.
@@ -87,9 +98,9 @@ class TemplateRederive(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // The next sync-driven derive reads the live templates, so the days catch up then.
+            // The cooldown already fired, so the retry waits for it.
             log("template scope failed: ${e::class.simpleName}")
-            emptySet()
+            null
         }
     }
 

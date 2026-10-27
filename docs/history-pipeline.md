@@ -54,6 +54,8 @@ things through `TemplateRederive.generation`.
    as long each time up to 10 min, and back to 30 s after 10 quiet minutes (`TemplateRederive.Cooldown`,
    one per process). A board that keeps a known dict and rotates its desc costs a bounded number of
    reads and passes. Sync-driven derives never wait for it, and they read the live templates anyway.
+5. A check whose index read or derive failed keeps the change pending and tries again once the
+   cooldown ends, so a failing index retries at that pace and never loops.
 
 No file is indexed again for a template.
 

@@ -67,8 +67,15 @@ class HistoryOrchestratorTest {
 
         /** When true the template match throws, as a busy database would, so the index cannot say. */
         var failMatch = false
+
+        /** How many next full reads throw, as a busy database would. */
+        var failScans = 0
         override fun observeAll(): Flow<List<ArchiveRecord>> = flow {
             scans++
+            if (failScans > 0) {
+                failScans--
+                error("database busy")
+            }
             emitAll(rows)
         }
         override suspend fun anyIndexedNames(descs: Set<String>, dicts: Set<String>, pinned: Set<String>): Boolean {
@@ -539,6 +546,79 @@ class HistoryOrchestratorTest {
         // 150 s. Reads at about 2 s, 32 s and 92 s, the next waits until 212 s.
         assertEquals(3, index.scans - before, "the cooldown bounds the reads that find nothing")
         assertEquals(0, derives)
+        job.cancel()
+    }
+
+    @Test
+    fun aFailedReadOrDeriveStaysPendingAndRetriesAfterTheCooldown() = runTest {
+        val dict = "ee".repeat(32)
+        val desc = "ff".repeat(32)
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict, templateSha256 = desc))
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val startup = HistoryStartup(history, janitor { }, cache, rederive = rederive(served))
+        var failDerives = 1
+        var attempts = 0
+        val derived = ArrayList<Set<String>>()
+        val job = startup.start(this, deriveThings = {
+            attempts++
+            if (failDerives-- > 0) error("disk full")
+            history.derivePass { derived += it }
+        }) { }
+        runCurrent()
+        index.failScans = 1
+
+        served.add(coreS3Template.copy(key = TemplateKey(dict, desc)))
+        advanceTimeBy(TemplateRederive.SETTLE + 1.seconds)
+        runCurrent()
+        assertEquals(0, attempts, "the failed read derives nothing yet")
+
+        // The read retries after the first wait and finds the thing, but its derive fails.
+        advanceTimeBy(30.seconds)
+        runCurrent()
+        assertEquals(1, attempts)
+        assertEquals(emptyList(), derived)
+
+        // The derive retries after the next wait, with no new template.
+        advanceTimeBy(60.seconds)
+        runCurrent()
+        assertEquals(listOf(setOf(thing)), derived, "the change stayed pending until it derived")
+
+        advanceTimeBy(30.minutes)
+        runCurrent()
+        assertEquals(2, attempts, "a change that derived is not tried again")
+        job.cancel()
+    }
+
+    @Test
+    fun aReadThatKeepsFailingRetriesOnlyAtTheCooldownPace() = runTest {
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = "ee".repeat(32)))
+        index.failMatch = true
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val startup = HistoryStartup(history, janitor { }, cache, rederive = rederive(served))
+        var derives = 0
+        val job = startup.start(this, deriveThings = { derives++ }) { }
+        runCurrent()
+        val before = index.scans
+        index.failScans = 10_000
+
+        served.add(coreS3Template.copy(key = TemplateKey("ab".repeat(32), "cd".repeat(32))))
+        advanceTimeBy(30.minutes)
+        runCurrent()
+        // Reads at about 2 s, 32 s, 92 s, 212 s, 452 s, 932 s and 1532 s, then every 10 minutes.
+        assertEquals(7, index.scans - before, "a failing read retries at the cooldown's pace")
+        assertEquals(0, derives)
+
+        index.failScans = 0
+        advanceTimeBy(10.minutes)
+        runCurrent()
+        assertEquals(8, index.scans - before, "the pending change reads once more when the index recovers")
+        advanceTimeBy(30.minutes)
+        runCurrent()
+        assertEquals(8, index.scans - before, "then the change is settled")
         job.cancel()
     }
 

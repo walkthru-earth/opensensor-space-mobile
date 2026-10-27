@@ -21,7 +21,8 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * 3. [HistoryOrchestrator.run], the backfill and the platform derive, so a file the janitor adopted is
  *    indexed in the same start.
  * 4. Beside it [rederive], the one gate for template changes. It derives again only the things whose
- *    files resolve to another template, settled and with a cooldown, see [TemplateRederive].
+ *    files resolve to another template, settled and with a cooldown, see [TemplateRederive]. A failed
+ *    template derive stays pending and tries again after the cooldown.
  *
  * [log] gets step names, counts and class names only, never paths or thing ids.
  */
@@ -66,13 +67,14 @@ class HistoryStartup(
         return launched
     }
 
-    private suspend fun step(name: String, block: suspend () -> Unit) {
-        try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            log("$name failed: ${e::class.simpleName}")
-        }
+    /** Runs [block] and returns false when it failed, after logging the failure. */
+    private suspend fun step(name: String, block: suspend () -> Unit): Boolean = try {
+        block()
+        true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        log("$name failed: ${e::class.simpleName}")
+        false
     }
 }

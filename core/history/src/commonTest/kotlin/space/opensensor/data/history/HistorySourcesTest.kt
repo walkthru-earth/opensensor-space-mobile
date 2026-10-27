@@ -391,7 +391,7 @@ class HistorySourcesTest {
         assertEquals(unbundledDict to unbundledDesc, indexed.dictionarySha256 to indexed.templateSha256)
         val rederive = TemplateRederive(index, templates, settle = Duration.ZERO)
         val tiers = ArchiveHistoryTiers(store, index, templates = templates, rederive = rederive)
-        val gate = CoroutineScope(Dispatchers.Default).launch { rederive.run { } }
+        val gate = CoroutineScope(Dispatchers.Default).launch { rederive.run { true } }
 
         // One collection across the change, as a screen holds it. Its first value has no metrics, then the board serves.
         var before: Set<String>? = null
