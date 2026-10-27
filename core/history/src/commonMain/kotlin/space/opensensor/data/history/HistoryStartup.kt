@@ -54,7 +54,7 @@ class HistoryStartup(
             }
             coroutineScope {
                 launch { orchestrator.run(deriveAll) }
-                // Starts before the first derive runs, so a template that lands meanwhile derives once more.
+                // Compares with the templates held when the gate was made, so one that landed during the janitor derives once more.
                 rederive.run { things -> step("template derive") { deriveThings?.invoke(things) ?: deriveAll() } }
             }
         }

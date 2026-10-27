@@ -461,6 +461,25 @@ class HistoryOrchestratorTest {
     }
 
     @Test
+    fun aTemplateThatLandsDuringTheJanitorStillDerivesItsThing() = runTest {
+        val dict = "ee".repeat(32)
+        val desc = "ff".repeat(32)
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict, templateSha256 = desc))
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val rederive = rederive(served)
+        // The served template cache loads while the janitor runs, after a reader already built its days.
+        val startup = HistoryStartup(history, janitor { served.add(coreS3Template.copy(key = TemplateKey(dict, desc))) }, cache, rederive = rederive)
+        val derived = ArrayList<Set<String>>()
+        val job = startup.start(this, deriveThings = { history.derivePass { derived += it } }) { }
+        advanceTimeBy(TemplateRederive.SETTLE + 1.seconds)
+        runCurrent()
+        assertEquals(listOf(setOf(thing)), derived)
+        job.cancel()
+    }
+
+    @Test
     fun aBoardRotatingDescsForAKnownDictDerivesWithinTheCooldown() = runTest {
         val dict = "ee".repeat(32)
         // Its own desc is never served, so each fresh template of its dict changes what it resolves to.

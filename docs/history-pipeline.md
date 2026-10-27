@@ -37,7 +37,8 @@ from `OpenSensorApplication.onCreate` on Android and `IosArchive.startIndexRepai
 (`AppStartupTest`, `IosArchiveStartupTest`). It runs the storage janitor, then the feed block quota,
 then `HistoryOrchestrator.run`. Beside it, it runs `TemplateRederive`, the one gate between served
 templates (a template the cache loads at start or a board serves) and History work. Both phones use
-it. `HistoryStartup` derives the things it names, and iOS's `ArchiveHistoryTiers` rebuilds only those
+it. It compares with the templates held when the gate is made, before any reader builds a day, so
+a template the cache loads while the janitor runs still counts as a change. `HistoryStartup` derives the things it names, and iOS's `ArchiveHistoryTiers` rebuilds only those
 things through `TemplateRederive.generation`.
 
 1. Changes settle for `TemplateRederive.SETTLE` (2 s) and coalesce into one check.

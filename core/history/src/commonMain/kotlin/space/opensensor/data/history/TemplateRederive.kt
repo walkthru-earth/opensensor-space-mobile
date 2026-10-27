@@ -48,15 +48,21 @@ class TemplateRederive(
     /** How many template checks re-derived each thing, so a tier upstream rebuilds only its own thing. */
     private val generations = MutableStateFlow<Map<String, Long>>(emptyMap())
 
+    /**
+     * The templates held when this gate is made, before any reader it serves builds a day. A template
+     * that lands before [run] starts, as the cache loads during the janitor, still counts as a change.
+     */
+    private val baseline = templates.changes.value
+
     /** Counts up each time a template change changes what one of [thing]'s indexed files resolves to. */
     fun generation(thing: String): Flow<Long> = generations.map { it[thing] ?: 0L }.distinctUntilChanged()
 
     /**
-     * Watches the templates until cancelled and calls [derive] with the things a change touched. The
-     * templates held when it starts are the baseline, so a template that lands meanwhile counts as a change.
+     * Watches the templates until cancelled and calls [derive] with the things a change touched, from
+     * the [baseline]. Called once per gate.
      */
     suspend fun run(derive: suspend (Set<String>) -> Unit) {
-        var seen = templates.changes.value
+        var seen = baseline
         templates.changes.debounce(settle).conflate().collect {
             delay(cooldown.remaining())
             val now = templates.changes.value
