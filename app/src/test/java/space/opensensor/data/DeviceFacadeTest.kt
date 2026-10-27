@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -88,6 +89,8 @@ import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.data.sync.FileOutcome
 import space.opensensor.data.sync.SyncEngine
+import space.opensensor.data.sync.ThingPlace
+import space.opensensor.data.sync.ThingPlaces
 import space.opensensor.link.AuthKind
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.FrameSink
@@ -348,6 +351,64 @@ class DeviceFacadeTest {
         assertEquals(listOf(0, 1), h.clockAnchorsBeforeList)
         assertEquals(2, h.factory.requests.count { it == Opcode.SET_TIME })
         assertEquals(2, h.factory.fakeConnects)
+    }
+
+    @Test
+    fun `a location read keeps the fixed Thing's Discover pin and drops it once it moves`() = harnessTest { h ->
+        h.device.locationCell = "85283473fffffff"
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        assertEquals("85283473fffffff", h.repo.readLocation()?.cell)
+        assertEquals(listOf(h.device.thing to "85283473fffffff"), h.places.all.map { it.thing to it.cell })
+        h.device.mobility = "moving"
+        h.repo.readLocation()
+        assertTrue("a moving Thing shows no pin", h.places.all.isEmpty())
+    }
+
+    @Test
+    fun `a location save keeps the pin the page it reads back gives`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        val saved = h.repo.writeLocation(ConfigPatch.build { location("85283473fffffff", 8, "") })
+        assertEquals("85283473fffffff", saved?.cell)
+        assertEquals(listOf(h.device.thing to "85283473fffffff"), h.places.all.map { it.thing to it.cell })
+        h.device.mobility = "moving"
+        h.repo.writeLocation(ConfigPatch.build { location("85283473fffffff", 8, "") })
+        assertTrue("a save that reads back a moving Thing shows no pin", h.places.all.isEmpty())
+    }
+
+    @Test
+    fun `forgetting a Thing removes its saved cell`() = harnessTest { h ->
+        h.device.locationCell = "85283473fffffff"
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        h.repo.readLocation()
+        assertEquals(1, h.places.all.size)
+        h.repo.forget(ADDRESS)
+        assertNull(h.knownDao.get(ADDRESS))
+        assertTrue("no cell of a forgotten Thing stays on the phone", h.places.all.isEmpty())
+    }
+
+    @Test
+    fun `forgetting a Thing removes the saved cells of its older epochs`() = harnessTest { h ->
+        h.device.locationCell = "85283473fffffff"
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        h.repo.readLocation()
+        h.thingEpochs.recordIfAbsent(ThingEpoch(ADDRESS, "older-thing", null, 1L, observedFromAuthenticatedBle = true))
+        h.places.put(ThingPlace("older-thing", "85283472fffffff", 1L))
+        assertEquals(2, h.places.all.size)
+        h.repo.forget(ADDRESS)
+        assertTrue("no cell of an older epoch stays on the phone", h.places.all.isEmpty())
+    }
+
+    /** [ThingPlaces] in memory. */
+    private class MemoryThingPlaces : ThingPlaces {
+        private val state = MutableStateFlow<List<ThingPlace>>(emptyList())
+        val all: List<ThingPlace> get() = state.value
+        override fun observeAll(): Flow<List<ThingPlace>> = state
+        override suspend fun put(place: ThingPlace) = state.update { list -> list.filter { it.thing != place.thing } + place }
+        override suspend fun remove(thing: String) = state.update { list -> list.filter { it.thing != thing } }
     }
 
     @Test
@@ -1377,6 +1438,7 @@ class DeviceFacadeTest {
         val factory = TestTransports(device, appScope)
         val identityClaims = DeviceIdentityClaims()
         val thingEpochs = InMemoryThingEpochDao()
+        val places = MemoryThingPlaces()
 
         var clockEpochOffset = 0L
         var partialFailuresRemaining = 0
@@ -1433,6 +1495,7 @@ class DeviceFacadeTest {
                 clock = { clockEpochOffset + test.testScheduler.currentTime },
                 pruned = PrunedFiles.None,
                 boardDescriptors = BoardDescriptors(MemoryBlockStore(), ServedTemplates(), io = dispatcher),
+                places = places,
             )
             val delegateStore = FileArchiveStore(fileArchive, dispatcher)
             val store = object : ArchiveStore by delegateStore {

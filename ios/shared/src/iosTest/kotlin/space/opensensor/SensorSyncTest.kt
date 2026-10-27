@@ -31,6 +31,7 @@ import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ParquetVerify
 import space.opensensor.data.protocol.ProtocolError
 import space.opensensor.data.sync.ThingSource
+import space.opensensor.data.sync.ThingSources
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkClosedException
 import space.opensensor.link.TimeoutPhase
@@ -56,7 +57,7 @@ class SensorSyncTest {
     private val finals = "$base/SensorArchive"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Default)
     private val database = IosArchiveDatabase(store, "$base/database")
-    private val sync = SensorSync(store, database.index, Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
+    private val sync = SensorSync(store, database.index, Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget(), sources = ThingSources.None)
     private val thing = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     @AfterTest
@@ -195,7 +196,7 @@ class SensorSyncTest {
 
     @Test
     fun aBoardWithListSinceGetsTheSavedCursorOnTheNextSync() {
-        val cursored = SensorSync(store, database.index, Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget(), cursors = database.cursors)
+        val cursored = SensorSync(store, database.index, Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget(), cursors = database.cursors, sources = ThingSources.None)
         // Mount epoch 42 in the first 4 bytes, the rest opaque.
         val next = ListCursor(
             ByteArray(ListCursor.BYTES) { i ->
@@ -273,6 +274,7 @@ class SensorSyncTest {
             Dispatchers.Default,
             recordClockAnchor = { _, _, _, _ -> anchorCount++ },
             budget = FakeStorageBudget(),
+            sources = ThingSources.None,
         )
         val link = sensor { link, req ->
             (req[0].toInt() and 0xFF == Opcode.STATUS).also {
@@ -297,6 +299,7 @@ class SensorSyncTest {
             Dispatchers.Default,
             recordClockAnchor = { st, boot, utc, mono -> anchors += Anchor(st, boot, utc, mono) },
             budget = FakeStorageBudget(),
+            sources = ThingSources.None,
         )
         val link = sensor().also { it.identify(thing, "full-boot-identity", 1024) }
         val done = CompletableDeferred<SyncResult>()
@@ -372,7 +375,7 @@ class SensorSyncTest {
                 queue.trySend(block)
             }
         }
-        val gated = SensorSync(store, database.index, held, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
+        val gated = SensorSync(store, database.index, held, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget(), sources = ThingSources.None)
         suspend fun pumpUntil(done: CompletableDeferred<*>) = withTimeout(20_000) {
             while (!done.isCompleted) {
                 queue.tryReceive().getOrNull()?.run() ?: yield()

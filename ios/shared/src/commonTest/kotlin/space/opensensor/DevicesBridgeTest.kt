@@ -1,9 +1,13 @@
 package space.opensensor
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.data.history.LatestDay
@@ -38,6 +42,7 @@ class DevicesBridgeTest {
     private class Calls {
         val forgotten = mutableListOf<Pair<String, String?>>()
         val collected = mutableListOf<Pair<String, String?>>()
+        val placesForgotten = mutableListOf<List<String>>()
     }
 
     private fun bridge(state: CompanionState = CompanionState(), storage: KnownRecordStorage = MemoryStorage(), calls: Calls = Calls(), now: Long = 5) =
@@ -50,6 +55,7 @@ class DevicesBridgeTest {
             stopScan = {},
             forget = { p, d -> calls.forgotten += p to d },
             collect = { id, wifi -> calls.collected += id to wifi },
+            forgetPlaces = { calls.placesForgotten += it },
         )
 
     @Test fun mergeListsRecordsAndCredentialsOncePerPeripheral() {
@@ -210,7 +216,7 @@ class DevicesBridgeTest {
         assertEquals("112233445566", bridge.deviceFor(b))
     }
 
-    @Test fun openingASensorKeepsItAndForgettingRemovesItEverywhere() {
+    @Test fun openingASensorKeepsItAndForgettingRemovesItEverywhere() = runTest {
         val storage = MemoryStorage()
         val calls = Calls()
         val bridge = bridge(storage = storage, calls = calls, now = 42)
@@ -222,9 +228,74 @@ class DevicesBridgeTest {
 
         bridge.forgetNow(a)
         assertEquals(listOf<Pair<String, String?>>(a to "aabbccddeeff"), calls.forgotten, "Swift removes the credential of this hardware id")
+        assertEquals(listOf(listOf("st-a")), calls.placesForgotten, "the Discover cell of its Thing goes too")
         assertEquals(listOf(b), bridge.knownNow().map { it.id })
         assertTrue(IosKnown.decode(storage.text).isEmpty())
         assertTrue(bridge(storage = storage).knownNow().isEmpty(), "forgotten stays forgotten after a restart")
+    }
+
+    @Test fun forgettingASensorRemovesTheCellsOfItsOlderThingsToo() = runTest {
+        val calls = Calls()
+        val bridge = bridge(calls = calls)
+        bridge.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff")
+        assertTrue(bridge.sensorOpened(a, "Kitchen", "st-a2", "aabbccddeeff").accepted, "a new Thing on the same hardware")
+        bridge.credentialsChanged(listOf(a), listOf("st-c"), listOf("aabbccddeeff"))
+
+        bridge.forgetNow(a)
+        assertEquals(setOf("st-a2", "st-a", "st-c"), calls.placesForgotten.single().toSet(), "the current, older and credential Things all lose their cell")
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun theRecordStaysUntilItsCellsAreGone() = runTest {
+        val storage = MemoryStorage()
+        val removed = CompletableDeferred<Unit>()
+        val bridge = DevicesBridge(
+            state = CompanionState(),
+            archive = emptyFlow(),
+            storage = storage,
+            now = { 5 },
+            startScan = {},
+            stopScan = {},
+            forget = { _, _ -> },
+            collect = { _, _ -> },
+            forgetPlaces = { removed.await() },
+        )
+        bridge.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff")
+
+        val forgetting = launch { bridge.forgetNow(a) }
+        runCurrent()
+        assertEquals(listOf(a), bridge.knownNow().map { it.id }, "a Forget stopped before its cells are gone runs again")
+        assertEquals("st-a", IosKnown.decode(storage.text).single().thing)
+
+        removed.complete(Unit)
+        forgetting.join()
+        assertTrue(bridge.knownNow().isEmpty())
+        assertTrue(IosKnown.decode(storage.text).isEmpty())
+    }
+
+    @Test fun aFailedRemovalKeepsTheRecordAndEndsQuietly() = runTest {
+        val storage = MemoryStorage()
+        val calls = Calls()
+        // The Forget runs in the test scope, so an error that escapes it fails the test.
+        val bridge = DevicesBridge(
+            state = CompanionState(),
+            archive = emptyFlow(),
+            storage = storage,
+            now = { 5 },
+            startScan = {},
+            stopScan = {},
+            forget = { p, d -> calls.forgotten += p to d },
+            collect = { _, _ -> },
+            forgetPlaces = { error("disk full") },
+            forgetScope = this,
+        )
+        bridge.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff")
+
+        bridge.forgetLater(a).join()
+        assertEquals(listOf(a), bridge.knownNow().map { it.id }, "Forget can run again")
+        assertEquals("st-a", IosKnown.decode(storage.text).single().thing)
+        assertTrue(calls.forgotten.isEmpty(), "the Wi-Fi access stays with the record")
     }
 
     @Test fun collectAllRunsOneSensorAtATime() {
