@@ -71,10 +71,17 @@ class SimpleCopyTest {
      */
     @Test
     fun todaySimpleInfoNeverNamesTheGuidelineBody() {
+        // The averaging lines and the unrated line Simple shows (#93, #91) never name WHO or the NowCast method.
+        val keys = listOf("info_now_body_simple", "now_basis_nowcast_simple", "now_nowcast_note_simple", "now_unrated_simple")
+        val nowCast = Regex("""NowCast|ناوكاست""", RegexOption.IGNORE_CASE)
         listOf("values", "values-ar").forEach { dir ->
             val file = File(Catalogues.root, "feature/today/src/commonMain/composeResources/$dir/strings.xml")
-            val text = Catalogues.parse(file)["info_now_body_simple"] ?: fail("$dir lacks info_now_body_simple")
-            if (banned.any { it.containsMatchIn(text) }) fail("$dir info_now_body_simple names the guideline body")
+            val catalogue = Catalogues.parse(file)
+            keys.forEach { key ->
+                val text = catalogue[key] ?: fail("$dir lacks $key")
+                if (banned.any { it.containsMatchIn(text) }) fail("$dir $key names the guideline body")
+                if (nowCast.containsMatchIn(text)) fail("$dir $key names the NowCast method")
+            }
         }
     }
 }

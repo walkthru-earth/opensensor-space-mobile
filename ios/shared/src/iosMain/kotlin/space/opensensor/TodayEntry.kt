@@ -10,6 +10,7 @@ import space.opensensor.settings.SettingsRepository
 import space.opensensor.today.TodayAction
 import space.opensensor.today.TodayController
 import space.opensensor.today.TodayScreen
+import space.opensensor.today.pm25NowCast
 import space.opensensor.today.todaySoFar
 import space.opensensor.units.UnitFormatter
 import space.opensensor.units.UnitSystem
@@ -41,6 +42,7 @@ private class TodayHolder(today: CompanionToday, devices: DevicesBridge, address
             nameFor = devices::nameFor,
         ),
         detailLevel = settings.detailLevel,
+        nowCast = pm25NowCast(info, IosArchive.reader::observeHourlyDay),
     )
 }
 

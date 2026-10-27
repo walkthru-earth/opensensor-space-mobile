@@ -46,6 +46,7 @@ import space.opensensor.today.TodayNotice
 import space.opensensor.today.TodayReconnect
 import space.opensensor.today.TodaySnapshot
 import space.opensensor.today.TodaySource
+import space.opensensor.today.pm25NowCast
 import space.opensensor.today.todaySoFar
 
 /**
@@ -91,6 +92,7 @@ class TodayViewModel @AssistedInject constructor(
         scope = viewModelScope,
         source = source,
         detailLevel = settings.detailLevel,
+        nowCast = pm25NowCast(repository.info, history::observeHourlyDay),
     )
 
     /**

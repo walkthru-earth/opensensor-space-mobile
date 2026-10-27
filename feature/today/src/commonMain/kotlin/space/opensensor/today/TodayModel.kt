@@ -15,6 +15,9 @@ import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
 import space.opensensor.data.protocol.LiveReading
 import space.opensensor.data.protocol.LiveSample
+import space.opensensor.family.air.NowReading
+import space.opensensor.family.air.Pm25NowCast
+import space.opensensor.family.air.QcFlags
 import space.opensensor.family.air.showsAirCards
 import space.opensensor.family.air.showsBatchEstimate
 import space.opensensor.settings.DetailLevel
@@ -121,10 +124,17 @@ data class TodayUiState(
     val level: DetailLevel = DetailLevel.SIMPLE,
     /** What this device can do, from `INFO` and LIVE (shared mapping, no schema strings in the UI). */
     val capabilities: DeviceCapabilities = DeviceCapabilities.from(snapshot.info),
+    /** The PM2.5 NowCast of this thing from the phone archive (#93), null until it has the hours. */
+    val nowCast: Pm25NowCast? = null,
+    /** The [QcFlags] of the live sample (#91). */
+    val liveFlags: Int = QcFlags.NONE,
 ) {
 
     /** The live sample read through the template and reviewed profile, null before both exist. */
     val reading: LiveReading? = capabilities.reading(snapshot.live)
+
+    /** What the air hero shows, the NowCast when there is one, else the live sample, with its flags. */
+    val airReading: NowReading get() = NowReading.of(reading, nowCast, liveFlags)
 
     /** Whether the live values can show yet, see [LiveSupport]. */
     val liveSupport: LiveSupport
