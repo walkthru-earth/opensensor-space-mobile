@@ -63,7 +63,8 @@ import kotlin.math.sin
  *
  * The colour is never the only cue. Each hour grows outward from the inner edge by its WHO step
  * ([whoStepShare]), so a cleaner hour is a shorter bar, and every bar has an `outline` border that
- * keeps 3 to 1 against the card. Hour labels get the room their measured size needs, and at a font
+ * keeps 3 to 1 against the card and the track ([markColors]), drawn under the track so the step colour
+ * reads true. Hour labels get the room their measured size needs, and at a font
  * scale of [STACKED_FONT_SCALE] or more the value text moves below the ring, so nothing clips at
  * 200 percent.
  *
@@ -89,8 +90,7 @@ internal fun DayRing(
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val onSurface = MaterialTheme.colorScheme.onSurface
-    val empty = MaterialTheme.colorScheme.surfaceContainerHighest
-    val border = MaterialTheme.colorScheme.outline
+    val (border, empty) = markColors(MaterialTheme.colorScheme)
     val density = LocalDensity.current
     val stacked = density.fontScale >= STACKED_FONT_SCALE
     val measurer = rememberTextMeasurer()
@@ -160,7 +160,10 @@ internal fun DayRing(
                     val mid = inner + w / 2
                     val arcTopLeft = Offset(c.x - mid, c.y - mid)
                     val arcSize = Size(2 * mid, 2 * mid)
+                    // Border, then the track, then the step colour, so a see-through colour and the gaps in a
+                    // dashed hour show the track and never the border.
                     drawArc(border, start, sweep, useCenter = false, topLeft = arcTopLeft, size = arcSize, style = Stroke(w + 2 * borderPx))
+                    drawArc(empty, start, sweep, useCenter = false, topLeft = arcTopLeft, size = arcSize, style = Stroke(w))
                     drawArc(
                         color = color.copy(alpha = alpha),
                         startAngle = start,

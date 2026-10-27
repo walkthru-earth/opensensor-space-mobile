@@ -24,11 +24,14 @@ class WhoCueTest {
     }
 
     @Test
-    fun theMarkBorderKeepsThreeToOneOnEveryCardSurface() {
+    fun theMarkBorderKeepsThreeToOneOnEveryCardSurfaceAndTheTrack() {
         for (scheme in listOf(BrandLightScheme, BrandDarkScheme)) {
-            for (surface in listOf(scheme.surface, scheme.surfaceContainerLow, scheme.surfaceContainer, scheme.surfaceContainerHigh)) {
-                val ratio = contrastRatio(scheme.outline, surface)
-                assertTrue(ratio >= 3.0, "outline on $surface is $ratio")
+            val marks = markColors(scheme)
+            assertEquals(scheme.outline, marks.border, "the border is the outline, not outlineVariant")
+            assertEquals(scheme.surfaceContainerHighest, marks.track)
+            for (surface in listOf(scheme.surface, scheme.surfaceContainerLow, scheme.surfaceContainer, scheme.surfaceContainerHigh, marks.track)) {
+                val ratio = contrastRatio(marks.border, surface)
+                assertTrue(ratio >= 3.0, "border on $surface is $ratio")
             }
         }
     }

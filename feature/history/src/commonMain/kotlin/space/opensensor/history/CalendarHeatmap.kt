@@ -81,8 +81,7 @@ internal fun CalendarHeatmap(
     showStep: Boolean = true,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val empty = MaterialTheme.colorScheme.surfaceContainerHighest
-    val border = MaterialTheme.colorScheme.outline
+    val (border, empty) = markColors(MaterialTheme.colorScheme)
     val labelPx = with(LocalDensity.current) { 10.sp.toPx() }
     val measurer = rememberTextMeasurer()
     val labelStyle = remember(muted) { chartTextStyle(muted, 10) }
