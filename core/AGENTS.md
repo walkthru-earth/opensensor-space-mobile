@@ -81,7 +81,8 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   and the profile (`Metrics.of`), plus the derived metrics of each
   `DerivedMetricProvider` (`AirFamily` for corrected PM2.5), and reads each file by the template of its
   `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by
-  `template.sha256` first and then `dictionary.sha256`. The old unprefixed footer
+  `template.sha256` first and then `dictionary.sha256`, a served template before a bundled one.
+  LIVE shows only for a dict with a reviewed profile. The old unprefixed footer
   keys are not read. A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading` or `GenericMetricHero`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and

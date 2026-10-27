@@ -63,7 +63,7 @@ class HistorySeriesReader(
     private val derived: DerivedDayFiles = DerivedDayFiles.NONE,
     private val footers: FooterCache = FooterCache(DERIVED_FOOTERS),
     private val nowEpochS: () -> Long = { Clock.System.now().epochSeconds },
-    private val templates: FileTemplates = FileTemplates.BUNDLED,
+    private val templates: FileTemplates = FileTemplates.SERVED,
 ) {
     /**
      * Rows a logger writing every [sampleIntervalMs] could have written in `[fromS, toS)` by now, 0 when

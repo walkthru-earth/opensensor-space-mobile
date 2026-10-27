@@ -14,7 +14,7 @@ class LiveReadingTest {
     private fun thing(dict: String): Thing = assertNotNull(BundledCatalog.thing("thing", dict))
 
     private val cores3 = thing("3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9")
-    private val waveshare = thing("50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7")
+    private val waveshare = thing("a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809")
 
     @Test
     fun `CoreS3 reads its board temperature from imu_t and hides the always null t and rh`() {

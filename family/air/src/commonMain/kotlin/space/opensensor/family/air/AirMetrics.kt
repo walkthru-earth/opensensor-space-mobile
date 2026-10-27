@@ -45,7 +45,9 @@ enum class PmsStatus(val code: Int, val label: String) {
     WARMING(1, "sensor warming up"),
     STALE(2, "sensor stale"),
     ERROR(3, "sensor error"),
-    VALID(4, "valid");
+    VALID(4, "valid"),
+    MODEL_MISMATCH(5, "sensor model mismatch"),
+    SLEEPING(6, "sensor sleeping");
 
     companion object {
         fun fromCode(code: Int?): PmsStatus? = entries.firstOrNull { it.code == code }

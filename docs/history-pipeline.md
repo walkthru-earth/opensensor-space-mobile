@@ -130,9 +130,12 @@ metrics. A file with no `opensensor` key is not checked against its Thing. A reb
 The boot is not read from `firmware.boot_id`. Every row carries `boot_id_hi` and `boot_id_lo`, and
 `rowBootId` formats the first pair as 32 lowercase hex digits, the same text firmware writes and sends
 in its clock receipts. The schema name is not read at all.
-The template is the bundled one whose exact bytes hash to `template.sha256` (the build precomputes
-that digest for every bundled file), else the bundled one for `dictionary.sha256`. A template digest
-whose dict disagrees with the footer's is not used. The bundled bytes are the firmware's own, so a
+The template (`FileTemplates.SERVED`) is the one whose exact bytes hash to `template.sha256`, a
+template a board served and the app verified (`ServedTemplates`) first, then the bundled one (the build
+precomputes that digest for every bundled file). Else it is the newest served one for
+`dictionary.sha256`, then the bundled one. A template digest whose dict disagrees with the footer's is
+not used. A file indexed before its board served a template it needs keeps no metrics until it is
+indexed again. The bundled bytes are the firmware's own, so a
 real footer resolves by `template.sha256` alone, with no dictionary member needed. The catalog refuses
 to load when an `index.json` desc is not the build digest of its file. The footer interval wins. Without it
 the template's default interval is used, and without both the interval is 0 and expected rows are 0.

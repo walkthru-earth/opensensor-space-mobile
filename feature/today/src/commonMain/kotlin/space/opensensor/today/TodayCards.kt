@@ -317,8 +317,8 @@ internal fun MetricHeroCard(
                         NowReading.Waiting -> PeacockExpression.CONFUSED
                         is NowReading.SensorNotReady -> when (reading.status) {
                             PmsStatus.WARMING -> PeacockExpression.WORKING
-                            PmsStatus.STALE -> PeacockExpression.SLEEPING
-                            PmsStatus.ABSENT, PmsStatus.ERROR -> PeacockExpression.CONCERNED
+                            PmsStatus.STALE, PmsStatus.SLEEPING -> PeacockExpression.SLEEPING
+                            PmsStatus.ABSENT, PmsStatus.ERROR, PmsStatus.MODEL_MISMATCH -> PeacockExpression.CONCERNED
                             PmsStatus.VALID -> PeacockExpression.CONFUSED
                         }
                     },

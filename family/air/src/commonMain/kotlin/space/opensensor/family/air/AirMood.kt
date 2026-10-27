@@ -80,6 +80,8 @@ sealed interface NowReading {
             PmsStatus.WARMING -> "The sensor is warming up. It takes about a minute after power on."
             PmsStatus.STALE -> "The last sensor reading is old, so it is not trusted."
             PmsStatus.ERROR -> "The sensor reports an error, so its numbers are not shown."
+            PmsStatus.MODEL_MISMATCH -> "The fitted sensor is not the model this board expects, so its numbers are not shown."
+            PmsStatus.SLEEPING -> "The sensor is resting between readings."
             PmsStatus.VALID -> ""
         }
     }

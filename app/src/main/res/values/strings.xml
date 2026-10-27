@@ -37,6 +37,8 @@
     <string name="pms_warming_title">Warming up</string>
     <string name="pms_stale_title">Reading is old</string>
     <string name="pms_error_title">Sensor error</string>
+    <string name="pms_mismatch_title">Wrong sensor model</string>
+    <string name="pms_sleeping_title">Sensor resting</string>
     <string name="pms_valid_title">Reading</string>
 
     <!-- Device -->

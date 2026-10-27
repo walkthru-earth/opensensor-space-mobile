@@ -18,6 +18,8 @@ fun PmsStatus.titleText(): String = stringResource(
         PmsStatus.WARMING -> R.string.pms_warming_title
         PmsStatus.STALE -> R.string.pms_stale_title
         PmsStatus.ERROR -> R.string.pms_error_title
+        PmsStatus.MODEL_MISMATCH -> R.string.pms_mismatch_title
+        PmsStatus.SLEEPING -> R.string.pms_sleeping_title
         PmsStatus.VALID -> R.string.pms_valid_title
     },
 )

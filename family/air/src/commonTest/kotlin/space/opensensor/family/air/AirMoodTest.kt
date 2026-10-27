@@ -2,11 +2,13 @@ package space.opensensor.family.air
 
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.protocol.LiveSample
+import space.opensensor.model.BundledCatalog
 import kotlin.math.nextUp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -85,6 +87,17 @@ class AirMoodTest {
         assertEquals(NowReading.Waiting, NowReading.of(LiveFixtures.waveshare("""{"seq":null,"mono":null,"utc":null,"pms":null,"pm25":null}""")))
         // An unknown dictionary has no LIVE reading.
         assertEquals(NowReading.Waiting, NowReading.of(DeviceCapabilities.from(LiveFixtures.waveshare.copy(dict = "0".repeat(64))).reading(LiveSample.parse("""{"pms":4,"pm25":22}"""))))
+    }
+
+    @Test
+    fun `pms_status 5 and 6 are known states that are not ready`() {
+        // mobile-migration step 3, the Waveshare template names classes 0 to 6.
+        val classes = assertNotNull(BundledCatalog.template(LiveFixtures.waveshareDict)?.datastream(AirMetrics.PMS_STATUS)).classes
+        assertEquals(classes.map { it.value.toInt() }, PmsStatus.entries.map { it.code })
+        for ((json, status) in listOf("""{"pms":5,"pm25":22}""" to PmsStatus.MODEL_MISMATCH, """{"pms":6,"pm25":22}""" to PmsStatus.SLEEPING)) {
+            val r = NowReading.of(LiveFixtures.waveshare(json))
+            assertTrue(r is NowReading.SensorNotReady && r.status == status && r.hint.isNotEmpty(), "$json gave $r")
+        }
     }
 
     @Test

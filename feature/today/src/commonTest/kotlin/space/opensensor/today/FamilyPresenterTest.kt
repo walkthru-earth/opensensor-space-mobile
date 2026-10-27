@@ -17,14 +17,17 @@ import space.opensensor.units.formatFixed
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 
 class FamilyPresenterTest {
-    private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = "50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7")
+    private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809")
     private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9")
     private val soilSample = LiveSample.parse("""{"sm":0.31,"st":18.5,"pct":80}""")
 
     private fun state(info: DeviceInfo?, live: LiveSample?, level: DetailLevel) = TodayUiState(TodaySnapshot(info = info, live = live), level)
+
+    private fun soil(level: DetailLevel) = TodayUiState(TodaySnapshot(info = SoilFixture.info, live = soilSample), level, SoilFixture.capabilities())
 
     @Test
     fun theRegistryPicksAirForAirMoodAndGenericForEverythingElse() {
@@ -40,14 +43,23 @@ class FamilyPresenterTest {
     }
 
     @Test
-    fun aSoilBoardShowsSoilCards() = SoilFixture.served {
-        val simple = state(SoilFixture.info, soilSample, DetailLevel.SIMPLE)
+    fun aSoilBoardShowsSoilCards() {
+        val simple = soil(DetailLevel.SIMPLE)
         assertSame(GenericPresenter, simple.presenter)
+        assertEquals(LiveSupport.READY, simple.liveSupport)
         assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK), simple.cards)
-        assertEquals(
-            listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK, METRICS, BOARD, STORAGE, DEVICE_INFO),
-            state(SoilFixture.info, soilSample, DetailLevel.DETAILED).cards,
-        )
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK, METRICS, BOARD, STORAGE, DEVICE_INFO), soil(DetailLevel.DETAILED).cards)
+    }
+
+    @Test
+    fun aServedBoardWithNoReviewedProfileHasNoLive() = SoilFixture.served {
+        // ble-sync-protocol LIVE key stability. A derived profile would show raw column names as a hero.
+        val state = state(SoilFixture.info, soilSample, DetailLevel.DETAILED)
+        assertEquals(LiveSupport.UNSUPPORTED, state.liveSupport)
+        assertNull(state.capabilities.thing)
+        assertNull(state.reading)
+        assertEquals(emptyList(), todayMetrics(state.capabilities))
+        assertFalse(METRICS in state.cards)
     }
 
     @Test
@@ -59,8 +71,8 @@ class FamilyPresenterTest {
     }
 
     @Test
-    fun theSoilBoardCardShowsItsBatteryButNoTemperature() = SoilFixture.served {
-        val state = state(SoilFixture.info, soilSample, DetailLevel.DETAILED)
+    fun theSoilBoardCardShowsItsBatteryButNoTemperature() {
+        val state = soil(DetailLevel.DETAILED)
         assertEquals("battery_percent", state.power.battery?.name)
         // Soil temperature is a measurement, so the metrics card shows it, not the board card.
         assertFalse(state.presenter.boardTemperature(state))
@@ -74,6 +86,6 @@ class FamilyPresenterTest {
         val units = UnitFormatter(UnitSystem.METRIC)
         assertEquals(0.31, reading?.value(moisture.name))
         assertEquals(NO_VALUE, formatReading(null, moisture, units))
-        assertEquals(formatFixed(0.3, 1), formatReading(0.31, moisture, units), "the derived profile shows one decimal")
+        assertEquals(formatFixed(0.3, 1), formatReading(0.31, moisture, units), "a float without a profile step shows one decimal")
     }
 }

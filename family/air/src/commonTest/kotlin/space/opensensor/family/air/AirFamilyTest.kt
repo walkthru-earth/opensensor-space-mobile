@@ -11,7 +11,7 @@ class AirFamilyTest {
         AirFamily.install()
     }
 
-    private val waveshare = assertNotNull(BundledCatalog.template("50a53393e940be182ded0b1119de6ac6d9521e7d28dfd244a24666ccf2a616c7"))
+    private val waveshare = assertNotNull(BundledCatalog.template("a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809"))
 
     @Test
     fun `a template with CF1 PM2_5 and RH derives the corrected PM2_5`() {

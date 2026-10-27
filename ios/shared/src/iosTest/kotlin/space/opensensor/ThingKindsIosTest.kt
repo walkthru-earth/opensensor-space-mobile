@@ -4,6 +4,7 @@ import space.opensensor.data.history.Metrics
 import space.opensensor.family.air.AirFamily
 import space.opensensor.publicfeed.DiscoverCollection
 import space.opensensor.thing.OpenSensorBoardKind
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -14,6 +15,12 @@ class ThingKindsIosTest {
     init {
         Metrics.install(emptyList())
         DiscoverCollection.installBundled("""{"type":"Collection","id":"discover-cells-bundled"}""")
+    }
+
+    // iosThingKinds is a cached lazy, so a later test in this process would keep the empty catalog.
+    @AfterTest
+    fun restoreAirFamily() {
+        AirFamily.install()
     }
 
     @Test
