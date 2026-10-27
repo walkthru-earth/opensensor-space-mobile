@@ -34,7 +34,8 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  *
  * Each day is cached in memory by its source signature (file name, CRC, estimate and the template the
  * file resolves to), so a new file or a newly served template rebuilds only its days and an unchanged
- * day costs one string comparison. Every change of [FileTemplates.changes] checks the days again. The cache is a least
+ * day costs one string comparison. A thing's days are checked again when [rederive] finds that a
+ * template change touched one of its files, settled and with a cooldown. The cache is a least
  * recently used map within [budgetBytes] of estimated size (#61), and [trim] gives memory back on
  * [MemoryPressure]. Behind it the [tierStore] keeps each day on disk under the same signature, so a
  * new process or an evicted day reads its tiers without decoding Parquet (#63). Only a day missing
@@ -60,6 +61,8 @@ class ArchiveHistoryTiers(
     private val afterBuild: suspend () -> Unit = {},
     /** Resolves each file's board template, so its metrics read with that template's gates and units. */
     private val templates: FileTemplates = FileTemplates.SERVED,
+    /** The shared template gate, null where templates never change while this reader lives. */
+    private val rederive: TemplateRederive? = null,
 ) : HistoryTiers,
     MemoryTrimmable {
     internal class Day(val signature: String, val buckets: DayTiers, val cacheable: Boolean = true)
@@ -136,7 +139,7 @@ class ArchiveHistoryTiers(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun upstream(thing: String): Flow<Thing> = combine(index.observeThing(thing), templates.changes) { records, _ -> records }
+    private fun upstream(thing: String): Flow<Thing> = (rederive?.let { gate -> combine(index.observeThing(thing), gate.generation(thing)) { records, _ -> records } } ?: index.observeThing(thing))
         .map { records -> sources(thing, records) }
         .distinctUntilChanged()
         .mapLatest { sources -> build(thing, sources) }

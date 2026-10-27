@@ -45,6 +45,12 @@ fun interface FileTemplates {
      */
     fun digestOf(record: ArchiveRecord): String? = template(record.dictionarySha256, record.templateSha256)?.let { it.key.desc ?: "dict:${it.dict}" }
 
+    /**
+     * These templates as they resolve with [held] in place of the served ones, so [TemplateRederive] can
+     * compare what a file resolved to before and after a change. Itself when only bundled templates resolve.
+     */
+    fun at(held: List<BoardTemplate>): FileTemplates = this
+
     /** The [FileTemplate] of a raw file with Parquet [keyValues], from its `opensensor` footer. */
     fun of(keyValues: Map<String, String>): FileTemplate = of(OpenSensorFooter.of(keyValues))
 
@@ -85,12 +91,15 @@ fun interface FileTemplates {
         fun over(served: ServedTemplates): FileTemplates = object : FileTemplates {
             override val changes: StateFlow<List<BoardTemplate>> get() = served.all
 
-            override fun template(dict: String?, desc: String?): BoardTemplate? {
-                val held = served.all.value
-                val byDesc = desc?.let { d -> held.firstOrNull { it.key.desc == d } ?: BundledCatalog.templateByDesc(d) }
-                    ?.takeIf { dict == null || it.dict == dict }
-                return byDesc ?: dict?.let { d -> held.lastOrNull { it.dict == d } ?: BundledCatalog.template(d) }
-            }
+            override fun template(dict: String?, desc: String?): BoardTemplate? = resolve(served.all.value, dict, desc)
+
+            override fun at(held: List<BoardTemplate>): FileTemplates = FileTemplates { dict, desc -> resolve(held, dict, desc) }
+        }
+
+        private fun resolve(held: List<BoardTemplate>, dict: String?, desc: String?): BoardTemplate? {
+            val byDesc = desc?.let { d -> held.firstOrNull { it.key.desc == d } ?: BundledCatalog.templateByDesc(d) }
+                ?.takeIf { dict == null || it.dict == dict }
+            return byDesc ?: dict?.let { d -> held.lastOrNull { it.dict == d } ?: BundledCatalog.template(d) }
         }
     }
 }

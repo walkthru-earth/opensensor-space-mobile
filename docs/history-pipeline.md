@@ -35,12 +35,24 @@ milliseconds.
 Both phones run the same order (#100). The shared `HistoryStartup.start` is called once per process,
 from `OpenSensorApplication.onCreate` on Android and `IosArchive.startIndexRepair` on iOS
 (`AppStartupTest`, `IosArchiveStartupTest`). It runs the storage janitor, then the feed block quota,
-then `HistoryOrchestrator.run`. Beside it, it watches `FileTemplates.SERVED.changes` (a template the
-cache loads at start or a board serves). Changes settle for `HistoryStartup.TEMPLATE_SETTLE` (2 s) and
-coalesce into one check. When a template added or removed names a desc or dict that an indexed file's
-footer names (`ArchiveIndex.anyIndexedNames`, one `EXISTS` query on the digest indices), the platform
-derive runs again, so the days of the files it resolves rebuild with their metrics. A board that serves
-fresh templates no file names costs no derive. No file is indexed again for it.
+then `HistoryOrchestrator.run`. Beside it, it runs `TemplateRederive`, the one gate between served
+templates (a template the cache loads at start or a board serves) and History work. Both phones use
+it. `HistoryStartup` derives the things it names, and iOS's `ArchiveHistoryTiers` rebuilds only those
+things through `TemplateRederive.generation`.
+
+1. Changes settle for `TemplateRederive.SETTLE` (2 s) and coalesce into one check.
+2. When no template added or removed names a desc or dict that an indexed file's footer names
+   (`ArchiveIndex.anyIndexedNames`, one `EXISTS` query on the digest indices), the check ends.
+3. Otherwise every indexed file resolves over the templates before and after the change
+   (`FileTemplates.at`). Only the things with a file whose resolved digest changed derive again
+   (`deriveStale(things)` on Android, a pass over those things on iOS). A fresh desc that changes no
+   file's resolution does no work.
+4. After a check that derived, the next one waits 30 s, then twice as long each time up to 10 min,
+   and back to 30 s after 10 quiet minutes (`TemplateRederive.Cooldown`, one per process). A board
+   that keeps a known dict and rotates its desc costs a bounded number of passes. Sync-driven derives
+   never wait for it, and they read the live templates anyway.
+
+No file is indexed again for a template.
 
 ```mermaid
 flowchart LR
@@ -269,8 +281,8 @@ picker of the old format cleanup offers the same span plus one day (`StorageCont
 the full desc (or `dict:<dict>` for a bundled one without) that `FileTemplates.digestOf` resolves now,
 `-` for none. iOS tiers and day files use the same lines. `deriveStale()` rebuilds exactly the days
 whose set changed (late file, re-synced mismatch, deleted file, new anchor, a template that starts or
-stops resolving) and drops days with no sources. `ArchiveHistoryTiers` checks its days again on every
-template change, and the Android derived day reader (`RoomDerivedDayFiles`) uses the deriver's
+stops resolving) and drops days with no sources. `ArchiveHistoryTiers` checks a thing's days again when
+`TemplateRederive` finds a template change that touched one of its files, and the Android derived day reader (`RoomDerivedDayFiles`) uses the deriver's
 templates, so a reader never takes a day file built under another template. A day with no
 source is kept while a row of that thing awaits its index and may place itself there
 (`ThingDays.held`). A waiting row that kept a span holds the days of that span, one without a span

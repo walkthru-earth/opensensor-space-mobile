@@ -1,0 +1,133 @@
+package space.opensensor.data.history
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import space.opensensor.archive.ArchiveIndex
+import space.opensensor.model.BoardTemplate
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
+
+/**
+ * The one gate between served templates and History work, the same on Android and iOS. A template
+ * matters to History only through the template each indexed file resolves to, which every day
+ * signature names. [run] turns template changes into the things whose files resolve differently,
+ * [HistoryStartup] derives those things and [ArchiveHistoryTiers] rebuilds them through [generation].
+ *
+ * 1. Changes settle for [settle] and coalesce, so a burst of served templates costs one check.
+ * 2. When no indexed file names a desc or dict of a template added or removed, one indexed query, the
+ *    check ends there.
+ * 3. Otherwise each indexed file resolves over the templates before and after, and only the things with
+ *    a file whose resolved digest changed derive again. A desc that changes no file's resolution does no work.
+ * 4. After a check that derived, the next check waits for [cooldown]. A board that keeps a known dict
+ *    and rotates its desc therefore costs a bounded number of passes. Sync-driven derives never wait.
+ *
+ * [log] gets class names only, never paths or thing ids.
+ */
+@OptIn(FlowPreview::class)
+class TemplateRederive(
+    private val index: ArchiveIndex,
+    private val templates: FileTemplates = FileTemplates.SERVED,
+    private val settle: Duration = SETTLE,
+    private val cooldown: Cooldown = Cooldown(),
+    private val log: (String) -> Unit = {},
+) {
+    /** How many template checks re-derived each thing, so a tier upstream rebuilds only its own thing. */
+    private val generations = MutableStateFlow<Map<String, Long>>(emptyMap())
+
+    /** Counts up each time a template change changes what one of [thing]'s indexed files resolves to. */
+    fun generation(thing: String): Flow<Long> = generations.map { it[thing] ?: 0L }.distinctUntilChanged()
+
+    /**
+     * Watches the templates until cancelled and calls [derive] with the things a change touched. The
+     * templates held when it starts are the baseline, so a template that lands meanwhile counts as a change.
+     */
+    suspend fun run(derive: suspend (Set<String>) -> Unit) {
+        var seen = templates.changes.value
+        templates.changes.debounce(settle).conflate().collect {
+            delay(cooldown.remaining())
+            val now = templates.changes.value
+            val things = affected(seen, now)
+            seen = now
+            if (things.isEmpty()) return@collect
+            cooldown.fired()
+            generations.update { held -> held + things.associateWith { (held[it] ?: 0L) + 1 } }
+            derive(things)
+        }
+    }
+
+    /** The things with an indexed file that resolves to another template under [after] than under [before]. */
+    private suspend fun affected(before: List<BoardTemplate>, after: List<BoardTemplate>): Set<String> {
+        val changed = changed(before, after)
+        if (changed.isEmpty() || !named(changed)) return emptySet()
+        val was = templates.at(before)
+        val now = templates.at(after)
+        return try {
+            index.observeAll().first().filter { it.isIndexed && was.digestOf(it) != now.digestOf(it) }.mapTo(HashSet()) { it.thing }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The next sync-driven derive reads the live templates, so the days catch up then.
+            log("template scope failed: ${e::class.simpleName}")
+            emptySet()
+        }
+    }
+
+    /** True when an indexed file names a desc or dict of [changed], and when the index cannot say. */
+    private suspend fun named(changed: Set<BoardTemplate>): Boolean = try {
+        index.anyIndexedNames(changed.mapNotNullTo(HashSet()) { it.key.desc }, changed.mapTo(HashSet()) { it.dict })
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        log("template match failed: ${e::class.simpleName}")
+        true
+    }
+
+    /**
+     * How long template checks wait after one that derived. The first waits [first], each next one twice
+     * the last up to [longest], and after [quiet] with no derive it starts again at [first]. One per
+     * process, read only by [run]'s single collector.
+     */
+    class Cooldown(
+        private val first: Duration = 30.seconds,
+        private val longest: Duration = 10.minutes,
+        private val quiet: Duration = 10.minutes,
+        private val clock: TimeSource = TimeSource.Monotonic,
+    ) {
+        private var wait = Duration.ZERO
+        private var last: TimeMark? = null
+
+        /** How long the next check still waits, zero when it may run now. */
+        fun remaining(): Duration = last?.let { (wait - it.elapsedNow()).coerceAtLeast(Duration.ZERO) } ?: Duration.ZERO
+
+        /** Records a check that derived. */
+        fun fired() {
+            val since = last?.elapsedNow()
+            wait = if (since == null || since >= wait + quiet) first else (wait * 2).coerceAtMost(longest)
+            last = clock.markNow()
+        }
+    }
+
+    companion object {
+        /** How long template changes settle before one check, so a burst of served templates costs one. */
+        val SETTLE: Duration = 2.seconds
+
+        /** The templates held in only one of [before] and [after], the ones added or removed. */
+        private fun changed(before: List<BoardTemplate>, after: List<BoardTemplate>): Set<BoardTemplate> {
+            val was = before.associateBy { it.key }
+            val now = after.associateBy { it.key }
+            return (was - now.keys).values.toSet() + (now - was.keys).values
+        }
+    }
+}

@@ -19,6 +19,7 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveLayout
+import space.opensensor.archive.ArchiveRecord
 import space.opensensor.archive.ClockAnchor
 import space.opensensor.archive.IosArchiveStore
 import space.opensensor.archive.IosClockAnchorStore
@@ -34,6 +35,7 @@ import space.opensensor.data.history.HistoryStartup
 import space.opensensor.data.history.IosDailyDerivedStore
 import space.opensensor.data.history.IosFileTierStore
 import space.opensensor.data.history.LegacyFileCleanup
+import space.opensensor.data.history.TemplateRederive
 import space.opensensor.data.history.TimeEstimate
 import space.opensensor.data.history.UtcDayRange
 import space.opensensor.data.history.info
@@ -93,6 +95,7 @@ internal object IosArchive {
             clockAnchors = clockAnchors,
             tierStore = tierStore,
             shareScope = scope,
+            rederive = templateRederive,
             beforeBuild = { thing, files, anchors ->
                 derivedMutex.withLock {
                     try {
@@ -139,7 +142,10 @@ internal object IosArchive {
      * then [rebuildDerived], and again whenever a record waits for its index. [startIndexRepair]
      * starts it once.
      */
-    val historyStartup by lazy { HistoryStartup(history, janitor, feedBlocks, log = ::println) }
+    val historyStartup by lazy { HistoryStartup(history, janitor, feedBlocks, log = ::println, rederive = templateRederive) }
+
+    /** The one template gate of the process, shared by [tiers] and [historyStartup]. */
+    private val templateRederive by lazy { TemplateRederive(index, log = ::println) }
 
     private val derivedMutex = Mutex()
     private val base get() = store.finalRoot.substringBeforeLast('/')
@@ -297,14 +303,26 @@ internal object IosArchive {
         history.derivePassOf { emptied: Collection<String> ->
             derivedMutex.withLock {
                 val byThing = index.observeAll().first().groupBy { it.thing }
-                for (thing in byThing.keys + emptied) {
-                    val files = byThing[thing].orEmpty()
-                    val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(thing))
-                    derived.rebuild(thing, files, store, anchors, Clock.System.now().epochSeconds)
-                }
-                withContext(Dispatchers.IO) { derivedQuota.enforce() }
+                rebuild(byThing.keys + emptied, byThing)
             }
         }
+    }
+
+    /** Rebuilds the derived days of the things it is given, as one pass, after a template change touched them. */
+    private val rebuildThings: suspend (Collection<String>) -> Unit by lazy {
+        history.derivePassOf { things: Collection<String> ->
+            derivedMutex.withLock { rebuild(things, index.observeAll().first().groupBy { it.thing }) }
+        }
+    }
+
+    /** Called under [derivedMutex] inside a pass. */
+    private suspend fun rebuild(things: Collection<String>, byThing: Map<String, List<ArchiveRecord>>) {
+        for (thing in things) {
+            val files = byThing[thing].orEmpty()
+            val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(thing))
+            derived.rebuild(thing, files, store, anchors, Clock.System.now().epochSeconds)
+        }
+        withContext(Dispatchers.IO) { derivedQuota.enforce() }
     }
 
     /**
@@ -319,7 +337,7 @@ internal object IosArchive {
         // The tiers give memory back on a memory warning, the next History pass rebuilds them (#61).
         scope.trimOnMemoryPressure(tiers)
         // The startup sweep of #60, the feed block quota, the backfill and the derive, in the shared order.
-        historyStartup.start(scope) { rebuildDerived(emptyList()) }
+        historyStartup.start(scope, deriveThings = { rebuildThings(it) }) { rebuildDerived(emptyList()) }
         // Cached served templates register before a sensor's own copy is asked for.
         scope.launch {
             try {

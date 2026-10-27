@@ -33,6 +33,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /** The History pass order both phones share, over an in-memory archive and fake platform passes. */
@@ -388,22 +389,27 @@ class HistoryOrchestratorTest {
     }
 
     @Test
-    fun onlyATemplateThatAnIndexedFileNamesDerivesAgain() = runTest {
+    fun onlyAThingWhoseFileResolvesToAnotherTemplateDerivesAgain() = runTest {
         val dict = "ee".repeat(32)
         val desc = "ff".repeat(32)
+        val otherDict = "dd".repeat(32)
         index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict, templateSha256 = desc))
+        index.put(ArchiveRecord("other", "thing=other/day/b.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = otherDict))
         val (cache, _) = blocks { }
         val history = orchestrator()
         val served = ServedTemplates()
-        val startup = HistoryStartup(history, janitor { }, cache, templates = FileTemplates.over(served).changes)
+        val startup = HistoryStartup(history, janitor { }, cache, rederive = rederive(served))
         var derives = 0
+        val derived = ArrayList<Set<String>>()
         fun served(dict: String, desc: String) = served.add(coreS3Template.copy(key = TemplateKey(dict, desc)))
+
+        // Long enough for the settle time and any cooldown, so each step is checked on its own.
         fun settled() {
-            advanceTimeBy(HistoryStartup.TEMPLATE_SETTLE + 1.seconds)
+            advanceTimeBy(15.minutes)
             runCurrent()
         }
 
-        val job = startup.start(this) { history.derivePass { derives++ } }
+        val job = startup.start(this, deriveThings = { history.derivePass { derived += it } }) { history.derivePass { derives++ } }
         runCurrent()
         assertEquals(1, derives)
 
@@ -412,24 +418,69 @@ class HistoryOrchestratorTest {
             served("ab".repeat(32), i.toString(16).padStart(64, '0'))
             settled()
         }
-        assertEquals(1, derives, "templates no indexed file names derive nothing")
+        assertEquals(emptyList(), derived, "templates no indexed file names derive nothing")
 
         served(dict, desc)
         settled()
-        assertEquals(2, derives, "a template an indexed file names derives again")
+        assertEquals(listOf(setOf(thing)), derived, "a template an indexed file resolves to derives only its thing")
 
         served(dict, desc)
         settled()
-        assertEquals(2, derives, "a template already held changes nothing")
+        assertEquals(1, derived.size, "a template already held changes nothing")
 
-        // Half a second apart, closer than the settle time, as a board reconnecting in a loop would serve them.
+        // Fresh descs for the file's dict. The file still resolves by its own desc, so nothing derives.
         repeat(5) { i ->
             served(dict, "0$i".repeat(32))
             advanceTimeBy(500.milliseconds)
             runCurrent()
         }
         settled()
-        assertEquals(3, derives, "a burst of templates for the file's dict settles into one derive")
+        assertEquals(1, derived.size, "a desc that changes no file's resolution does no work")
+
+        served(otherDict, "0a".repeat(32))
+        settled()
+        assertEquals(listOf(setOf(thing), setOf("other")), derived, "the other thing's file now resolves by its dict")
+        assertEquals(1, derives, "a template change never runs the full derive")
         job.cancel()
     }
+
+    @Test
+    fun aBoardRotatingDescsForAKnownDictDerivesWithinTheCooldown() = runTest {
+        val dict = "ee".repeat(32)
+        // Its own desc is never served, so each fresh template of its dict changes what it resolves to.
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict, templateSha256 = "11".repeat(32)))
+        val (cache, _) = blocks { }
+        val history = orchestrator()
+        val served = ServedTemplates()
+        val startup = HistoryStartup(history, janitor { }, cache, rederive = rederive(served))
+        var derives = 0
+        fun serve(i: Int) = served.add(coreS3Template.copy(key = TemplateKey(dict, (0x100 + i).toString(16).padStart(64, '0'))))
+
+        val job = startup.start(this, deriveThings = { history.derivePass { derives++ } }) { }
+        runCurrent()
+
+        // 50 fresh valid templates naming the file's dict, 3 s apart, past the settle time each.
+        repeat(50) { i ->
+            serve(i)
+            advanceTimeBy(3.seconds)
+            runCurrent()
+        }
+        // 150 s. Derives at about 2 s, 32 s and 92 s, the next waits until 212 s.
+        assertEquals(3, derives, "the cooldown bounds the derives")
+
+        advanceTimeBy(5.minutes)
+        runCurrent()
+        assertEquals(4, derives, "the last template derives once the cooldown ends")
+
+        // Quiet for longer than the reset, so the next template derives after the settle time alone.
+        advanceTimeBy(15.minutes)
+        serve(50)
+        advanceTimeBy(TemplateRederive.SETTLE + 1.seconds)
+        runCurrent()
+        assertEquals(5, derives, "after a quiet spell the cooldown starts again from its first wait")
+        job.cancel()
+    }
+
+    private fun TestScope.rederive(served: ServedTemplates) =
+        TemplateRederive(index, FileTemplates.over(served), cooldown = TemplateRederive.Cooldown(clock = testScheduler.timeSource))
 }

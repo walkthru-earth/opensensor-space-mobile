@@ -1,6 +1,7 @@
 package space.opensensor.data.history
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +30,7 @@ import space.opensensor.data.history.parquet.ParquetWriter
 import space.opensensor.model.TemplateKey
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
+import kotlin.time.Duration
 
 /** The shared History sources over a fake archive: index repair, the row reader and the in-memory tiers. */
 class HistorySourcesTest {
@@ -381,7 +383,9 @@ class HistorySourcesTest {
         ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = templates).backfillAll()
         val indexed = index.get(r.key)!!
         assertEquals(unbundledDict to unbundledDesc, indexed.dictionarySha256 to indexed.templateSha256)
-        val tiers = ArchiveHistoryTiers(store, index, templates = templates)
+        val rederive = TemplateRederive(index, templates, settle = Duration.ZERO)
+        val tiers = ArchiveHistoryTiers(store, index, templates = templates, rederive = rederive)
+        val gate = CoroutineScope(Dispatchers.Default).launch { rederive.run { } }
 
         // One collection across the change, as a screen holds it. Its first value has no metrics, then the board serves.
         var before: Set<String>? = null
@@ -397,6 +401,7 @@ class HistorySourcesTest {
             }
         }
         assertTrue(AirMetrics.PM25.id !in before!!)
+        gate.cancel()
         assertTrue(AirMetrics.BOARD_TEMP.id in metrics)
         assertEquals(indexed, index.get(r.key))
     }

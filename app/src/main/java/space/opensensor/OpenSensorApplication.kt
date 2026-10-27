@@ -72,7 +72,7 @@ class OpenSensorApplication :
         // temps and stale partials and adopts orphan finals (#60), the feed block quota applies, then
         // old indexes backfill and History derives, and again whenever a record waits for its index.
         // Screen navigation only observes Room; syncs derive after newly archived files arrive.
-        historyStartup.start(appScope + Dispatchers.IO) { historyDeriver.deriveStale() }
+        historyStartup.start(appScope + Dispatchers.IO, deriveThings = { historyDeriver.deriveStale(it) }) { historyDeriver.deriveStale() }
         // Shared Compose screens read the first default locale. Make it the language `res/` chose.
         AppLanguage.alignDefault(this)
         // The basemap tile cache stays in cacheDir under its cap, set before any map runs (#61).
