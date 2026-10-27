@@ -18,6 +18,9 @@ sealed interface SetupStep {
     val id: String
     val skippable: Boolean
 
+    /** A required page keeps Next off until its fact is saved on the Thing, and Done waits for it. */
+    val required: Boolean get() = false
+
     /** Pages the user sees. [Permission] and [Pair] are not. */
     val isPage: Boolean get() = this !is Permission && this !is Pair
 
@@ -45,10 +48,14 @@ sealed interface SetupStep {
         override val skippable = false
     }
 
-    /** The sensor's H3 cell and country, through `DeviceLocationForm`. */
-    data object Location : SetupStep {
+    /**
+     * The Thing's H3 cell and country, through `DeviceLocationForm`. A [required] Location has no Skip.
+     * A fixed kind satisfies it with a saved `location.cell`, a moving kind will by declaring moving
+     * mobility instead of a pin. Country stays optional.
+     */
+    data class Location(override val required: Boolean) : SetupStep {
         override val id = "location"
-        override val skippable = true
+        override val skippable get() = !required
     }
 
     /** A group of `SET_CONFIG` keys from the `ConfigFields` table, named [id]. */
@@ -65,6 +72,9 @@ sealed interface SetupStep {
 
 /** The setup steps of each Thing kind the app knows. */
 object SetupFlows {
+    /** The board stays in one cell, so it cannot be set up without a saved location. */
+    val LOCATION = SetupStep.Location(required = true)
+
     /** The Wi-Fi page of the board, joined over Bluetooth, then Sync over Wi-Fi. */
     val WIFI = SetupStep.Fields("wifi", listOf(ConfigFields.WIFI_ON, ConfigFields.WIFI_SSID, ConfigFields.WIFI_PSK, ConfigFields.LAN_ON))
 
@@ -74,7 +84,7 @@ object SetupFlows {
         SetupStep.Find,
         SetupStep.Pair,
         SetupStep.Name,
-        SetupStep.Location,
+        LOCATION,
         SetupStep.Permission(UserAction.WIFI_ACTION),
         WIFI,
         SetupStep.Done,

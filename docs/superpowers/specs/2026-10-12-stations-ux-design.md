@@ -127,10 +127,10 @@ details" without a link). Pages above the current level pop themselves.
 
 New `:feature:setup`, full screen, no bottom bar, from "Add sensor" or "Finish setup".
 
-`FIND → NAME → LOCATION → WIFI → DONE`. Location and Wi-Fi can be skipped. Back goes one step,
+`FIND → NAME → LOCATION → WIFI → DONE`. Location is required and Wi-Fi can be skipped. Back goes one step,
 but stops at NAME after pairing (unpairing belongs to settings). Closing after pairing asks first,
 and the sensor stays added with `setupDone = false`. No step progress, location draft or password
-is persisted. Resuming opens at NAME and reconnects silently.
+is persisted. Resuming opens at LOCATION and reconnects silently.
 
 - **Find.** The BLE scanner moves out of `ScanViewModel` into an app scoped radio used only here.
   Rows already added carry "Added" and start a re-run. Below proto 3 fails with "Update firmware".
@@ -139,7 +139,8 @@ is persisted. Resuming opens at NAME and reconnects silently.
   `KnownDevice`, `KnownRecord`, `KnownSensor`) because the advertised name overwrites `name`. It is
   never sent in a frame, patch or log. Display name is `nickname ?: name`.
 - **Location.** `DeviceLocationForm(state, onAction)` extracted from `DeviceLocationCard`, shared by
-  the wizard and settings. Old firmware shows a one line note and Next.
+  the wizard and settings. Next waits for a saved `location.cell`, so firmware without location
+  provisioning cannot finish setup.
 - **Wi-Fi.** Join through `SET_CONFIG` over Bluetooth, then "Turn on Wi-Fi sync", which asks for
   local network and fetches the token on iOS (Android already holds one after pairing).
 - **Done.** The Station summary, "Warming up" until the first live reading.

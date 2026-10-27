@@ -55,7 +55,8 @@ class SetupControllerTest {
         val pages = SetupFlows.BOARD.filter { it.isPage }
         assertEquals(listOf("find", "name", "location", "wifi", "done"), pages.map { it.id })
         assertEquals(SetupFlows.BOARD, SetupFlows.of(OpenSensorBoardKind.id))
-        assertEquals(listOf(SetupStep.Location, SetupFlows.WIFI), pages.filter { it.skippable })
+        assertEquals(listOf(SetupFlows.WIFI), pages.filter { it.skippable })
+        assertEquals(listOf<SetupStep>(SetupFlows.LOCATION), pages.filter { it.required })
     }
 
     @Test
@@ -88,7 +89,7 @@ class SetupControllerTest {
         val port = FakePort()
         val c = paired(port)
         c.next()
-        assertEquals(SetupStep.Location, c.state.value.page)
+        assertEquals(SetupFlows.LOCATION, c.state.value.page)
         c.back()
         assertEquals(SetupStep.Name, c.state.value.page)
         c.back()
@@ -111,11 +112,41 @@ class SetupControllerTest {
     }
 
     @Test
-    fun locationAndWifiSkipToDoneWhichClearsPending() = runTest(UnconfinedTestDispatcher()) {
+    fun locationHasNoSkipAndNextWaitsForASavedCell() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = paired(port)
         c.next()
+        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        assertFalse(SetupFlows.LOCATION.skippable)
         c.skip()
+        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        assertFalse(c.state.value.canAdvance)
+        c.next()
+        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        c.onLocated(true)
+        c.onLocated(false)
+        c.next()
+        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        assertEquals(setOf("AA"), port.pending)
+    }
+
+    @Test
+    fun doneNeedsASavedLocation() = runTest(UnconfinedTestDispatcher()) {
+        val port = FakePort()
+        val c = paired(port)
+        c.next()
+        repeat(3) { c.skip() }
+        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        assertEquals(setOf("AA"), port.pending)
+    }
+
+    @Test
+    fun wifiSkipsToDoneOnceLocatedWhichClearsPending() = runTest(UnconfinedTestDispatcher()) {
+        val port = FakePort()
+        val c = paired(port)
+        c.next()
+        c.onLocated(true)
+        c.next()
         assertEquals(SetupFlows.WIFI, c.state.value.page)
         c.skip()
         assertEquals(SetupStep.Done, c.state.value.page)
@@ -165,13 +196,16 @@ class SetupControllerTest {
     }
 
     @Test
-    fun resumeOpensAtNameAndReconnectsSilently() = runTest(UnconfinedTestDispatcher()) {
+    fun resumeOpensAtLocationAndReconnectsSilently() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = controller(port, resume = "AA")
-        assertEquals(SetupStep.Name, c.state.value.page)
+        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        assertFalse(c.state.value.canAdvance)
         assertTrue("connect AA" in port.calls)
         port.links.getValue("AA").value = SetupLink.Unreachable
         assertNull(c.state.value.failure)
+        c.back()
+        assertEquals(SetupStep.Name, c.state.value.page)
         c.back()
         assertTrue(c.state.value.askClose)
     }
@@ -186,7 +220,7 @@ class SetupControllerTest {
         assertEquals(SetupStep.Name, c.state.value.page)
         c.setNickname("  Balcony  ")
         c.next()
-        assertEquals(SetupStep.Location, c.state.value.page)
+        assertEquals(SetupFlows.LOCATION, c.state.value.page)
         assertEquals("Balcony", port.nicknames["AA"])
         assertEquals("Balcony", c.state.value.displayName)
         assertEquals(listOf("saveNickname AA"), port.calls.filter { it.contains("AA") && !it.startsWith("connect") })

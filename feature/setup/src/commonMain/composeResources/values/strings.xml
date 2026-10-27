@@ -22,6 +22,7 @@
     <string name="setup_name_info">Stays on this phone. Leave it empty to use the sensor name.</string>
     <string name="setup_name_too_long">Up to 32 characters.</string>
     <string name="setup_location_title">Location</string>
+    <string name="setup_location_needed">Save a location to continue</string>
     <string name="setup_wifi_title">Wi-Fi</string>
     <string name="setup_waiting">Connecting to the sensor</string>
     <string name="setup_done_title">All set</string>

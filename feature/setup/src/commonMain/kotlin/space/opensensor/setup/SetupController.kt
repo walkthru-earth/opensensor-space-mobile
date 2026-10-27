@@ -67,10 +67,20 @@ data class SetupUiState(
     val paired: Boolean = false,
     val failure: SetupFailure? = null,
     val nickname: String = "",
+    /** The Thing holds a saved location that satisfies the required Location page. */
+    val located: Boolean = false,
     val askClose: Boolean = false,
     val closed: Boolean = false,
 ) {
     val nicknameValid: Boolean get() = nickname.trim().length <= SetupController.NICKNAME_MAX
+
+    /** Next is on unless this is a required page whose fact is not saved yet. */
+    val canAdvance: Boolean get() = nicknameValid && (!page.required || satisfied(page))
+
+    fun satisfied(step: SetupStep): Boolean = when (step) {
+        is SetupStep.Location -> located
+        else -> true
+    }
 
     /** Display name on Done, `nickname ?: name`. */
     val displayName: String? get() = nickname.trim().ifEmpty { null } ?: selected?.name
@@ -80,7 +90,8 @@ data class SetupUiState(
  * Walks [steps] for one sensor. Back goes one page but stops at Name once paired, since unpairing
  * belongs to settings. Closing after pairing asks first, and the sensor stays added with setup
  * pending. Nothing about the run is persisted besides the nickname and that flag, so a resumed run
- * ([resumeId]) opens at Name and reconnects silently.
+ * ([resumeId]) opens at the first required page, Location for the board, and reconnects silently.
+ * Done, which clears the flag, is reached only once every required page is satisfied.
  */
 class SetupController(
     private val scope: CoroutineScope,
@@ -98,7 +109,8 @@ class SetupController(
     init {
         if (resumeId != null) {
             val candidate = SetupCandidate(resumeId, resumeName, added = true)
-            _state.update { it.copy(page = SetupStep.Name, selected = candidate, paired = true) }
+            val page = pages.firstOrNull { it.required } ?: SetupStep.Name
+            _state.update { it.copy(page = page, selected = candidate, paired = true) }
             pair(candidate, silent = true)
         } else {
             nearbyJob = scope.launch { port.nearby.collect { list -> _state.update { it.copy(candidates = list) } } }
@@ -154,13 +166,18 @@ class SetupController(
         _state.update { it.copy(nickname = value.replace('\n', ' ').take(NICKNAME_MAX + 1)) }
     }
 
+    /** Whether the Thing holds a saved location, from the Location form's confirmed read or write. */
+    fun onLocated(located: Boolean) {
+        _state.update { it.copy(located = located) }
+    }
+
     /** The next page. On Name it saves the nickname first, a blank one shows the advertised name. */
     fun next() {
         val s = _state.value
+        if (!s.canAdvance) return
         when (s.page) {
             SetupStep.Find -> return
             SetupStep.Name -> {
-                if (!s.nicknameValid) return
                 val id = s.selected?.id ?: return
                 scope.launch {
                     port.saveNickname(id, s.nickname.trim().ifEmpty { null })
@@ -181,6 +198,7 @@ class SetupController(
     private fun advance() {
         val s = _state.value
         val next = pages.getOrNull(pages.indexOf(s.page) + 1) ?: return
+        if (next == SetupStep.Done && pages.any { it.required && !s.satisfied(it) }) return
         _state.update { it.copy(page = next) }
         if (next == SetupStep.Done) s.selected?.let { scope.launch { port.setPending(it.id, false) } }
     }

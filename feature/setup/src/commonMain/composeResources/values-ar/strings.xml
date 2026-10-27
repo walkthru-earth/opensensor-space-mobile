@@ -22,6 +22,7 @@
     <string name="setup_name_info">يبقى على هذا الهاتف. اتركه فارغًا لاستخدام اسم المستشعر.</string>
     <string name="setup_name_too_long">حتى 32 حرفًا.</string>
     <string name="setup_location_title">الموقع</string>
+    <string name="setup_location_needed">احفظ موقعًا للمتابعة</string>
     <string name="setup_wifi_title">Wi-Fi</string>
     <string name="setup_waiting">جارٍ الاتصال بالمستشعر</string>
     <string name="setup_done_title">اكتمل الإعداد</string>

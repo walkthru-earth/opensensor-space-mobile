@@ -154,7 +154,7 @@ class DeviceConfigController(
             location.value = if (config == null) {
                 DeviceLocationState(supported = false)
             } else {
-                DeviceLocationState(supported = true, draft = DeviceLocationDraft.from(config))
+                DeviceLocationState(supported = true, draft = DeviceLocationDraft.from(config), saved = config.hasCell())
             }
         } catch (e: CancellationException) {
             throw e
@@ -197,7 +197,11 @@ class DeviceConfigController(
                 val confirmed = source.writeLocation(patch)
                 val matches = confirmed != null && confirmed.cell.orEmpty() == draft.cell &&
                     confirmed.resolution == draft.resolution && confirmed.country.orEmpty() == draft.country
-                location.value = loc.copy(working = false, result = if (matches) DeviceLocationResult.SAVED else DeviceLocationResult.NOT_CONFIRMED)
+                location.value = loc.copy(
+                    working = false,
+                    result = if (matches) DeviceLocationResult.SAVED else DeviceLocationResult.NOT_CONFIRMED,
+                    saved = if (confirmed != null) confirmed.hasCell() else loc.saved,
+                )
             } catch (e: CancellationException) { throw e } catch (_: Exception) { location.value = loc.copy(working = false, result = DeviceLocationResult.FAILED) }
         }
     }

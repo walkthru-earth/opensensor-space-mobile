@@ -519,6 +519,33 @@ class DeviceConfigControllerTest {
     }
 
     @Test
+    fun onlyAConfirmedValidCellCountsAsSaved() = runTest {
+        val source = FakeSource()
+        source.locationAnswer = LocationConfig(cell = "", resolution = 5, country = "GH")
+        val c = controller(source)
+        assertFalse(c.state.value.location.saved)
+        c.acceptLocationCell("85283083fffffff", 5)
+        assertFalse(c.state.value.location.saved)
+        source.locationAnswer = LocationConfig(cell = "85283083fffffff", resolution = 5, cellResolution = 5, country = "")
+        c.saveLocation()
+        assertTrue(c.state.value.location.saved)
+        c.clearLocation()
+        assertTrue(c.state.value.location.saved)
+        source.locationAnswer = LocationConfig(cell = "", resolution = 5, country = "")
+        c.saveLocation()
+        assertFalse(c.state.value.location.saved)
+    }
+
+    @Test
+    fun aCellFinerThanTheMaximumOrBadHexIsNoLocation() {
+        assertTrue(LocationConfig(cell = "85283083fffffff", resolution = 8).hasCell())
+        assertFalse(LocationConfig(cell = "8928308280fffff", resolution = 5).hasCell())
+        assertFalse(LocationConfig(cell = "85283083fffffff", resolution = 5, cellResolution = 9).hasCell())
+        assertFalse(LocationConfig(cell = "nothex", resolution = 5).hasCell())
+        assertFalse(LocationConfig(cell = null, country = "GH").hasCell())
+    }
+
+    @Test
     fun unsupportedBusyOrFinerWithoutFreshFixCannotWriteLocation() = runTest {
         val old = FakeSource()
         val unsupported = controller(old)

@@ -79,6 +79,7 @@ import space.opensensor.setup.resources.setup_find_title
 import space.opensensor.setup.resources.setup_leave
 import space.opensensor.setup.resources.setup_leave_body
 import space.opensensor.setup.resources.setup_leave_title
+import space.opensensor.setup.resources.setup_location_needed
 import space.opensensor.setup.resources.setup_location_title
 import space.opensensor.setup.resources.setup_name_info
 import space.opensensor.setup.resources.setup_name_label
@@ -115,6 +116,9 @@ fun SetupScreen(
     LaunchedEffect(s.closed) { if (s.closed) onClose() }
     if (config != null) DeviceConfigEffects(config, snackbar)
     val configState = config?.state?.collectAsState()?.value
+    // Only the board's confirmed answer counts, never an unsaved draft.
+    val located = configState?.location?.saved == true
+    LaunchedEffect(located) { controller.onLocated(located) }
     if (s.askClose) {
         AlertDialog(
             onDismissRequest = controller::dismissClose,
@@ -151,7 +155,10 @@ fun SetupScreen(
             when (val page = s.page) {
                 SetupStep.Find -> findItems(s, controller, bluetooth)
                 SetupStep.Name -> item(key = "name") { NameCard(s, controller) }
-                SetupStep.Location -> configItem(configState) { state -> DeviceLocationForm(state, onConfigAction) }
+                is SetupStep.Location -> {
+                    configItem(configState) { state -> DeviceLocationForm(state, onConfigAction) }
+                    if (page.required && !s.located) item(key = "location-needed") { InfoNote(stringResource(Res.string.setup_location_needed)) }
+                }
                 is SetupStep.Fields -> configItem(configState) { state -> WifiForm(state, lanAccess, onConfigAction) }
                 SetupStep.Done -> item(key = "done") { DoneCard(s, onOpenSensor) }
                 is SetupStep.Permission, SetupStep.Pair -> Unit
@@ -163,7 +170,7 @@ fun SetupScreen(
 private fun pageTitle(page: SetupStep): StringResource = when (page) {
     SetupStep.Find -> Res.string.setup_title
     SetupStep.Name -> Res.string.setup_name_title
-    SetupStep.Location -> Res.string.setup_location_title
+    is SetupStep.Location -> Res.string.setup_location_title
     is SetupStep.Fields -> Res.string.setup_wifi_title
     SetupStep.Done -> Res.string.setup_done_title
     is SetupStep.Permission, SetupStep.Pair -> Res.string.setup_title
@@ -312,7 +319,7 @@ private fun SetupNav(s: SetupUiState, config: DeviceConfigUiState?, controller: 
         PillButton(
             stringResource(if (s.page == SetupStep.Done) Res.string.setup_close else Res.string.setup_next),
             onClick = controller::next,
-            enabled = s.nicknameValid && !busy,
+            enabled = s.canAdvance && !busy,
         )
     }
 }

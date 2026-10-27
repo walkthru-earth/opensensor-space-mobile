@@ -46,6 +46,8 @@ device, and nothing is asked at launch.
   with their own back arrow.
 - "Add your sensor" on Discover opens the Add sensor wizard over the My devices root, so closing it
   lands on My devices. A device screen that loses its session returns there too. Settings is reached only from the bottom bar.
+  The wizard's Location page has no Skip. Next waits until the sensor confirms a saved H3 cell, and a
+  setup left before Done resumes at Location.
 - Each thing action has one home. Today holds Smart Sync, its Stop, Reconnect or Disconnect in the
   header, Forget in the header menu, and Debug at Developer. Files holds the archive list and Sync all. Device holds the sensor
   settings, Wi-Fi access, paired phones and Auto-sync. Every thing page reads one
