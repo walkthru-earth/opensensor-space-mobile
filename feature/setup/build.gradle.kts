@@ -19,9 +19,15 @@ kotlin {
             api(project(":core:thing"))
             api(project(":ui:permissions"))
             implementation(libs.kotlinx.coroutines.core)
+            // System back, the Android gesture or the iOS edge swipe, asks before leaving (NavigationBackHandler).
+            implementation(libs.jetbrains.navigationevent.compose)
         }
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
+        }
+        // The back and saved-location tests render the screen headless on the iOS simulator (verifyIos).
+        iosTest.dependencies {
+            implementation(libs.compose.ui.test)
         }
     }
 }

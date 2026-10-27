@@ -27,6 +27,9 @@ sealed interface SetupLink {
 
     data object Unreachable : SetupLink
 
+    /** The link owner refused the sensor's INFO for a `proto` below 3, before any known row. */
+    data object UpdateFirmware : SetupLink
+
     /** Bluetooth is off or not allowed. */
     data object NoBluetooth : SetupLink
 }
@@ -147,6 +150,7 @@ class SetupController(
             is SetupLink.Ready -> if ((link.protocol ?: 0) < DeviceGatt.PROTOCOL_VERSION) SetupFailure.UPDATE_FIRMWARE else null
             SetupLink.PairingRefused -> SetupFailure.PAIRING
             SetupLink.Unreachable -> SetupFailure.UNREACHABLE
+            SetupLink.UpdateFirmware -> SetupFailure.UPDATE_FIRMWARE
             SetupLink.NoBluetooth -> SetupFailure.BLUETOOTH
         }
         // A resumed run is already on Name and the forms wait for the link, so a silent failure stays quiet.

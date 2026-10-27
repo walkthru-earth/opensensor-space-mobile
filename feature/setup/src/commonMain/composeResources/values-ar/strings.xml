@@ -28,7 +28,7 @@
     <string name="setup_done_title">اكتمل الإعداد</string>
     <string name="setup_done_open">افتح المستشعر</string>
     <string name="setup_leave_title">مغادرة الإعداد؟</string>
-    <string name="setup_leave_body">يبقى المستشعر مضافًا. أكمل الإعداد لاحقًا من بطاقته.</string>
+    <string name="setup_leave_body">يبقى المستشعر مضافًا. اضغط أضف مستشعرك مرة أخرى للإكمال.</string>
     <string name="setup_leave">مغادرة</string>
     <string name="setup_stay">بقاء</string>
 </resources>

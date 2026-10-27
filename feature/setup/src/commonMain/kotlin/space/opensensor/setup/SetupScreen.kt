@@ -41,6 +41,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.AppIcons
@@ -114,6 +117,13 @@ fun SetupScreen(
 ) {
     val s by controller.state.collectAsState()
     LaunchedEffect(s.closed) { if (s.closed) onClose() }
+    // System back, the Android gesture or the iOS edge swipe, does what the toolbar arrow does. After
+    // pairing it asks before leaving. It wins over the shell's NavDisplay, the newest handler runs first.
+    NavigationBackHandler(
+        state = rememberNavigationEventState(NavigationEventInfo.None),
+        isBackEnabled = !s.closed,
+        onBackCompleted = controller::requestClose,
+    )
     if (config != null) DeviceConfigEffects(config, snackbar)
     val configState = config?.state?.collectAsState()?.value
     // Only the board's confirmed answer counts, never an unsaved draft.

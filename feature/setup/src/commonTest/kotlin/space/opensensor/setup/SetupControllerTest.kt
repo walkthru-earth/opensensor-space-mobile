@@ -17,7 +17,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private class FakePort : SetupPort {
+internal class FakePort : SetupPort {
     override val nearby = MutableStateFlow(listOf(SetupCandidate("AA", "OS-1", added = false), SetupCandidate("BB", "OS-2", added = true)))
     val links = mutableMapOf<String, MutableStateFlow<SetupLink>>()
     val calls = mutableListOf<String>()
@@ -158,6 +158,21 @@ class SetupControllerTest {
     }
 
     @Test
+    fun losingTheSavedLocationOnWifiKeepsDoneClosed() = runTest(UnconfinedTestDispatcher()) {
+        val port = FakePort()
+        val c = paired(port)
+        c.next()
+        c.onLocated(true)
+        c.next()
+        assertEquals(SetupFlows.WIFI, c.state.value.page)
+        // The board's cell went away after Location, so Wi-Fi Skip must not reach Done.
+        c.onLocated(false)
+        c.skip()
+        assertEquals(SetupFlows.WIFI, c.state.value.page)
+        assertEquals(setOf("AA"), port.pending)
+    }
+
+    @Test
     fun oldFirmwareFailsWithUpdateFirmware() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = controller(port)
@@ -211,7 +226,7 @@ class SetupControllerTest {
     }
 
     @Test
-    fun nicknameIsOneTo32CharactersAndOnlyReachesTheStore() = runTest(UnconfinedTestDispatcher()) {
+    fun nicknameIsAtMost32CharactersAndOnlyReachesTheStore() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = paired(port)
         c.setNickname("x".repeat(40))

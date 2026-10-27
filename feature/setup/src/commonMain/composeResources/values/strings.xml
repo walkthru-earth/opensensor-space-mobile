@@ -28,7 +28,7 @@
     <string name="setup_done_title">All set</string>
     <string name="setup_done_open">Open sensor</string>
     <string name="setup_leave_title">Leave setup?</string>
-    <string name="setup_leave_body">The sensor stays added. Finish setup later from its card.</string>
+    <string name="setup_leave_body">The sensor stays added. Tap Add your sensor again to finish.</string>
     <string name="setup_leave">Leave</string>
     <string name="setup_stay">Stay</string>
 </resources>

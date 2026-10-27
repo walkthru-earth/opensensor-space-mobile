@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SyncWireTest {
     private val wire = SyncWire()
@@ -57,6 +58,9 @@ class SyncWireTest {
         assertNull(wire.identity(json.replace("AABBCCDDEEFF", "invalid")))
         assertNull(wire.identity("{}"))
         assertNull(wire.identity(json.replace("\"proto\":3", "\"proto\":2")), "proto 2 needs a firmware update")
+        assertTrue(wire.outdated(json.replace("\"proto\":3", "\"proto\":2")))
+        assertFalse(wire.outdated(json))
+        assertFalse(wire.outdated("not json"))
     }
 
     @Test fun thingIdAllowsDotButNoPathTraversal() {

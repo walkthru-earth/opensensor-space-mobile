@@ -552,7 +552,7 @@ class DeviceLinkOwner @Inject constructor(
         when (val cause = e.disconnectCause) {
             is DisconnectCause.UpdateFirmware -> {
                 Log.w(TAG, "firmware update required (proto ${cause.reported})")
-                connectionFailure.value = "firmware update required"
+                connectionFailure.value = BleConnectionFailure.FIRMWARE_UPDATE_MESSAGE
                 _events.tryEmit(DeviceEvent.Error(DeviceMessage.FirmwareUpdateRequired(cause.reported, cause.required)))
             }
             is DisconnectCause.FramingViolation -> {

@@ -95,12 +95,7 @@ class SetupViewModel @AssistedInject constructor(
             emitAll(
                 combine(facade.connectionState, facade.info) { state, info ->
                     if (state is ConnectionState.Bonding) bonding = true
-                    when (state) {
-                        is ConnectionState.Ready -> if (info == null) SetupLink.Connecting else SetupLink.Ready(info.proto)
-                        is ConnectionState.Failed ->
-                            if (bonding || BleConnectionFailure.needsPairingRepair(state)) SetupLink.PairingRefused else SetupLink.Unreachable
-                        else -> SetupLink.Connecting
-                    }
+                    setupLink(state, info?.proto, info != null, bonding)
                 }.distinctUntilChanged(),
             )
         }
@@ -124,4 +119,18 @@ class SetupViewModel @AssistedInject constructor(
     private companion object {
         const val TAG = "SetupViewModel"
     }
+}
+
+/**
+ * What the wizard sees of one Android link. The proto gate fails the link before INFO is kept, so old
+ * firmware shows as [SetupLink.UpdateFirmware] rather than as an unreachable sensor.
+ */
+internal fun setupLink(state: ConnectionState, proto: Int?, hasInfo: Boolean, bonding: Boolean): SetupLink = when (state) {
+    is ConnectionState.Ready -> if (!hasInfo) SetupLink.Connecting else SetupLink.Ready(proto)
+    is ConnectionState.Failed -> when {
+        BleConnectionFailure.needsFirmwareUpdate(state) -> SetupLink.UpdateFirmware
+        bonding || BleConnectionFailure.needsPairingRepair(state) -> SetupLink.PairingRefused
+        else -> SetupLink.Unreachable
+    }
+    else -> SetupLink.Connecting
 }
