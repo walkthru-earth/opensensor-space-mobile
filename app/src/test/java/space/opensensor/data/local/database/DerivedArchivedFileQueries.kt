@@ -1,7 +1,9 @@
 package space.opensensor.data.local.database
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import space.opensensor.data.archive.toRecord
 
 /**
  * Host fakes of [ArchivedFileDao] implement this instead, so the thing-scoped and aggregate
@@ -31,6 +33,9 @@ interface DerivedArchivedFileQueries : ArchivedFileDao {
             ThingArchiveGlance(thing, list.size, list.maxOfOrNull { it.syncedAtEpochMs }, list.mapNotNull { it.lastUtcNs }.maxOrNull())
         }
     }
+
+    override suspend fun anyIndexedNames(descs: List<String>, dicts: List<String>, pinned: List<String>): Boolean =
+        observeAll().first().any { it.toRecord().mayResolveAnew(descs.toSet(), dicts.toSet(), pinned.toSet()) }
 
     override fun observeAnyNeverIndexed(): Flow<Boolean> = observeAll().map { rows -> rows.any { it.indexedAtEpochMs == null } }
 

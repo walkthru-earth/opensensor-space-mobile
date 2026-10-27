@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -31,8 +32,10 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * from the verified, indexed telemetry files on that day's timeline, through the shared [Aggregator],
  * keeping the buckets that start inside the day.
  *
- * Each day is cached in memory by its source signature (file name, CRC and estimate), so a new file
- * rebuilds only its day and an unchanged day costs one string comparison. The cache is a least
+ * Each day is cached in memory by its source signature (file name, CRC, estimate and the template the
+ * file resolves to), so a new file or a newly served template rebuilds only its days and an unchanged
+ * day costs one string comparison. A thing's days are checked again when [rederive] finds that a
+ * template change touched one of its files, settled and with a cooldown. The cache is a least
  * recently used map within [budgetBytes] of estimated size (#61), and [trim] gives memory back on
  * [MemoryPressure]. Behind it the [tierStore] keeps each day on disk under the same signature, so a
  * new process or an evicted day reads its tiers without decoding Parquet (#63). Only a day missing
@@ -58,6 +61,8 @@ class ArchiveHistoryTiers(
     private val afterBuild: suspend () -> Unit = {},
     /** Resolves each file's board template, so its metrics read with that template's gates and units. */
     private val templates: FileTemplates = FileTemplates.SERVED,
+    /** The shared template gate, null where templates never change while this reader lives. */
+    private val rederive: TemplateRederive? = null,
 ) : HistoryTiers,
     MemoryTrimmable {
     internal class Day(val signature: String, val buckets: DayTiers, val cacheable: Boolean = true)
@@ -66,6 +71,8 @@ class ArchiveHistoryTiers(
     private data class Sources(
         val records: List<ArchiveRecord>,
         val days: Map<Long, List<ArchiveRecord>>,
+        /** Each day's [signature], so a template change that alters none of them builds nothing. */
+        val signatures: Map<Long, String>,
         val anchors: Map<String, TimeEstimate.Anchor>,
         /** Days kept in the store while a record waits for its index, see [ThingDays.held]. */
         val held: ThingDays.Held = ThingDays.Held.NONE,
@@ -132,7 +139,7 @@ class ArchiveHistoryTiers(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun upstream(thing: String): Flow<Thing> = index.observeThing(thing)
+    private fun upstream(thing: String): Flow<Thing> = (rederive?.let { gate -> combine(index.observeThing(thing), gate.generation(thing)) { records, _ -> records } } ?: index.observeThing(thing))
         .map { records -> sources(thing, records) }
         .distinctUntilChanged()
         .mapLatest { sources -> build(thing, sources) }
@@ -144,7 +151,7 @@ class ArchiveHistoryTiers(
         // One pass over the thing for every day, in the timeline order the pass reads them (#63).
         val days = ThingDays.sourcesByDay(own) { it }
         val held = ThingDays.held(records.filter { it.thing == thing })
-        return Sources(own, days, TimeEstimate.anchors(own.map { it.info() }, clockAnchors.anchors(thing)), held)
+        return Sources(own, days, days.mapValues { (_, files) -> signature(files, templates) }, TimeEstimate.anchors(own.map { it.info() }, clockAnchors.anchors(thing)), held)
     }
 
     private suspend fun build(thing: String, sources: Sources): Thing {
@@ -152,7 +159,7 @@ class ArchiveHistoryTiers(
         val built = mutex.withLock {
             val out = HashMap<Long, Summary>()
             for ((day, files) in sources.days) {
-                val sig = signature(files)
+                val sig = sources.signatures.getValue(day)
                 out[day] = summary(sig, loadDay(thing, day, files, sources.anchors, sig))
             }
             // A day that lost every source while a waiting record holds it shows its saved tiers (ThingDays.kept).
@@ -232,10 +239,19 @@ class ArchiveHistoryTiers(
             return bytes
         }
 
-        /** The identity of one day's sources, sorted `name:crc32[:est<anchor>:<first>]` lines (the derive signature without the hash). */
-        fun signature(files: List<ArchiveRecord>): String = files
-            .map { "${it.name}:${it.crc32}" + (if (it.hasEstimatedUtc) ":est${it.estAnchorFile}:${it.estFirstUtcNs}" else "") }
+        /** The identity of one day's sources, sorted [sourceLine]s (the derive signature without the hash). */
+        fun signature(files: List<ArchiveRecord>, templates: FileTemplates): String = files
+            .map { sourceLine(it, templates) }
             .sorted()
             .joinToString("\n")
+
+        /**
+         * One source of a day signature on both phones, `name:crc32[:est<anchor>:<first>]:t<template>`.
+         * The template is [FileTemplates.digestOf], `-` when none resolves, so a template served after the
+         * file was indexed rebuilds the file's days.
+         */
+        fun sourceLine(file: ArchiveRecord, templates: FileTemplates): String =
+            "${file.name}:${file.crc32}" + (if (file.hasEstimatedUtc) ":est${file.estAnchorFile}:${file.estFirstUtcNs}" else "") +
+                ":t${templates.digestOf(file) ?: "-"}"
     }
 }

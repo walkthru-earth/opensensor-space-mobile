@@ -38,6 +38,9 @@ data class ArchiveRecord(
     val estFirstUtcNs: Long? = null,
     val estLastUtcNs: Long? = null,
     val estAnchorFile: String? = null,
+    /** The footer `dictionary.sha256` and `template.sha256`, index columns. History resolves the file's template from them at each derive. */
+    val dictionarySha256: String? = null,
+    val templateSha256: String? = null,
 ) {
     val key: ArchiveKey get() = ArchiveKey(thing, name)
 
@@ -49,6 +52,19 @@ data class ArchiveRecord(
      * failed index is not waiting, it already has its answer.
      */
     val awaitsIndex: Boolean get() = indexedAtEpochMs == null
+
+    /**
+     * True when a template change could change what this indexed record resolves to. Its footer names
+     * one of [descs], or it names one of [dicts] and its own desc is not one of [pinned], the [pin]s
+     * that resolve by desc before and after the change. `ArchivedFileDao.anyIndexedNames` is the same
+     * test in SQL.
+     */
+    fun mayResolveAnew(descs: Set<String>, dicts: Set<String>, pinned: Set<String>): Boolean {
+        if (!isIndexed) return false
+        if (templateSha256 in descs) return true
+        val dict = dictionarySha256 ?: return false
+        return dict in dicts && templateSha256?.let { pin(it, dict) } !in pinned
+    }
 
     /** Thing data, the only purpose history reads. */
     val isTelemetry: Boolean get() = purpose == null || purpose == TELEMETRY
@@ -82,20 +98,11 @@ data class ArchiveRecord(
         return last >= fromNs && first < toNs
     }
 
-    /**
-     * Indexed without error but with no UTC rows, which is all an index written before
-     * [INDEX_LAYOUT] 2 could give a `*_utc_us` file. Such a record is indexed again once.
-     */
-    val needsUtcReindex: Boolean get() = isIndexed && (utcRows ?: 0L) == 0L
-
     companion object {
         const val TELEMETRY: String = "telemetry"
 
-        /**
-         * The index layout this build writes. 2 reads `event_time_utc_us` (CoreS3 v6.12, Waveshare
-         * v2.6). An index from layout 1 knew only `event_time_utc_ns`, so a newer file got no UTC rows.
-         */
-        const val INDEX_LAYOUT: Int = 2
+        /** A footer that resolves by its own [desc] to a template of [dict], as [mayResolveAnew] reads it. */
+        fun pin(desc: String, dict: String): String = "$desc:$dict"
 
         /** The order [ArchiveIndex.timeline] returns, by real or estimated first time, unplaced last. */
         val TIMELINE_ORDER: Comparator<ArchiveRecord> = compareBy(nullsLast()) { it.timelineFirstNs }

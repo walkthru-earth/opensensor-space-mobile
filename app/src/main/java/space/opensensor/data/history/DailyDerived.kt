@@ -65,13 +65,20 @@ class DerivedStore(
 /**
  * The Day view's derived files on Android (#63). A day file is handed out only when `derived_day`
  * records it under the signature of exactly the sources the view would read, so a late file or a new
- * time estimate sends the view back to the raw files until the next derive pass.
+ * time estimate sends the view back to the raw files until the next derive pass. [templates] must be the
+ * deriver's, since each signature names the template a file resolves to.
  */
 @Singleton
-class RoomDerivedDayFiles @Inject constructor(private val store: DerivedStore, private val dayDao: DerivedDayDao) : DerivedDayFiles {
+class RoomDerivedDayFiles internal constructor(
+    private val store: DerivedStore,
+    private val dayDao: DerivedDayDao,
+    private val templates: FileTemplates,
+) : DerivedDayFiles {
+    @Inject constructor(store: DerivedStore, dayDao: DerivedDayDao) : this(store, dayDao, FileTemplates.SERVED)
+
     override suspend fun open(thing: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): LocalRangeSource? {
         val day = dayDao.get(thing, epochDay) ?: return null
-        val signature = HistoryDeriver.signatureOf(sources)
+        val signature = HistoryDeriver.signatureOf(sources, templates)
         if (day.dailyFile == null || day.sourceSignature != signature) return null
         return synchronized(store.commitLock) {
             val manifest = store.manifestFile(thing, epochDay)

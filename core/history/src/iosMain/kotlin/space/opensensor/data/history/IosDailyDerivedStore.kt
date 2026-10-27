@@ -114,7 +114,7 @@ class IosDailyDerivedStore(
                     }
                     val result = pass.daily
                     if (pass.failedSources.isEmpty()) {
-                        tierStore.save(thing, day, ArchiveHistoryTiers.signature(sources), TierStore.fromBuckets(pass.buckets))
+                        tierStore.save(thing, day, ArchiveHistoryTiers.signature(sources, templates), TierStore.fromBuckets(pass.buckets))
                     }
                     pass.dailyError?.let { throw it }
                     if (result == null) {
@@ -163,7 +163,7 @@ class IosDailyDerivedStore(
             }
         }
 
-    /** The identity of a day's build: the builder, completeness, and every source with the anchor that dates it. */
+    /** The identity of a day's build: the builder, completeness, and every source with the anchor that dates it and the template it resolves to. */
     private fun signature(sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>, complete: Boolean): String {
         val text = buildString {
             append("derive-cache-v3:${DailyParquetBuilder.BUILDER}:$complete\n")
@@ -173,6 +173,7 @@ class IosDailyDerivedStore(
                     val anchor = anchors[source.bootId]
                     append(":est${anchor?.boot}:${anchor?.utcNs}:${anchor?.monoUs}")
                 }
+                append(":t${templates.digestOf(source) ?: "-"}")
                 append('\n')
             }
         }

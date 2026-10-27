@@ -1,6 +1,7 @@
 package space.opensensor.data.history
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,8 +29,10 @@ import space.opensensor.data.history.parquet.ParquetWriter
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.family.air.EpaPm25Correction
+import space.opensensor.model.TemplateKey
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
+import kotlin.time.Duration
 
 /** The shared History sources over a fake archive: index repair, the row reader and the in-memory tiers. */
 class HistorySourcesTest {
@@ -352,9 +355,61 @@ class HistorySourcesTest {
     fun signatureIgnoresOrderAndCarriesTheEstimate() {
         val a = record("a", 1)
         val b = record("b", 2)
-        assertEquals(ArchiveHistoryTiers.signature(listOf(a, b)), ArchiveHistoryTiers.signature(listOf(b, a)))
+        assertEquals(ArchiveHistoryTiers.signature(listOf(a, b), FileTemplates.BUNDLED), ArchiveHistoryTiers.signature(listOf(b, a), FileTemplates.BUNDLED))
         val est = b.copy(indexedAtEpochMs = 1, rows = 1, utcRows = 0, estFirstUtcNs = 5, estLastUtcNs = 6, estAnchorFile = "a")
-        assertTrue(ArchiveHistoryTiers.signature(listOf(a, b)) != ArchiveHistoryTiers.signature(listOf(a, est)))
+        assertTrue(ArchiveHistoryTiers.signature(listOf(a, b), FileTemplates.BUNDLED) != ArchiveHistoryTiers.signature(listOf(a, est), FileTemplates.BUNDLED))
+    }
+
+    private val unbundledDict = "ab".repeat(32)
+    private val unbundledDesc = "cd".repeat(32)
+    private val unbundled = coreS3Template.copy(key = TemplateKey(unbundledDict, unbundledDesc))
+
+    @Test
+    fun signatureNamesTheTemplateTheFileResolvesToNow() {
+        val served = ServedTemplates()
+        val templates = FileTemplates.over(served)
+        val file = record("a").copy(dictionarySha256 = unbundledDict, templateSha256 = unbundledDesc)
+        val before = ArchiveHistoryTiers.signature(listOf(file), templates)
+        served.add(coreS3Template.copy(key = TemplateKey("ef".repeat(32), "01".repeat(32))))
+        assertEquals("another board's template changes nothing", before, ArchiveHistoryTiers.signature(listOf(file), templates))
+        served.add(unbundled)
+        assertTrue(before != ArchiveHistoryTiers.signature(listOf(file), templates))
+    }
+
+    /** A file indexed before its board served its template shows metrics once it does, with no index pass. */
+    @Test
+    fun aTemplateServedAfterTheDayWasBuiltRebuildsItsMetrics() = runTest {
+        val served = ServedTemplates()
+        val templates = FileTemplates.over(served)
+        val store = Store()
+        val index = Index()
+        val r = record("thing=$thing/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        store.files[r.key] = withCoreS3Dict(board, unbundledDesc, unbundledDict)
+        index.put(r)
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = templates).backfillAll()
+        val indexed = index.get(r.key)!!
+        assertEquals(unbundledDict to unbundledDesc, indexed.dictionarySha256 to indexed.templateSha256)
+        val rederive = TemplateRederive(index, templates, settle = Duration.ZERO)
+        val tiers = ArchiveHistoryTiers(store, index, templates = templates, rederive = rederive)
+        val gate = CoroutineScope(Dispatchers.Default).launch { rederive.run { true } }
+
+        // One collection across the change, as a screen holds it. Its first value has no metrics, then the board serves.
+        var before: Set<String>? = null
+        val metrics = withContext(Dispatchers.Default) {
+            withTimeout(10_000) {
+                tiers.observeMetricsWithData(thing).first { now ->
+                    if (before == null) {
+                        before = now
+                        served.add(unbundled)
+                    }
+                    AirMetrics.PM25.id in now
+                }
+            }
+        }
+        assertTrue(AirMetrics.PM25.id !in before!!)
+        gate.cancel()
+        assertTrue(AirMetrics.BOARD_TEMP.id in metrics)
+        assertEquals(indexed, index.get(r.key))
     }
 
     /**
