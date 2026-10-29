@@ -75,17 +75,16 @@ object SetupFlows {
     /** The board stays in one cell, so it cannot be set up without a saved location. */
     val LOCATION = SetupStep.Location(required = true)
 
-    /** The Wi-Fi page of the board, joined over Bluetooth, then Sync over Wi-Fi. */
-    val WIFI = SetupStep.Fields("wifi", listOf(ConfigFields.WIFI_ON, ConfigFields.WIFI_SSID, ConfigFields.WIFI_PSK, ConfigFields.LAN_ON))
+    /** The Wi-Fi page of the board, joined over Bluetooth. Wi-Fi sync and its token follow on their own. */
+    val WIFI = SetupStep.Fields("wifi", listOf(ConfigFields.WIFI_ON, ConfigFields.WIFI_SSID, ConfigFields.WIFI_PSK))
 
-    /** `FIND → NAME → LOCATION → WIFI → DONE`, with Bluetooth asked for from Find and local network from Turn on Wi-Fi sync. */
+    /** `FIND → NAME → LOCATION → WIFI → DONE`, with Bluetooth asked for from Find. Setup never asks for local network. */
     val BOARD: List<SetupStep> = listOf(
         SetupStep.Permission(UserAction.FIND_SENSORS),
         SetupStep.Find,
         SetupStep.Pair,
         SetupStep.Name,
         LOCATION,
-        SetupStep.Permission(UserAction.WIFI_ACTION),
         WIFI,
         SetupStep.Done,
     )

@@ -32,8 +32,8 @@ PERMISSION_MISSING or NO_ADAPTER) before any Bluetooth open. Connect and collect
 A LAN connect refused with EPERM, the Local Network permission refusal, is the same
 `Unavailable(PERMISSION_MISSING)` (`SocketErrors.connectException`), never a retried UNREACHABLE.
 
-`TransportPreference.AUTO` is the rule above; `GET_TOKEN` and *Fetch token* force BLE. Any LAN
-connection failure falls back to BLE with a snackbar. After connection, INFO must pass
+`TransportPreference.AUTO` is the rule above; `GET_TOKEN` and the Developer *Fetch token* force BLE. Any LAN
+connection failure falls back to BLE with no message, the cause goes to the diagnostics log. After connection, INFO must pass
 `DeviceContinuityPolicy` before identity is persisted or files collected; a mismatch closes the
 attempt and surfaces an error. Enrollment stays keyed by the Bluetooth address on both pipes.
 The [canonical firmware contract](../../opensensor-space-firmware/docs/shared/ble-sync-protocol.md) owns the UUIDs,
@@ -233,11 +233,10 @@ Re-provision in this order on the Device settings page.
 2. Connect from My devices, then use Paired phones, Clear (`ble.clear_bonds=1`), and pair again
    with the code on the display or `<dev pin>`.
 3. Bluetooth pairing, the mode and PIN if they should differ from the default, then Restart.
-4. Find networks and Join. Sync over Wi-Fi stays on unless the owner turns it off.
-5. Get Wi-Fi token. If the phone still holds the old token, the first `OSS1` handshake fails with
-   `ERROR` 14 and the stored token is cleared. On Android `LanTokenPolicy` clears it and the next
-   bonded BLE session fetches the new one. On iOS the Keychain token is cleared and the new one
-   comes only when the owner taps Get Wi-Fi token again.
+4. Find networks and Join. Sync over Wi-Fi comes back on by itself, see below.
+5. Nothing to do for the Wi-Fi token. If the phone still holds the old token, the first `OSS1`
+   handshake fails with `ERROR` 14 and the stored token is cleared (`LanTokenPolicy`, Android
+   Room and iOS Keychain alike). The next Bluetooth connection fetches the new one quietly.
 6. Particle sensor sticker on Waveshare, which sends vendor, model, serial and the batch choice.
 7. Device location, with Use phone location or a chosen cell.
 
@@ -252,6 +251,23 @@ replacement have **not been verified on a phone**. Measured runs remain in the
 [CoreS3 bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#phone-over-lan-and-ble-oneplus-7-pro-android-16);
 other boards need their own records.
 
+## Automatic Wi-Fi sync and token
+
+Below the Developer level the owner never sees the token or the Sync over Wi-Fi switch. Both
+phones run the same shared rules (`LanTokenPolicy`, `LanAutoEnable`) once per Bluetooth connection.
+
+- **Token.** A connection over Bluetooth with protocol 3 or later and no stored token sends
+  `GET_TOKEN` and stores the answer, with no message. A refused or timed out `GET_TOKEN`, or a
+  full client pool, is logged and tried again on the next connection. A sensor reset (a new
+  thing generation) clears the old token and the same connection fetches the new one.
+- **Wi-Fi sync on.** A sensor that reports `lan.on=0` gets `SET_CONFIG lan.on=1` once
+  (`LanAutoEnable`, `DeviceSession.enableLanOnce`). Old firmware without the field is left alone.
+  At Developer the switch is shown and its state is respected, so a Developer may keep it off.
+- **No prompts.** None of this browses mDNS. The Local Network prompt comes only from the Scan
+  tap on My devices or the Developer Allow button. A background run never asks for it.
+- **Developer.** The Sync over Wi-Fi card, the no-token tag on My devices, Fetch token and
+  Rotate token stay on the Device page.
+
 ## LAN token lifecycle
 
 `LanTokenPolicy` (pure, unit-tested). `DeviceLinkOwner` clears the stored token whenever `invalidatesToken(cause)` holds for a LAN close. The clear is one conditional update on the ciphertext that link authenticated with, so a token renewed meanwhile survives. A clear, not only a stale mark, because a stored token is never fetched again.
@@ -263,7 +279,7 @@ stateDiagram-v2
   Stored --> Stored: LAN HELLO ok
   Stored --> Stale: LAN ERROR 14 or BYE 3 (refused) → lanToken cleared
   Stored --> Stale: LAN BYE 10 (rotated), at the handshake or mid-session → lanToken cleared
-  Stale --> Stored: Android next BLE session refetches, snackbar LanTokenRenewed. iOS Get Wi-Fi token
+  Stale --> Stored: next BLE session refetches quietly, Android and iOS
   Stored --> Stale: unreadable encrypted value → token + port cleared
   Stored --> Stale: verified BLE thing-generation change → token + port cleared
   Stored --> None: Forget device / deliberate Rotate token

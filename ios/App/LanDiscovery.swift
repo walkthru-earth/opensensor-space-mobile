@@ -136,7 +136,14 @@ final class LanDiscovery {
         return connect(name: name, onFailure: onFailure)
     }
 
+    /// The user browsed the local network once, so iOS has asked for access. Until then nothing
+    /// browses on its own, neither on screen nor in Auto-sync.
+    var browseAllowed: Bool { UserDefaults.standard.bool(forKey: Self.browsedKey) }
+    private static let browsedKey = "lanBrowseStarted"
+
+    /// Browses for sensors. Every caller is a user action or follows the first one.
     func scan() {
+        UserDefaults.standard.set(true, forKey: Self.browsedKey)
         stop()
         state.lanScanStarted()
         let browser = NWBrowser(for: .bonjourWithTXTRecord(type: state.lanServiceType, domain: "local."), using: .tcp)
@@ -210,8 +217,8 @@ final class LanDiscovery {
             report(name, notice: .lanSensorGone)
             return false
         }
+        // No Wi-Fi access yet. The next Bluetooth connection fetches it quietly.
         guard let credential = credentials.find(device: device.device), credential.thing == device.thing else {
-            report(name, notice: LanFailure.enrollmentRequired.notice)
             return false
         }
         guard claims.connect(name: name, device: device.device) else {
@@ -259,8 +266,13 @@ final class LanDiscovery {
                 }
                 self.state.lanInfoReceived(name: name, json: info)
                 self.connectFailures[name] = nil
-                if let sink = await session.link() { self.adopt(sink, name: name, session: session) }
-                await session.requestStatus()
+                if let sink = await session.link() {
+                    self.adopt(sink, name: name, session: session)
+                    await session.requestStatus()
+                    await self.upkeep(name, link: sink, session: session)
+                } else {
+                    await session.requestStatus()
+                }
             } catch {
                 session.close()
                 guard self.attempts[name] == attempt else { return }
@@ -268,9 +280,13 @@ final class LanDiscovery {
                 self.sessionDevices[name] = nil
                 self.claims.closeSession(name: name)
                 if case LanFailure.authentication = error { self.removeCredential(device: device.device) }
-                self.report(name, notice: LanFailure.connectNotice(error))
-                let fallback = self.connectFailures.removeValue(forKey: name)
-                fallback?()
+                // With Bluetooth to fall back on the switch is silent, as on Android.
+                if let fallback = self.connectFailures.removeValue(forKey: name) {
+                    self.report(name, notice: .lanDisconnected)
+                    fallback()
+                } else {
+                    self.report(name, notice: LanFailure.connectNotice(error))
+                }
             }
         }
         return true
@@ -418,6 +434,23 @@ final class LanDiscovery {
         state.lanReadingExpired(name: name)
     }
 
+    /// The shared once-per-connection upkeep, silent: the clock when it drifted, then Wi-Fi sync
+    /// back on below Developer. It runs inside the connect task, so no sync or command shares the link.
+    private func upkeep(_ name: String, link: IosLink, session: LanSession) async {
+        guard sessions[name] === session, runTokens[name] == nil, handles[name] == nil else { return }
+        let slot = RunSlot<Void, SyncHandle>(cancelHandle: { $0.cancel() })
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                let handle = engine.upkeep(link: link) { continuation.resume() }
+                handles[name] = handle
+                slot.set(handle)
+            }
+        } onCancel: {
+            slot.cancel()
+        }
+        handles[name] = nil
+    }
+
     /// Sends a Today command over the authenticated, idle Wi-Fi session for this hardware id.
     /// The same shared DeviceSession command path is used for Bluetooth. The command takes a lease of
     /// the session's link, so it never interleaves with a Debug or Device settings request.
@@ -447,7 +480,7 @@ final class LanDiscovery {
             let slot = RunSlot<CommandResult, SyncHandle>(cancelHandle: { $0.cancel() })
             await withTaskCancellationHandler {
                 await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                    let handle = self.engine.command(link: link, command: command, automatic: false) { result in
+                    let handle = self.engine.command(link: link, command: command) { result in
                         slot.result = result
                         continuation.resume()
                     }
@@ -653,6 +686,8 @@ extension LanDiscovery {
     /// things. Found sensors are kept so a step can open them.
     func backgroundBrowse(timeout: TimeInterval, done: @escaping ([String], [String]) -> Void) {
         endBackgroundBrowse()
+        // Auto-sync never browses before the user did, so iOS never asks for access off screen.
+        guard browseAllowed else { return done([], []) }
         let browser = NWBrowser(for: .bonjourWithTXTRecord(type: state.lanServiceType, domain: "local."), using: .tcp)
         backgroundBrowser = browser
         backgroundBrowseDone = done

@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import space.opensensor.device.DeviceConfigAction
 import space.opensensor.device.DeviceConfigController
-import space.opensensor.device.LanAccess
 import space.opensensor.device.onAction
 import space.opensensor.setup.SetupCandidate
 import space.opensensor.setup.SetupController
@@ -87,8 +86,8 @@ private class SetupConfigHolder(address: String, devices: DevicesBridge, links: 
 }
 
 /**
- * The Add sensor wizard on iOS. Bluetooth is asked for from Look for sensors. Local network is asked
- * for by browsing for sensors from the Wi-Fi page, the iOS prompt.
+ * The Add sensor wizard on iOS. Bluetooth is asked for from Look for sensors. Setup never asks for
+ * local network.
  */
 @Composable
 internal fun SetupEntry(
@@ -110,10 +109,8 @@ internal fun SetupEntry(
         controller = controller,
         config = config,
         bluetooth = bluetooth,
-        lanAccess = LanAccess(granted = !devices.state.lanAccessDenied, requestable = true),
         onConfigAction = { action ->
             when (action) {
-                DeviceConfigAction.RequestLanAccess -> links.scanLan()
                 DeviceConfigAction.ScanSticker -> Unit
                 DeviceConfigAction.ReconnectOverBluetooth -> bluetooth.run { config?.onAction(action) }
                 else -> config?.onAction(action)

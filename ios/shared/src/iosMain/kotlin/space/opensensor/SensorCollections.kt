@@ -52,7 +52,7 @@ import kotlin.time.TimeSource
  * A run that ends early still reports the files it saved and the ones that failed.
  *
  * A thing syncs over one link at a time, shared with [SensorSync]. The clock receipt of an
- * acknowledged `SET_TIME` is recorded against the exact link it was sent over.
+ * acknowledged automatic `SET_TIME` is recorded against the exact link it was sent over.
  */
 @OptIn(ExperimentalAtomicApi::class, DelicateCoroutinesApi::class)
 class SensorCollections internal constructor(
@@ -305,7 +305,6 @@ class SensorCollections internal constructor(
     /** The anchor of an acknowledged `SET_TIME`, recorded for the link it was sent over. */
     private suspend fun clockSet(link: CollectionLink, set: Frame.TimeSet) {
         val ios = locked { lent[link] } ?: return
-        ios.clockChecked = true
         val boot = ios.boot ?: return
         recordClockAnchor(link.thing, boot, set.epochNanos, set.monotonicMicros)
     }

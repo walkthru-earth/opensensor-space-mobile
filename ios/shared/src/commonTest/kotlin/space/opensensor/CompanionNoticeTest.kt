@@ -4,14 +4,9 @@ import space.opensensor.strings.UiText
 import space.opensensor.strings.resources.Res
 import space.opensensor.strings.resources.companion_ble_off
 import space.opensensor.strings.resources.companion_firmware_update_unknown
-import space.opensensor.strings.resources.companion_lan_needs_access
 import space.opensensor.strings.resources.companion_lan_syncing
-import space.opensensor.strings.resources.companion_wifi_access_saving_message
 import space.opensensor.strings.resources.msg_busy_before_sync
 import space.opensensor.strings.resources.msg_hardware_in_use
-import space.opensensor.strings.resources.msg_identity_enroll_ble
-import space.opensensor.strings.resources.msg_lan_token_stored
-import space.opensensor.strings.resources.msg_rejected_get_token
 import space.opensensor.strings.resources.msg_verification_failed
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,7 +16,6 @@ import kotlin.test.assertTrue
 class CompanionNoticeTest {
     @Test fun everyNoticeUsesACatalogueString() {
         for (notice in CompanionNotice.entries) assertTrue(notice.text is UiText.Resource, notice.name)
-        assertEquals(UiText.of(Res.string.msg_identity_enroll_ble), CompanionNotice.ENROLL_OVER_BLUETOOTH.text)
         assertEquals(UiText.of(Res.string.msg_verification_failed), CompanionNotice.VERIFICATION_FAILED.text)
         assertEquals(UiText.of(Res.string.msg_busy_before_sync), CompanionNotice.BUSY_BEFORE_SYNC.text)
         assertEquals(UiText.of(Res.string.companion_firmware_update_unknown, 3), CompanionNotice.FIRMWARE_UPDATE.text)
@@ -39,16 +33,10 @@ class CompanionNoticeTest {
         assertEquals(UiText.of(Res.string.msg_hardware_in_use), session.message)
     }
 
-    @Test fun wifiAccessNoticesShowTheAndroidWords() {
-        val state = CompanionState()
-        state.wifiAccessNoticed(true, false, CompanionNotice.SAVE_WIFI_ACCESS)
-        assertEquals(UiText.of(Res.string.companion_lan_needs_access), state.wifiAccessMessage)
-        state.wifiAccessNoticed(true, false, CompanionNotice.TOKEN_STORED)
-        assertEquals(UiText.of(Res.string.msg_lan_token_stored), state.wifiAccessMessage)
-        state.wifiAccessNoticed(true, false, CompanionNotice.TOKEN_REFUSED)
-        assertEquals(UiText.of(Res.string.msg_rejected_get_token), state.wifiAccessMessage)
-        assertTrue(state.wifiAccessAvailable)
-        assertFalse(state.wifiAccessBusy)
+    @Test fun noNoticeNamesWifiAccessOrTheToken() {
+        // Wi-Fi access is fetched, renewed and dropped quietly, so no link notice is about it.
+        val quiet = CompanionNotice.entries.map { it.name }.filter { "TOKEN" in it || "WIFI_ACCESS" in it || "ENROLL" in it }
+        assertEquals(emptyList(), quiet)
     }
 
     @Test fun aClosedConnectionShowsItsNotice() {
@@ -79,16 +67,20 @@ class CompanionNoticeTest {
         assertEquals(UiText.None, state.message)
     }
 
-    @Test fun savingWifiAccessClearsTheLastOutcome() {
+    @Test fun aWifiAccessRequestKeepsOnlyWhetherItStored() {
         val state = CompanionState()
-        state.wifiAccessNoticed(true, false, CompanionNotice.TOKEN_STORED)
+        state.wifiAccessEnded(stored = true)
+        assertTrue(state.wifiAccessStored)
         state.wifiAccessSaving()
         assertTrue(state.wifiAccessBusy)
-        assertEquals(null, state.wifiAccessNotice)
-        assertEquals(UiText.of(Res.string.companion_wifi_access_saving_message), state.wifiAccessMessage)
-        state.wifiAccessReset()
-        assertFalse(state.wifiAccessAvailable)
+        assertFalse(state.wifiAccessStored)
+        state.wifiAccessEnded(stored = false)
         assertFalse(state.wifiAccessBusy)
-        assertEquals(UiText.None, state.wifiAccessMessage)
+        assertFalse(state.wifiAccessStored)
+        state.wifiAccessEnded(stored = true)
+        state.wifiAccessReset()
+        assertFalse(state.wifiAccessBusy)
+        assertFalse(state.wifiAccessStored)
+        assertEquals(UiText.None, state.message)
     }
 }

@@ -6,7 +6,6 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
-import space.opensensor.data.sync.ClockQuality
 import space.opensensor.designsystem.moodLineRes
 import space.opensensor.designsystem.moodWord
 import space.opensensor.family.air.AirMood
@@ -22,9 +21,6 @@ import space.opensensor.today.resources.ago_hours
 import space.opensensor.today.resources.ago_just_now
 import space.opensensor.today.resources.ago_minutes
 import space.opensensor.today.resources.ago_seconds
-import space.opensensor.today.resources.clock_reason_missing
-import space.opensensor.today.resources.clock_reason_rtc
-import space.opensensor.today.resources.clock_reason_unknown
 import space.opensensor.today.resources.conn_connecting
 import space.opensensor.today.resources.conn_disconnected
 import space.opensensor.today.resources.conn_discovering
@@ -240,13 +236,6 @@ internal fun PmsStatus.hintText(): String = stringResource(
         PmsStatus.VALID -> Res.string.pms_valid_title
     },
 )
-
-/** Why Smart Sync wants to set the clock, in words (the app's `ClockQuality.reasonRes`). */
-internal fun ClockQuality.reasonRes(): StringResource = when (this) {
-    ClockQuality.MISSING -> Res.string.clock_reason_missing
-    ClockQuality.RTC_RESTORED -> Res.string.clock_reason_rtc
-    ClockQuality.HOST_ANCHORED, ClockQuality.UNKNOWN -> Res.string.clock_reason_unknown
-}
 
 /** The name of a byte pipe, for chips and stat lines. */
 @Composable

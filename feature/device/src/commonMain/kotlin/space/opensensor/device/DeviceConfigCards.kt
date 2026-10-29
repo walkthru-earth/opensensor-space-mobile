@@ -377,9 +377,9 @@ fun ProtocolV1Card(modifier: Modifier = Modifier) {
 }
 
 /**
- * Sync over the user's own Wi-Fi. Simple shows the server switch, whether the device is seen on
- * this network, whether this phone holds a token, and the token actions. Detailed adds the
- * explanations. Developer adds host, port, client count and the discovered address.
+ * Sync over the user's own Wi-Fi, the Developer controls. The server switch, host, port, client
+ * count, the discovered address, whether this phone holds a token, and the token actions. Every
+ * other level keeps the server on and fetches the token on its own over Bluetooth.
  */
 @Composable
 fun LanCard(
@@ -395,7 +395,6 @@ fun LanCard(
     val snapshot = state.snapshot
     val lan = snapshot.config?.config?.lan
     val hasToken = snapshot.hasLanToken
-    val level = state.level
 
     BrandCard(modifier = modifier) {
         val title = stringResource(Res.string.lan_title)
@@ -410,21 +409,17 @@ fun LanCard(
             onCheckedChange = onToggleLan,
             enabled = state.canEdit && lan != null,
         )
-        if (level.detailed) {
-            StatLine(
-                stringResource(Res.string.lan_server),
-                when (lan?.isOn) {
-                    true -> stringResource(Res.string.lan_server_on)
-                    false -> stringResource(Res.string.value_off)
-                    null -> NO_VALUE
-                },
-            )
-        }
-        if (level.developer) {
-            StatLine(stringResource(Res.string.lan_host), lan?.host?.let { "$it.local" } ?: NO_VALUE)
-            StatLine(stringResource(Res.string.lan_port), lan?.port?.toString() ?: NO_VALUE)
-            StatLine(stringResource(Res.string.lan_clients), lan?.clients?.toString() ?: NO_VALUE)
-        }
+        StatLine(
+            stringResource(Res.string.lan_server),
+            when (lan?.isOn) {
+                true -> stringResource(Res.string.lan_server_on)
+                false -> stringResource(Res.string.value_off)
+                null -> NO_VALUE
+            },
+        )
+        StatLine(stringResource(Res.string.lan_host), lan?.host?.let { "$it.local" } ?: NO_VALUE)
+        StatLine(stringResource(Res.string.lan_port), lan?.port?.toString() ?: NO_VALUE)
+        StatLine(stringResource(Res.string.lan_clients), lan?.clients?.toString() ?: NO_VALUE)
 
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -432,15 +427,8 @@ fun LanCard(
             Text(
                 when {
                     !access.granted -> stringResource(Res.string.lan_no_access)
-                    snapshot.lanSeen -> {
-                        val endpoint = snapshot.lanEndpoint
-                        if (level.developer && endpoint != null) {
-                            stringResource(Res.string.lan_seen_at, endpoint)
-                        } else {
-                            stringResource(Res.string.lan_seen)
-                        }
-                    }
-                    snapshot.lanDiscoveryError != null && level.detailed -> stringResource(Res.string.lan_discovery_error, snapshot.lanDiscoveryError)
+                    snapshot.lanSeen -> snapshot.lanEndpoint?.let { stringResource(Res.string.lan_seen_at, it) } ?: stringResource(Res.string.lan_seen)
+                    snapshot.lanDiscoveryError != null -> stringResource(Res.string.lan_discovery_error, snapshot.lanDiscoveryError)
                     else -> stringResource(Res.string.lan_not_seen)
                 },
                 style = MaterialTheme.typography.bodyMedium,
@@ -463,7 +451,7 @@ fun LanCard(
             } else {
                 OutlinePillButton(stringResource(Res.string.lan_reconnect_ble), onClick = onReconnectBle, enabled = state.ready && !snapshot.busy && !snapshot.heldInBackground)
             }
-            if (level.detailed) OutlinePillButton(stringResource(Res.string.lan_rotate), onClick = onRotateToken, enabled = state.canDisrupt)
+            OutlinePillButton(stringResource(Res.string.lan_rotate), onClick = onRotateToken, enabled = state.canDisrupt)
         }
         if (!state.overBle) InfoNote(stringResource(Res.string.lan_fetch_ble_only))
     }

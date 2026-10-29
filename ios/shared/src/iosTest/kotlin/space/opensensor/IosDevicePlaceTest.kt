@@ -73,7 +73,7 @@ class IosDevicePlaceTest {
             connectionStarted(address)
             check(receiveInfo("""{"proto":3,"dev":"aabbccddeeff"}"""))
         }
-        val devices = DevicesBridge(state, emptyFlow(), NoRecords(), { 0L }, {}, {}, { _, _ -> }, { _, _ -> })
+        val devices = DevicesBridge(state, emptyFlow(), NoRecords(), { 0L }, {}, {}, {}, { _, _ -> }, { _, _ -> })
         check(devices.sensorOpened(address, "Kitchen", thing, "aabbccddeeff").accepted)
         val links = DeviceConfigLinks(
             openConfigLink = { link },

@@ -16,13 +16,11 @@ import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.protocol.DeviceInfo
-import space.opensensor.data.sync.ClockQuality
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.family.air.Pm25Basis
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
 class TodayFormatTest {
@@ -66,12 +64,6 @@ class TodayFormatTest {
     fun fillReplacesEitherPlaceholder() {
         assertEquals("12 s ago", fill("%1\$s s ago", "12"))
         assertEquals("قبل 12 ث", fill("قبل %1\$d ث", "12"))
-    }
-
-    @Test
-    fun eachClockProblemHasItsOwnReason() {
-        assertNotEquals(ClockQuality.MISSING.reasonRes(), ClockQuality.RTC_RESTORED.reasonRes())
-        assertNotEquals(ClockQuality.MISSING.reasonRes(), ClockQuality.UNKNOWN.reasonRes())
     }
 
     @Test

@@ -60,8 +60,6 @@ import space.opensensor.device.DeviceConfigController
 import space.opensensor.device.DeviceConfigEffects
 import space.opensensor.device.DeviceConfigUiState
 import space.opensensor.device.DeviceLocationForm
-import space.opensensor.device.LanAccess
-import space.opensensor.device.LanCard
 import space.opensensor.device.WifiCard
 import space.opensensor.permissions.RuntimeAccess
 import space.opensensor.setup.resources.Res
@@ -101,14 +99,13 @@ import space.opensensor.setup.resources.setup_wifi_title
  * The setup wizard, full screen with no bottom bar. [config] is the Device settings controller of the
  * picked sensor, so Location and Wi-Fi send exactly what the settings cards send. [bluetooth] is the
  * access [SetupFlows] binds to Find, asked for from Look for sensors. [onConfigAction] runs a card
- * action the way the platform's Device settings does (local network for Turn on Wi-Fi sync).
+ * action the way the platform's Device settings does. Setup never asks for local network.
  */
 @Composable
 fun SetupScreen(
     controller: SetupController,
     config: DeviceConfigController?,
     bluetooth: RuntimeAccess?,
-    lanAccess: LanAccess,
     onConfigAction: (DeviceConfigAction) -> Unit,
     onClose: () -> Unit,
     onOpenSensor: (String) -> Unit,
@@ -169,7 +166,7 @@ fun SetupScreen(
                     configItem(configState) { state -> DeviceLocationForm(state, onConfigAction) }
                     if (page.required && !s.located) item(key = "location-needed") { InfoNote(stringResource(Res.string.setup_location_needed)) }
                 }
-                is SetupStep.Fields -> configItem(configState) { state -> WifiForm(state, lanAccess, onConfigAction) }
+                is SetupStep.Fields -> configItem(configState) { state -> WifiForm(state, onConfigAction) }
                 SetupStep.Done -> item(key = "done") { DoneCard(s, onOpenSensor) }
                 is SetupStep.Permission, SetupStep.Pair -> Unit
             }
@@ -279,9 +276,9 @@ private fun LazyListScope.configItem(state: DeviceConfigUiState?, content: @Comp
     }
 }
 
-/** Join over Bluetooth, then Turn on Wi-Fi sync, the same cards as Device settings. */
+/** Join over Bluetooth, the same card as Device settings. Wi-Fi sync stays on by itself. */
 @Composable
-private fun WifiForm(state: DeviceConfigUiState, lanAccess: LanAccess, onAction: (DeviceConfigAction) -> Unit) {
+private fun WifiForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         WifiCard(
             state = state,
@@ -289,15 +286,6 @@ private fun WifiForm(state: DeviceConfigUiState, lanAccess: LanAccess, onAction:
             onScan = { onAction(DeviceConfigAction.ScanWifi) },
             onClearScan = { onAction(DeviceConfigAction.ClearWifiScan) },
             onJoin = { onAction(DeviceConfigAction.JoinWifi(it)) },
-        )
-        LanCard(
-            state = state,
-            access = lanAccess,
-            onRequestAccess = { onAction(DeviceConfigAction.RequestLanAccess) },
-            onToggleLan = { onAction(DeviceConfigAction.SetLanOn(it)) },
-            onFetchToken = { onAction(DeviceConfigAction.FetchToken) },
-            onRotateToken = { onAction(DeviceConfigAction.RequestRotateToken) },
-            onReconnectBle = { onAction(DeviceConfigAction.ReconnectOverBluetooth) },
         )
     }
 }

@@ -27,7 +27,6 @@ class ForgetConfirmTest {
         override val snapshot: StateFlow<TodaySnapshot> = MutableStateFlow(TodaySnapshot(name = "Kitchen"))
         override val notices = emptyFlow<TodayNotice>()
         override fun sync() = Unit
-        override fun setTime() = Unit
         override fun flush() = Unit
         override fun stopSync() = Unit
         override fun reconnect() = Unit

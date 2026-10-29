@@ -174,23 +174,17 @@
     <string name="msg_background_owns_command">Background sync is using this sensor. Wait for it to finish.</string>
     <string name="msg_busy_before_sync">Wait for the current sensor task to finish before syncing.</string>
     <string name="msg_busy">Wait for the current sensor task to finish.</string>
-    <string name="msg_lan_token_rejected">Wi-Fi token rejected. Using Bluetooth and renewing the token.</string>
-    <string name="msg_lan_unreachable">Sensor not reachable on this Wi-Fi. Using Bluetooth.</string>
-    <string name="msg_lan_timeout">Sensor did not answer on Wi-Fi in time. Using Bluetooth.</string>
-    <string name="msg_lan_busy">Another phone is connected over Wi-Fi. Using Bluetooth.</string>
-    <string name="msg_lan_failed">Wi-Fi connection failed. Using Bluetooth.</string>
     <string name="msg_newer_protocol">Sensor protocol v%1$d, app protocol v%2$d. Newer features are ignored.</string>
     <string name="msg_firmware_update_required">Update the sensor firmware to connect. It speaks protocol %1$d, this app needs %2$d.</string>
     <string name="msg_firmware_update_required_unknown">Update the sensor firmware to connect. This app needs protocol %1$d.</string>
     <string name="msg_hardware_in_use">This sensor is already connected another way.</string>
     <string name="msg_verification_failed">Could not verify the sensor. Try again.</string>
-    <string name="msg_thing_changed">The sensor was reset. Earlier history is kept and Wi-Fi access renews over Bluetooth.</string>
+    <string name="msg_thing_changed">The sensor was reset. Earlier history is kept.</string>
     <string name="msg_reconnecting">Link lost. Reconnecting, attempt %1$d of %2$d…</string>
     <plurals name="msg_reconnect_failed">
         <item quantity="one">Could not reconnect. Tap Reconnect when the sensor is back.</item>
         <item quantity="other">Could not reconnect after %1$d tries. Tap Reconnect when the sensor is back.</item>
     </plurals>
-    <string name="msg_lan_token_renewed">Wi-Fi token renewed</string>
     <string name="msg_lan_token_stored">Wi-Fi token stored on this phone.</string>
     <string name="msg_token_needs_ble">The token comes over Bluetooth only. Reconnect over Bluetooth first.</string>
     <string name="msg_token_rotated_lan">Token changed. This Wi-Fi session ends. Reconnect over Bluetooth to get the new token.</string>
@@ -214,8 +208,7 @@
     <string name="msg_sync_end_interrupted">Android paused the sync. It resumes when you open the app.</string>
     <string name="msg_sync_end_bluetooth_off">Sync stopped. Turn on Bluetooth, then sync again.</string>
     <string name="msg_sync_end_permission">Sync stopped. Allow Nearby devices for this app, then sync again.</string>
-    <string name="msg_sync_end_token_rotated">The Wi-Fi token changed. Connect over Bluetooth once to fetch the new one.</string>
-    <string name="msg_sync_end_token_rejected">The sensor refused the Wi-Fi token. Connect over Bluetooth once to renew it.</string>
+    <string name="msg_sync_end_wifi_access">Sync stopped. Connect over Bluetooth once, then sync again.</string>
     <string name="msg_sync_end_busy">The sensor is busy with another phone. Try again soon.</string>
     <string name="msg_sync_end_out_of_range">The sensor is out of reach. Move closer and sync again.</string>
     <string name="msg_sync_end_update_firmware">Update the sensor firmware, then sync again.</string>
@@ -227,7 +220,6 @@
         <item quantity="one">%1$d reading is archived but has no time yet, so it is not on the calendar.</item>
         <item quantity="other">%1$d readings are archived but have no time yet, so they are not on the calendar.</item>
     </plurals>
-    <string name="msg_clock_set">Sensor clock set. New readings carry the time.</string>
     <plurals name="msg_finalized">
         <item quantity="one">Finalized %1$d reading. %2$d files on the card.</item>
         <item quantity="other">Finalized %1$d readings. %2$d files on the card.</item>
@@ -235,14 +227,12 @@
     <string name="msg_no_reboot_syncing">Not restarting while a sync runs. Stop the sync first.</string>
     <string name="msg_rebooting">The sensor is restarting. Reconnecting…</string>
     <string name="msg_rejected_get_token">The sensor refused to share its Wi-Fi token.</string>
-    <string name="msg_rejected_set_time">The sensor refused the time.</string>
     <string name="msg_rejected_flush">The sensor refused to finalize its readings.</string>
     <string name="msg_rejected_get_config">The sensor refused to share its settings.</string>
     <string name="msg_rejected_set_config">The sensor refused the settings. Nothing was changed.</string>
     <string name="msg_rejected_reboot">The sensor refused to restart.</string>
     <string name="msg_rejected_rotate_token">The sensor refused to change its token.</string>
     <string name="msg_failed_get_token">Could not get the Wi-Fi token. Try again.</string>
-    <string name="msg_failed_set_time">Could not set the sensor clock. Try again.</string>
     <string name="msg_failed_flush">Could not finalize the readings. Try again.</string>
     <string name="msg_failed_get_config">Could not read the sensor settings. Try again.</string>
     <string name="msg_failed_set_config">Could not save the settings. Try again.</string>

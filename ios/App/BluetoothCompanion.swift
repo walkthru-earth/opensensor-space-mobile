@@ -28,7 +28,10 @@ final class BluetoothCompanion {
     private var canSync = false
     /// The write size INFO reported, plus the ATT header.
     private var mtu: Int32 = 0
-    private var clockAttempted = false
+    /// The once-per-connection upkeep (clock, then Wi-Fi sync on) has started on this link.
+    private var upkeepStarted = false
+    /// No Wi-Fi token is stored for this sensor, so the link fetches one quietly once it settles.
+    private var tokenWanted = false
     private var identity: SyncIdentity?
     private var tokenTimer: Timer?
     private var requestingToken = false
@@ -350,7 +353,8 @@ final class BluetoothCompanion {
         tokenTimer = nil
         requestingToken = false
         identity = nil
-        clockAttempted = false
+        upkeepStarted = false
+        tokenWanted = false
         canSync = false
         mtu = 0
         state.wifiAccessReset()
@@ -405,7 +409,7 @@ final class BluetoothCompanion {
     @discardableResult
     private func startSync(onlyName: String? = nil) -> Bool {
         // A lease still held by Debug or Device settings queues the sync behind it on the shared link.
-        guard active, clockAttempted, current != nil, let link = ioLink, link.isOpen, let identity, run == nil,
+        guard active, upkeepStarted, current != nil, let link = ioLink, link.isOpen, let identity, run == nil,
             commandHandle == nil, !requestingToken
         else { return false }
         return beginRun(device: identity.device, onlyName: onlyName)
@@ -450,26 +454,41 @@ final class BluetoothCompanion {
         return true
     }
 
-    /// Sends automatic UTC synchronization or a confirmed flush through the shared session.
-    func command(_ command: SensorCommand, automatic: Bool = false) {
-        guard (foreground || automatic), current != nil, let link = ioLink, link.isOpen, run == nil,
+    /// Sends a confirmed flush through the shared session.
+    func command(_ command: SensorCommand) {
+        guard foreground, current != nil, let link = ioLink, link.isOpen, run == nil,
             commandHandle == nil, !requestingToken
         else {
             state.today.commandRefused()
             return
         }
-        if !automatic { state.today.commandStarted() }
-        commandHandle = engine.command(link: link, command: command, automatic: automatic) { [weak self] result in
-            MainActor.assumeIsolated { self?.commandEnded(result, link: link, automatic: automatic) }
+        state.today.commandStarted()
+        commandHandle = engine.command(link: link, command: command) { [weak self] result in
+            MainActor.assumeIsolated { self?.commandEnded(result, link: link) }
         }
     }
 
-    private func commandEnded(_ result: CommandResult, link: IosLink, automatic: Bool) {
+    private func commandEnded(_ result: CommandResult, link: IosLink) {
         guard ioLink === link else { return }
         commandHandle = nil
-        // Today hears an explicit command outcome once the link settles; automatic maintenance
-        // remains silent.
-        if !automatic { state.today.commandEnded(result: result) }
+        // Today hears the outcome once the link settles.
+        state.today.commandEnded(result: result)
+        linkEnded(link)
+    }
+
+    /// The shared per-connection upkeep, silent: the clock when it drifted, then Wi-Fi sync back on.
+    private func startUpkeep(_ link: IosLink) {
+        upkeepStarted = true
+        commandHandle = engine.upkeep(link: link) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.ioLink === link else { return }
+                self.commandHandle = nil
+                self.linkEnded(link)
+            }
+        }
+    }
+
+    private func linkEnded(_ link: IosLink) {
         // A failed write poisoned the link, so the next request needs a fresh connection.
         guard link.isOpen else {
             disconnect(notice: .sensorDisconnected)
@@ -483,10 +502,13 @@ final class BluetoothCompanion {
     private func settle() {
         guard !linkBusy, gattIdle else { return }
         // A run that reconnected holds the link at once. Its clock was set before it started.
-        if ioLink != nil, !clockAttempted, run == nil {
-            clockAttempted = true
-            command(.setTime, automatic: true)
+        if let link = ioLink, link.isOpen, !upkeepStarted, run == nil {
+            startUpkeep(link)
             return
+        }
+        if tokenWanted, ioLink != nil, run == nil {
+            tokenWanted = false
+            if requestToken() { return }
         }
         state.today.linkIdle()
         collectWhenReady()
@@ -576,12 +598,20 @@ final class BluetoothCompanion {
         return linkBusy || collectId != nil
     }
 
-    /// Asks the sensor for its LAN token. The request takes a native lease of the shared link, so it
-    /// waits for any Kotlin request and its reply stays on this side.
+    /// The Developer level Get token action. The quiet fetch on connect does the same on its own.
     func saveWifiAccess() {
-        guard foreground, current != nil, identity != nil, let link = ioLink, run == nil, commandHandle == nil,
+        guard foreground else { return }
+        requestToken()
+    }
+
+    /// Asks the sensor for its LAN token, quietly. The request takes a native lease of the shared
+    /// link, so it waits for any Kotlin request and its reply stays on this side. False when nothing
+    /// was asked.
+    @discardableResult
+    private func requestToken() -> Bool {
+        guard current != nil, identity != nil, let link = ioLink, run == nil, commandHandle == nil,
             !requestingToken, mtu >= 4
-        else { return }
+        else { return false }
         requestingToken = true
         state.wifiAccessSaving()
         tokenTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
@@ -592,9 +622,9 @@ final class BluetoothCompanion {
                 // recorder redacts it. A write still in flight has wedged the GATT queue, so the
                 // link closes as before.
                 if self.gattIdle {
-                    self.finishTokenRequest(.wifiAccessTimedOut)
+                    self.finishTokenRequest(stored: false)
                 } else {
-                    self.disconnect(notice: .wifiAccessTimedOut)
+                    self.disconnect(notice: .sensorDisconnected)
                 }
             }
         }
@@ -603,8 +633,8 @@ final class BluetoothCompanion {
             MainActor.assumeIsolated {
                 guard let self, let lease, self.requestingToken, self.ioLink === link, self.connection == number else {
                     lease?.end()
-                    // A sync took the link first, or it closed. The user can ask again.
-                    if let self, self.requestingToken, self.ioLink === link { self.finishTokenRequest(.saveWifiAccess) }
+                    // A sync took the link first, or it closed. The next connection asks again.
+                    if let self, self.requestingToken, self.ioLink === link { self.finishTokenRequest(stored: false) }
                     return
                 }
                 self.nativeLease = lease
@@ -612,16 +642,17 @@ final class BluetoothCompanion {
                 self.physical.requestToken(number)
             }
         }
+        return true
     }
 
-    private func finishTokenRequest(_ notice: CompanionNotice) {
+    private func finishTokenRequest(stored: Bool) {
         requestingToken = false
         tokenTimer?.invalidate()
         tokenTimer = nil
         nativeLease?.end()
         nativeLease = nil
         physical.endTokenRequest(connection)
-        state.wifiAccessNoticed(available: true, busy: false, notice: notice)
+        state.wifiAccessEnded(stored: stored)
         settle()
     }
 }
@@ -690,7 +721,7 @@ extension BluetoothCompanion {
             case .characteristicsMissing: disconnect(notice: .characteristicsMissing)
             case .notifyFailed: disconnect(notice: .notifyFailed)
             case .readFailed: disconnect(notice: .readFailed)
-            case .tokenFailed: disconnect(notice: .tokenFailed)
+            case .tokenFailed: disconnect(notice: .sensorDisconnected)
             case .pairingRemoved: pairingRemoved()
             }
         case .power, .found, .wake: break
@@ -771,7 +802,9 @@ extension BluetoothCompanion {
         self.mtu = mtu
         self.canSync = canSync
         openLink(identity: observed)
-        state.wifiAccessNoticed(available: canSync, busy: false, notice: .saveWifiAccess)
+        // A token saved for another thing is stale after an identity reset, so this link fetches again.
+        let stored = credentials.find(device: observed.device)?.thing == observed.thing
+        tokenWanted = canSync && wire.shouldFetchToken(json: json, hasToken: stored)
         state.bluetoothSyncAvailable(available: canSync)
     }
 
@@ -797,15 +830,15 @@ extension BluetoothCompanion {
     private func tokenReplied(kind: String, payload: Data, port: Int) {
         guard nativeLease != nil, requestingToken else { return }
         guard kind == "token", let identity, let id = current else {
-            finishTokenRequest(.tokenRefused)
+            finishTokenRequest(stored: false)
             return
         }
         do {
             try credentials.save(
                 LanCredential(thing: identity.thing, device: identity.device, peripheral: id, token: payload, port: port))
-            finishTokenRequest(.tokenStored)
+            finishTokenRequest(stored: true)
             onCredentialSaved?()
-        } catch { finishTokenRequest(LanFailure.credentialsUnavailable.notice) }
+        } catch { finishTokenRequest(stored: false) }
     }
 }
 

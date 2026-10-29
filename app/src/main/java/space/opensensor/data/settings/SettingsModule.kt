@@ -6,6 +6,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.flow.first
 import space.opensensor.settings.SettingsKeys
 import space.opensensor.settings.SettingsRepository
 import space.opensensor.settings.createSettingsDataStore
@@ -24,4 +25,16 @@ object SettingsModule {
     @Singleton
     fun provideSettingsRepository(@ApplicationContext context: Context): SettingsRepository =
         SettingsRepository(createSettingsDataStore(File(context.filesDir, SettingsKeys.RELATIVE_PATH).absolutePath))
+
+    @Provides
+    fun provideDeveloperLevel(settings: SettingsRepository): DeveloperLevel =
+        DeveloperLevel { settings.detailLevel.first().developer }
+}
+
+/**
+ * Whether the phone is at the Developer level right now. Automatic device upkeep reads it once per
+ * connection: only Developer may keep Wi-Fi sync off on a sensor.
+ */
+fun interface DeveloperLevel {
+    suspend fun developer(): Boolean
 }

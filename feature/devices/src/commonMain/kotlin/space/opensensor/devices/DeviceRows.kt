@@ -139,7 +139,7 @@ internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) 
                     if (level.developer) Mono(row.id)
                     if (row.bonded) Tag(stringResource(Res.string.scan_tag_paired))
                     if (row.known) Tag(stringResource(Res.string.scan_tag_known))
-                    row.wifi?.let { Tag(wifiTagText(it)) }
+                    row.wifi?.let { Tag(wifiTagText(it, level)) }
                 }
                 ArchiveLine(row.archive, level)
             }
@@ -164,7 +164,7 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                     Text(row.name ?: stringResource(Res.string.scan_unnamed), style = MaterialTheme.typography.titleMedium)
-                    row.wifi?.let { Tag(wifiTagText(it)) }
+                    row.wifi?.let { Tag(wifiTagText(it, level)) }
                 }
                 row.lastSeenMs?.let { seen ->
                     val seenTemplate = stringResource(Res.string.scan_seen)
@@ -199,17 +199,18 @@ internal fun WifiOnlyRow(sensor: WifiSensor, level: DetailLevel) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(sensor.name, style = MaterialTheme.typography.titleMedium)
-                Tag(stringResource(Res.string.scan_tag_on_lan_no_token))
+                Tag(wifiTagText(WifiTag.NO_ACCESS, level))
                 if (level.developer) sensor.thing?.let { Mono(it.take(8)) }
             }
-            InfoButton(InfoContent(stringResource(Res.string.devices_on_wifi), stringResource(Res.string.info_wifi_only)))
+            if (level.developer) InfoButton(InfoContent(stringResource(Res.string.devices_on_wifi), stringResource(Res.string.info_wifi_only)))
         }
     }
 }
 
+/** The Wi-Fi token renews on its own, so only Developer tells a sensor without one apart. */
 @Composable
-private fun wifiTagText(tag: WifiTag): String =
-    stringResource(if (tag == WifiTag.WITH_ACCESS) Res.string.scan_tag_on_lan else Res.string.scan_tag_on_lan_no_token)
+private fun wifiTagText(tag: WifiTag, level: DetailLevel): String =
+    stringResource(if (tag == WifiTag.NO_ACCESS && level.developer) Res.string.scan_tag_on_lan_no_token else Res.string.scan_tag_on_lan)
 
 /** The unit system the archive lines show day means in, from [MyDevicesScreen]. */
 internal val LocalArchiveUnits = staticCompositionLocalOf { UnitFormatter.Metric }

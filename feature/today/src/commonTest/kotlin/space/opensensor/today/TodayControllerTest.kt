@@ -24,10 +24,6 @@ private class FakeSource(connection: ConnectionState = ConnectionState.Ready(247
         calls += "sync"
     }
 
-    override fun setTime() {
-        calls += "setTime"
-    }
-
     override fun flush() {
         calls += "flush"
     }

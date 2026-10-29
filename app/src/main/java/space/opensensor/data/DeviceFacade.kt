@@ -431,7 +431,6 @@ class DeviceFacade internal constructor(
     fun isConnectedTo(address: String) = linkOwner.isConnectedTo(address)
     suspend fun setAutoSync(address: String, enabled: Boolean) = linkOwner.setAutoSync(address, enabled)
     suspend fun setCompanionAssociation(address: String, associationId: Int?) = linkOwner.setCompanionAssociation(address, associationId)
-    fun setTimeFromPhone() = linkOwner.setTimeFromPhone()
     fun flush() = linkOwner.flush()
     fun requestStatus() = linkOwner.requestStatus()
     fun refreshConfig() = linkOwner.refreshConfig()

@@ -35,7 +35,7 @@ class AutoSyncTest {
     private fun settings(storage: AutoSyncStorage = Memory(), status: Long = 0) =
         AutoSyncSettings(storage, { clock }, { status }, { it() }, { changes++ })
 
-    private fun devices() = DevicesBridge(CompanionState(), emptyFlow(), Memory(), { clock }, {}, {}, { _, _ -> }, { _, _ -> }).also {
+    private fun devices() = DevicesBridge(CompanionState(), emptyFlow(), Memory(), { clock }, {}, {}, {}, { _, _ -> }, { _, _ -> }).also {
         it.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff")
         it.sensorOpened(b, "Garden", "st-b", "112233445566")
     }
