@@ -23,7 +23,6 @@ import space.opensensor.device.DeviceConfigController
 import space.opensensor.device.DeviceConfigNotice
 import space.opensensor.device.DeviceConfigSnapshot
 import space.opensensor.device.DeviceConfigSource
-import space.opensensor.device.LanAccess
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -94,7 +93,6 @@ class SetupScreenTest {
             controller = c,
             config = config,
             bluetooth = null,
-            lanAccess = LanAccess(granted = true, requestable = false),
             onConfigAction = {},
             onClose = { run.closes++ },
             onOpenSensor = {},

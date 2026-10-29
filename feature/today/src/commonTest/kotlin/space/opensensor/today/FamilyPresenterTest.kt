@@ -47,8 +47,9 @@ class FamilyPresenterTest {
         val simple = soil(DetailLevel.SIMPLE)
         assertSame(GenericPresenter, simple.presenter)
         assertEquals(LiveSupport.READY, simple.liveSupport)
-        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK), simple.cards)
-        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK, METRICS, BOARD, STORAGE, DEVICE_INFO), soil(DetailLevel.DETAILED).cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC), simple.cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, METRICS, BOARD, STORAGE, DEVICE_INFO), soil(DetailLevel.DETAILED).cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK, METRICS, BOARD, STORAGE, DEVICE_INFO), soil(DetailLevel.DEVELOPER).cards)
     }
 
     @Test

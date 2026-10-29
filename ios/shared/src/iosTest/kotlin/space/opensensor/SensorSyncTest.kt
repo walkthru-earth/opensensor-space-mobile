@@ -464,21 +464,91 @@ class SensorSyncTest {
 
     @Test
     fun aCancelledCommandEndsStopped() = runBlocking {
-        val setting = CompletableDeferred<Unit>()
+        val flushing = CompletableDeferred<Unit>()
         val link = sensor { link, req ->
             when (op(req)) {
-                Opcode.SET_TIME -> setting.complete(Unit).let { true }
-                Opcode.ABORT -> link.reply(Frame.Aborted(Opcode.SET_TIME)).let { true }
+                Opcode.FLUSH -> flushing.complete(Unit).let { true }
+                Opcode.ABORT -> link.reply(Frame.Aborted(Opcode.FLUSH)).let { true }
                 else -> false
             }
         }
         val done = CompletableDeferred<CommandResult>()
-        val handle = sync.command(link, SensorCommand.SET_TIME) { done.complete(it) }
-        withTimeout(5_000) { setting.await() }
+        val handle = sync.command(link, SensorCommand.FLUSH) { done.complete(it) }
+        withTimeout(5_000) { flushing.await() }
         handle.cancel()
         val result = withTimeout(5_000) { done.await() }
         assertTrue(result.stopped)
-        assertFalse(result.clockSynchronized)
+        assertTrue(link.isOpen)
+    }
+
+    /** A sensor with Wi-Fi sync off, answering GET_CONFIG and SET_CONFIG like the firmware. */
+    private fun lanOffSensor(): IosLink = sensor { link, req ->
+        when (op(req)) {
+            Opcode.GET_CONFIG -> link.reply(Frame.Config(0, "{\"lan\":{\"on\":0}}")).let { true }
+            Opcode.SET_CONFIG -> link.reply(Frame.Config(0, "{\"lan\":{\"on\":1}}")).let { true }
+            else -> false
+        }
+    }.also { it.identify(thing, "upkeep-boot", 1024) }
+
+    private fun SensorSync.upkeepAndWait(link: IosLink) = runBlocking {
+        val done = CompletableDeferred<Unit>()
+        upkeep(link) { done.complete(Unit) }
+        withTimeout(5_000) { done.await() }
+    }
+
+    @Test
+    fun upkeepSetsTheClockOncePerConnectionAndSwitchesWifiSyncBackOn() {
+        var anchors = 0
+        val runner = SensorSync(
+            store,
+            database.index,
+            Dispatchers.Default,
+            Dispatchers.Default,
+            recordClockAnchor = { _, _, _, _ -> anchors++ },
+            developer = { false },
+            budget = FakeStorageBudget(),
+            sources = ThingSources.None,
+        )
+        val link = lanOffSensor()
+
+        runner.upkeepAndWait(link)
+        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.STATUS, Opcode.GET_CONFIG, Opcode.SET_CONFIG), requests)
+        assertEquals(1, anchors)
+
+        // The same connection never asks again, neither from a second upkeep nor from a sync.
+        requests.clear()
+        runner.upkeepAndWait(link)
+        assertEquals(listOf(Opcode.GET_CONFIG), requests)
+        requests.clear()
+        val done = CompletableDeferred<SyncResult>()
+        runner.start(link, thing, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
+        assertEquals(SyncEnd.COMPLETE, runBlocking { withTimeout(20_000) { done.await() } }.end)
+        assertFalse(Opcode.SET_TIME in requests || Opcode.SET_CONFIG in requests)
+        assertEquals(1, anchors)
+
+        // A new connection checks the clock again.
+        requests.clear()
+        runner.upkeepAndWait(lanOffSensor())
+        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.STATUS, Opcode.GET_CONFIG, Opcode.SET_CONFIG), requests)
+    }
+
+    @Test
+    fun upkeepAtTheDeveloperLevelLeavesWifiSyncOff() {
+        val runner = SensorSync(store, database.index, Dispatchers.Default, Dispatchers.Default, developer = { true }, budget = FakeStorageBudget(), sources = ThingSources.None)
+        runner.upkeepAndWait(lanOffSensor())
+        assertTrue(Opcode.SET_TIME in requests)
+        assertTrue(Opcode.GET_CONFIG in requests)
+        assertFalse(Opcode.SET_CONFIG in requests)
+    }
+
+    @Test
+    fun aClockTheSensorKeepsIsLeftAloneAndAFailedConfigReadEndsQuietly() {
+        val link = sensor { link, req ->
+            (op(req) == Opcode.STATUS).also { if (it) link.offerStatus("{\"utc\":1,\"clk\":1,\"clk_age_s\":60}") }
+        }
+        // GET_CONFIG is answered with ERROR by the scripted sensor. Upkeep still finishes.
+        sync.upkeepAndWait(link)
+        assertEquals(listOf(Opcode.STATUS, Opcode.GET_CONFIG), requests)
         assertTrue(link.isOpen)
     }
 

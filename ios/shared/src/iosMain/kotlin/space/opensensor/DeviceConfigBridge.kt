@@ -330,7 +330,7 @@ internal class IosDeviceConfigSource(
         }
         if (!started) return null
         val done = withTimeoutOrNull(TOKEN_TIMEOUT_MS) { snapshotFlow { state.wifiAccessBusy }.first { !it } }
-        return done != null && state.wifiAccessNotice == CompanionNotice.TOKEN_STORED
+        return done != null && state.wifiAccessStored
     }
 
     /**

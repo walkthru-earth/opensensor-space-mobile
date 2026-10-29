@@ -1,7 +1,6 @@
 package space.opensensor.data
 
 import space.opensensor.collection.SyncEndReason
-import space.opensensor.data.lan.LanFailure
 import space.opensensor.link.UnavailableKind
 
 /**
@@ -11,7 +10,7 @@ import space.opensensor.link.UnavailableKind
  */
 sealed interface DeviceMessage {
     /** Device requests a message can name. */
-    enum class Command { GET_TOKEN, SET_TIME, FLUSH, GET_CONFIG, SET_CONFIG, REBOOT, ROTATE_TOKEN }
+    enum class Command { GET_TOKEN, FLUSH, GET_CONFIG, SET_CONFIG, REBOOT, ROTATE_TOKEN }
 
     /** Which settings a successful `SET_CONFIG` changed, for the confirmation line. */
     enum class ConfigChange { SETTINGS, PAIRING, PIN, WIFI_SENT, WIFI_ON, WIFI_OFF, LAN_ON, LAN_OFF, BONDS_CLEARED }
@@ -31,8 +30,6 @@ sealed interface DeviceMessage {
 
     // Connecting
 
-    /** The LAN attempt failed and Bluetooth is used. [failure] is null for an untyped error. */
-    data class LanFallback(val failure: LanFailure?) : DeviceMessage
     data object ConnectFailed : DeviceMessage
 
     /** Bluetooth is off, missing, or its permission is not granted, so a connect never started. */
@@ -52,7 +49,6 @@ sealed interface DeviceMessage {
     data class ReconnectFailed(val attempts: Int) : DeviceMessage
 
     // LAN token
-    data object LanTokenRenewed : DeviceMessage
     data object LanTokenStored : DeviceMessage
     data object TokenNeedsBluetooth : DeviceMessage
     data class TokenRotated(val outcome: TokenRotation) : DeviceMessage
@@ -76,7 +72,6 @@ sealed interface DeviceMessage {
     data class UnplacedReadings(val rows: Long) : DeviceMessage
 
     // Device commands
-    data object ClockSet : DeviceMessage
     data class Finalized(val rows: Int, val files: Long) : DeviceMessage
     data class ConfigSaved(val change: ConfigChange, val rebootRequired: Boolean = false) : DeviceMessage
 

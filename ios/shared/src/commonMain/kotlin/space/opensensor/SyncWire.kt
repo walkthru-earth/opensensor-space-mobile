@@ -1,5 +1,6 @@
 package space.opensensor
 
+import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.lan.LanTokenPolicy
 import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.data.protocol.DeviceInfo
@@ -45,7 +46,16 @@ class SyncWire {
     /** INFO that parses but reports a `proto` below 3. The adapter closes with an update notice. */
     fun outdated(json: String): Boolean = runCatching { requireProto3(DeviceInfo.parse(json)) is ProtoGate.UpdateFirmware }.getOrDefault(false)
 
+    /**
+     * Whether this Bluetooth connection fetches the Wi-Fi token quietly, by the shared
+     * [LanTokenPolicy] as Android does: once per connection, only when none is stored.
+     */
+    fun shouldFetchToken(json: String, hasToken: Boolean): Boolean = runCatching {
+        tokenPolicy.shouldFetch(TransportKind.BLE, DeviceInfo.parse(json).proto, if (hasToken) STORED else null)
+    }.getOrDefault(false)
+
     companion object {
+        private const val STORED = "stored"
         const val DEFAULT_MAX_READ = 4096
         private const val MAX_READ_CAP = 16384
         private val THING_ID = Regex("[0-9A-Za-z._-]+")

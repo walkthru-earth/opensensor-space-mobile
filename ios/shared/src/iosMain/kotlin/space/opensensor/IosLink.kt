@@ -152,9 +152,6 @@ class IosLink internal constructor(
         }
     }
 
-    /** Whether the automatic clock check already ran on this connection. Read and set under a lease. */
-    internal var clockChecked = false
-
     private val scope = CoroutineScope(SupervisorJob() + context)
     private val recorder: FrameRecorder = debugFrames.recorderFor(address)
     private val driver = Driver()

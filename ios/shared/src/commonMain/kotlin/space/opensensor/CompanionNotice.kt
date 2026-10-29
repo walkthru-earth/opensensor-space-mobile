@@ -25,39 +25,22 @@ import space.opensensor.strings.resources.companion_lan_connecting
 import space.opensensor.strings.resources.companion_lan_disconnected
 import space.opensensor.strings.resources.companion_lan_gone
 import space.opensensor.strings.resources.companion_lan_listing
-import space.opensensor.strings.resources.companion_lan_needs_access
 import space.opensensor.strings.resources.companion_lan_sync_paused
 import space.opensensor.strings.resources.companion_lan_sync_queued
 import space.opensensor.strings.resources.companion_lan_syncing
-import space.opensensor.strings.resources.companion_wifi_access_saving_message
-import space.opensensor.strings.resources.companion_wifi_access_timed_out
 import space.opensensor.strings.resources.msg_busy
 import space.opensensor.strings.resources.msg_busy_before_sync
-import space.opensensor.strings.resources.msg_failed_get_token
 import space.opensensor.strings.resources.msg_hardware_in_use
-import space.opensensor.strings.resources.msg_identity_enroll_ble
 import space.opensensor.strings.resources.msg_identity_hardware_changed
 import space.opensensor.strings.resources.msg_identity_thing_ble
-import space.opensensor.strings.resources.msg_lan_token_stored
-import space.opensensor.strings.resources.msg_rejected_get_token
 import space.opensensor.strings.resources.msg_sync_aborted
-import space.opensensor.strings.resources.msg_token_needs_ble
 import space.opensensor.strings.resources.msg_verification_failed
 
 /**
- * A link or Wi-Fi access event the Swift adapters report by kind. The state picks the words, so
+ * A link event the Swift adapters report by kind. The state picks the words, so
  * iOS shows Android's keys and wording. Notices never carry a token, PIN or passphrase.
  */
 enum class CompanionNotice {
-    /** No Wi-Fi access is saved for this sensor yet. */
-    ENROLL_OVER_BLUETOOTH,
-
-    /** Wi-Fi access can be saved now over the open Bluetooth connection. */
-    SAVE_WIFI_ACCESS,
-
-    /** The sensor refused the saved Wi-Fi access. It is dropped and renews over Bluetooth. */
-    TOKEN_NEEDS_BLUETOOTH,
-
     /** HELLO named another thing than the saved access. */
     THING_CHANGED,
 
@@ -78,15 +61,6 @@ enum class CompanionNotice {
 
     /** The link went away during a sync. Saved files and partial bytes stay. */
     SYNC_ABORTED,
-
-    /** Wi-Fi access arrived over Bluetooth and is stored in the Keychain. */
-    TOKEN_STORED,
-
-    /** The Wi-Fi access request or its secure storage failed. */
-    TOKEN_FAILED,
-
-    /** The sensor refused to share its Wi-Fi access. */
-    TOKEN_REFUSED,
 
     /** INFO was unsupported or invalid. */
     INFO_INVALID,
@@ -136,12 +110,6 @@ enum class CompanionNotice {
     /** The sensor refused this phone's pairing keys. Forget it in iOS Settings and pair again. */
     PAIRING_REMOVED,
 
-    /** Wi-Fi access is being requested over Bluetooth. */
-    SAVING_WIFI_ACCESS,
-
-    /** The Wi-Fi access request did not answer in time. */
-    WIFI_ACCESS_TIMED_OUT,
-
     /** The Wi-Fi sensor is no longer in the browse results. */
     LAN_SENSOR_GONE,
 
@@ -172,9 +140,6 @@ enum class CompanionNotice {
 
     private val resource: StringResource
         get() = when (this) {
-            ENROLL_OVER_BLUETOOTH -> Res.string.msg_identity_enroll_ble
-            SAVE_WIFI_ACCESS -> Res.string.companion_lan_needs_access
-            TOKEN_NEEDS_BLUETOOTH -> Res.string.msg_token_needs_ble
             THING_CHANGED -> Res.string.msg_identity_thing_ble
             HARDWARE_CHANGED -> Res.string.msg_identity_hardware_changed
             VERIFICATION_FAILED -> Res.string.msg_verification_failed
@@ -182,9 +147,6 @@ enum class CompanionNotice {
             BUSY_BEFORE_SYNC -> Res.string.msg_busy_before_sync
             HARDWARE_IN_USE -> Res.string.msg_hardware_in_use
             SYNC_ABORTED -> Res.string.msg_sync_aborted
-            TOKEN_STORED -> Res.string.msg_lan_token_stored
-            TOKEN_FAILED -> Res.string.msg_failed_get_token
-            TOKEN_REFUSED -> Res.string.msg_rejected_get_token
             INFO_INVALID -> Res.string.companion_info_invalid
             FIRMWARE_UPDATE -> Res.string.companion_firmware_update_unknown
             CONNECT_TIMED_OUT -> Res.string.companion_ble_timed_out
@@ -201,8 +163,6 @@ enum class CompanionNotice {
             NOTIFY_FAILED -> Res.string.companion_ble_notify_failed
             READ_FAILED -> Res.string.companion_ble_read_failed
             PAIRING_REMOVED -> Res.string.companion_ble_pairing_removed
-            SAVING_WIFI_ACCESS -> Res.string.companion_wifi_access_saving_message
-            WIFI_ACCESS_TIMED_OUT -> Res.string.companion_wifi_access_timed_out
             LAN_SENSOR_GONE -> Res.string.companion_lan_gone
             LAN_CONNECTING -> Res.string.companion_lan_connecting
             LAN_CONNECTED -> Res.string.companion_lan_connected

@@ -16,7 +16,7 @@ import space.opensensor.settings.AppPrefs
  * session for the same sensor. [linkFor] answers the open connection's [IosLink] to the sensor with
  * this hardware id, Wi-Fi first, or null when it is not connected. Debug, Device settings and Files
  * take leases of it. [bluetoothLinkFor] answers only the Bluetooth link, which a passphrase or PIN
- * change in Device settings borrows so it never travels over Wi-Fi. [command] sends a confirmed `SET_TIME` or `FLUSH` from Today over the
+ * change in Device settings borrows so it never travels over Wi-Fi. [command] sends a confirmed `FLUSH` from Today over the
  * Bluetooth connection.
  * [autoSync] holds the per device Auto-sync switches, shown first on the Device section. [closeIdle] runs
  * when the last Today or Device page for a sensor leaves the back stack. Swift closes that

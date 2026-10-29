@@ -74,7 +74,7 @@ class IosSecretPatchTest {
             connectionStarted(address)
             check(receiveInfo("""{"proto":3,"dev":"aabbccddeeff"}"""))
         }
-        val devices = DevicesBridge(state, emptyFlow(), NoRecords(), { 0L }, {}, {}, { _, _ -> }, { _, _ -> })
+        val devices = DevicesBridge(state, emptyFlow(), NoRecords(), { 0L }, {}, {}, {}, { _, _ -> }, { _, _ -> })
         val links = DeviceConfigLinks(
             openConfigLink = { wifi ?: bluetooth },
             openBluetoothLink = { bluetooth },

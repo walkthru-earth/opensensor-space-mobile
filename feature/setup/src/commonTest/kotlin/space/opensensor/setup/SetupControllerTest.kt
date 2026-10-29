@@ -63,7 +63,7 @@ class SetupControllerTest {
     fun permissionStepsBindTheNextTapAndSharingIsNoStep() {
         val flow = SetupFlows.BOARD
         assertEquals(UserAction.FIND_SENSORS, flow.accessFor(SetupStep.Find))
-        assertEquals(UserAction.WIFI_ACTION, flow.accessFor(SetupFlows.WIFI))
+        assertNull(flow.accessFor(SetupFlows.WIFI), "setup never asks for local network")
         assertNull(flow.accessFor(SetupStep.Name))
         assertTrue(AccessKind.BLUETOOTH in PermissionTriggers.of(UserAction.FIND_SENSORS).required)
         assertTrue(flow.none { it.id.contains("shar") || it.id.contains("upload") })

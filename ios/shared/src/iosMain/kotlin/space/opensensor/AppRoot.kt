@@ -434,6 +434,8 @@ private fun MyDevicesEntry(
         bluetooth = access,
         platform = IosDevices,
         onOpenLocalNetworkSettings = openSettings,
+        // Only a tap browses the local network, so iOS asks for access when the user scans.
+        onScanTap = bridge::scanTapped,
         onAction = { action ->
             when (action) {
                 is DevicesAction.Open -> onOpen(action.id, action.connect)

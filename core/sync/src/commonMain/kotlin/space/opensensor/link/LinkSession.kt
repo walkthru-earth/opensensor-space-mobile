@@ -230,6 +230,21 @@ class LinkSession(
         events.trySend(Event.OweClose(handle))
     }
 
+    private val claimed = AtomicReference(emptySet<String>())
+
+    /**
+     * True the first time [key] is claimed on this connection, false after. Automatic device
+     * changes (the clock check, re-enabling Wi-Fi sync) claim a key so each runs at most once per
+     * connection, however many runs or screens share the link.
+     */
+    fun claimOnce(key: String): Boolean {
+        while (true) {
+            val held = claimed.load()
+            if (key in held) return false
+            if (claimed.compareAndSet(held, held + key)) return true
+        }
+    }
+
     /** Close the link on purpose. [reason] is a fixed developer label. */
     fun close(reason: String) {
         terminate(DisconnectCause.Deliberate(reason))

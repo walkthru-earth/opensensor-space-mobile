@@ -35,16 +35,10 @@
     <string name="flush">Finalize buffered rows</string>
     <string name="flush_confirm">Writes the readings waiting in memory to a short file now, so you can sync them.</string>
     <string name="flush_button">Finalize</string>
-    <string name="clock_reason_missing">The sensor has no clock time, so new readings cannot be dated.</string>
-    <string name="clock_reason_rtc">The sensor restored its clock after a restart and this phone has not checked it.</string>
-    <string name="clock_reason_unknown">The sensor clock needs a check.</string>
-    <string name="msg_clock_set">Sensor clock set. New readings carry the time.</string>
     <plurals name="msg_finalized">
         <item quantity="one">Finalized %1$d reading. %2$d files on the card.</item>
         <item quantity="other">Finalized %1$d readings. %2$d files on the card.</item>
     </plurals>
-    <string name="msg_rejected_set_time">The sensor refused the time.</string>
-    <string name="msg_failed_set_time">Could not set the sensor clock. Try again.</string>
     <string name="msg_rejected_flush">The sensor refused to finalize its readings.</string>
     <string name="msg_failed_flush">Could not finalize the readings. Try again.</string>
     <string name="msg_busy">Wait for the current sensor task to finish.</string>
@@ -105,7 +99,6 @@
     <string name="env_unsupported">This app version cannot read live values from this sensor yet. Synced files still work.</string>
     <string name="today_so_far">Today so far</string>
     <string name="today_none">No timed readings yet today.</string>
-    <string name="today_none_clock">No timed readings yet. Sync now also sets the sensor time.</string>
     <string name="today_average">Average %1$s %2$s</string>
     <string name="today_of_the_day">covered so far</string>
     <plurals name="today_readings_since_midnight">
@@ -118,12 +111,12 @@
     <string name="clock_set">Clock is set</string>
     <string name="clock_unknown">Clock state unknown</string>
     <string name="clock_title">Clock</string>
-    <string name="clock_actions_explain">Time synchronizes automatically when connected. Finalize saves readings waiting in memory so you can sync them now.</string>
+    <string name="clock_actions_explain">This phone sets the sensor clock on its own when connected.</string>
     <string name="clock_none_explain">Readings keep their device time until UTC synchronizes automatically.</string>
     <string name="clock_generation">anchor generation %1$d</string>
     <string name="clock_last_sample">last sample at %1$s</string>
     <string name="sync_title">Smart Sync</string>
-    <string name="sync_explain">Smart Sync checks the sensor clock, copies the files this phone is missing, checks each one and updates the charts.</string>
+    <string name="sync_explain">Smart Sync copies the files this phone is missing, checks each one and updates the charts.</string>
     <plurals name="sync_running">
         <item quantity="one">Syncing %1$d of %2$d file…</item>
         <item quantity="other">Syncing %1$d of %2$d files…</item>
