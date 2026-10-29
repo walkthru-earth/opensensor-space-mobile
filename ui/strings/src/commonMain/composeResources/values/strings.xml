@@ -45,7 +45,6 @@
     <string name="companion_lan_denied">Turn on Local Network for opensensor.space in Settings.</string>
     <string name="companion_lan_unavailable">Wi-Fi search is not available. Check Wi-Fi and Local Network in Settings.</string>
     <string name="companion_lan_paused">Sync paused</string>
-    <string name="companion_lan_needs_access">Save Wi-Fi access over Bluetooth first.</string>
 
     <!-- Bluetooth and Wi-Fi link states the iOS adapters report as notices. -->
     <string name="companion_ble_timed_out">Connection timed out. Keep the sensor nearby and try again.</string>
@@ -62,8 +61,6 @@
     <string name="companion_ble_notify_failed">Notifications could not be enabled. Check the pairing PIN and try again.</string>
     <string name="companion_ble_read_failed">The sensor could not be read. Check the pairing PIN and try again.</string>
     <string name="companion_ble_pairing_removed">The sensor reset its pairing. Forget it in iOS Settings, Bluetooth, then pair again.</string>
-    <string name="companion_wifi_access_saving_message">Saving Wi-Fi access…</string>
-    <string name="companion_wifi_access_timed_out">Wi-Fi access timed out. Reconnect over Bluetooth and try again.</string>
     <string name="companion_lan_gone">This Wi-Fi sensor is no longer available. Find Wi-Fi sensors again.</string>
     <string name="companion_lan_connecting">Connecting on Wi-Fi…</string>
     <string name="companion_lan_connected">Connected on Wi-Fi. Ready to sync.</string>

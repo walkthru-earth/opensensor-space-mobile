@@ -4,9 +4,11 @@ import space.opensensor.storage.RetentionPolicy
 import space.opensensor.units.UnitSystem
 
 /**
- * How much the UI shows. Cosmetic only. Every level reads the same data, higher levels reveal more,
- * and nothing the Simple experience needs depends on them (AGENTS.md). Same three levels, same
- * names, on Android and iOS.
+ * How much the UI shows. Every level reads the same data, higher levels reveal more, and nothing
+ * the Simple experience needs depends on them (AGENTS.md). One behavior differs. Below
+ * [DEVELOPER] a sensor that reports Wi-Fi sync off is switched back on once per Bluetooth
+ * connection, since only Developer shows that switch. Same three levels, same names, on Android
+ * and iOS.
  */
 enum class DetailLevel {
     /** The current reading and today, in plain words. History and files stay one tap away. */

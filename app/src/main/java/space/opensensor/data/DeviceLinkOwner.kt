@@ -82,6 +82,7 @@ import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.LiveSample
 import space.opensensor.data.protocol.hexToBytes
 import space.opensensor.data.protocol.toHex
+import space.opensensor.data.settings.DeveloperLevel
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.data.sync.ReadWindow
 import space.opensensor.data.sync.SyncListing
@@ -195,6 +196,8 @@ class DeviceLinkOwner @Inject constructor(
     private val boardDescriptors: BoardDescriptors,
     /** Each fixed Thing's saved cell, for its pin on Discover (#226). Only the cell, never coordinates. */
     private val places: ThingPlaces,
+    /** Below Developer a sensor's Wi-Fi sync is switched back on once per connection. */
+    private val developerLevel: DeveloperLevel,
 ) {
     /**
      * Child of the process scope: one failed child never cancels its siblings, and cancelling the
@@ -449,7 +452,7 @@ class DeviceLinkOwner @Inject constructor(
         if (fake) {
             transport = transportFactory.fake(address)
         } else if (preference != TransportPreference.BLE_ONLY) {
-            when (val lan = tryLan(address, name ?: known?.name, known, fallbackToBle = preference == TransportPreference.AUTO)) {
+            when (val lan = tryLan(address, name ?: known?.name, known)) {
                 is LanAttempt.Opened -> transport = lan.link
                 LanAttempt.Refused -> return false
                 LanAttempt.Skipped -> Unit
@@ -494,10 +497,10 @@ class DeviceLinkOwner @Inject constructor(
 
     /**
      * Attempt a LAN session. The caller may fall back to BLE after [LanAttempt.Skipped] if its
-     * preference allows it. The probe session is removed and its link closed on every failure
+     * preference allows it, with no message. The probe session is removed and its link closed on every failure
      * path, including an unexpected exception and cancellation.
      */
-    private suspend fun tryLan(address: String, name: String?, known: KnownDevice?, fallbackToBle: Boolean = true, target: LanDevice? = null): LanAttempt {
+    private suspend fun tryLan(address: String, name: String?, known: KnownDevice?, target: LanDevice? = null): LanAttempt {
         val thing = known?.thing ?: return LanAttempt.Skipped
         val seen = target ?: lanDevices.value[thing] ?: return LanAttempt.Skipped
         if (seen.thing != thing) return LanAttempt.Skipped
@@ -533,13 +536,11 @@ class DeviceLinkOwner @Inject constructor(
             // ERROR 14 or BYE 3 (refused) and BYE 10 (rotated) at the handshake: the Bluetooth
             // session we are about to open fetches a fresh token.
             forgetInvalidatedToken(address, typed, key.stored)
-            if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(failure)))
             return LanAttempt.Skipped
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "LAN connect failed unexpectedly (${e::class.simpleName})")
-            if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
             return LanAttempt.Skipped
         } finally {
             if (!connected) {
@@ -730,7 +731,7 @@ class DeviceLinkOwner @Inject constructor(
             }
             verifiedSessionInfo = session to info
             _info.value = info
-            if (!collectionActive.value) setTimeFromPhoneNow(session, quiet = true, automatic = true)
+            if (!collectionActive.value) synchronizeClockQuietly(session)
             if (_session.value !== session) {
                 lastOpenFailure = DisconnectCause.Rejected("session replaced")
                 return false
@@ -743,16 +744,18 @@ class DeviceLinkOwner @Inject constructor(
 
             val v2 = (proto ?: 1) >= 2
             if (v2) {
-                // Token: once, over BLE only, when we do not hold one (or the LAN handshake just
+                // Token: quietly, over BLE only, when we do not hold one (or the LAN handshake just
                 // said ours is stale, see tryLan). Never logged.
                 if (tokenPolicy.shouldFetch(transport.kind, proto, previous?.lanToken?.takeUnless { continuity.invalidateLanToken })) {
-                    if (fetchTokenLocked(session, address, quiet = true) && tokenPolicy.onFetched(address)) {
-                        _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanTokenRenewed))
-                    }
+                    if (fetchTokenLocked(session, address, quiet = true)) tokenPolicy.onFetched(address)
                 }
                 suspendRunCatching { session.getConfig() }
                     .onSuccess { _config.value = it }
                     .onFailure { Log.w(TAG, "GET_CONFIG failed: ${it.message}") }
+                // Wi-Fi sync stays on below Developer, switched back once per connection.
+                suspendRunCatching { session.enableLanOnce(_config.value?.config, developerLevel.developer()) }
+                    .onSuccess { snapshot -> snapshot?.let { _config.value = it; recordDiagnostic("lan", "Wi-Fi sync switched back on") } }
+                    .onFailure { Log.w(TAG, "lan.on=1 failed (${it::class.simpleName})") }
             }
             // The link is open and, on BLE, bonded. Only a desc no known template matches is fetched.
             suspendRunCatching { boardDescriptors.ensure(info, session) }
@@ -1006,7 +1009,7 @@ class DeviceLinkOwner @Inject constructor(
         val fake = address == FakeTransport.FAKE_ADDRESS || address == FakeTransport.FAKE_LAN_ADDRESS
         var link: AndroidLink? = if (fake) transportFactory.fake(address) else null
         if (link == null && prefer != LinkPreference.BLE) {
-            when (val lan = tryLan(address, name, known, fallbackToBle = prefer == LinkPreference.ANY, target = background?.lanTarget)) {
+            when (val lan = tryLan(address, name, known, target = background?.lanTarget)) {
                 is LanAttempt.Opened -> link = lan.link
                 LanAttempt.Refused -> throw LinkClosedException(lastOpenFailure ?: DisconnectCause.UpdateFirmware(null, DeviceUuids.PROTOCOL_VERSION))
                 LanAttempt.Skipped -> Unit
@@ -1392,19 +1395,17 @@ class DeviceLinkOwner @Inject constructor(
 
     // ----------------------------------------------------------------- controls
 
-    /** Automatic SET_TIME with the phone UTC, also preserving the acknowledged reconciliation anchor. */
-    fun setTimeFromPhone() {
-        val session = interactiveSession() ?: return
-        launchCommand { setTimeFromPhoneNow(session, quiet = false) }
-    }
-
-    private suspend fun setTimeFromPhoneNow(session: DeviceSession, quiet: Boolean, automatic: Boolean = false): Boolean {
-        return try {
-            val r = if (automatic) session.synchronizeClockIfNeeded(clock::nowEpochMs) else session.synchronizeClock(clock::nowEpochMs)
+    /**
+     * The automatic clock check, once per connection and shared with collection runs. Silent, the
+     * outcome reaches the diagnostics log only. The acknowledged anchor is kept for History.
+     */
+    private suspend fun synchronizeClockQuietly(session: DeviceSession) {
+        try {
+            val r = session.synchronizeClockOnce(clock::nowEpochMs)
             check(_session.value === session) { "clock session replaced" }
             if (r == null) {
-                recordDiagnostic("clock", "external clock remains usable; SET_TIME skipped")
-                return true
+                recordDiagnostic("clock", "sensor clock kept, SET_TIME skipped")
+                return
             }
             val info = (session.link.state.value as? LinkState.Ready)?.info?.info
             val thing = info?.thing
@@ -1418,19 +1419,11 @@ class DeviceLinkOwner @Inject constructor(
                 }
             }
             recordDiagnostic("clock", "SET_TIME accepted at epoch ${r.epochSeconds}")
-            if (!quiet) _events.emit(DeviceEvent.Info(DeviceMessage.ClockSet))
             suspendRunCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, clock.nowEpochMs()) }
-            true
-        } catch (e: DeviceErrorException) {
-            recordDiagnostic("clock", "SET_TIME rejected: ${e.message}")
-            if (!quiet) _events.emit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.SET_TIME)))
-            false
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             recordDiagnostic("clock", "SET_TIME failed: ${e.message ?: e::class.simpleName}")
-            if (!quiet) _events.emit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.SET_TIME)))
-            false
         }
     }
 

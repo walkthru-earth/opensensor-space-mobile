@@ -5,15 +5,31 @@ sample timing and durable anchor evidence. The server is not required for local 
 
 ## Connection and storage
 
-Android and iOS run one shared clock policy after authentication and before listing files.
-A fresh `STATUS` snapshot reports clock source, current `utc_ms` and `clk_age_s`. Send phone
-UTC when no anchor exists, the clock came from RTC, an external anchor is at least six hours
-old, or device UTC differs by more than two seconds plus half the measured request delay.
+Android and iOS run one shared clock policy (`SmartSyncPolicy`) after authentication and before
+listing files, at most once per connection over Bluetooth or Wi-Fi (`DeviceSession.synchronizeClockOnce`,
+claimed on the link, so a Smart Sync run on the same connection does not check again). It is
+silent. No message, no button, and a failure only reaches the diagnostics log.
+A fresh `STATUS` snapshot reports clock source, current `utc_ms` and `clk_age_s`. The rules, in order:
+
+1. A phone clock earlier than the app build floor (`PHONE_CLOCK_FLOOR_MILLIS`, 2026-10-29) is
+   wrong and is never sent.
+2. Send phone UTC when no anchor exists, the clock came from RTC after a power cut, or the
+   status is unavailable.
+3. A difference beyond one minute plus expected drift and half the measured request delay means
+   one side was set by hand. Send phone UTC, except over a network (`clk=3`, SNTP) anchor, which
+   the phone never overwrites by that much.
+4. A difference beyond two seconds plus half the request delay is fixed only when the anchor is
+   at least six hours old. A recent anchor within a minute is kept, so two phones that disagree
+   slightly never flip-flop the sensor clock.
+5. An anchor at least six hours old is refreshed.
+
 The six-hour cadence uses the existing 50 ppm drift assumption (about 1.08 seconds), not
 measured oscillator accuracy. A recent host or network clock survives reconnects, switching
-transports and creating a new iOS byte pipe without another `SET_TIME`. Legacy firmware with a usable UTC clock but no age/drift fields keeps
+transports and creating a new iOS byte pipe without another `SET_TIME`. The phone sends UTC,
+so a time zone change on the phone changes nothing on the sensor. Legacy firmware with a usable UTC clock but no age/drift fields keeps
 that anchor; unavailable status obtains an initial acknowledged phone anchor. A failed clock
 check does not prevent downloading verified original files. There is no user-facing device-time setting or confirmation.
+Only the Developer level shows the Clock card on Today, read only, with the source, age and drift.
 The optional microsecond remainder in `SET_TIME` retains the phone's millisecond precision;
 legacy firmware falls back to integer seconds. Only the acknowledged UTC/monotonic pair is
 persisted as evidence, bound to the connection's original thing and full boot ID.

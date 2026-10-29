@@ -38,11 +38,8 @@ enum class UserAction {
     /** Sync now, Sync all and per file sync. The sync runs whatever the notification answer. */
     SYNC,
 
-    /** Find Wi-Fi sensors, the Wi-Fi sync switch and Allow local network. */
+    /** Find Wi-Fi sensors on the Scan tap, and Allow local network on the Developer Wi-Fi sync card. */
     WIFI_ACTION,
-
-    /** Save Wi-Fi access (the token comes over Bluetooth). A refusal does not block it. */
-    SAVE_WIFI_ACCESS,
 
     /** Near me on the Discover map. */
     NEAR_ME,
@@ -79,7 +76,6 @@ object PermissionTriggers {
         UserAction.RECONNECT to Trigger(required = setOf(AccessKind.BLUETOOTH)),
         UserAction.SYNC to Trigger(optional = setOf(AccessKind.NOTIFICATIONS)),
         UserAction.WIFI_ACTION to Trigger(required = setOf(AccessKind.LOCAL_NETWORK)),
-        UserAction.SAVE_WIFI_ACCESS to Trigger(optional = setOf(AccessKind.LOCAL_NETWORK)),
         UserAction.NEAR_ME to Trigger(required = setOf(AccessKind.APPROX_LOCATION)),
         UserAction.CONFIGURE_LOCATION to Trigger(required = setOf(AccessKind.APPROX_LOCATION)),
         UserAction.AUTO_SYNC_ON to Trigger(optional = setOf(AccessKind.NOTIFICATIONS)),

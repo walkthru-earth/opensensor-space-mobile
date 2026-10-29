@@ -4,6 +4,17 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../opensensor-space-firmware/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-29, silent clock, Wi-Fi token and Wi-Fi sync (code only)
+
+Host tests, `ios/tests/verify-native.sh` and a simulator build only. No phone run is recorded.
+
+- The sensor clock, the Wi-Fi token and Sync over Wi-Fi run by themselves once per connection on
+  both phones, through shared `:core:sync` policy (`SmartSyncPolicy`, `LanTokenPolicy`,
+  `LanAutoEnable`). Their cards and switches show only at Developer. A phone clock before the build
+  floor is never sent, and a network clock is never overwritten by more than a minute.
+- To check on phones. Clock set after a power cut, the token after a sensor reset, Wi-Fi sync
+  switched back on below Developer, and no Local Network prompt outside the Scan tap.
+
 ## 2026-10-27, templates at opensensor-space-firmware da9bd03 (code only)
 
 Host tests and the iOS simulator only. No phone run is recorded.

@@ -49,9 +49,9 @@ class TodayCardsTest {
     )
 
     @Test
-    fun simpleShowsTheHeroTodaySyncAndClock() {
+    fun simpleShowsTheHeroTodayAndSync() {
         assertEquals(
-            listOf(NOW, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK),
+            listOf(NOW, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC),
             state(waveshare, particleSample, DetailLevel.SIMPLE).cards,
         )
     }
@@ -59,15 +59,15 @@ class TodayCardsTest {
     @Test
     fun detailedAddsMeasurementsBoardStorageAndDevice() {
         assertEquals(
-            listOf(NOW, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK, READINGS, PARTICLES, BOARD, STORAGE, DEVICE_INFO),
+            listOf(NOW, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, READINGS, PARTICLES, BOARD, STORAGE, DEVICE_INFO),
             state(waveshare, particleSample, DetailLevel.DETAILED).cards,
         )
     }
 
     @Test
-    fun developerShowsTheSameCardsAsDetailed() {
+    fun onlyDeveloperAddsTheClock() {
         assertEquals(
-            state(waveshare, particleSample, DetailLevel.DETAILED).cards,
+            listOf(NOW, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK, READINGS, PARTICLES, BOARD, STORAGE, DEVICE_INFO),
             state(waveshare, particleSample, DetailLevel.DEVELOPER).cards,
         )
     }
@@ -76,13 +76,13 @@ class TodayCardsTest {
     fun aBoardTemperatureDeviceGetsTheEnvironmentHeroAndNoParticleCards() {
         // A CoreS3 sample without a PM sensor reports board temperature only, so neither the mood nor the ambient card applies.
         val boardOnly = LiveSample.parse("""{"pms":0,"imu_t":31.0}""")
-        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, boardOnly, DetailLevel.SIMPLE).cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC), state(cores3, boardOnly, DetailLevel.SIMPLE).cards)
         assertEquals(
-            listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK, BOARD, STORAGE, DEVICE_INFO),
+            listOf(NOW, TODAY_SO_FAR, SMART_SYNC, BOARD, STORAGE, DEVICE_INFO),
             state(cores3, boardOnly, DetailLevel.DETAILED).cards,
         )
         // With its PM sensor the CoreS3 gets the mood but never the ambient card.
-        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, particleSample, DetailLevel.SIMPLE).cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC), state(cores3, particleSample, DetailLevel.SIMPLE).cards)
     }
 
     @Test
@@ -96,7 +96,7 @@ class TodayCardsTest {
     @Test
     fun noLiveSampleYetKeepsTheTopOfTheList() {
         val cards = state(waveshare, null, DetailLevel.SIMPLE).cards
-        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK), cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC), cards)
     }
 
     @Test
@@ -149,7 +149,7 @@ class TodayCardsTest {
     }
 
     @Test
-    fun everyEarlyEndHasItsOwnLineAndSimpleHidesTokenWording() {
+    fun everyEarlyEndHasItsOwnLineAndOnlyDeveloperNamesTheToken() {
         val ended = SyncEndReason.entries.filter { it != SyncEndReason.COMPLETED }
         ended.forEach { reason ->
             assertNotNull(syncEndLine(SyncProgress(endReason = reason), DetailLevel.SIMPLE), reason.name)
@@ -158,7 +158,8 @@ class TodayCardsTest {
         assertNull(syncEndLine(SyncProgress(running = true, endReason = SyncEndReason.LINK_LOST), DetailLevel.DETAILED))
         assertEquals(SyncEndLine.WIFI_ACCESS, syncEndLine(SyncProgress(endReason = SyncEndReason.TOKEN_ROTATED), DetailLevel.SIMPLE))
         assertEquals(SyncEndLine.WIFI_ACCESS, syncEndLine(SyncProgress(endReason = SyncEndReason.TOKEN_REJECTED), DetailLevel.SIMPLE))
-        assertEquals(SyncEndLine.TOKEN_ROTATED, syncEndLine(SyncProgress(endReason = SyncEndReason.TOKEN_ROTATED), DetailLevel.DETAILED))
+        assertEquals(SyncEndLine.WIFI_ACCESS, syncEndLine(SyncProgress(endReason = SyncEndReason.TOKEN_ROTATED), DetailLevel.DETAILED))
+        assertEquals(SyncEndLine.TOKEN_ROTATED, syncEndLine(SyncProgress(endReason = SyncEndReason.TOKEN_ROTATED), DetailLevel.DEVELOPER))
         assertEquals(SyncEndLine.TOKEN_REJECTED, syncEndLine(SyncProgress(endReason = SyncEndReason.TOKEN_REJECTED), DetailLevel.DEVELOPER))
         assertEquals(SyncEndLine.BLUETOOTH_OFF, syncEndLine(SyncProgress(endReason = SyncEndReason.BLUETOOTH_OFF), DetailLevel.SIMPLE))
         assertEquals(SyncEndLine.PAIRING_REPAIR, syncEndLine(SyncProgress(endReason = SyncEndReason.PAIRING_REPAIR), DetailLevel.SIMPLE))
@@ -175,7 +176,7 @@ class TodayCardsTest {
         assertNull(state.capabilities.thing)
         assertNull(state.reading)
         assertEquals(LiveSupport.UNSUPPORTED, state.liveSupport)
-        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC, CLOCK), state.cards)
+        assertEquals(listOf(NOW, TODAY_SO_FAR, SMART_SYNC), state.cards)
     }
 
     @Test

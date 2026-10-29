@@ -199,7 +199,6 @@ import space.opensensor.today.resources.sync_unplaced_detail
 import space.opensensor.today.resources.sync_unplaced_simple
 import space.opensensor.today.resources.today_average
 import space.opensensor.today.resources.today_none
-import space.opensensor.today.resources.today_none_clock
 import space.opensensor.today.resources.today_of_the_day
 import space.opensensor.today.resources.today_readings_since_midnight
 import space.opensensor.today.resources.today_so_far
@@ -488,17 +487,13 @@ internal fun EnvironmentCard(
  * covers. Without timed readings it says what to do next instead of showing a number.
  */
 @Composable
-internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: DetailLevel, modifier: Modifier = Modifier) {
+internal fun TodaySoFarCard(today: TodaySoFar?, level: DetailLevel, modifier: Modifier = Modifier) {
     BrandCard(modifier = modifier, tone = CardTone.SOFT) {
         Eyebrow(stringResource(Res.string.today_so_far), heading = true)
         today?.let { FitText(it.metric.basis?.let { basis -> pm25Label(basis) } ?: it.metric.label(Locale.current.language), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Spacer(Modifier.height(8.dp))
         if (today == null) {
-            Text(
-                stringResource(if (clockMissing) Res.string.today_none_clock else Res.string.today_none),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(stringResource(Res.string.today_none), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@BrandCard
         }
         // The current reading owns the page's character. This summary adds the average and coverage.
@@ -620,19 +615,11 @@ private val SyncEndLine.text: StringResource
 private fun Long.toPluralCount(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
 
 /**
- * The logger's automatically synchronized clock in words. **Finalize buffered
- * rows** is a power action and appears from Detailed. Developer adds the anchor generation and the
- * last sample's UTC instant.
+ * Developer level: the logger's automatically synchronized clock in words, with the anchor
+ * generation and the last sample's UTC instant. The phone sets the clock on its own.
  */
 @Composable
-internal fun ClockCard(
-    status: DeviceStatus?,
-    live: LiveSample?,
-    enabled: Boolean,
-    level: DetailLevel,
-    onFlush: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+internal fun ClockCard(status: DeviceStatus?, live: LiveSample?, modifier: Modifier = Modifier) {
     val synced = status?.utcSynced
     val label = when (status?.clockSource) {
         1 -> stringResource(Res.string.clock_host)
@@ -665,22 +652,16 @@ internal fun ClockCard(
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
-        if (level.developer) {
-            status?.gen?.let {
-                Text(stringResource(Res.string.clock_generation, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            live?.utc?.let { ns ->
-                Text(
-                    stringResource(Res.string.clock_last_sample, isoInstant(ns)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontFamily = FontFamily.Monospace,
-                )
-            }
+        status?.gen?.let {
+            Text(stringResource(Res.string.clock_generation, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(Modifier.height(12.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (level.detailed) OutlinePillButton(stringResource(Res.string.flush), onClick = onFlush, enabled = enabled)
+        live?.utc?.let { ns ->
+            Text(
+                stringResource(Res.string.clock_last_sample, isoInstant(ns)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontFamily = FontFamily.Monospace,
+            )
         }
     }
 }
@@ -880,9 +861,17 @@ private fun batteryStateText(state: BatteryState): String = when (state.kind) {
 /**
  * Detailed level: the logger's storage counters and microSD use. Problem counters appear in Detailed
  * only when they are not zero. Developer adds codec, retained partial files, uptime and free heap.
+ * **Finalize buffered rows** sits here, beside the buffered count it empties.
  */
 @Composable
-internal fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level: DetailLevel, modifier: Modifier = Modifier) {
+internal fun StorageCard(
+    status: DeviceStatus?,
+    receivedAtEpochMs: Long?,
+    level: DetailLevel,
+    enabled: Boolean,
+    onFlush: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     BrandCard(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Eyebrow(stringResource(Res.string.storage_title), modifier = Modifier.weight(1f), heading = true)
@@ -941,6 +930,8 @@ internal fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level:
             Spacer(Modifier.height(8.dp))
             WarningNote(stringResource(if (status.sdFull) Res.string.storage_full else Res.string.storage_degraded))
         }
+        Spacer(Modifier.height(12.dp))
+        OutlinePillButton(stringResource(Res.string.flush), onClick = onFlush, enabled = enabled)
     }
 }
 

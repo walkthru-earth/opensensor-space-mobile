@@ -111,7 +111,7 @@ class LargeTextFitTest {
     @Test
     fun theStorageCountersWrapAndAProblemCountHasAnIconAtDoubleText() = runComposeUiTest {
         val status = DeviceStatus(fin = 1234, buf = 56, open = 1, drop = 7, err = 3, miss = 12, sd = 1, intervalSeconds = 900)
-        show { StorageCard(status, receivedAtEpochMs = null, level = DetailLevel.DETAILED) }
+        show { StorageCard(status, receivedAtEpochMs = null, level = DetailLevel.DETAILED, enabled = true, onFlush = {}) }
         assertEveryTextFits(minTexts = 8)
         // Each non zero problem counter carries a warning icon, so colour is never the only cue.
         val icons = onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ContentDescription), useUnmergedTree = true)

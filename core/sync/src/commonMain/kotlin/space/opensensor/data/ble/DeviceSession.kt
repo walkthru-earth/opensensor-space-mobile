@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.withTimeoutOrNull
+import space.opensensor.data.lan.LanAutoEnable
 import space.opensensor.data.protocol.ConfigChunkAccumulator
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.DeviceConfig
@@ -303,6 +304,23 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
         return if (decision.action == ClockSyncAction.SET_TIME) synchronizeClock(nowMillis) else null
     }
 
+    /**
+     * The automatic clock check, at most once per connection. A later call on the same link,
+     * from a run or a screen, returns null without asking again, also when the first one timed out.
+     */
+    suspend fun synchronizeClockOnce(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet? =
+        if (link.claimOnce(CLOCK_CHECK)) synchronizeClockIfNeeded(nowMillis) else null
+
+    /**
+     * Turns Wi-Fi sync back on when the sensor reports it off, at most once per connection. Wi-Fi
+     * sync is on for everyone, and only the Developer level may keep it off ([developer] true skips
+     * this). Returns the new config when it sent `lan.on=1`, else null.
+     */
+    suspend fun enableLanOnce(config: DeviceConfig?, developer: Boolean): ConfigSnapshot? {
+        if (!LanAutoEnable.shouldEnable(config, developer) || !link.claimOnce(LAN_ENABLE)) return null
+        return setConfig(ConfigPatch.build { lanOn(true) })
+    }
+
     /** `FLUSH` → `FLUSHED` or `ERROR` 10. Finalizes the RAM batch into a short file. */
     suspend fun flush(): Frame.Flushed = single(Request.Flush, "FLUSH")
 
@@ -515,6 +533,10 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
 
     companion object {
         private const val STATUS_CLOCK_TIMEOUT_MS = 5_000L
+
+        /** [LinkSession.claimOnce] keys of the automatic, once per connection device changes. */
+        private const val CLOCK_CHECK = "clock"
+        private const val LAN_ENABLE = "lan.on"
 
         /** The device's serial log ring. */
         const val LOG_RING_BYTES = 8192

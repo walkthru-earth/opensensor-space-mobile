@@ -128,15 +128,12 @@ class CompanionState {
     /** Local network has no status API on iOS, so it stays unknown until the policy denial. */
     internal val lanAccess: AccessStatus get() = IosAuthorization.localNetwork(policyDenied = lanAccessDenied)
 
-    internal var wifiAccessAvailable by mutableStateOf(false)
-        private set
+    /** A Wi-Fi access request is in flight over Bluetooth. It is quiet, nothing shows it. */
     internal var wifiAccessBusy by mutableStateOf(false)
         private set
-    internal var wifiAccessMessage by mutableStateOf<UiText>(UiText.None)
-        private set
 
-    /** How the last Wi-Fi access request ended, cleared when a new one starts. Device settings reads it. */
-    internal var wifiAccessNotice by mutableStateOf<CompanionNotice?>(null)
+    /** Whether the last Wi-Fi access request stored a token. Developer Get token reads it. */
+    internal var wifiAccessStored by mutableStateOf(false)
         private set
     internal var lanSessions by mutableStateOf<Map<String, LanSessionState>>(emptyMap())
         private set
@@ -175,32 +172,22 @@ class CompanionState {
         lanPaused = if (paused) lanPaused + name else lanPaused - name
     }
 
-    internal fun wifiAccessChanged(available: Boolean, busy: Boolean, explanation: String) {
-        wifiAccessAvailable = available
-        wifiAccessBusy = busy
-        wifiAccessMessage = UiText.plain(explanation)
-        wifiAccessNotice = null
-    }
-
-    /** The Bluetooth connection is gone, so Wi-Fi access cannot be requested and shows nothing. */
+    /** The Bluetooth connection is gone, so no Wi-Fi access request runs. */
     fun wifiAccessReset() {
-        wifiAccessChanged(available = false, busy = false, explanation = "")
+        wifiAccessBusy = false
+        wifiAccessStored = false
     }
 
     /** A Wi-Fi access request started. The last outcome clears until this one ends. */
     fun wifiAccessSaving() {
-        wifiAccessAvailable = true
         wifiAccessBusy = true
-        wifiAccessMessage = CompanionNotice.SAVING_WIFI_ACCESS.text
-        wifiAccessNotice = null
+        wifiAccessStored = false
     }
 
-    /** Wi-Fi access state with a typed [notice] in Android's words. */
-    fun wifiAccessNoticed(available: Boolean, busy: Boolean, notice: CompanionNotice) {
-        wifiAccessAvailable = available
-        wifiAccessBusy = busy
-        wifiAccessMessage = notice.text
-        wifiAccessNotice = notice
+    /** The Wi-Fi access request ended, [stored] when the token is in the Keychain. */
+    fun wifiAccessEnded(stored: Boolean) {
+        wifiAccessBusy = false
+        wifiAccessStored = stored
     }
 
     /** Native sessions are independent: a callback updates only its own sensor card. */
@@ -258,7 +245,7 @@ class CompanionState {
     internal var lastSyncResult by mutableStateOf<SyncResult?>(null)
         private set
 
-    /** SET_TIME and FLUSH from Today, over the same Bluetooth connection. */
+    /** FLUSH from Today, over the same Bluetooth connection. */
     val today = TodayLink()
 
     fun bluetoothSyncAvailable(available: Boolean) {

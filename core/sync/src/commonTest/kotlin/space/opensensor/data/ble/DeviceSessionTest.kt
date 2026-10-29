@@ -20,14 +20,18 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import space.opensensor.data.protocol.ConfigPatch
+import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
+import space.opensensor.data.protocol.LanConfig
 import space.opensensor.data.protocol.ListCursor
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ProtocolError
 import space.opensensor.data.protocol.Request
 import space.opensensor.data.protocol.toHex
+import space.opensensor.data.sync.SmartSyncPolicy
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkClosedException
 import space.opensensor.link.LinkEvent
@@ -47,6 +51,9 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
+
+/** A phone time after the clock policy build floor, on a whole second. */
+private const val PHONE_NOW = SmartSyncPolicy.PHONE_CLOCK_FLOOR_MILLIS + 86_400_000L
 
 class DeviceSessionTest {
     private val opened = Frame.Opened(1, 12, 0, "legacy-parquet/boundary.parquet")
@@ -460,10 +467,10 @@ class DeviceSessionTest {
         val p = peer()
         val session = p.view()
         for (source in listOf(1, 3)) {
-            val request = async { session.synchronizeClockIfNeeded { 1_000_000L } }
+            val request = async { session.synchronizeClockIfNeeded { PHONE_NOW } }
             runCurrent()
             assertContentEquals(Request.Status.encode(), p.bodies.last())
-            p.transport.statusNotifications.emit("{\"utc\":1,\"clk\":$source,\"utc_ms\":1000000,\"clk_age_s\":60}".encodeToByteArray())
+            p.transport.statusNotifications.emit("{\"utc\":1,\"clk\":$source,\"utc_ms\":$PHONE_NOW,\"clk_age_s\":60}".encodeToByteArray())
             assertNull(request.await())
         }
         assertEquals(2, p.bodies.size)
@@ -473,12 +480,12 @@ class DeviceSessionTest {
     fun maintenanceAnchorsMissingRtcAndOldExternalClocks() = runTest {
         for (json in listOf("{\"utc\":0}", "{\"utc\":1,\"clk\":2}", "{\"utc\":1,\"clk\":1,\"clk_age_s\":21600}")) {
             val p = peer()
-            val request = async { p.view().synchronizeClockIfNeeded { 1_000_000L } }
+            val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
             runCurrent()
             p.transport.statusNotifications.emit(json.encodeToByteArray())
             runCurrent()
-            assertContentEquals(Request.SetTime(1000L, 0).encode(), p.bodies.last())
-            val ack = Frame.TimeSet(1000L, 501L, 0)
+            assertContentEquals(Request.SetTime(PHONE_NOW / 1000, 0).encode(), p.bodies.last())
+            val ack = Frame.TimeSet(PHONE_NOW / 1000, 501L, 0)
             p.driver.emit(ack)
             assertEquals(ack, request.await())
         }
@@ -487,19 +494,19 @@ class DeviceSessionTest {
     @Test
     fun maintenanceFallsBackForFirmwareWithoutStatusNotifications() = runTest {
         val p = peer()
-        val request = async { p.view().synchronizeClockIfNeeded { 1_000_000L } }
+        val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
         runCurrent()
         advanceTimeBy(5_000)
         runCurrent()
-        assertContentEquals(Request.SetTime(1000L, 0).encode(), p.bodies.last())
-        p.driver.emit(Frame.TimeSet(1000L, 501L, 0))
+        assertContentEquals(Request.SetTime(PHONE_NOW / 1000, 0).encode(), p.bodies.last())
+        p.driver.emit(Frame.TimeSet(PHONE_NOW / 1000, 501L, 0))
         assertEquals(501L, request.await()?.monotonicMicros)
     }
 
     @Test
     fun legacyStatusReadFallbackRetainsAnAlreadyUsableUtcClock() = runTest {
         val p = peer("{\"utc\":1}".encodeToByteArray())
-        val request = async { p.view().synchronizeClockIfNeeded { 1_000_000L } }
+        val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
         runCurrent()
         advanceTimeBy(5_000)
         runCurrent()
@@ -509,8 +516,8 @@ class DeviceSessionTest {
 
     @Test
     fun aCachedFallbackCannotBeMistakenForClockDrift() = runTest {
-        val p = peer("{\"utc\":1,\"clk\":1,\"utc_ms\":985000,\"clk_age_s\":60}".encodeToByteArray())
-        val request = async { p.view().synchronizeClockIfNeeded { 1_000_000L } }
+        val p = peer("{\"utc\":1,\"clk\":1,\"utc_ms\":${PHONE_NOW - 120_000},\"clk_age_s\":60}".encodeToByteArray())
+        val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
         runCurrent()
         advanceTimeBy(5_000)
         runCurrent()
@@ -519,9 +526,51 @@ class DeviceSessionTest {
     }
 
     @Test
+    fun aPhoneClockBeforeTheBuildFloorNeverSetsTime() = runTest {
+        val p = peer()
+        val request = async { p.view().synchronizeClockIfNeeded { SmartSyncPolicy.PHONE_CLOCK_FLOOR_MILLIS - 1 } }
+        runCurrent()
+        p.transport.statusNotifications.emit("{\"utc\":0}".encodeToByteArray())
+        assertNull(request.await())
+        assertContentEquals(Request.Status.encode(), p.bodies.single())
+    }
+
+    @Test
+    fun theAutomaticClockCheckRunsOncePerConnectionEvenAfterATimeout() = runTest {
+        val p = peer()
+        // The first check times out on STATUS and has no cached snapshot, so it sends SET_TIME and that times out too.
+        val first = async { runCatching { p.view().synchronizeClockOnce { PHONE_NOW } } }
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+        advanceTimeBy(60_000)
+        runCurrent()
+        first.await()
+        val sent = p.bodies.size
+        // A second run or screen on the same link never asks again, so a slow sensor is not looped.
+        assertNull(p.view().synchronizeClockOnce { PHONE_NOW })
+        assertEquals(sent, p.bodies.size)
+    }
+
+    @Test
+    fun wifiSyncIsSwitchedBackOnOncePerConnectionBelowDeveloper() = runTest {
+        val p = peer()
+        p.reply = { op, _ -> if (op == Opcode.SET_CONFIG) emit(Frame.Config(0, "{\"lan\":{\"on\":1}}")) }
+        val off = DeviceConfig(lan = LanConfig(on = 0))
+        assertNull(p.view().enableLanOnce(off, developer = true))
+        assertNull(p.view().enableLanOnce(DeviceConfig(lan = LanConfig(on = 1)), developer = false))
+        assertNull(p.view().enableLanOnce(DeviceConfig(), developer = false))
+        assertTrue(p.bodies.isEmpty())
+        assertEquals(1, p.view().enableLanOnce(off, developer = false)?.config?.lan?.on)
+        assertContentEquals(Request.SetConfig(ConfigPatch.build { lanOn(true) }).encode(), p.bodies.single())
+        assertNull(p.view().enableLanOnce(off, developer = false))
+        assertEquals(1, p.bodies.size)
+    }
+
+    @Test
     fun maintenanceCancellationNeverSetsTime() = runTest {
         val p = peer()
-        val request = async { p.view().synchronizeClockIfNeeded { 1_000_000L } }
+        val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
         runCurrent()
         request.cancelAndJoin()
         runCurrent()

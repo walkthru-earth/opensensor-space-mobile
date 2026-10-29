@@ -283,7 +283,7 @@ class DeviceFacadeTest {
         val lent = pending.await()
         lent.session.link.close("synthetic post-ack disconnect")
         assertTrue(lent.session.link.state.value is LinkState.Closed)
-        h.owner.collectionClockSet(lent.session, Frame.TimeSet(1_789_581_931L, 1234L))
+        h.owner.collectionClockSet(lent.session, Frame.TimeSet(1_793_318_400L, 1234L))
         assertEquals(listOf(0), h.clockAnchorsBeforeList)
         lent.release()
         h.owner.closeReturnedLend()
@@ -299,7 +299,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `direct collection records its clock anchor before its first LIST`() = harnessTest { h ->
-        h.clockEpochOffset = 1_789_581_931_987L
+        h.clockEpochOffset = 1_793_318_400_987L
         val startedMs = h.clockEpochOffset + h.test.testScheduler.currentTime
         h.repo.syncAll()
         h.until { h.repo.collectionState.value is CollectionState.Done && !h.repo.busy.value }
@@ -329,7 +329,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `worker collection records its clock anchor before its first LIST`() = harnessTest { h ->
-        h.clockEpochOffset = 1_789_581_931_987L
+        h.clockEpochOffset = 1_793_318_400_987L
         h.knownDao.upsert(h.enrolled(token = null))
         val work = async { h.repo.syncInBackground(ADDRESS, null, owner = "synthetic-worker", protection = KeepAlive.None) }
         h.until { work.isCompleted }
@@ -341,7 +341,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `reconnected collection persists each accepted clock anchor before the new LIST`() = harnessTest(chunkDelayMs = 1) { h ->
-        h.clockEpochOffset = 1_789_581_931_987L
+        h.clockEpochOffset = 1_793_318_400_987L
         h.repo.syncAll()
         h.until { h.archived.rows.isNotEmpty() }
         assertEquals(listOf(0), h.clockAnchorsBeforeList)
@@ -578,7 +578,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `connection synchronizes UTC before listing without a user action`() = harnessTest { h ->
-        h.clockEpochOffset = 1_789_581_931_987L
+        h.clockEpochOffset = 1_793_318_400_987L
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null }
         val sent = h.repo.session.value!!.frames.records.value.filter { it.direction == FrameDirection.TX }.map { it.type }
@@ -589,7 +589,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `a slow re-dating derive after a clock receipt never holds the link`() = harnessTest { h ->
-        h.clockEpochOffset = 1_789_581_931_987L
+        h.clockEpochOffset = 1_793_318_400_987L
         val gate = CompletableDeferred<Unit>()
         h.thingDeriveGate = gate
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
@@ -604,24 +604,25 @@ class DeviceFacadeTest {
     }
 
     @Test
-    fun `the SET_TIME on connect and a manual one each record the clock anchor`() = harnessTest { h ->
-        h.clockEpochOffset = 1_789_581_931_987L
+    fun `the clock is set once on connect, quietly, and records the anchor`() = harnessTest { h ->
+        h.clockEpochOffset = 1_793_318_400_987L
         h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         assertEquals(1, h.factory.requests.count { it == Opcode.SET_TIME })
         assertEquals("the automatic SET_TIME on connect", 1, h.clockAnchorsBeforeList.size)
 
-        h.repo.setTimeFromPhone()
-        h.until { h.factory.requests.count { it == Opcode.SET_TIME } == 2 && !h.repo.busy.value }
-        assertEquals("the manual SET_TIME", 2, h.clockAnchorsBeforeList.size)
+        h.repo.smartSync()
+        h.until { h.repo.collectionState.value is CollectionState.Done && !h.repo.busy.value }
+        assertEquals("a run on the same connection does not set it again", 1, h.factory.requests.count { it == Opcode.SET_TIME })
     }
 
     @Test
-    fun `a refused automatic clock still lists original files`() = harnessTest { h ->
-        // Virtual epoch zero is deliberately refused by the firmware-compatible fake.
+    fun `a phone clock before the build floor is never sent and the files still list`() = harnessTest { h ->
+        // Virtual epoch zero is a wrong phone clock, older than the app build.
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null }
         assertTrue(h.repo.plan.value!!.toDownload.isNotEmpty())
+        assertEquals(0, h.factory.requests.count { it == Opcode.SET_TIME })
         assertEquals(0, h.repo.status.value?.status?.utc)
     }
 
@@ -647,7 +648,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `smart sync uses its fresh listing instead of the plan from connection`() = harnessTest { h ->
-        h.clockEpochOffset = 1_789_581_931_987L
+        h.clockEpochOffset = 1_793_318_400_987L
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null }
         val newer = h.newFile()
@@ -867,7 +868,7 @@ class DeviceFacadeTest {
         val renewed = h.knownDao.lanToken(ADDRESS)
         assertNotNull("a fresh token was fetched over the Bluetooth session", renewed)
         assertFalse(renewed == OLD_TOKEN)
-        assertTrue(h.events.contains(DeviceEvent.Info(DeviceMessage.LanFallback(LanFailure.AUTH_FAILED))))
+        assertTrue("the fallback and the renewal are quiet", h.events.none { it is DeviceEvent.Info })
     }
 
     @Test
@@ -942,7 +943,7 @@ class DeviceFacadeTest {
         assertTrue(h.factory.lanTransports.single().closed)
         assertEquals(TransportKind.FAKE, h.repo.activeTransport.value)
         assertEquals("a non-auth failure keeps the stored token", OLD_TOKEN, h.knownDao.lanToken(ADDRESS))
-        assertTrue("the detail stays in the log", h.events.contains(DeviceEvent.Info(DeviceMessage.LanFallback(null))))
+        assertTrue("the fallback is quiet", h.events.none { it is DeviceEvent.Info })
     }
 
     @Test
@@ -970,7 +971,7 @@ class DeviceFacadeTest {
         assertEquals(0, h.factory.fakeConnects)
         assertFalse(h.repo.connectionState.value.isReady)
         assertEquals(OLD_TOKEN, h.knownDao.lanToken(ADDRESS))
-        assertFalse(h.events.any { it is DeviceEvent.Info && it.message is DeviceMessage.LanFallback })
+        assertTrue(h.events.none { it is DeviceEvent.Info })
     }
 
     @Test
@@ -995,6 +996,31 @@ class DeviceFacadeTest {
         assertTrue(h.events.any { it == DeviceEvent.Info(DeviceMessage.Busy) || it == DeviceEvent.Info(DeviceMessage.BusyBeforeSync) })
         h.until { !h.repo.busy.value }
         assertEquals(1, h.events.count { it is DeviceEvent.Info && it.message is DeviceMessage.ConfigSaved })
+    }
+
+    @Test
+    fun `Wi-Fi sync switched off is switched back on once below Developer and left alone at Developer`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null && !h.repo.busy.value }
+        assertEquals("already on, nothing sent", 0, h.factory.requests.count { it == Opcode.SET_CONFIG })
+
+        h.developer = true
+        h.repo.applyConfig(ConfigPatch.build { lanOn(false) })
+        h.until { !h.repo.busy.value && h.repo.config.value?.config?.lan?.on == 0 }
+        h.repo.disconnect()
+        h.until { h.repo.session.value == null }
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null && !h.repo.busy.value }
+        assertEquals("Developer keeps it off", 0, h.repo.config.value?.config?.lan?.on)
+        assertEquals(1, h.factory.requests.count { it == Opcode.SET_CONFIG })
+
+        h.developer = false
+        h.repo.disconnect()
+        h.until { h.repo.session.value == null }
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.connectionState.value.isReady && h.repo.config.value?.config?.lan?.on == 1 && !h.repo.busy.value }
+        assertEquals("one quiet lan.on=1", 2, h.factory.requests.count { it == Opcode.SET_CONFIG })
+        assertEquals("only the explicit save says so", 1, h.events.count { it is DeviceEvent.Info && it.message is DeviceMessage.ConfigSaved })
     }
 
     @Test
@@ -1216,6 +1242,7 @@ class DeviceFacadeTest {
     @Test
     fun `a link that drops while a lend opens it is closed, so the next lend is not Busy`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = null))
+        h.clockEpochOffset = 1_793_318_400_000L
         h.factory.dropOn = Opcode.SET_TIME
         val first = async { runCatching { h.repo.lendLink(ADDRESS, LinkPreference.ANY) } }.also { h.until { it.isCompleted } }.await()
         assertTrue("the lend fails with a typed close: ${first.exceptionOrNull()}", first.exceptionOrNull() is LinkClosedException)
@@ -1441,6 +1468,7 @@ class DeviceFacadeTest {
         val places = MemoryThingPlaces()
 
         var clockEpochOffset = 0L
+        var developer = false
         var partialFailuresRemaining = 0
         val failedStorageNames = mutableListOf<String>()
         val committedNames = mutableListOf<String>()
@@ -1496,6 +1524,7 @@ class DeviceFacadeTest {
                 pruned = PrunedFiles.None,
                 boardDescriptors = BoardDescriptors(MemoryBlockStore(), ServedTemplates(), io = dispatcher),
                 places = places,
+                developerLevel = { developer },
             )
             val delegateStore = FileArchiveStore(fileArchive, dispatcher)
             val store = object : ArchiveStore by delegateStore {

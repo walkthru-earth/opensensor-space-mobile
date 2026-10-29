@@ -160,8 +160,6 @@ private class RepositoryTodaySource(
     /** Collection applies the automatic clock rule. */
     override fun sync() = repository.smartSync()
 
-    override fun setTime() = repository.setTimeFromPhone()
-
     override fun flush() = repository.flush()
 
     override fun stopSync() = repository.cancelSync()

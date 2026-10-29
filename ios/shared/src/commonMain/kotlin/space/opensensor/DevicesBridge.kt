@@ -217,7 +217,10 @@ class DevicesBridge internal constructor(
     private val archive: Flow<List<ArchiveRecord>>,
     private val storage: KnownRecordStorage,
     private val now: () -> Long,
+    /** The scan My devices starts on its own. Bluetooth only until the user first tapped Scan. */
     private val startScan: () -> Unit,
+    /** The user tapped Scan or Find, which also browses the local network and may ask for access. */
+    private val tapScan: () -> Unit,
     private val stopScan: () -> Unit,
     private val forget: (peripheral: String, device: String?) -> Unit,
     private val collect: (id: String, wifiName: String?) -> Unit,
@@ -237,8 +240,11 @@ class DevicesBridge internal constructor(
 
     internal val known: StateFlow<List<KnownRecord>> get() = records.asStateFlow()
 
-    /** The setup wizard's Find runs the same Bluetooth scan as My devices. */
-    internal fun startFind() = startScan()
+    /** The setup wizard's Find is a tap, so it runs the same scan as tapping Scan on My devices. */
+    internal fun startFind() = tapScan()
+
+    /** The user tapped Scan on My devices. */
+    internal fun scanTapped() = tapScan()
 
     internal fun stopFind() = stopScan()
 

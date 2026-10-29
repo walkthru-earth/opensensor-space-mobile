@@ -183,8 +183,8 @@ fun LazyListScope.sensorIdentityItem(
 
 /**
  * The configuration cards in their order. A protocol v1 device gets one note. Pairing is Detailed,
- * or Simple when it needs attention. Wi-Fi and Sync over Wi-Fi show at every level, paired phones at
- * Detailed.
+ * or Simple when it needs attention. Wi-Fi shows at every level, paired phones at Detailed. Sync over
+ * Wi-Fi is Developer only, every other level keeps it on and renews the token on its own.
  */
 fun LazyListScope.deviceConfigItems(state: DeviceConfigUiState, lanAccess: LanAccess, onAction: (DeviceConfigAction) -> Unit) {
     if (state.snapshot.info != null && !state.isV2) {
@@ -210,16 +210,18 @@ fun LazyListScope.deviceConfigItems(state: DeviceConfigUiState, lanAccess: LanAc
             onJoin = { onAction(DeviceConfigAction.JoinWifi(it)) },
         )
     }
-    item(key = "lan") {
-        LanCard(
-            state = state,
-            access = lanAccess,
-            onRequestAccess = { onAction(DeviceConfigAction.RequestLanAccess) },
-            onToggleLan = { onAction(DeviceConfigAction.SetLanOn(it)) },
-            onFetchToken = { onAction(DeviceConfigAction.FetchToken) },
-            onRotateToken = { onAction(DeviceConfigAction.RequestRotateToken) },
-            onReconnectBle = { onAction(DeviceConfigAction.ReconnectOverBluetooth) },
-        )
+    if (state.level.developer) {
+        item(key = "lan") {
+            LanCard(
+                state = state,
+                access = lanAccess,
+                onRequestAccess = { onAction(DeviceConfigAction.RequestLanAccess) },
+                onToggleLan = { onAction(DeviceConfigAction.SetLanOn(it)) },
+                onFetchToken = { onAction(DeviceConfigAction.FetchToken) },
+                onRotateToken = { onAction(DeviceConfigAction.RequestRotateToken) },
+                onReconnectBle = { onAction(DeviceConfigAction.ReconnectOverBluetooth) },
+            )
+        }
     }
     if (state.level.detailed) {
         item(key = "bonds") { BondsCard(state, onForgetAll = { onAction(DeviceConfigAction.RequestForgetBonds) }) }

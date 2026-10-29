@@ -70,7 +70,7 @@
     <string name="info_connect_body1">Turn on your sensor and keep this phone close. It appears here in a few seconds.</string>
     <string name="info_connect_body2">On the first connection the phone asks for a 6 digit code. Read it on the sensor screen. A sensor without a screen uses the PIN its owner set over USB.</string>
     <string name="info_privacy">Bluetooth and your local Wi-Fi reach only your own sensors. No account, no analytics and no uploads. Approximate location is used only when you tap Near me, to move the map. Your files stay on this phone unless you share them.</string>
-    <string name="info_collect_body">Collects from your known sensors over Wi-Fi when this phone holds their token, otherwise over Bluetooth. Sensors with an open connection are skipped.</string>
+    <string name="info_collect_body">Collects from your known sensors over Wi-Fi when it can, otherwise over Bluetooth. Sensors with an open connection are skipped.</string>
     <string name="info_collect_background">Up to two run at once with a notification, so you can leave the app.</string>
     <string name="info_collect_foreground">One runs at a time while the app is open.</string>
     <string name="info_wifi_only">The token comes over Bluetooth only. Connect it over Bluetooth once to sync over Wi-Fi.</string>

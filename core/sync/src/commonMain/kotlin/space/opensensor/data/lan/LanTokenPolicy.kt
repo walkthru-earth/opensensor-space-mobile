@@ -13,8 +13,8 @@ import space.opensensor.sync.SyncLock
  * the device's token, the LAN handshake failed with `ERROR` 14 (`AUTH_FAILED`), the app fell back to
  * Bluetooth as designed — and then never fetched a new token, because one was still stored. So an
  * `AUTH_FAILED` handshake **invalidates** the stored token (the repository clears the Room column),
- * which makes the next BLE session fetch again; the renewal is remembered here so the UI can say
- * "LAN token renewed" exactly once instead of the silent first-time fetch.
+ * which makes the next BLE session fetch again. Every fetch is quiet, on Android and iOS alike.
+ * The stale mark only lets a Wi-Fi-only request fail fast until that BLE session runs.
  */
 class LanTokenPolicy {
     private val staleAddresses = HashSet<String>()
@@ -44,11 +44,10 @@ class LanTokenPolicy {
     fun shouldFetch(kind: TransportKind, proto: Int?, storedToken: String?): Boolean =
         kind != TransportKind.LAN && (proto ?: 1) >= 2 && storedToken == null
 
-    /**
-     * A token was fetched and stored for [address]. Returns true when this was a renewal after an
-     * `AUTH_FAILED` (so the UI should announce it), and forgets the stale mark either way.
-     */
-    fun onFetched(address: String): Boolean = lock.withLock { staleAddresses.remove(address) }
+    /** A token was fetched and stored for [address], so it is no longer stale. */
+    fun onFetched(address: String) {
+        lock.withLock { staleAddresses.remove(address) }
+    }
 
     /** The user forgot the device (or rotated the token deliberately); nothing to announce later. */
     fun clear(address: String) {

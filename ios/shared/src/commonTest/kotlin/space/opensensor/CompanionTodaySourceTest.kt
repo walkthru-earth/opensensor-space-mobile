@@ -175,25 +175,25 @@ class CompanionTodaySourceTest {
         }
     }
 
-    @Test fun explicitClockNoticeWaitsForTheLastNativeWrite() = runTest {
+    @Test fun aCommandNoticeWaitsForTheLastNativeWrite() = runTest {
         val state = connected("{\"utc\":0,\"clk\":0}")
         val calls = Calls()
         val notices = mutableListOf<TodayNotice>()
         val source = source(state, calls, notices)
-        source.setTime()
+        source.flush()
         state.today.commandStarted()
-        state.today.commandEnded(CommandResult(TodayNotice.ClockSet))
+        state.today.commandEnded(CommandResult(TodayNotice.Finalized(3, 1)))
         runCurrent()
-        assertEquals(listOf("SET_TIME"), calls.list)
+        assertEquals(listOf("FLUSH"), calls.list)
         assertTrue(notices.isEmpty())
         assertTrue(state.today.busy)
         state.today.linkIdle()
         runCurrent()
-        assertEquals(listOf<TodayNotice>(TodayNotice.ClockSet), notices)
+        assertEquals(listOf<TodayNotice>(TodayNotice.Finalized(3, 1)), notices)
         assertFalse(state.today.busy)
         state.today.linkIdle()
         runCurrent()
-        assertEquals(listOf("SET_TIME"), calls.list)
+        assertEquals(listOf("FLUSH"), calls.list)
     }
 
     @Test fun nothingIsSentWhileACommandOrSyncRuns() = runTest {
@@ -206,7 +206,7 @@ class CompanionTodaySourceTest {
         source.sync()
         state.today.commandFinished(CommandResult(TodayNotice.Finalized(12, 1)))
         state.bluetoothSyncStarted()
-        source.setTime()
+        source.flush()
         runCurrent()
         assertTrue(calls.list.isEmpty())
         assertEquals(

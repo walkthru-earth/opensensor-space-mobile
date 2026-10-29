@@ -11,11 +11,10 @@ enum LanFailure: Error {
     var notice: CompanionNotice {
         switch self {
         case .invalidReply: return .verificationFailed
-        case .credentialsUnavailable: return .tokenFailed
-        case .enrollmentRequired: return .enrollOverBluetooth
+        // A missing or refused token is dropped and fetched again over Bluetooth, silently.
+        case .credentialsUnavailable, .enrollmentRequired, .authentication: return .verificationFailed
         case .thingChanged: return .thingChanged
         case .hardwareChanged: return .hardwareChanged
-        case .authentication: return .tokenNeedsBluetooth
         case .busy: return .busy
         case .timeout, .disconnected: return .syncAborted
         }

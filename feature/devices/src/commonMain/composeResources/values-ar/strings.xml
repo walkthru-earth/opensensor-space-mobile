@@ -86,7 +86,7 @@
     <string name="info_connect_body1">شغّل المستشعر وأبقِ هذا الهاتف قريبًا. سيظهر هنا خلال ثوانٍ.</string>
     <string name="info_connect_body2">عند الاتصال الأول يطلب الهاتف رمزًا من 6 أرقام. اقرأه على شاشة المستشعر. المستشعر الذي بلا شاشة يستخدم رمز PIN الذي ضبطه مالكه عبر USB.</string>
     <string name="info_privacy">لا يصل Bluetooth وشبكة Wi-Fi المحلية إلا إلى مستشعراتك. لا حساب ولا تحليلات ولا رفع. يُستخدم الموقع التقريبي فقط عند النقر على بالقرب مني، لتحريك الخريطة. تبقى ملفاتك على هذا الهاتف ما لم تشاركها.</string>
-    <string name="info_collect_body">يجمع من مستشعراتك المعروفة عبر Wi-Fi حين يملك هذا الهاتف رمز الوصول الخاص بها، وإلا فعبر Bluetooth. تُتخطى المستشعرات التي لها اتصال مفتوح.</string>
+    <string name="info_collect_body">يجمع من مستشعراتك المعروفة عبر Wi-Fi حين يمكنه ذلك، وإلا فعبر Bluetooth. تُتخطى المستشعرات التي لها اتصال مفتوح.</string>
     <string name="info_collect_background">يعمل اثنان كحد أقصى معًا مع إشعار، فيمكنك مغادرة التطبيق.</string>
     <string name="info_collect_foreground">يعمل واحد في كل مرة والتطبيق مفتوح.</string>
     <string name="info_wifi_only">رمز الوصول يأتي عبر Bluetooth فقط. صِله عبر Bluetooth مرة واحدة للمزامنة عبر Wi-Fi.</string>

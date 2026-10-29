@@ -31,7 +31,7 @@ import space.opensensor.data.SyncProgress as RunProgress
 class CompanionLinkActions(
     /** Sync the connected sensor. The app routes it to an open Wi-Fi session for the same sensor. */
     internal val syncFiles: (String) -> Unit,
-    /** Automatic `SET_TIME` or confirmed `FLUSH` over this sensor's active connection. */
+    /** A confirmed `FLUSH` over this sensor's active connection. */
     internal val command: (String, SensorCommand) -> Unit,
     internal val connect: (String) -> Unit,
     internal val disconnect: (String) -> Unit,
@@ -42,8 +42,8 @@ class CompanionLinkActions(
 /**
  * The iOS side of the Today port: [CompanionState], which `BluetoothCompanion` fills, read as a
  * [TodaySnapshot], and the verbs sent back through [actions]. [address] is the peripheral id Today
- * was opened for. Readings stay null until the sensor sent them. Smart Sync sends `SET_TIME` before
- * the file sync when the automatic policy requires it, as Android's repository does.
+ * was opened for. Readings stay null until the sensor sent them. The clock check runs once per
+ * connection in `SensorSync`, never from Today.
  */
 internal class CompanionTodaySource(
     scope: CoroutineScope,
@@ -181,8 +181,6 @@ internal class CompanionTodaySource(
         // transport. Clock failure still permits preserving immutable original files.
         actions.syncFiles(address)
     }
-
-    override fun setTime() = send(SensorCommand.SET_TIME)
 
     override fun flush() = send(SensorCommand.FLUSH)
 

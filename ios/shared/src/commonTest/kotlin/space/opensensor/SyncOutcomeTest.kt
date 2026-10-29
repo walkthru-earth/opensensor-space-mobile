@@ -8,7 +8,6 @@ import space.opensensor.strings.resources.msg_hardware_in_use
 import space.opensensor.strings.resources.msg_sync_aborted
 import space.opensensor.strings.resources.msg_sync_finished
 import space.opensensor.strings.resources.msg_sync_stopped
-import space.opensensor.strings.resources.msg_token_needs_ble
 import space.opensensor.strings.resources.msg_up_to_date
 import space.opensensor.strings.resources.sync_some_failed
 import kotlin.test.Test
@@ -23,7 +22,7 @@ class SyncOutcomeTest {
         assertEquals(UiText.plural(Res.plurals.msg_sync_finished, 2, 2, 2), SyncResult(SyncEnd.COMPLETE, 3, 2, 0).message)
         assertEquals(UiText.plural(Res.plurals.sync_some_failed, 1, 1), SyncResult(SyncEnd.FILES_NOT_SAVED, 3, 2, 1).message)
         assertEquals(UiText.of(Res.string.msg_sync_stopped), SyncResult(SyncEnd.STOPPED, 3, 0, 0).message)
-        assertEquals(UiText.of(Res.string.msg_token_needs_ble), SyncResult(SyncEnd.AUTH_FAILED, 0, 0, 0).message)
+        assertEquals(UiText.of(Res.string.msg_sync_aborted), SyncResult(SyncEnd.AUTH_FAILED, 0, 0, 0).message)
         assertEquals(UiText.of(Res.string.msg_busy), SyncResult(SyncEnd.BUSY, 0, 0, 0).message)
         assertEquals(UiText.of(Res.string.msg_hardware_in_use), SyncResult(SyncEnd.IN_USE, 0, 0, 0).message)
         assertEquals(UiText.of(Res.string.msg_sync_aborted), SyncResult(SyncEnd.LINK_LOST, 3, 0, 0).message)

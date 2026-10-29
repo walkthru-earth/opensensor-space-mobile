@@ -11,7 +11,6 @@ import space.opensensor.data.DeviceEvent
 import space.opensensor.data.DeviceMessage
 import space.opensensor.data.DeviceMessage.Command
 import space.opensensor.data.DeviceMessage.ConfigChange
-import space.opensensor.data.lan.LanFailure
 import space.opensensor.data.protocol.ConfigFields
 import space.opensensor.data.protocol.ConfigGroup
 import space.opensensor.data.protocol.ConfigProblem
@@ -48,15 +47,6 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
     DeviceMessage.BackgroundOwnsCommand -> res(R.string.msg_background_owns_command)
     DeviceMessage.BusyBeforeSync -> res(R.string.msg_busy_before_sync)
     DeviceMessage.Busy -> res(R.string.msg_busy)
-    is DeviceMessage.LanFallback -> res(
-        when (failure) {
-            LanFailure.AUTH_FAILED -> R.string.msg_lan_token_rejected
-            LanFailure.UNREACHABLE -> R.string.msg_lan_unreachable
-            LanFailure.TIMEOUT -> R.string.msg_lan_timeout
-            LanFailure.BUSY -> R.string.msg_lan_busy
-            LanFailure.PROTOCOL, null -> R.string.msg_lan_failed
-        },
-    )
     DeviceMessage.ConnectFailed -> res(R.string.conn_failed)
     is DeviceMessage.BluetoothUnavailable -> res(
         when (kind) {
@@ -75,7 +65,6 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
     DeviceMessage.ThingChanged -> res(R.string.msg_thing_changed)
     is DeviceMessage.Reconnecting -> res(R.string.msg_reconnecting, attempt, max)
     is DeviceMessage.ReconnectFailed -> plural(R.plurals.msg_reconnect_failed, attempts.toLong(), attempts)
-    DeviceMessage.LanTokenRenewed -> res(R.string.msg_lan_token_renewed)
     DeviceMessage.LanTokenStored -> res(R.string.msg_lan_token_stored)
     DeviceMessage.TokenNeedsBluetooth -> res(R.string.msg_token_needs_ble)
     is DeviceMessage.TokenRotated -> res(
@@ -101,7 +90,6 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
     is DeviceMessage.SyncEnded -> res(reason.toStringRes())
     is DeviceMessage.NotEnoughSpace -> res(R.string.msg_not_enough_space, bytesText(shortBytes))
     is DeviceMessage.UnplacedReadings -> plural(R.plurals.msg_unplaced, rows, rows)
-    DeviceMessage.ClockSet -> res(R.string.msg_clock_set)
     is DeviceMessage.Finalized -> plural(R.plurals.msg_finalized, rows.toLong(), rows, files)
     is DeviceMessage.ConfigSaved -> if (rebootRequired) res(R.string.msg_saved_after_reboot, res(change.toStringRes())) else res(change.toStringRes())
     is DeviceMessage.ConfigKeyRejected -> res(configRejectedRes(key))
@@ -132,8 +120,8 @@ fun SyncEndReason.toStringRes(): Int = when (this) {
     SyncEndReason.BLUETOOTH_OFF -> R.string.msg_sync_end_bluetooth_off
     SyncEndReason.PERMISSION_MISSING -> R.string.msg_sync_end_permission
     SyncEndReason.PAIRING_REPAIR -> R.string.conn_pairing_repair
-    SyncEndReason.TOKEN_ROTATED -> R.string.msg_sync_end_token_rotated
-    SyncEndReason.TOKEN_REJECTED -> R.string.msg_sync_end_token_rejected
+    // The token renews quietly on the next Bluetooth connection, so both say only that.
+    SyncEndReason.TOKEN_ROTATED, SyncEndReason.TOKEN_REJECTED -> R.string.msg_sync_end_wifi_access
     SyncEndReason.DEVICE_BUSY -> R.string.msg_sync_end_busy
     SyncEndReason.OUT_OF_RANGE -> R.string.msg_sync_end_out_of_range
     SyncEndReason.UPDATE_FIRMWARE -> R.string.msg_sync_end_update_firmware
@@ -172,7 +160,6 @@ fun DeviceContinuityPolicy.Reason.toStringRes(): Int = when (this) {
 @StringRes
 private fun Command.rejectedRes(): Int = when (this) {
     Command.GET_TOKEN -> R.string.msg_rejected_get_token
-    Command.SET_TIME -> R.string.msg_rejected_set_time
     Command.FLUSH -> R.string.msg_rejected_flush
     Command.GET_CONFIG -> R.string.msg_rejected_get_config
     Command.SET_CONFIG -> R.string.msg_rejected_set_config
@@ -183,7 +170,6 @@ private fun Command.rejectedRes(): Int = when (this) {
 @StringRes
 private fun Command.failedRes(): Int = when (this) {
     Command.GET_TOKEN -> R.string.msg_failed_get_token
-    Command.SET_TIME -> R.string.msg_failed_set_time
     Command.FLUSH -> R.string.msg_failed_flush
     Command.GET_CONFIG -> R.string.msg_failed_get_config
     Command.SET_CONFIG -> R.string.msg_failed_set_config
