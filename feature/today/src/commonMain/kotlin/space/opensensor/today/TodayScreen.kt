@@ -50,12 +50,9 @@ import space.opensensor.today.resources.flush
 import space.opensensor.today.resources.flush_button
 import space.opensensor.today.resources.flush_confirm
 import space.opensensor.today.resources.msg_busy
-import space.opensensor.today.resources.msg_clock_set
 import space.opensensor.today.resources.msg_failed_flush
-import space.opensensor.today.resources.msg_failed_set_time
 import space.opensensor.today.resources.msg_finalized
 import space.opensensor.today.resources.msg_rejected_flush
-import space.opensensor.today.resources.msg_rejected_set_time
 import space.opensensor.today.resources.nav_debug
 import space.opensensor.today.resources.nav_devices
 import space.opensensor.today.resources.nav_disconnect
@@ -140,10 +137,9 @@ fun TodayScreen(
 
 /** A notice in words, or null for one that opens a dialog instead. */
 internal suspend fun noticeText(notice: TodayNotice): String? = when (notice) {
-    TodayNotice.ClockSet -> getString(Res.string.msg_clock_set)
     is TodayNotice.Finalized -> getPluralString(Res.plurals.msg_finalized, notice.rows, notice.rows, notice.files)
-    is TodayNotice.Rejected -> getString(if (notice.command == TodayCommand.SET_TIME) Res.string.msg_rejected_set_time else Res.string.msg_rejected_flush)
-    is TodayNotice.Failed -> getString(if (notice.command == TodayCommand.SET_TIME) Res.string.msg_failed_set_time else Res.string.msg_failed_flush)
+    is TodayNotice.Rejected -> getString(Res.string.msg_rejected_flush)
+    is TodayNotice.Failed -> getString(Res.string.msg_failed_flush)
     TodayNotice.Busy -> getString(Res.string.msg_busy)
 }
 
@@ -308,7 +304,7 @@ fun TodayContent(
                         item(key = card.key) {
                             when (card) {
                                 TodayCard.NOW -> state.presenter.Hero(state, Modifier)
-                                TodayCard.TODAY_SO_FAR -> TodaySoFarCard(snapshot.todaySoFar, clockMissing = snapshot.status?.utcSynced == false, level = level)
+                                TodayCard.TODAY_SO_FAR -> TodaySoFarCard(snapshot.todaySoFar, level = level)
                                 TodayCard.ENVIRONMENT -> EnvironmentCard(state.liveSupport, capabilities, reading, receivedAt, hero = false)
                                 TodayCard.SMART_SYNC -> SmartSyncCard(
                                     sync = snapshot.sync,
@@ -318,13 +314,7 @@ fun TodayContent(
                                     onSync = { onAction(TodayAction.SmartSync) },
                                     onStop = { onAction(TodayAction.StopSync) }.takeIf { snapshot.sync.running && !snapshot.heldInBackground },
                                 )
-                                TodayCard.CLOCK -> ClockCard(
-                                    status = snapshot.status,
-                                    live = live,
-                                    enabled = snapshot.thing.canCommand,
-                                    level = level,
-                                    onFlush = onRequestFlush,
-                                )
+                                TodayCard.CLOCK -> ClockCard(status = snapshot.status, live = live)
                                 TodayCard.BATCH_ESTIMATE -> BatchEstimateCard(reading, receivedAt, snapshot.config)
                                 TodayCard.READINGS -> ReadingsCard(reading, receivedAt, level)
                                 TodayCard.PARTICLES -> ParticlesCard(reading)
@@ -337,7 +327,13 @@ fun TodayContent(
                                     showTemperature = state.presenter.boardTemperature(state),
                                     level = level,
                                 )
-                                TodayCard.STORAGE -> StorageCard(snapshot.status, snapshot.statusAtEpochMs, level)
+                                TodayCard.STORAGE -> StorageCard(
+                                    status = snapshot.status,
+                                    receivedAtEpochMs = snapshot.statusAtEpochMs,
+                                    level = level,
+                                    enabled = snapshot.thing.canCommand,
+                                    onFlush = onRequestFlush,
+                                )
                                 TodayCard.DEVICE_INFO -> DeviceInfoCard(
                                     name = snapshot.name,
                                     info = snapshot.info,

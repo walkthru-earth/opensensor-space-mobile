@@ -7,14 +7,11 @@ import androidx.compose.runtime.remember
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import space.opensensor.device.DeviceConfigAction
-import space.opensensor.device.LanAccess
 import space.opensensor.device.onAction
 import space.opensensor.setup.SetupScreen
 import space.opensensor.ui.device.DeviceViewModel
 import space.opensensor.ui.permissions.AccessDialogs
-import space.opensensor.ui.permissions.LanPermission
 import space.opensensor.ui.permissions.rememberBluetoothAccess
-import space.opensensor.ui.permissions.rememberLocalNetworkAccess
 
 /**
  * Android entry for the shared wizard. Bluetooth is asked for from Look for sensors and local network
@@ -37,9 +34,7 @@ fun SetupRoute(
     val state by controller.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val bluetooth = rememberBluetoothAccess()
-    val localNetwork = rememberLocalNetworkAccess()
     AccessDialogs(bluetooth)
-    AccessDialogs(localNetwork)
 
     val address = state.selected?.id.takeIf { state.paired }
     val config = address?.let { a ->
@@ -50,14 +45,10 @@ fun SetupRoute(
         controller = controller,
         config = config,
         bluetooth = bluetooth,
-        lanAccess = LanAccess(localNetwork.granted, requestable = LanPermission.name != null),
         snackbar = snackbar,
         onConfigAction = { a ->
             val c = config ?: return@SetupScreen
             when (a) {
-                DeviceConfigAction.RequestLanAccess -> localNetwork.run { }
-                is DeviceConfigAction.SetLanOn -> if (a.on) localNetwork.run { c.setLanOn(true) } else c.setLanOn(false)
-                DeviceConfigAction.FetchToken -> localNetwork.run(onDeclined = { c.fetchToken() }) { c.fetchToken() }
                 DeviceConfigAction.ReconnectOverBluetooth -> bluetooth.run { c.reconnectOverBluetooth() }
                 else -> c.onAction(a)
             }

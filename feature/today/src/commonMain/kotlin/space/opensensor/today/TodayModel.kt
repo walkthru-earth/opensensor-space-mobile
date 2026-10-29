@@ -79,12 +79,11 @@ data class TodaySnapshot(
     val thing: ThingStatus get() = ThingStatus(connection, reconnecting != null, sync.running, heldInBackground)
 }
 
-/** A device command Today can send. Each one is confirmed by the user first. */
-enum class TodayCommand { SET_TIME, FLUSH }
+/** A device command Today can send. It is confirmed by the user first. */
+enum class TodayCommand { FLUSH }
 
 /** One-off outcomes the platform reports back to Today. */
 sealed interface TodayNotice {
-    data object ClockSet : TodayNotice
     data class Finalized(val rows: Int, val files: Int) : TodayNotice
     data class Rejected(val command: TodayCommand) : TodayNotice
     data class Failed(val command: TodayCommand) : TodayNotice
@@ -102,11 +101,8 @@ interface TodaySource {
     val snapshot: StateFlow<TodaySnapshot>
     val notices: Flow<TodayNotice>
 
-    /** Smart Sync. The sync engine sets the device clock automatically from this phone's UTC. */
+    /** Smart Sync. The sync engine checks the device clock on its own, see `SmartSyncPolicy`. */
     fun sync()
-
-    /** Internal automatic `SET_TIME` with this phone UTC. No manual control exposes this action. */
-    fun setTime()
 
     /** `FLUSH`, finalizing the buffered rows. Called only after the user confirmed it. */
     fun flush()
@@ -185,8 +181,9 @@ enum class TodayCard(val key: String) {
 }
 
 /**
- * Which cards Today shows, the same on both platforms. Simple has the hero, today so far, Smart Sync
- * and the clock. Detailed adds the board, storage, the batch estimate and the device card. The
+ * Which cards Today shows, the same on both platforms. Simple has the hero, today so far and Smart
+ * Sync. Detailed adds the board, storage, the batch estimate and the device card. Developer adds
+ * the clock. The
  * [FamilyPresenter] adds its own cards after today so far and after the batch estimate, so the air
  * family keeps its environment, readings and particle cards and any other thing gets one card of
  * its other readings. Conditional cards sit after the first one, so a level change never moves the
@@ -198,7 +195,8 @@ fun todayCards(state: TodayUiState): List<TodayCard> = buildList {
     add(TodayCard.TODAY_SO_FAR)
     addAll(presenter.simpleCards(state))
     add(TodayCard.SMART_SYNC)
-    add(TodayCard.CLOCK)
+    // The clock is set automatically. Only Developer sees its state.
+    if (state.level.developer) add(TodayCard.CLOCK)
     if (state.level.detailed) {
         if (state.showsBatchEstimate) add(TodayCard.BATCH_ESTIMATE)
         addAll(presenter.detailedCards(state))
@@ -235,7 +233,7 @@ enum class SyncEndLine {
     PERMISSION_MISSING,
     PAIRING_REPAIR,
 
-    /** Simple wording for both Wi-Fi token endings. Detailed names which one. */
+    /** Wording for both Wi-Fi token endings below Developer. The token renews on its own. */
     WIFI_ACCESS,
     TOKEN_ROTATED,
     TOKEN_REJECTED,
@@ -258,8 +256,8 @@ fun syncEndLine(sync: SyncProgress, level: DetailLevel): SyncEndLine? {
         SyncEndReason.BLUETOOTH_OFF -> SyncEndLine.BLUETOOTH_OFF
         SyncEndReason.PERMISSION_MISSING -> SyncEndLine.PERMISSION_MISSING
         SyncEndReason.PAIRING_REPAIR -> SyncEndLine.PAIRING_REPAIR
-        SyncEndReason.TOKEN_ROTATED -> if (level.detailed) SyncEndLine.TOKEN_ROTATED else SyncEndLine.WIFI_ACCESS
-        SyncEndReason.TOKEN_REJECTED -> if (level.detailed) SyncEndLine.TOKEN_REJECTED else SyncEndLine.WIFI_ACCESS
+        SyncEndReason.TOKEN_ROTATED -> if (level.developer) SyncEndLine.TOKEN_ROTATED else SyncEndLine.WIFI_ACCESS
+        SyncEndReason.TOKEN_REJECTED -> if (level.developer) SyncEndLine.TOKEN_REJECTED else SyncEndLine.WIFI_ACCESS
         SyncEndReason.DEVICE_BUSY -> SyncEndLine.DEVICE_BUSY
         SyncEndReason.OUT_OF_RANGE -> SyncEndLine.OUT_OF_RANGE
         SyncEndReason.UPDATE_FIRMWARE -> SyncEndLine.UPDATE_FIRMWARE

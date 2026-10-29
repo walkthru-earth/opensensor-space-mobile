@@ -350,7 +350,7 @@ class CollectionController(
     /** Only an actual acknowledgement is recorded. A refused clock keeps the original files flowing. */
     private suspend fun setClock(intent: CollectionIntent, link: CollectionLink) {
         val accepted = try {
-            link.session.synchronizeClockIfNeeded(clock)
+            link.session.synchronizeClockOnce(clock)
         } catch (e: DeviceErrorException) {
             if (e is AuthFailedException || e is DeviceBusyException || e.frame.op == 0) throw e
             note("collection ${intent.id} clock not set, ERROR ${e.frame.code}")

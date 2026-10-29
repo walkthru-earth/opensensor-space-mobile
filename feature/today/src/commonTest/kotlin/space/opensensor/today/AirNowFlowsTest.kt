@@ -131,7 +131,6 @@ class AirNowFlowsTest {
             override val snapshot = MutableStateFlow(TodaySnapshot(address = "AA", info = WAVESHARE.copy(thing = "st-1"), live = live(1)))
             override val notices = MutableSharedFlow<TodayNotice>()
             override fun sync() = Unit
-            override fun setTime() = Unit
             override fun flush() = Unit
             override fun stopSync() = Unit
             override fun reconnect() = Unit

@@ -21,7 +21,7 @@ import space.opensensor.ui.device.DeviceUiState
 /**
  * Per-device opt-in to unattended syncs. The switch flips `known_device.autoSync`. The scheduler
  * registers one 15-minute WorkManager job while any device has it on. Simple states what happens
- * in one line. Detailed spells out each link and what the worker will and will not do.
+ * in one line. Detailed adds the Bluetooth bond, Developer adds the Wi-Fi token.
  */
 @Composable
 fun AutoSyncCard(
@@ -60,7 +60,10 @@ fun AutoSyncCard(
         }
         if (level.detailed) {
             Spacer(Modifier.height(8.dp))
-            StatLine(stringResource(R.string.autosync_wifi), stringResource(if (known?.hasLanToken == true) R.string.autosync_wifi_token else R.string.autosync_wifi_no_token))
+            // The Wi-Fi token renews on its own, so only Developer names it.
+            if (level.developer) {
+                StatLine(stringResource(R.string.autosync_wifi), stringResource(if (known?.hasLanToken == true) R.string.autosync_wifi_token else R.string.autosync_wifi_no_token))
+            }
             StatLine(stringResource(R.string.autosync_bluetooth), stringResource(if (state.bonded) R.string.autosync_bonded else R.string.autosync_not_bonded))
         }
         StatLine(

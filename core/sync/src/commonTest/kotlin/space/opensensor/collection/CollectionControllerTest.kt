@@ -238,7 +238,7 @@ class CollectionControllerTest {
 
     @Test
     fun acceptedClockEvidenceIsAwaitedOnTheExactLinkBeforeListing() = runTest {
-        val accepted = Frame.TimeSet(1_789_581_931L, 123_456L, 789_000)
+        val accepted = Frame.TimeSet(1_793_318_400L, 123_456L, 789_000)
         var persisted = false
         val keepAlive = CountingKeepAlive()
         val links = FakeLinks(backgroundScope) {
@@ -251,7 +251,7 @@ class CollectionControllerTest {
             collector(),
             keepAlive,
             backgroundScope,
-            clock = { 1_789_581_931_789L },
+            clock = { 1_793_318_400_789L },
             onClockSet = { link, ack ->
                 assertTrue(link === links.links.single(), "the receipt belongs to the exact borrowed link")
                 assertEquals(accepted, ack)
@@ -273,7 +273,7 @@ class CollectionControllerTest {
 
     @Test
     fun timeoutAfterClockAcknowledgementPersistsEvidenceThenStopsBeforeListing() = runTest {
-        val accepted = Frame.TimeSet(1_789_581_931L, 123_456L, 789_000)
+        val accepted = Frame.TimeSet(1_793_318_400L, 123_456L, 789_000)
         val recording = CompletableDeferred<Unit>()
         var recorded: Frame.TimeSet? = null
         val keepAlive = CountingKeepAlive()
@@ -284,7 +284,7 @@ class CollectionControllerTest {
             collector(),
             keepAlive,
             backgroundScope,
-            clock = { 1_789_581_931_789L },
+            clock = { 1_793_318_400_789L },
             onClockSet = { _, ack ->
                 recording.complete(Unit)
                 delay(100)

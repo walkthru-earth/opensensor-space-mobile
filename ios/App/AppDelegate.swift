@@ -68,7 +68,8 @@ final class AppServices {
     /// My devices over the adapters. Only ids, names and things cross, never a token.
     private(set) lazy var devices: DevicesBridge = DevicesBridgeIosKt.devicesBridge(
         state: bluetooth.state, sync: engine,
-        startScan: { [weak self] in self?.scanDevices() },
+        startScan: { [weak self] in self?.scanDevices(tapped: false) },
+        tapScan: { [weak self] in self?.scanDevices(tapped: true) },
         stopScan: { [weak self] in self?.stopDeviceScan() },
         forget: { [weak self] peripheral, device in self?.forget(peripheral: peripheral, device: device) },
         collect: { [weak self] id, wifiName in self?.collect(id: id, wifiName: wifiName) }
@@ -152,11 +153,12 @@ final class AppServices {
             peripherals: entries.map(\.peripheral), things: entries.map(\.thing), devices: entries.map(\.device))
     }
 
-    /// My devices uses one scan action for both nearby Bluetooth and local Bonjour sensors.
-    /// The browse is the user-facing action that lets iOS request Local Network access.
-    private func scanDevices() {
+    /// My devices uses one scan action for both nearby Bluetooth and local Bonjour sensors. Only a
+    /// tap browses the local network until the user first tapped, so iOS asks for Local Network
+    /// access on a user action, never when a screen opens.
+    private func scanDevices(tapped: Bool) {
         bluetooth.scan()
-        lan.scan()
+        if tapped || lan.browseAllowed { lan.scan() }
     }
 
     private func stopDeviceScan() {

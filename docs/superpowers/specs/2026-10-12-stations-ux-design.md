@@ -141,16 +141,16 @@ is persisted. Resuming opens at LOCATION and reconnects silently.
 - **Location.** `DeviceLocationForm(state, onAction)` extracted from `DeviceLocationCard`, shared by
   the wizard and settings. Next waits for a saved `location.cell`, so firmware without location
   provisioning cannot finish setup.
-- **Wi-Fi.** Join through `SET_CONFIG` over Bluetooth, then "Turn on Wi-Fi sync", which asks for
-  local network and fetches the token on iOS (Android already holds one after pairing).
+- **Wi-Fi.** Join through `SET_CONFIG` over Bluetooth. Wi-Fi sync stays on and the token is
+  fetched quietly over Bluetooth on both phones, so this page asks for nothing more.
 - **Done.** The Station summary, "Warming up" until the first live reading.
 
 **Known record timing.** Android currently inserts the known row before the link opens
 (`DeviceLinkOwner.kt:373`), so a failed pairing leaves a ghost entry. It is removed, and the row is
 written only after INFO and the identity check, as iOS does.
 
-Permissions. Bluetooth from Find, approximate location from Use phone location, local network
-from Turn on Wi-Fi sync.
+Permissions. Bluetooth from Find, approximate location from Use phone location. Setup never asks
+for local network.
 
 ## Slice 4. Device settings
 
@@ -161,7 +161,7 @@ pairing card at Simple (default PIN, restart pending).
 | Group | Simple | Detailed | Developer |
 | --- | --- | --- | --- |
 | Location | H3 area with Use phone location and Save, country | cell id, resolution | |
-| Connection | Wi-Fi join, Sync over Wi-Fi switch (fetches token when missing), Auto-sync, wake when nearby (Android) | IP, signal, token line, reachability | AP security, channel, mDNS host, port |
+| Connection | Wi-Fi join, Auto-sync, wake when nearby (Android). Sync over Wi-Fi and its token are Developer only | IP, signal, token line, reachability | AP security, channel, mDNS host, port |
 | Sensor | nickname | sticker and batch estimate, firmware and protocol | IDs, MAC, endpoint, read age |
 | Advanced | | pairing mode, Restart, Replace token, Forget paired phones | |
 | Footer | Forget this sensor | | |

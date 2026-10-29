@@ -8,7 +8,6 @@ import space.opensensor.data.DeviceContinuityPolicy
 import space.opensensor.data.DeviceMessage
 import space.opensensor.data.DeviceMessage.Command
 import space.opensensor.data.DeviceMessage.ConfigChange
-import space.opensensor.data.lan.LanFailure
 import space.opensensor.data.protocol.ConfigProblem
 import space.opensensor.link.UnavailableKind
 
@@ -58,9 +57,6 @@ class DeviceMessagesTest {
 
     @Test
     fun `LAN fallback names the failure and an untyped one stays generic`() {
-        assertEquals(UiText.Res(R.string.msg_lan_token_rejected), DeviceMessage.LanFallback(LanFailure.AUTH_FAILED).toUiText())
-        assertEquals(UiText.Res(R.string.msg_lan_failed), DeviceMessage.LanFallback(null).toUiText())
-        assertEquals(UiText.Res(R.string.msg_lan_failed), DeviceMessage.LanFallback(LanFailure.PROTOCOL).toUiText())
     }
 
     @Test
@@ -71,14 +67,16 @@ class DeviceMessagesTest {
         assertDistinct(ConfigChange.entries.map { it.toStringRes() })
         assertDistinct(ConfigProblem.entries.map { it.toStringRes() })
         assertDistinct(DeviceMessage.TokenRotation.entries.map { DeviceMessage.TokenRotated(it).toUiText() })
-        assertDistinct(SyncEndReason.entries.map { it.toStringRes() })
+        // A rotated and a rejected token share one line, both renew on the next Bluetooth connection.
+        assertDistinct((SyncEndReason.entries - SyncEndReason.TOKEN_REJECTED).map { it.toStringRes() })
         assertDistinct(UnavailableKind.entries.map { DeviceMessage.BluetoothUnavailable(it).toUiText() })
     }
 
     @Test
     fun `a sync ending names its reason and shares the pairing and stop lines`() {
         assertEquals(UiText.Res(R.string.msg_sync_end_bluetooth_off), DeviceMessage.SyncEnded(SyncEndReason.BLUETOOTH_OFF).toUiText())
-        assertEquals(UiText.Res(R.string.msg_sync_end_token_rotated), DeviceMessage.SyncEnded(SyncEndReason.TOKEN_ROTATED).toUiText())
+        assertEquals(UiText.Res(R.string.msg_sync_end_wifi_access), DeviceMessage.SyncEnded(SyncEndReason.TOKEN_ROTATED).toUiText())
+        assertEquals(UiText.Res(R.string.msg_sync_end_wifi_access), DeviceMessage.SyncEnded(SyncEndReason.TOKEN_REJECTED).toUiText())
         assertEquals(UiText.Res(R.string.conn_pairing_repair), DeviceMessage.SyncEnded(SyncEndReason.PAIRING_REPAIR).toUiText())
         assertEquals(UiText.Res(R.string.msg_sync_stopped), DeviceMessage.SyncEnded(SyncEndReason.STOPPED).toUiText())
         assertEquals(UiText.Res(R.string.msg_sync_aborted), DeviceMessage.SyncEnded(SyncEndReason.OTHER).toUiText())

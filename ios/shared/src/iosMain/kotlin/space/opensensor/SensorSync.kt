@@ -79,6 +79,8 @@ class SensorSync internal constructor(
     private val callbacks: CoroutineContext,
     private val progressInterval: Long = PROGRESS_INTERVAL_MS,
     private val recordClockAnchor: suspend (String, String, Long, Long) -> Unit = { _, _, _, _ -> },
+    /** Whether the phone is at the Developer level, read once per [upkeep]. Only it may keep Wi-Fi sync off. */
+    private val developer: suspend () -> Boolean = { false },
     budget: StorageBudget,
     /**
      * The archive's one coordinator, shared with the index repair, the storage janitor and the old
@@ -153,7 +155,7 @@ class SensorSync internal constructor(
                 var lastDone = -1
                 link.leased(LeaseKind.SYNC) { session ->
                     try {
-                        synchronizeClock(session, link, automatic = true)
+                        synchronizeClock(session, link)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -211,43 +213,79 @@ class SensorSync internal constructor(
     }
 
     /**
-     * The one clock owner on iOS. The automatic check runs once per connection, whichever of the
-     * connect step and the first sync gets the link first. Called under a lease.
+     * The one clock owner on iOS. The automatic check runs once per connection, whichever of
+     * [upkeep] and the first sync gets the link first. Called under a lease.
      */
-    private suspend fun synchronizeClock(session: DeviceSession, link: IosLink, automatic: Boolean = false) {
-        if (automatic && link.clockChecked) return
+    private suspend fun synchronizeClock(session: DeviceSession, link: IosLink) {
+        val anchor = session.synchronizeClockOnce(::nowEpochMillis) ?: return
         val thing = link.thing
         val boot = link.boot
-        val anchor = if (automatic) session.synchronizeClockIfNeeded(::nowEpochMillis) else session.synchronizeClock(::nowEpochMillis)
-        link.clockChecked = true
-        if (anchor == null) return
         if (thing != null && boot != null) {
             recordClockAnchor(thing, boot, anchor.epochNanos, anchor.monotonicMicros)
         }
     }
 
     /**
-     * Sends automatic UTC or a confirmed flush over [link] through [DeviceSession]. `SET_TIME` carries
-     * this phone's clock and then asks for a fresh `status` push, so Today shows the anchored clock.
-     * `FLUSH` finalizes the buffered rows. Neither touches the archive files. `finished` fires
-     * exactly once on the main thread, also when the link closes or [SyncHandle.cancel] lands, which
-     * ends it stopped with no notice.
+     * The quiet per-connection upkeep, the same steps as Android's connect. Swift calls it once when
+     * a Bluetooth or Wi-Fi link is first usable. Under one lease it checks the sensor clock (and
+     * asks for a fresh status push when it set it), then reads the config and switches Wi-Fi sync
+     * back on below the Developer level. Each step runs at most once per connection, also when a
+     * run got there first. Failures reach the device log by class only and nothing is shown.
+     * `finished` fires exactly once on the main thread, also when the link closes or
+     * [SyncHandle.cancel] lands.
      */
     @OptIn(DelicateCoroutinesApi::class)
-    fun command(link: IosLink, command: SensorCommand, automatic: Boolean = false, finished: (CommandResult) -> Unit): SyncHandle {
+    fun upkeep(link: IosLink, finished: () -> Unit): SyncHandle {
+        val job = scope.launch(work, CoroutineStart.ATOMIC) {
+            try {
+                link.leased(LeaseKind.COMMAND) { session -> upkeepUnderLease(session, link) }
+            } catch (e: CancellationException) {
+                // Stopped or the link closed, the next connection runs it again.
+            } catch (e: Exception) {
+                syncLog("upkeep skipped, ${e::class.simpleName}")
+            }
+            withContext(NonCancellable + callbacks) { finished() }
+        }
+        return SyncHandle(job)
+    }
+
+    private suspend fun upkeepUnderLease(session: DeviceSession, link: IosLink) {
+        try {
+            val set = session.synchronizeClockOnce(::nowEpochMillis)
+            if (set != null) {
+                val thing = link.thing
+                val boot = link.boot
+                if (thing != null && boot != null) recordClockAnchor(thing, boot, set.epochNanos, set.monotonicMicros)
+                // Today shows the anchored clock from the next push.
+                session.requestStatus()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            syncLog("clock check failed, ${e::class.simpleName}")
+        }
+        // Every identified iOS link speaks protocol 3, so it always has a config to read.
+        try {
+            val config = session.getConfig().config
+            if (session.enableLanOnce(config, developer()) != null) syncLog("Wi-Fi sync switched back on")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            syncLog("Wi-Fi sync check failed, ${e::class.simpleName}")
+        }
+    }
+
+    /**
+     * Sends a confirmed flush over [link] through [DeviceSession]. `FLUSH` finalizes the buffered
+     * rows and never touches the archive files. `finished` fires exactly once on the main thread,
+     * also when the link closes or [SyncHandle.cancel] lands, which ends it stopped with no notice.
+     */
+    @OptIn(DelicateCoroutinesApi::class)
+    fun command(link: IosLink, command: SensorCommand, finished: (CommandResult) -> Unit): SyncHandle {
         val job = scope.launch(work, CoroutineStart.ATOMIC) {
             val notice = try {
                 link.leased(LeaseKind.COMMAND) { session ->
                     when (command) {
-                        SensorCommand.SET_TIME -> {
-                            synchronizeClock(session, link, automatic)
-                            try {
-                                session.requestStatus()
-                            } catch (e: TransportException) {
-                                // The clock is set. The next status push shows it.
-                            }
-                            TodayNotice.ClockSet
-                        }
                         SensorCommand.FLUSH -> {
                             val flushed = session.flush()
                             TodayNotice.Finalized(flushed.rows, flushed.filesFinalized.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())

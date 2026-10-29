@@ -44,8 +44,12 @@ concern you are changing in `docs/README.md`.
   rename or rewrite archive files.
 - Keep PIN, Wi-Fi PSK and LAN token out of logs, frames, screenshots and docs.
   LAN tokens remain encrypted at rest. Device-changing actions are explicit UI
-  actions; reboot, token rotation, forgetting bonds and pairing mode `none`
-  require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
+  actions, with three automatic exceptions run silently once per connection on
+  both phones by shared `:core:sync` policy. `SET_TIME` from `SmartSyncPolicy`,
+  `GET_TOKEN` when no token is stored (`LanTokenPolicy`), and `lan.on=1` when
+  the sensor reports it off below the Developer level (`LanAutoEnable`). None of
+  them browses mDNS or asks for a permission. Reboot, token rotation, forgetting
+  bonds and pairing mode `none` require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
 - `:core:*` stays reusable without Android or Hilt. Room lives only in `:core:database`,
   one Room KMP schema on the bundled SQLite driver for both phones. Every other `:core` module
   (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `archive`,

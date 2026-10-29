@@ -386,7 +386,7 @@ internal fun clockAnchorFollowUp(scope: CoroutineScope, history: HistoryOrchestr
  */
 fun sharedSensorSync(): SensorSync {
     IosArchive.startIndexRepair()
-    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, coordinator = IosArchive.coordinator, cursors = IosArchive.cursors, sources = IosArchive.sources)
+    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, developer = { settingsRepository.current().detailLevel.developer }, budget = IosArchive.budget, coordinator = IosArchive.coordinator, cursors = IosArchive.cursors, sources = IosArchive.sources)
 }
 
 /** `Library/Caches` of this app. */

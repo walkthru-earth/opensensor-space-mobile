@@ -11,7 +11,6 @@ import space.opensensor.strings.resources.msg_hardware_in_use
 import space.opensensor.strings.resources.msg_sync_aborted
 import space.opensensor.strings.resources.msg_sync_finished
 import space.opensensor.strings.resources.msg_sync_stopped
-import space.opensensor.strings.resources.msg_token_needs_ble
 import space.opensensor.strings.resources.msg_up_to_date
 import space.opensensor.strings.resources.sync_some_failed
 
@@ -92,10 +91,10 @@ class SyncResult internal constructor(
                 }
                 SyncEnd.STORAGE_FAILED -> UiText.of(Res.string.companion_sync_storage_failed)
                 SyncEnd.STOPPED -> UiText.of(Res.string.msg_sync_stopped)
-                SyncEnd.AUTH_FAILED -> UiText.of(Res.string.msg_token_needs_ble)
                 SyncEnd.BUSY -> UiText.of(Res.string.msg_busy)
                 SyncEnd.IN_USE -> UiText.of(Res.string.msg_hardware_in_use)
-                SyncEnd.LINK_LOST, SyncEnd.FAILED -> UiText.of(Res.string.msg_sync_aborted)
+                // A refused Wi-Fi token is renewed quietly on the next Bluetooth connection, so it reads as a lost link.
+                SyncEnd.LINK_LOST, SyncEnd.AUTH_FAILED, SyncEnd.FAILED -> UiText.of(Res.string.msg_sync_aborted)
             }
         }
 

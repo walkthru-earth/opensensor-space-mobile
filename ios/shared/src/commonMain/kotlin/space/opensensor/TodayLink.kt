@@ -10,17 +10,13 @@ import kotlinx.coroutines.flow.asSharedFlow
 import space.opensensor.today.TodayCommand
 import space.opensensor.today.TodayNotice
 
-/** A device-changing command Today sends after the user confirmed it. Swift sees `.setTime` and `.flush`. */
+/** A device-changing command Today sends after the user confirmed it. Swift sees `.flush`. */
 enum class SensorCommand {
-    /** `SET_TIME` with this phone's clock. */
-    SET_TIME,
-
     /** `FLUSH`, finalizing the buffered rows into a short file. */
     FLUSH,
     ;
 
     internal val today: TodayCommand get() = when (this) {
-        SET_TIME -> TodayCommand.SET_TIME
         FLUSH -> TodayCommand.FLUSH
     }
 }
@@ -30,7 +26,6 @@ enum class SensorCommand {
  * unread. A null [notice] means it was stopped, which Today does not report as a failure.
  */
 class CommandResult internal constructor(internal val notice: TodayNotice?) {
-    val clockSynchronized: Boolean get() = notice == TodayNotice.ClockSet
     val stopped: Boolean get() = notice == null
     override fun toString(): String = "CommandResult($notice)"
 }
@@ -64,8 +59,8 @@ class TodayLink {
     private var endedPending = false
 
     /**
-     * The command ended and handed its link back. A write it queued last, such as the status
-     * request after `SET_TIME`, may still be in flight, so the outcome waits for [linkIdle]. Smart
+     * The command ended and handed its link back. A write it queued last may still be in
+     * flight, so the outcome waits for [linkIdle]. Smart
      * Sync starts its file sync on that outcome, and a sync started earlier would be refused.
      */
     fun commandEnded(result: CommandResult) {

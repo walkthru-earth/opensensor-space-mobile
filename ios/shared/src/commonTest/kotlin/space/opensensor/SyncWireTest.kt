@@ -14,6 +14,13 @@ class SyncWireTest {
         assertEquals("b41d37a48c04031e9397e28ce48c2f43", identity.boot)
     }
 
+    @Test fun theTokenIsFetchedQuietlyOnlyWhenNoneIsStored() {
+        val info = """{"proto":3,"thing":"abc-123","dev":"AABBCCDDEEFF"}"""
+        assertTrue(wire.shouldFetchToken(info, hasToken = false))
+        assertFalse(wire.shouldFetchToken(info, hasToken = true))
+        assertFalse(wire.shouldFetchToken("not json", hasToken = false))
+    }
+
     @Test fun requestsUseCanonicalLittleEndianCodec() {
         assertEquals("0d", wire.tokenFrame().hex())
         assertEquals("07", wire.statusFrame().hex())
