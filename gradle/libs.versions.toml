@@ -32,7 +32,7 @@ kotlinxSerialization = "1.11.0"
 # Calendar math in shared code (time zones, local dates). 0.8.0 uses kotlin.time.Instant and Clock.
 kotlinxDatetime = "0.8.0"
 androidxDocumentfile = "1.1.0"
-androidxDatastore = "1.2.1"
+androidxDatastore = "1.3.0"
 androidxWork = "2.12.0"
 zstdJni = "1.5.7-24"
 googleCodeScanner = "16.1.0"
