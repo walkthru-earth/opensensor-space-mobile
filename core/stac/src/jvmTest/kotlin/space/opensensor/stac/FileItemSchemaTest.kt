@@ -1,5 +1,6 @@
 package space.opensensor.stac
 
+import com.networknt.schema.Error
 import com.networknt.schema.Schema
 import com.networknt.schema.SchemaLocation
 import com.networknt.schema.SchemaRegistry
@@ -51,14 +52,23 @@ class FileItemSchemaTest {
         .associateWith { registry.getSchema(SchemaLocation.of(it)) }
 
     /** Every schema the Item [json] answers to, the profile, core STAC and each extension it lists. */
-    private fun errors(json: String): List<String> {
+    private fun schemaErrors(json: String): List<Error> {
         val node = mapper.readTree(json)
         val listed = node.required("stac_extensions").values().map { it.asString() }.filter { it.startsWith(STAC_EXTENSIONS) }
         val schemas = profileSchemas + coreSchema + listed.map { checkNotNull(extensionSchemas[it]) { "no bundled schema for $it" } }
-        return schemas.flatMap { schema -> schema.validate(node).map { it.toString() } }
+        return schemas.flatMap { schema -> schema.validate(node) }
     }
 
+    private fun errors(json: String): List<String> = schemaErrors(json).map { it.toString() }
+
     private fun coreErrors(json: String): List<String> = coreSchema.validate(mapper.readTree(json)).map { it.toString() }
+
+    /** Where each error points and which keyword raised it, independent of the message locale. */
+    private fun List<Error>.sites(): List<String> = map { listOfNotNull(it.instanceLocation.toString(), it.keyword, it.property).joinToString(" ") }
+
+    private fun assertSite(expected: String, errors: List<Error>) {
+        assertTrue("expected $expected in ${errors.sites()}", expected in errors.sites())
+    }
 
     private fun example(name: String): String = stacFile(name).decodeToString()
 
@@ -117,21 +127,21 @@ class FileItemSchemaTest {
     fun theSchemasCatchAFixedItemWithoutItsCell() {
         val item = mapper.readTree(itemJson(rowsIn(OSU_CELL), Mobility.FIXED, coreS3Template)) as ObjectNode
         (item.required("properties") as ObjectNode).remove("grid:code")
-        assertTrue(errors(mapper.writeValueAsString(item)).isNotEmpty())
+        assertSite("/properties required grid:code", schemaErrors(mapper.writeValueAsString(item)))
     }
 
     @Test
     fun theProfileCatchesACellAtAnotherResolution() {
         val item = mapper.readTree(itemJson(rowsIn(OSU_CELL), Mobility.FIXED, coreS3Template)) as ObjectNode
         (item.required("properties") as ObjectNode).put("grid:code", "H3-${H3Index.toHex(H3Index.parent(OSU_CELL, 7))}")
-        assertTrue(errors(mapper.writeValueAsString(item)).isNotEmpty())
+        assertSite("/properties/grid:code pattern", schemaErrors(mapper.writeValueAsString(item)))
     }
 
     @Test
     fun theProfileCatchesAMovingItemThatListsGrid() {
         val item = mapper.readTree(itemJson(movingRows(), Mobility.MOVING, waveshareTemplate)) as ObjectNode
         (item.required("stac_extensions") as ArrayNode).add(FileItems.GRID_EXTENSION)
-        assertTrue(errors(mapper.writeValueAsString(item)).isNotEmpty())
+        assertSite("/stac_extensions not", schemaErrors(mapper.writeValueAsString(item)))
     }
 
     @Test
@@ -140,7 +150,7 @@ class FileItemSchemaTest {
         assertEquals(emptyList<String>(), coreErrors(json))
         val item = mapper.readTree(json) as ObjectNode
         item.remove("links")
-        assertFalse(coreErrors(mapper.writeValueAsString(item)).isEmpty())
+        assertSite(" required links", coreSchema.validate(mapper.readTree(mapper.writeValueAsString(item))))
     }
 
     @Test
