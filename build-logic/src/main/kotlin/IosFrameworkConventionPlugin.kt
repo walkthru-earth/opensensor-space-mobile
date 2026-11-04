@@ -34,5 +34,6 @@ class IosFrameworkConventionPlugin : Plugin<Project> {
         }
 
         addToGate(Gates.IOS, "iosSimulatorArm64Test", "linkDebugFrameworkIosSimulatorArm64")
+        gateMetadataCompiles()
     }
 }

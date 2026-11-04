@@ -87,7 +87,7 @@ private fun stopObserving() {
 
 internal actual object PlatformCredentialCaptureGuard : CredentialCaptureGuard {
     @Composable
-    override fun guard(onScreenshot: () -> Unit): Boolean {
+    actual override fun guard(onScreenshot: () -> Unit): Boolean {
         val latest by rememberUpdatedState(onScreenshot)
         DisposableEffect(Unit) {
             val handler = ScreenshotHandler { latest() }

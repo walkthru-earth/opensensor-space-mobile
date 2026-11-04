@@ -68,5 +68,6 @@ class ComposeFeatureConventionPlugin : Plugin<Project> {
         registerTestAlias("testAndroidHostTest")
         addToGate(Gates.HOST, "testAndroidHostTest")
         addToGate(Gates.IOS, "iosSimulatorArm64Test")
+        gateMetadataCompiles()
     }
 }

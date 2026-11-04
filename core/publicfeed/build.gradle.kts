@@ -52,6 +52,10 @@ kotlin {
         val buildH3 = tasks.register<Exec>("buildH3${name.replaceFirstChar { it.uppercase() }}") {
             inputs.dir(h3Source).withPropertyName("h3Source")
             outputs.dir(out).withPropertyName("h3Library")
+            // xcrun exists on a Mac only. On Linux the iOS cinterop is disabled, but Gradle still runs the
+            // tasks it depends on whenever the metadata compiles pull it into the graph, so the H3 build
+            // skips itself there. A static call, so the configuration cache holds no script reference.
+            onlyIf("xcrun needs a Mac host") { org.jetbrains.kotlin.konan.target.HostManager.hostIsMac }
             val outDir = out.get().asFile
             val src = h3Source.asFile
             doFirst { outDir.mkdirs() }

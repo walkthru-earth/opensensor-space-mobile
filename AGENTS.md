@@ -102,8 +102,9 @@ concern you are changing in `docs/README.md`.
 
 Use a JDK 25 (`gradle/gradle-daemon-jvm.properties` pins it, and
 [`CONTRIBUTING.md`](CONTRIBUTING.md) sets one up with Homebrew), and run `./gradlew --no-daemon verify` before a commit
-(lint, debug APK, `:app` unit tests and every shared module's host tests; on a Mac
-also `verifyIos`, the iOS simulator tests and framework link). Each convention
+(lint, debug APK, `:app` unit tests, every shared module's host tests and `commonMain`
+metadata compile; on a Mac also `verifyIos`, the iOS simulator tests, iOS source set
+metadata compiles and framework link). Each convention
 plugin adds its module to the gates, so a new module needs no list edit.
 `app/src/androidTest` is not gated. The installed pre-commit hook checks hygiene,
 secrets and ktlint; the pre-push hook runs `verify`. For setup and CI details see
