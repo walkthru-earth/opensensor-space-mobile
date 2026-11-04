@@ -15,7 +15,7 @@ BIN="$CACHE_DIR/ktlint-$KTLINT_VERSION"
 
 if [ -n "${JAVA_HOME:-}" ]; then export PATH="$JAVA_HOME/bin:$PATH"; fi
 if ! command -v java >/dev/null 2>&1; then
-  echo "ktlint hook: no 'java' on PATH; set JAVA_HOME (see CONTRIBUTING.md)." >&2
+  echo "ktlint hook: no 'java' on PATH, set JAVA_HOME (see CONTRIBUTING.md)." >&2
   exit 1
 fi
 

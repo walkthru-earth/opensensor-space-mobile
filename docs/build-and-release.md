@@ -72,29 +72,31 @@ are Java 11 (class file major 55).
 
 This is a behavior change. Before, any JDK 17 or newer could run the build. Now a `./gradlew` started
 without a JDK 25 in reach fails at once. macOS auto-detection reads `/usr/libexec/java_home`, which lists
-only JDKs under `/Library/Java/JavaVirtualMachines`. Homebrew's `openjdk@25` is keg-only and is not
-there until you link it, so without the link it counts only when `JAVA_HOME` points at it. Two common
-cases run without your shell's `JAVA_HOME`. The pre-push `gradle-verify` hook, when a GUI git client or
-an IDE runs the push. And the Xcode build phase (`ios/OpenSensor.xcodeproj/project.pbxproj`). That phase
-uses `JAVA_HOME` when it is set, then asks `/usr/libexec/java_home` for the pinned major, checks the
-`release` file of the JDK it gets back, and fails with an `error:` line pointing at `CONTRIBUTING.md`
-when neither is a JDK 25.
+only JDKs under `/Library/Java/JavaVirtualMachines` and `~/Library/Java/JavaVirtualMachines`. Homebrew's
+`openjdk@25` is keg-only and is not there until you link it, so without the link it counts only when
+`JAVA_HOME` points at it. Two common cases run without your shell's `JAVA_HOME`. The pre-push
+`gradle-verify` hook, when a GUI git client or an IDE runs the push. And the Xcode build phase
+(`ios/OpenSensor.xcodeproj/project.pbxproj`). That phase uses `JAVA_HOME` when it is the pinned major,
+then asks `/usr/libexec/java_home` for the pinned major, checks the `release` file of the JDK it gets
+back, and fails with an `error:` line pointing at `CONTRIBUTING.md` when neither is a JDK 25.
 
 Local setup, once per machine, is in [CONTRIBUTING.md](../CONTRIBUTING.md). It installs Homebrew's
 `openjdk@25`, links it into `/Library/Java/JavaVirtualMachines` (Homebrew's own caveat) and exports
-`JAVA_HOME` in `~/.zshenv`. Check both paths.
+`JAVA_HOME` in `~/.zshenv`. Check both paths. `java_home -v 25` exits 0 and prints some JDK even when
+no JDK 25 is installed, so read the path it prints, or list every JDK with `java_home -V`.
 
 ```sh
 java -version                         # expect 25
 /usr/libexec/java_home -v 25          # expect the openjdk@25 path
+/usr/libexec/java_home -V             # lists every JDK it can see
 ```
 
 Android Studio is optional. If you use it, keep its Gradle JDK setting (Settings, Build, Execution,
 Deployment, Build Tools, Gradle) on Daemon JVM criteria. CI reads `toolchainVersion` from the same file
 through the local action `.github/actions/build-jdk-version`, which fails unless the key appears once as
-a plain major version, and passes it to `actions/setup-java`. The version lives in one place. To move to another JDK, run
-`./gradlew updateDaemonJvm --jvm-version=<major>` on a machine that has that JDK and commit the file.
-The root `build.gradle.kts` configures that task to write no download URLs.
+a plain major version, and passes it to `actions/setup-java`. The version lives in one place. To move to
+another JDK, run `./gradlew updateDaemonJvm --jvm-version=<major>` on a machine that has that JDK and
+commit the file. The root `build.gradle.kts` configures that task to write no download URLs.
 
 ## Stack (verified building 2026-10-09; kotlinx-datetime 0.8.0 added for W8)
 
