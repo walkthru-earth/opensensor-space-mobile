@@ -62,7 +62,7 @@ phone radio, screen-off collection or board behavior.
 | Language / UI | Kotlin 2.4.21, Jetpack Compose (BOM 2026.09.00, material3 1.4.0), the shared `:ui:designsystem` theme and vendored icons (no dynamic color, no `material-icons-extended`), Navigation 3 (1.2.0) |
 | DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v1**), DataStore Preferences 1.2.1, WorkManager 2.12.0 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, kotlinx-datetime 0.8.0 (shared calendar math, added 2026-10-08), coroutines 1.11.0 |
 | Native | `zstd-jni` 1.5.7-20 (`@aar`). Discover (W12, 2026-10-08) adds `maplibre-compose` (0.20.0 since 2026-10-11) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.1 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
-| Build | AGP 9.4.1, Gradle 9.8.0 (configuration cache on), KSP 2.3.12, version catalog, R8 for release. Every `:core` module (protocol, parquet, history, publicfeed, units, archive, storage, net, sync and settings) and `:family:air` target JVM (Java 17) and iOS. `:ui:designsystem` and `:feature:discover` use `opensensor.kmp.compose-feature`, Compose Multiplatform 1.12.1 for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. `:ios:shared` targets iOS only |
+| Build | Gradle as `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` names it (configuration cache on). AGP (`androidGradlePlugin`), KSP (`ksp`) and Compose Multiplatform (`composeMultiplatform`) as `gradle/libs.versions.toml` pins them. R8 for release. Every `:core` module (protocol, parquet, history, publicfeed, units, archive, storage, net, sync and settings) and `:family:air` target JVM (Java 17) and iOS. `:ui:designsystem` and `:feature:discover` use `opensensor.kmp.compose-feature`, Compose Multiplatform for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. `:ios:shared` targets iOS only |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 
@@ -126,8 +126,9 @@ and [Kotlin compatibility matrix](https://kotlinlang.org/docs/multiplatform/mult
 together when updating Kotlin or Xcode. Do not fall back silently to the default if
 the pinned Xcode disappears from the hosted image. Kotlin 2.4.20's published
 baseline is Xcode 26.4; this project deliberately uses Xcode 27 with local build
-evidence. The existing Gradle 9.7.1 / AGP 9.4.0 pins are also above that matrix's
-listed maxima (9.7.0 / 9.3.1). Passing project builds do not extend the vendor's
+evidence. The Gradle pin (`gradle/wrapper/gradle-wrapper.properties`) and the AGP pin
+(`androidGradlePlugin` in `gradle/libs.versions.toml`) are also above that matrix's
+listed maxima (Gradle 9.7.0, AGP 9.3.1). Passing project builds do not extend the vendor's
 published compatibility range. Preserve the pins for this CI change and reassess
 compatibility during each toolchain update.
 
