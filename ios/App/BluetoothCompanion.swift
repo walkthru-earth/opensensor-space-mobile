@@ -32,6 +32,8 @@ final class BluetoothCompanion {
     private var upkeepStarted = false
     /// No Wi-Fi token is stored for this sensor, so the link fetches one quietly once it settles.
     private var tokenWanted = false
+    /// True while the token request in flight is the quiet one on connect, not the Developer action.
+    private var tokenAutomatic = false
     private var identity: SyncIdentity?
     private var tokenTimer: Timer?
     private var requestingToken = false
@@ -352,6 +354,7 @@ final class BluetoothCompanion {
         tokenTimer?.invalidate()
         tokenTimer = nil
         requestingToken = false
+        tokenAutomatic = false
         identity = nil
         upkeepStarted = false
         tokenWanted = false
@@ -506,9 +509,11 @@ final class BluetoothCompanion {
             startUpkeep(link)
             return
         }
-        if tokenWanted, ioLink != nil, run == nil {
+        // The quiet fetch stays wanted until it is asked, so a command in flight or a handshake
+        // not yet done only delays it to the next idle link.
+        if tokenWanted, ioLink != nil, run == nil, requestToken(automatic: true) {
             tokenWanted = false
-            if requestToken() { return }
+            return
         }
         state.today.linkIdle()
         collectWhenReady()
@@ -601,18 +606,19 @@ final class BluetoothCompanion {
     /// The Developer level Get token action. The quiet fetch on connect does the same on its own.
     func saveWifiAccess() {
         guard foreground else { return }
-        requestToken()
+        requestToken(automatic: false)
     }
 
     /// Asks the sensor for its LAN token, quietly. The request takes a native lease of the shared
     /// link, so it waits for any Kotlin request and its reply stays on this side. False when nothing
     /// was asked.
     @discardableResult
-    private func requestToken() -> Bool {
+    private func requestToken(automatic: Bool) -> Bool {
         guard current != nil, identity != nil, let link = ioLink, run == nil, commandHandle == nil,
             !requestingToken, mtu >= 4
         else { return false }
         requestingToken = true
+        tokenAutomatic = automatic
         state.wifiAccessSaving()
         tokenTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -624,7 +630,7 @@ final class BluetoothCompanion {
                 if self.gattIdle {
                     self.finishTokenRequest(stored: false)
                 } else {
-                    self.disconnect(notice: .sensorDisconnected)
+                    self.disconnect(notice: self.tokenFailedNotice)
                 }
             }
         }
@@ -645,8 +651,15 @@ final class BluetoothCompanion {
         return true
     }
 
+    /// A failed fetch the user never asked for closes the link with the plain notice, so no error
+    /// shows for something they did not do. The Developer action keeps the error.
+    private var tokenFailedNotice: CompanionNotice {
+        tokenAutomatic ? .disconnected : .sensorDisconnected
+    }
+
     private func finishTokenRequest(stored: Bool) {
         requestingToken = false
+        tokenAutomatic = false
         tokenTimer?.invalidate()
         tokenTimer = nil
         nativeLease?.end()
@@ -721,7 +734,7 @@ extension BluetoothCompanion {
             case .characteristicsMissing: disconnect(notice: .characteristicsMissing)
             case .notifyFailed: disconnect(notice: .notifyFailed)
             case .readFailed: disconnect(notice: .readFailed)
-            case .tokenFailed: disconnect(notice: .sensorDisconnected)
+            case .tokenFailed: disconnect(notice: tokenFailedNotice)
             case .pairingRemoved: pairingRemoved()
             }
         case .power, .found, .wake: break
