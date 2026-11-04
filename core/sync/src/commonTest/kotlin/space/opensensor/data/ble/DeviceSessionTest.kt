@@ -492,15 +492,25 @@ class DeviceSessionTest {
     }
 
     @Test
-    fun maintenanceFallsBackForFirmwareWithoutStatusNotifications() = runTest {
+    fun noStatusOnAProto3LinkNeverSetsTime() = runTest {
         val p = peer()
         val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
         runCurrent()
         advanceTimeBy(5_000)
         runCurrent()
-        assertContentEquals(Request.SetTime(PHONE_NOW / 1000, 0).encode(), p.bodies.last())
-        p.driver.emit(Frame.TimeSet(PHONE_NOW / 1000, 501L, 0))
-        assertEquals(501L, request.await()?.monotonicMicros)
+        assertNull(request.await())
+        assertContentEquals(Request.Status.encode(), p.bodies.single())
+    }
+
+    @Test
+    fun aCachedNetworkAnchorIsNeverSetEvenWhenItIsOld() = runTest {
+        val p = peer("{\"utc\":1,\"clk\":3,\"utc_ms\":${PHONE_NOW - 3_600_000},\"clk_age_s\":86400}".encodeToByteArray())
+        val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertNull(request.await())
+        assertContentEquals(Request.Status.encode(), p.bodies.single())
     }
 
     @Test
@@ -538,32 +548,65 @@ class DeviceSessionTest {
     @Test
     fun theAutomaticClockCheckRunsOncePerConnectionEvenAfterATimeout() = runTest {
         val p = peer()
-        // The first check times out on STATUS and has no cached snapshot, so it sends SET_TIME and that times out too.
-        val first = async { runCatching { p.view().synchronizeClockOnce { PHONE_NOW } } }
+        // STATUS times out with no cached snapshot. That is a decision, the clock is left alone.
+        val first = async { p.view().synchronizeClockOnce { PHONE_NOW } }
         runCurrent()
         advanceTimeBy(5_000)
         runCurrent()
+        assertNull(first.await())
+        assertContentEquals(Request.Status.encode(), p.bodies.single())
+        // A second run or screen on the same link never asks again, so a slow sensor is not looped.
+        assertNull(p.view().synchronizeClockOnce { PHONE_NOW })
+        assertEquals(1, p.bodies.size)
+    }
+
+    @Test
+    fun aTimedOutSetTimeKeepsTheClaim() = runTest {
+        val p = peer()
+        val first = async { runCatching { p.view().synchronizeClockOnce { PHONE_NOW } } }
+        runCurrent()
+        p.transport.statusNotifications.emit("{\"utc\":0}".encodeToByteArray())
+        runCurrent()
+        assertContentEquals(Request.SetTime(PHONE_NOW / 1000, 0).encode(), p.bodies.last())
         advanceTimeBy(60_000)
         runCurrent()
-        first.await()
+        assertTrue(first.await().isFailure)
         val sent = p.bodies.size
-        // A second run or screen on the same link never asks again, so a slow sensor is not looped.
         assertNull(p.view().synchronizeClockOnce { PHONE_NOW })
         assertEquals(sent, p.bodies.size)
     }
 
     @Test
-    fun wifiSyncIsSwitchedBackOnOncePerConnectionBelowDeveloper() = runTest {
+    fun aCancelledClockCheckRunsAgainOnTheNextCall() = runTest {
         val p = peer()
-        p.reply = { op, _ -> if (op == Opcode.SET_CONFIG) emit(Frame.Config(0, "{\"lan\":{\"on\":1}}")) }
-        val off = DeviceConfig(lan = LanConfig(on = 0))
-        assertNull(p.view().enableLanOnce(off, developer = true))
-        assertNull(p.view().enableLanOnce(DeviceConfig(lan = LanConfig(on = 1)), developer = false))
-        assertNull(p.view().enableLanOnce(DeviceConfig(), developer = false))
-        assertTrue(p.bodies.isEmpty())
-        assertEquals(1, p.view().enableLanOnce(off, developer = false)?.config?.lan?.on)
-        assertContentEquals(Request.SetConfig(ConfigPatch.build { lanOn(true) }).encode(), p.bodies.single())
-        assertNull(p.view().enableLanOnce(off, developer = false))
+        val first = async { p.view().synchronizeClockOnce { PHONE_NOW } }
+        runCurrent()
+        first.cancelAndJoin()
+        runCurrent()
+        assertContentEquals(Request.Status.encode(), p.bodies.single())
+        val second = async { p.view().synchronizeClockOnce { PHONE_NOW } }
+        runCurrent()
+        assertEquals(2, p.bodies.size)
+        p.transport.statusNotifications.emit("{\"utc\":0}".encodeToByteArray())
+        runCurrent()
+        assertContentEquals(Request.SetTime(PHONE_NOW / 1000, 0).encode(), p.bodies.last())
+        val ack = Frame.TimeSet(PHONE_NOW / 1000, 501L, 0)
+        p.driver.emit(ack)
+        assertEquals(ack, second.await())
+        assertNull(p.view().synchronizeClockOnce { PHONE_NOW })
+        assertEquals(3, p.bodies.size)
+    }
+
+    @Test
+    fun twoSimultaneousClockChecksAskOnce() = runTest {
+        val p = peer()
+        val a = async { p.view().synchronizeClockOnce { PHONE_NOW } }
+        val b = async { p.view().synchronizeClockOnce { PHONE_NOW } }
+        runCurrent()
+        assertContentEquals(Request.Status.encode(), p.bodies.single())
+        p.transport.statusNotifications.emit("{\"utc\":1,\"clk\":1,\"utc_ms\":$PHONE_NOW,\"clk_age_s\":60}".encodeToByteArray())
+        assertNull(a.await())
+        assertNull(b.await())
         assertEquals(1, p.bodies.size)
     }
 
@@ -576,6 +619,36 @@ class DeviceSessionTest {
         runCurrent()
         assertContentEquals(Request.Status.encode(), p.bodies.single())
         assertIs<LinkState.Ready>(p.link.state.value)
+    }
+
+    @Test
+    fun aCancelledWifiSyncSwitchRetriesOnceOnTheNextCall() = runTest {
+        val p = peer()
+        val off = DeviceConfig(lan = LanConfig(on = 0))
+        fun setConfigs() = p.driver.sent.count { it == Opcode.SET_CONFIG }
+        val first = async { p.view().enableLanOnce(off, developer = false) }
+        runCurrent()
+        first.cancelAndJoin()
+        runCurrent()
+        assertEquals(1, setConfigs())
+        // The late CONFIG of the cancelled request, then the answer to ABORT.
+        p.driver.emit(Frame.Config(0, "{\"lan\":{\"on\":0}}"), Frame.Aborted(0))
+        runCurrent()
+        p.reply = { op, _ -> if (op == Opcode.SET_CONFIG) emit(Frame.Config(0, "{\"lan\":{\"on\":1}}")) }
+        assertEquals(1, p.view().enableLanOnce(off, developer = false)?.config?.lan?.on)
+        assertEquals(2, setConfigs())
+        assertNull(p.view().enableLanOnce(off, developer = false))
+        assertEquals(2, setConfigs())
+    }
+
+    @Test
+    fun aRefusedWifiSyncSwitchIsNotRetriedOnTheSameConnection() = runTest {
+        val p = peer()
+        p.reply = { op, _ -> if (op == Opcode.SET_CONFIG) emit(Frame.Error(Opcode.SET_CONFIG, ProtocolError.INVALID_CONFIG.code, "lan.on")) }
+        val off = DeviceConfig(lan = LanConfig(on = 0))
+        assertFailsWith<DeviceErrorException> { p.view().enableLanOnce(off, developer = false) }
+        assertNull(p.view().enableLanOnce(off, developer = false))
+        assertEquals(1, p.bodies.size)
     }
 
     @Test

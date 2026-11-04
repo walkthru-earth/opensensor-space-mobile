@@ -60,6 +60,26 @@ class LinkSessionTest {
     private fun files(n: Int) = Array<Frame>(n) { Frame.File(1024, "f$it.parquet") }
 
     @Test
+    fun aKeyIsClaimedOnceAcrossRacingThreadsAndAReleaseLetsTheNextClaimWin() = runTest {
+        val s = session(ScriptedLinkDriver())
+        val wins = AtomicInt(0)
+        withContext(Dispatchers.Default) {
+            List(64) { launch { if (s.claimOnce("clock")) wins.incrementAndFetch() } }
+        }
+        assertEquals(1, wins.load())
+        assertFalse(s.claimOnce("clock"))
+        // Another key is independent, and releasing a key never touches it.
+        assertTrue(s.claimOnce("lan"))
+        s.release("clock")
+        assertFalse(s.claimOnce("lan"))
+        assertTrue(s.claimOnce("clock"))
+        assertFalse(s.claimOnce("clock"))
+        // Releasing a key nobody holds is harmless.
+        s.release("never")
+        assertTrue(s.claimOnce("never"))
+    }
+
+    @Test
     fun cancelledListWithBacklogLeavesLinkReadyThroughTenIdleMinutes() = runTest {
         var pings = 0
         val driver = ScriptedLinkDriver { op, _ ->

@@ -245,6 +245,18 @@ class LinkSession(
         }
     }
 
+    /**
+     * Give back a [claimOnce] key whose check made no decision (cancelled, or failed before the
+     * sensor answered), so the next caller on this connection runs it.
+     */
+    fun release(key: String) {
+        while (true) {
+            val held = claimed.load()
+            if (key !in held) return
+            if (claimed.compareAndSet(held, held - key)) return
+        }
+    }
+
     /** Close the link on purpose. [reason] is a fixed developer label. */
     fun close(reason: String) {
         terminate(DisconnectCause.Deliberate(reason))
