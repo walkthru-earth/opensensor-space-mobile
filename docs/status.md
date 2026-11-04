@@ -15,10 +15,14 @@ Host tests and the iOS simulator only. No phone run is recorded. Owner decisions
   (83787768cc8451109d48a03d4ef5493ffcd403dd). A file with a cell that is not res 8 gets no Item,
   `anon:size` is 0.01, a moving Item does not list Grid, and the extension and link order, geometry,
   times and `statistics` match the profile. The partition comes from the rotation window of the first
-  row, and a file whose `HHMM` names another window gets no Item.
+  row. A file whose `HHMM` names another window gets `WindowMismatch`, a footer with no allowed
+  `rotation_interval_s` gets `NoRotationWindow` and a cell H3 rejects gets `InvalidCell`, all with
+  no Item.
 - `FileItemSchemaTest` checks the v0.1.0 profile, the core STAC 1.1.0 Item schema and the Grid,
-  Anonymized Location, Table and File extension schemas. A phone Item rebuilt from each v0.1.0 row
-  fixture equals its example as JSON values, with geometry within the 1e-9 degrees the profile allows.
+  Anonymized Location, Table and File extension schemas. `ProfileExampleTest` runs on the JVM and on
+  iOS. A phone Item rebuilt from each v0.1.0 row fixture equals its example as JSON values, with
+  geometry within the 1e-9 degrees the profile allows. The JVM uses h3-java 4.5.1, which matches the
+  H3 C 4.5.0 reference within 1e-9 there.
 
 ## 2026-10-29, silent clock, Wi-Fi token and Wi-Fi sync (code only)
 
