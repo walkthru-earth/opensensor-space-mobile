@@ -1,7 +1,7 @@
 # Build, verify, release. Stack, hooks, CI, signing, the fake device
 
 **Scope:** toolchain versions, permissions declared, the `verify` gate, git hooks, GitHub Actions, release signing, and the debug-only fake device used by tests and demos.
-**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/opensensor.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `.github/dependabot.yml`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
+**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `gradle/gradle-daemon-jvm.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/opensensor.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `.github/dependabot.yml`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
 **Related:** [architecture.md](architecture.md) (modules the gate builds), [status.md](status.md) (what the gate proves and what it cannot).
 
 ## Gate
@@ -17,7 +17,7 @@ flowchart LR
 ```
 
 ```sh
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"   # JBR (JDK 25) or any JDK ≥ 17
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"   # a JDK 25, see Build JDK below
 tools/setup-hooks.sh                 # once per clone
 ./gradlew --no-daemon clean verify   # the gate; on a Mac it includes verifyIos (needs Xcode)
 ./gradlew --no-daemon :app:assembleRelease -Popensensor.localRelease=true   # R8 check, debug key, never publish
@@ -54,6 +54,31 @@ below describe configured jobs, not completed CI. Local gates are the acceptance
 Mobile CodeRabbit provides summaries only, so use a scoped source review before opening a PR.
 Run `./ios/tests/verify-native.sh` for the native host checks. No host or simulator gate qualifies
 phone radio, screen-off collection or board behavior.
+
+## Build JDK
+
+Gradle runs on **JDK 25**, pinned once in `gradle/gradle-daemon-jvm.properties` (`toolchainVersion=25`).
+That file is Gradle's Daemon JVM criteria, stable since Gradle 9.2. It takes precedence over `JAVA_HOME`,
+so the terminal, Android Studio (Panda and newer read it) and CI all start the Gradle daemon on a JDK 25.
+The file has no download URLs, so Gradle never downloads a JDK. It uses a JDK 25 it finds through
+`JAVA_HOME`, `org.gradle.java.installations.paths`, `/usr/libexec/java_home` on macOS, `/usr/lib/jvm` on
+Linux and the other [auto-detection locations](https://docs.gradle.org/current/userguide/toolchains.html#sec:auto_detection).
+Without one the build stops at once with `Unable to download toolchain matching the requirements
+({languageVersion=25, ...})`. The compiled bytecode stays Java 17, Android's floor
+(`OpenSensorConventions.jvmTarget`), so a newer build JDK changes nothing in the APK or the jars.
+
+Local setup, once per machine. The Android Studio bundled JBR is a JDK 25, so either
+
+- export `JAVA_HOME` as in the block above, or
+- add `org.gradle.java.installations.paths=/Applications/Android Studio.app/Contents/jbr/Contents/Home`
+  to `~/.gradle/gradle.properties`, so `./gradlew` finds it in any terminal without `JAVA_HOME`, or
+- install any JDK 25, for example Temurin 25, in the system location.
+
+In Android Studio keep the Gradle JDK setting (Settings, Build, Execution, Deployment, Build Tools, Gradle)
+on Daemon JVM criteria. CI reads `toolchainVersion` from the same file and passes it to `actions/setup-java`,
+so the version lives in one place. To move to another JDK, run
+`./gradlew updateDaemonJvm --jvm-version=<major>` on a machine that has that JDK and commit the file.
+The root `build.gradle.kts` configures that task to write no download URLs.
 
 ## Stack (verified building 2026-10-09; kotlinx-datetime 0.8.0 added for W8)
 
@@ -100,7 +125,7 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | --- | --- |
 | `xcode-27` (standard ARM64 runner, public preview) | Matches `iosSimulatorArm64`; validates the latest chosen Apple SDK without an Intel target or a multi-version matrix. |
 | Explicit Xcode 27.0 through `DEVELOPER_DIR` | Matches the locally checked release build; avoids the runner's moving default and pre-release Xcode installations. |
-| Temurin 21 + repository Gradle wrapper | Uses the same Java major as Linux CI; preserves the project's pinned Gradle distribution. |
+| Temurin, version read from `gradle/gradle-daemon-jvm.properties` (25), + repository Gradle wrapper | Uses the same Java major as Linux CI and local builds; preserves the project's pinned Gradle distribution. |
 | `setup-gradle` with `cache-provider: basic` | Owns Gradle caching and wrapper validation, using standard GitHub caching. Do not also enable Gradle caching in `setup-java`. |
 | Separate `~/.konan` cache | Reuses the native compiler/dependencies, keyed by architecture, Xcode and dependency/build definitions. No DerivedData cache. |
 | Two Gradle workers | Limits simultaneous native compilation on the standard runner's 7 GB RAM. |

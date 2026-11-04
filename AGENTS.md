@@ -100,7 +100,8 @@ concern you are changing in `docs/README.md`.
 
 ## Gate
 
-Use the bundled toolchain and run `./gradlew --no-daemon verify` before a commit
+Use a JDK 25, such as the bundled Android Studio JBR (`gradle/gradle-daemon-jvm.properties`
+pins it), and run `./gradlew --no-daemon verify` before a commit
 (lint, debug APK, `:app` unit tests and every shared module's host tests; on a Mac
 also `verifyIos`, the iOS simulator tests and framework link). Each convention
 plugin adds its module to the gates, so a new module needs no list edit.
