@@ -1,13 +1,15 @@
 # Contributing
 
-## Mac setup
+## Mac setup (Apple Silicon)
 
-Everything comes from Homebrew. Android Studio is not needed.
+Everything comes from Homebrew. Android Studio is not needed. On an Intel Mac, Homebrew lives in
+`/usr/local` instead of `/opt/homebrew`, so change the paths below.
 
 ```sh
 brew install openjdk@25
 sudo ln -sfn /opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-25.jdk
 brew install --cask android-commandlinetools
+brew install pre-commit
 ```
 
 The `ln` step is Homebrew's own caveat. It lets `/usr/libexec/java_home`, Gradle and Xcode find the JDK
@@ -21,6 +23,10 @@ export ANDROID_HOME="/opt/homebrew/share/android-commandlinetools"
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
 ```
 
+On a Mac, `./gradlew verify` and the pre-push hook also run the iOS checks, which need Xcode 27 from
+the App Store. Without Xcode, put `opensensor.skipIos=true` in `~/.gradle/gradle.properties`, which
+skips them for every build, the hook included.
+
 ```sh
 java -version                        # expect 25
 yes | sdkmanager --licenses
@@ -29,7 +35,6 @@ tools/setup-hooks.sh                 # once per clone, the pre-push hook runs ve
 ./gradlew verify
 ```
 
-Build-tools 36.0.0 is the version AGP uses by default, so the build does not download it again.
+Build-tools 36.0.0 is AGP 9.5's default, so the build does not download it again. Update it with AGP.
 
-For iOS, install Xcode 27 from the App Store. Without Xcode, add `-Popensensor.skipIos=true` to skip
-the iOS checks. Why the build needs JDK 25 is in [docs/build-and-release.md](docs/build-and-release.md#build-jdk).
+Why the build needs JDK 25 is in [docs/build-and-release.md](docs/build-and-release.md#build-jdk).
