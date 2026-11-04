@@ -33,8 +33,10 @@ measured oscillator accuracy. A recent host or network clock survives reconnects
 transports and creating a new iOS byte pipe without another `SET_TIME`. The phone sends UTC,
 so a time zone change on the phone changes nothing on the sensor. Legacy firmware with a usable UTC clock but no age/drift fields keeps
 that anchor. A check that is cancelled, or fails before `STATUS` answers, made no decision and
-runs again on the next call on the same connection. A `STATUS` timeout or a failed `SET_TIME`
-is a decision and is not retried until the next connection. A failed clock check does not
+runs again on the next call on the same connection. So does a `SET_TIME` that got no reply, a
+timeout or a transport error, as the Wi-Fi sync switch does. A `STATUS` timeout, or an `ERROR`
+reply to `SET_TIME` other than busy, is a decision and is not retried until the next connection.
+A failed clock check does not
 prevent downloading verified original files. There is no user-facing device-time setting or confirmation.
 Only the Developer level shows the Clock card on Today, read only, with the source, age and drift.
 The optional microsecond remainder in `SET_TIME` retains the phone's millisecond precision;

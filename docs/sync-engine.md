@@ -495,9 +495,12 @@ iOS runs the same controller retry through `SensorCollections`.
 ## Smart Sync and state-changing requests
 
 **Device UTC synchronizes automatically on connection, before LIST.** Android and iOS send
-phone UTC without a manual clock control or consent setting. Smart Sync retries missing or
-RTC-restored UTC automatically; phone and network anchors (`clk == 1` or `clk == 3`) continue
-without a second clock update. An old stored `clock_sync_mode` key is ignored.
+phone UTC without a manual clock control or consent setting. Smart Sync sets missing or
+RTC-restored UTC automatically. A phone anchor (`clk == 1`) is kept until it is six hours old,
+whatever the difference, and refreshed after that. A network anchor (`clk == 3`) is replaced
+only when a pushed `STATUS` measured it within a minute of the phone and it is stale. More than a
+minute off, or not measured, it is kept. The full rules are in
+[time-reconciliation.md](time-reconciliation.md). An old stored `clock_sync_mode` key is ignored.
 
 The accepted UTC/monotonic acknowledgement is bound to the full thing and boot identity,
 allowing the local archive to reconcile earlier untimed rows from that boot. Android collection
