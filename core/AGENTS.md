@@ -101,7 +101,7 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   neither exact coordinates nor uploading belong to that flow.
   `H3Index.isCell` is the pure Kotlin cell check (mode 1, reserved bits clear, base cell under 122,
   digits 0 to 6 down to the resolution and 7 below, no deleted K axis under a pentagon).
-  `DeviceLocation.hasCell` uses it, and `H3Grid.isValidCell` defaults to it, so a fake grid checks
+  `LocationConfig.hasCell()` (in `DeviceLocation.kt`) uses it, and `H3Grid.isValidCell` defaults to it, so a fake grid checks
   cells correctly. The JVM and iOS bindings keep their library call, and `H3IsCellTest` holds
   `isCell` to the H3 library.
 - Keep protocol and sensor-domain analysis pure and reusable by Android, iOS and
@@ -123,12 +123,15 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   and `SafeName` is the firmware name rule (charset, no `..` or `//`, 399-byte cap) plus the phone's
   241-byte segment cap, so every sibling of a segment fits a 255-byte file name. Platform code
   measures and calls them, it does not re-implement them.
-- The automatic device changes run at most once per link through `LinkSession.claimOnce(key)`.
-  `DeviceSession.synchronizeClockOnce` and `enableLanOnce` keep the claim once the sensor decided,
-  including a STATUS timeout or an ERROR reply. A cancelled try, a failure before STATUS answered,
-  a `SET_TIME` with no reply, or `DeviceBusyException` calls `release(key)`, so the next run or
-  screen on that link tries again. `SmartSyncPolicy.decide(status, now, uncertainty, proto)` is the
-  one clock rule, applied in this order.
+- The clock check and `lan.on` run at most once per link through `LinkSession.claimOnce(key)`,
+  with the keys `CLOCK_CHECK` ("clock") and `LAN_ENABLE` ("lan.on") in `DeviceSession`. The token
+  fetch takes no claim. Android gates it with `LanTokenPolicy.shouldFetch` and iOS with
+  `tokenWanted`. `synchronizeClockOnce` and `enableLanOnce` keep the claim once the sensor decided,
+  which includes a STATUS timeout and an ERROR reply other than BUSY. A cancelled try, a failure
+  before STATUS answered, a `SET_TIME` or `SET_CONFIG` with no reply (a timeout or a transport
+  error), or `DeviceBusyException` calls `release(key)`, so the next run or screen on that link
+  tries again. `SmartSyncPolicy.decide(status, now, uncertainty, proto)` is the
+  one clock rule, where the link uncertainty is half the STATUS round trip, applied in this order.
   - No `SET_TIME` when the phone clock is before `PHONE_CLOCK_FLOOR_MILLIS`, or when STATUS did not
     answer on proto 3 or newer.
   - Set it when the anchor is missing, RTC restored or unknown.
@@ -136,8 +139,9 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   - Past a minute of drift (plus 50 ppm aged drift and link uncertainty) keep a network anchor,
     since a hand-set phone is the likelier fault, and keep any anchor under 6 h old, so two phones
     never flip-flop it. Set any other.
-  - Past 2 s keep an anchor under 6 h old and set any other. This also sets a network anchor that
-    reports no `clockAgeSeconds`, so such an anchor is replaced at 2 to 60 s of drift.
+  - Past 2 s plus link uncertainty keep an anchor under 6 h old and set any other. This also sets
+    a network anchor that reports no `clockAgeSeconds`, so such an anchor is replaced at a drift
+    over 2 s plus uncertainty and up to 60 s plus uncertainty.
   - Otherwise set only an anchor 6 h old or more.
 - History derives each grouped day once with `DayPass`, producing tiers and daily Parquet
   together. Android uses derive version 5 and plans from projected thing archive identities.

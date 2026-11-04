@@ -54,7 +54,7 @@ concern you are changing in `docs/README.md`.
 - `:core:*` stays reusable without Android or Hilt. Room lives only in `:core:database`,
   one Room KMP schema on the bundled SQLite driver for both phones. Every other `:core` module
   (`model`, `protocol`, `parquet`, `history`, `publicfeed`, `units`, `archive`,
-  `storage`, `net`, `sync`, `settings`, `stac`, `thing`) compiles for JVM and iOS from `commonMain`.
+  `storage`, `net`, `sync`, `settings`, `stac`, `thing`, `thing:testkit`) compiles for JVM and iOS from `commonMain`.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
   H3). Every `:feature:*` module and `:ui:designsystem`, `:ui:permissions` and `:ui:strings`
   are Compose for Android and iOS (`opensensor.kmp.compose-feature`). A sensor family (`:family:air`) holds its own science and plugs in through
@@ -110,5 +110,6 @@ secrets and ktlint; the pre-push hook runs `verify`. For setup and CI details se
 
 CI (`.github/workflows/verify.yml`) runs the same gates. The "iOS native validation" job has a
 60 minute timeout, and under macOS runner contention it hits it and shows as cancelled. That is
-infrastructure, not a code failure. Rerun the job, or run `./gradlew --no-daemon verify` and
+infrastructure, not a code failure. A change that only touches `docs/**` or Markdown starts no
+CI run (`paths-ignore`). Rerun the job, or run `./gradlew --no-daemon verify` and
 `verifyIos` locally before calling a change broken.
