@@ -290,7 +290,10 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
      * Null means the external clock is already usable; only a real TIME_SET is receipt evidence.
      * Legacy status has no age/drift fields, so a reported usable UTC anchor is retained.
      */
-    suspend fun synchronizeClockIfNeeded(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet? {
+    suspend fun synchronizeClockIfNeeded(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet? = clockCheck(nowMillis) {}
+
+    /** [synchronizeClockIfNeeded], calling [onDecided] once STATUS answered or timed out. */
+    private suspend fun clockCheck(nowMillis: () -> Long, onDecided: () -> Unit): Frame.TimeSet? {
         val before = nowMillis()
         val elapsed = TimeSource.Monotonic.markNow()
         val snapshot = freshStatus()?.let { (status, pushed) ->
@@ -298,27 +301,52 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
             // age still guide initialization/maintenance; cached UTC cannot measure drift.
             if (pushed) status else status.copy(utcEpochMillis = null)
         }
+        onDecided()
         val delayMillis = elapsed.elapsedNow().inWholeMilliseconds.coerceAtLeast(0)
         val midpoint = before + delayMillis / 2
-        val decision = SmartSyncPolicy.decide(snapshot, midpoint, (delayMillis + 1) / 2)
+        val proto = (link.state.value as? LinkState.Ready)?.info?.proto
+        val decision = SmartSyncPolicy.decide(snapshot, midpoint, (delayMillis + 1) / 2, proto)
         return if (decision.action == ClockSyncAction.SET_TIME) synchronizeClock(nowMillis) else null
     }
 
     /**
      * The automatic clock check, at most once per connection. A later call on the same link,
      * from a run or a screen, returns null without asking again, also when the first one timed out.
+     * A check that is cancelled, or fails before STATUS answers, made no decision, so it gives the
+     * claim back and the next call runs it.
      */
-    suspend fun synchronizeClockOnce(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet? =
-        if (link.claimOnce(CLOCK_CHECK)) synchronizeClockIfNeeded(nowMillis) else null
+    suspend fun synchronizeClockOnce(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet? {
+        if (!link.claimOnce(CLOCK_CHECK)) return null
+        var decided = false
+        try {
+            return clockCheck(nowMillis) { decided = true }
+        } catch (e: CancellationException) {
+            link.release(CLOCK_CHECK)
+            throw e
+        } catch (e: Exception) {
+            if (!decided) link.release(CLOCK_CHECK)
+            throw e
+        }
+    }
 
     /**
      * Turns Wi-Fi sync back on when the sensor reports it off, at most once per connection. Wi-Fi
      * sync is on for everyone, and only the Developer level may keep it off ([developer] true skips
-     * this). Returns the new config when it sent `lan.on=1`, else null.
+     * this). Returns the new config when it sent `lan.on=1`, else null. A refusal from the sensor
+     * keeps the claim. A cancelled, busy or unanswered request gives it back, so the next call retries.
      */
     suspend fun enableLanOnce(config: DeviceConfig?, developer: Boolean): ConfigSnapshot? {
         if (!LanAutoEnable.shouldEnable(config, developer) || !link.claimOnce(LAN_ENABLE)) return null
-        return setConfig(ConfigPatch.build { lanOn(true) })
+        try {
+            return setConfig(ConfigPatch.build { lanOn(true) })
+        } catch (e: CancellationException) {
+            link.release(LAN_ENABLE)
+            throw e
+        } catch (e: Exception) {
+            // An ERROR reply is the sensor's answer, except BUSY, which asks for a later try.
+            if (e !is DeviceErrorException || e is DeviceBusyException) link.release(LAN_ENABLE)
+            throw e
+        }
     }
 
     /** `FLUSH` → `FLUSHED` or `ERROR` 10. Finalizes the RAM batch into a short file. */
