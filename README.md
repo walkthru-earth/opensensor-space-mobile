@@ -95,10 +95,12 @@ separates measured CoreS3 host throughput from pending phone speed checks.
 
 ## Build
 
+First-time Mac setup (Homebrew JDK 25 and Android SDK) is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 Android and host gate:
 
 ```sh
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"   # Gradle needs a JDK 25 (docs/build-and-release.md#build-jdk)
+export JAVA_HOME="/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home"   # Gradle needs a JDK 25 (docs/build-and-release.md#build-jdk)
 tools/setup-hooks.sh                 # once per clone: git hooks (ktlint, gitleaks, hygiene; verify on push)
 ./gradlew --no-daemon clean verify   # lint + assembleDebug + every module's unit tests
 adb install app/build/outputs/apk/debug/app-debug.apk

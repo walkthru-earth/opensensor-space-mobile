@@ -4,8 +4,8 @@
 #
 # The binary is fetched once into ~/.cache/ktlint and pinned by SHA-256, so the hook is
 # deterministic and needs no Gradle start-up (a full `./gradlew verify` runs on pre-push).
-# Requires a JRE ≥ 17 on PATH or JAVA_HOME (Android Studio's JBR works:
-#   export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home").
+# Requires a JRE ≥ 17 on PATH or JAVA_HOME (the JDK 25 from CONTRIBUTING.md works:
+#   export JAVA_HOME="/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home").
 set -euo pipefail
 
 KTLINT_VERSION="1.8.0"
@@ -15,7 +15,7 @@ BIN="$CACHE_DIR/ktlint-$KTLINT_VERSION"
 
 if [ -n "${JAVA_HOME:-}" ]; then export PATH="$JAVA_HOME/bin:$PATH"; fi
 if ! command -v java >/dev/null 2>&1; then
-  echo "ktlint hook: no 'java' on PATH; set JAVA_HOME (Android Studio's JBR is fine)." >&2
+  echo "ktlint hook: no 'java' on PATH; set JAVA_HOME (see CONTRIBUTING.md)." >&2
   exit 1
 fi
 

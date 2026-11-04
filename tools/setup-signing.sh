@@ -19,7 +19,7 @@ KS="$DIR/release.jks"
 ENV="$DIR/.env"
 ALIAS="opensensor"
 
-JAVA_BIN="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}/bin"
+JAVA_BIN="${JAVA_HOME:-/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home}/bin"
 KEYTOOL="$JAVA_BIN/keytool"; command -v "$KEYTOOL" >/dev/null 2>&1 || KEYTOOL="$(command -v keytool)"
 
 for f in "$KS" "$ENV"; do git check-ignore -q "$f" || { echo "refusing: $f is not git-ignored" >&2; exit 1; }; done

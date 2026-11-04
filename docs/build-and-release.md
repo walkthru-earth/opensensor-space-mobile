@@ -17,7 +17,7 @@ flowchart LR
 ```
 
 ```sh
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"   # a JDK 25, see Build JDK below
+export JAVA_HOME="/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home"   # a JDK 25, see Build JDK below
 tools/setup-hooks.sh                 # once per clone
 ./gradlew --no-daemon clean verify   # the gate; on a Mac it includes verifyIos (needs Xcode)
 ./gradlew --no-daemon :app:assembleRelease -Popensensor.localRelease=true   # R8 check, debug key, never publish
@@ -71,27 +71,28 @@ The build JDK does not set the bytecode. The shared modules compile to Java 17, 
 are Java 11 (class file major 55).
 
 This is a behavior change. Before, any JDK 17 or newer could run the build. Now a `./gradlew` started
-without a JDK 25 in reach fails at once. macOS auto-detection reads `/usr/libexec/java_home`, which does
-not list the Android Studio JBR, so the JBR counts only when `JAVA_HOME` points at it. Two common cases
-miss it. The pre-push `gradle-verify` hook, when a GUI git client or an IDE runs the push without your
-shell's `JAVA_HOME`. And the Xcode build phase (`ios/OpenSensor.xcodeproj/project.pbxproj`), which exports
-the JBR only when `JAVA_HOME` is unset, so a `JAVA_HOME` already set to another JDK wins there.
+without a JDK 25 in reach fails at once. macOS auto-detection reads `/usr/libexec/java_home`, which lists
+only JDKs under `/Library/Java/JavaVirtualMachines`. Homebrew's `openjdk@25` is keg-only and is not
+there until you link it, so without the link it counts only when `JAVA_HOME` points at it. Two common
+cases run without your shell's `JAVA_HOME`. The pre-push `gradle-verify` hook, when a GUI git client or
+an IDE runs the push. And the Xcode build phase (`ios/OpenSensor.xcodeproj/project.pbxproj`). That phase
+uses `JAVA_HOME` when it is set, then asks `/usr/libexec/java_home` for the pinned major, checks the
+`release` file of the JDK it gets back, and fails with an `error:` line pointing at `CONTRIBUTING.md`
+when neither is a JDK 25.
 
-Local setup, once per machine. The bundled JBR of current Android Studio releases is a JDK 25. Check yours.
+Local setup, once per machine, is in [CONTRIBUTING.md](../CONTRIBUTING.md). It installs Homebrew's
+`openjdk@25`, links it into `/Library/Java/JavaVirtualMachines` (Homebrew's own caveat) and exports
+`JAVA_HOME` in `~/.zshenv`. Check both paths.
 
 ```sh
-"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java" -version   # expect 25
+java -version                         # expect 25
+/usr/libexec/java_home -v 25          # expect the openjdk@25 path
 ```
 
-- In a terminal, export `JAVA_HOME` to the JBR as in the block above.
-- If you push from a GUI git client or an IDE, or build from Xcode, install a JDK 25 (for example
-  Temurin 25) in the system location `/Library/Java/JavaVirtualMachines`, so auto-detection finds it
-  without `JAVA_HOME`.
-
-In Android Studio keep the Gradle JDK setting (Settings, Build, Execution, Deployment, Build Tools, Gradle)
-on Daemon JVM criteria. CI reads `toolchainVersion` from the same file through the local action
-`.github/actions/build-jdk-version`, which fails unless the key appears once as a plain major version,
-and passes it to `actions/setup-java`. The version lives in one place. To move to another JDK, run
+Android Studio is optional. If you use it, keep its Gradle JDK setting (Settings, Build, Execution,
+Deployment, Build Tools, Gradle) on Daemon JVM criteria. CI reads `toolchainVersion` from the same file
+through the local action `.github/actions/build-jdk-version`, which fails unless the key appears once as
+a plain major version, and passes it to `actions/setup-java`. The version lives in one place. To move to another JDK, run
 `./gradlew updateDaemonJvm --jvm-version=<major>` on a machine that has that JDK and commit the file.
 The root `build.gradle.kts` configures that task to write no download URLs.
 
