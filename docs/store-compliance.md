@@ -98,13 +98,13 @@ question was still open, the safest choice is taken. These are product rules, no
 Have counsel read the privacy policy before the first public release.
 
 1. **Published cells are H3 resolution 8** (owner decision 2026-11-04, about 0.74 km², edge
-   about 460 m). This replaces the earlier resolution 7 cap. Every published Thing, fixed or
+   about 530 m). This replaces the earlier resolution 7 cap. Every published Thing, fixed or
    moving, carries res 8, and no publisher coarsens it. Play's Data safety guidance treats
    location finer than about 3 km² as precise, so a published res 8 cell is declared as precise
    location on Play once upload ships. Apple calls location precise from about three decimal
    places of latitude and longitude (about 100 m). A res 8 cell is coarser than that, so by our
    reading it stays "Coarse Location" on the App Store. Have counsel confirm both answers before
-   the first upload release. The owner may pick a coarser cell, never a finer one. Each File Item
+   the first upload release. A file whose cells are not res 8 is not published. Each File Item
    states its own precision in its Anonymized Location fields (`anon:size`, `anon:warning`).
    `devices-and-discovery.md` privacy rule 2 says the same.
 2. **Feed hosting is source.coop** (owner decision, Radiant Earth partnership on AWS Open Data).

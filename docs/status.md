@@ -11,9 +11,12 @@ Host tests and the iOS simulator only. No phone run is recorded. Owner decisions
 - The board kind publishes H3 resolution 8, the file's own cells. The resolution 7 cap is gone.
 - The File Item data href is `./<file>.parquet`, relative to the sidecar beside it.
 - The board writes the Item. `FileItems` regenerates it and must equal the board's Item.
-- `FileItemSchemaTest` also checks the core STAC 1.1.0 Item schema and the Grid, Anonymized
-  Location, Table and File extension schemas. A moving Item still lists Grid without a
-  `grid:code`, as the 815fc45 profile asks. The spec update removes that (phase 2).
+- `FileItems` follows stac-opensensor v0.1.0 (9943282). A file with a cell that is not res 8 gets
+  no Item, `anon:size` is 0.01, a moving Item does not list Grid, and the extension and link order,
+  geometry and `statistics` match the profile.
+- `FileItemSchemaTest` checks the v0.1.0 profile, the core STAC 1.1.0 Item schema and the Grid,
+  Anonymized Location, Table and File extension schemas. A phone Item rebuilt for each v0.1.0
+  example equals it as JSON values, with geometry within the 1e-9 degrees the profile's check allows.
 
 ## 2026-10-29, silent clock, Wi-Fi token and Wi-Fi sync (code only)
 

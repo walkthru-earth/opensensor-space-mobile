@@ -47,8 +47,9 @@ Item as JSON values. Its data href is relative, `./<file>.parquet`. It is a pure
 file bytes, its `opensensor` footer and its `BoardTemplate`, with no upload, network or Room. The
 geometry is H3 cells only, `ColumnStatistics` gives each measurement column `statistics` under its
 `valid_when` gate, and `FileItemResult.NoItem` names why a file gets none (no UTC anchor, no located
-row under `FileItems.ITEM_NEEDS_LOCATION`, a fixed Thing in two cells). Cells finer than its required `maxRes`
-are coarsened to their parent. `PublishGate` in `thing/` is its only caller. Once upload exists, the
+row under `FileItems.ITEM_NEEDS_LOCATION`, a fixed Thing in two cells, a cell not at its required
+`publishedRes`). It never coarsens. It follows stac-opensensor v0.1.0 (9943282), and `FileItemSchemaTest`
+proves a rebuilt Item equals the profile's examples. `PublishGate` in `thing/` is its only caller. Once upload exists, the
 phone uploads the board's sidecar `.json` together with its `.parquet`.
 `thing/` (`:core:thing`, #219) holds the `ThingKind` contract, its `DataSource` and `PublishPolicy`,
 `OpenSensorBoardKind` (#222) and the `ThingKinds` registry. Each app builds that registry as a plain
@@ -56,7 +57,7 @@ list, Android in `data/di/ThingModule` and iOS in `ThingKindsIos.kt` from `AppSe
 registration. Each app hands `ThingKinds.metricProviders` to `AirFamily.install`, which passes the family and then the kinds' `DerivedMetricProvider`s to `Metrics.install`,
 which rebuilds the catalog. `PublishGate` (#224) issues a ticket only for a `Recording` kind with
 `OptInCcBy` whose Thing the owner opted in (`UploadConsent`, none by default), then builds that file's
-Item at the policy's `maxRes` (8 for the board, the contract's resolution), asking consent again so an opt out stops it. Health, feeds and anything else get none. It never
+Item at the policy's `publishedRes` (8 for the board, the contract's resolution), asking consent again so an opt out stops it. Health, feeds and anything else get none. It never
 uploads. `thing/testkit` (`:core:thing:testkit`) holds `ThingKindContract`, the checks every kind runs
 from its own tests. `PlatformNeedsTable` (#227) is the one table of what the app shell and each kind ask
 of the Android manifest (permissions, foreground service types) and the iOS bundle (Info.plist privacy
