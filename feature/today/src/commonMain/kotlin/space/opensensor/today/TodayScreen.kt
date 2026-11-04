@@ -304,7 +304,7 @@ fun TodayContent(
                         item(key = card.key) {
                             when (card) {
                                 TodayCard.NOW -> state.presenter.Hero(state, Modifier)
-                                TodayCard.TODAY_SO_FAR -> TodaySoFarCard(snapshot.todaySoFar, level = level)
+                                TodayCard.TODAY_SO_FAR -> TodaySoFarCard(snapshot.todaySoFar, clockMissing = snapshot.status?.utcSynced == false, level = level)
                                 TodayCard.ENVIRONMENT -> EnvironmentCard(state.liveSupport, capabilities, reading, receivedAt, hero = false)
                                 TodayCard.SMART_SYNC -> SmartSyncCard(
                                     sync = snapshot.sync,
