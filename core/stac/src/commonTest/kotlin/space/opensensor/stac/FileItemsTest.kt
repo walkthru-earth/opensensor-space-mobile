@@ -162,6 +162,49 @@ class FileItemsTest {
     }
 
     @Test
+    fun aMultiPolygonKeepsThePolygonOrderOfH3() {
+        // Three disjoint cells. The expected values are h3-js 4.5.0 output through geometryOf in
+        // stac-opensensor scripts/canonical.mjs at 83787768. H3 returns Cairo first, then Osu, then the
+        // cell north west of Accra, not the sorted input order, and every writer must keep that order.
+        // Equal-area polygons may order differently across H3 builds, stac-opensensor #12 item N1.
+        val cells = listOf("887576970bfffff", "883e628e05fffff", "887576914bfffff").map(H3Index::fromHex)
+        val rows = cells.mapIndexed { i, cell -> Row((HOUR_S + 10L * i) * 1_000_000L, cell) }
+        val item = json(item(deviceFile(rows), Mobility.MOVING))
+        val geometry = item["geometry"]!!.jsonObject
+        assertEquals("MultiPolygon", geometry["type"]!!.jsonPrimitive.content)
+        val polygons = geometry["coordinates"]!!.jsonArray
+        val firstVertices = listOf(
+            listOf(31.26070644322702, 30.04162701583852),
+            listOf(-0.18879745033151518, 5.597861712437427),
+            listOf(-0.3006566654888493, 5.695721072249183),
+        )
+        assertEquals(firstVertices.size, polygons.size)
+        firstVertices.zip(polygons).forEach { (want, polygon) ->
+            val ring = polygon.jsonArray.single().jsonArray
+            assertEquals(7, ring.size)
+            assertEquals(ring.first(), ring.last())
+            val got = ring.first().jsonArray.map { it.jsonPrimitive.double }
+            assertEquals(want[0], got[0], 1e-9)
+            assertEquals(want[1], got[1], 1e-9)
+        }
+        val bbox = item["bbox"]!!.jsonArray.map { it.jsonPrimitive.double }
+        listOf(-0.30390519926525567, 5.597861712437427, 31.26324747040906, 30.05063219298801).zip(bbox).forEach { (want, got) ->
+            assertEquals(want, got, 1e-9)
+        }
+    }
+
+    @Test
+    fun aCorruptCellGetsNoItem() {
+        // Resolution 8 bits, but its unused ninth digit is 0 rather than 7, so H3 rejects it.
+        val corrupt = H3Index.fromHex("887576970a3ffff")
+        assertEquals(8, H3Index.resolution(corrupt))
+        assertFalse(h3.isValidCell(corrupt))
+        assertEquals(FileItemResult.InvalidCell("887576970a3ffff"), item(deviceFile(rowsIn(corrupt)), Mobility.FIXED))
+        val rows = rowsIn(OSU_CELL, 2) + rowsIn(corrupt, 2).map { it.copy(utcUs = it.utcUs!! + 20_000_000L) }
+        assertEquals(FileItemResult.InvalidCell("887576970a3ffff"), item(deviceFile(rows), Mobility.MOVING))
+    }
+
+    @Test
     fun noCoordinateOfTheFileReachesTheItem() {
         // The geometry is the cell, never a fix, so the cell centre is not a vertex either.
         val item = json(item(deviceFile(rowsIn(OSU_CELL)), Mobility.FIXED))

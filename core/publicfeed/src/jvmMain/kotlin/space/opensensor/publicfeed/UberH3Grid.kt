@@ -21,6 +21,8 @@ class UberH3Grid internal constructor(private val core: H3Core) : H3Grid {
     override fun polygonToCells(ring: List<LatLng>, res: Int): List<Long> =
         core.polygonToCells(ring.map { UberLatLng(it.lat, it.lng) }, emptyList(), res)
 
+    override fun isValidCell(cell: Long): Boolean = core.isValidCell(cell)
+
     override fun cellsToMultiPolygon(cells: Collection<Long>): List<List<List<LatLng>>> =
         if (cells.isEmpty()) {
             emptyList()
@@ -45,6 +47,7 @@ class UberH3Grid internal constructor(private val core: H3Core) : H3Grid {
             override fun cellToBoundary(cell: Long): List<LatLng> = emptyList()
             override fun polygonToCells(ring: List<LatLng>, res: Int): List<Long> = emptyList()
             override fun cellsToMultiPolygon(cells: Collection<Long>): List<List<List<LatLng>>> = emptyList()
+            override fun isValidCell(cell: Long): Boolean = false
         }
     }
 }

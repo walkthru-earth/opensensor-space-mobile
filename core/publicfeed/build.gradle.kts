@@ -37,8 +37,8 @@ kotlin {
     }
 }
 
-// H3 on iOS. The vendored H3 C library (src/nativeInterop/h3c, v4.5.0, the version inside
-// com.uber:h3 4.5.0) is compiled per iOS target with xcrun clang into a static library, which
+// H3 on iOS. The vendored H3 C library (src/nativeInterop/h3c, v4.5.0, the reference of the
+// stac-opensensor profile, com.uber:h3 4.5.1 on Android) is compiled per iOS target with xcrun clang into a static library, which
 // cinterop binds and embeds in the klib, so the Xcode project needs no extra step.
 val h3Source = layout.projectDirectory.dir("src/nativeInterop/h3c")
 kotlin {
