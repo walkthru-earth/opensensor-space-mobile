@@ -15,7 +15,7 @@ androidxTestEspresso = "3.7.0"
 coroutines = "1.11.0"
 hilt = "2.60.1"
 junit = "4.13.2"
-jsonSchemaValidator = "1.5.9"
+jsonSchemaValidator = "3.0.8"
 # Android framework on the host for :ui:designsystem window and font scale tests (#170, #115).
 robolectric = "4.17"
 kotlin = "2.4.21"
@@ -23,7 +23,7 @@ ksp = "2.3.12"
 # Must equal the runtime that the JetBrains navigation3-ui POM names (docs/adr/0001-shared-navigation.md).
 nav3Core = "1.1.7"
 # Multiplatform Navigation 3 UI, paired with CMP 1.12.1 (release notes). Pins nav3Core 1.1.7.
-jetbrainsNavigation3 = "1.1.2"
+jetbrainsNavigation3 = "1.2.0"
 # Multiplatform lifecycle, paired with CMP 1.12.1. Android resolves to androidx.lifecycle 2.11.0.
 jetbrainsLifecycle = "2.11.0"
 # Multiplatform Navigation Event, the version navigation3-ui 1.1.2 names. Android resolves to androidx.navigationevent.
@@ -40,7 +40,7 @@ googleCodeScanner = "16.1.0"
 maplibreCompose = "0.20.0"
 h3 = "4.5.1"
 # HTTP range reads on Android and the JVM (:core:net, issue #62). Latest stable 5.x on Maven Central.
-okhttp = "5.5.0"
+okhttp = "5.5.1"
 # Flow assertions in :app host tests (#63). Latest stable on Maven Central (maven-metadata.xml, 2025-06-11).
 turbine = "1.2.1"
 # Latest stable on Maven Central, checked 2026-10-11. Host-only history measurements.
