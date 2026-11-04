@@ -120,6 +120,7 @@ plugin adds its module's tasks to `verify` and `verifyIos` (`build-logic/src/mai
 including the metadata compile of every shared source set. Only that compile checks `commonMain` on
 its own (an expect class must declare the members it inherits), and `assemble` runs it, so CodeQL
 autobuild fails without it. `commonMain` joins `verify`, the iOS only source sets join `verifyIos`.
+For the same reason `opensensor.jvm.library` adds `compileKotlin` of the `:tools` modules to `verify`.
 On a Mac `verify` runs `verifyIos` too, so the pre-push hook covers iOS. Linux CI skips it, and
 `-Popensensor.skipIos=true` skips it locally. Xcode compiles the Swift app. Signing teams stay in local Xcode settings
 or command-line overrides. See [ios.md](ios.md) for commands,
