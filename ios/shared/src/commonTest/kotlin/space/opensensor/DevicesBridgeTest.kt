@@ -55,11 +55,33 @@ class DevicesBridgeTest {
             now = { now },
             startScan = {},
             tapScan = {},
+            findScan = {},
             stopScan = {},
             forget = { p, d -> calls.forgotten += p to d },
             collect = { id, wifi -> calls.collected += id to wifi },
             forgetPlaces = { calls.placesForgotten += it },
         )
+
+    @Test fun setupFindScansOverBluetoothOnlyAndNeverBrowsesTheLocalNetwork() {
+        val scans = mutableListOf<String>()
+        val bridge = DevicesBridge(
+            state = CompanionState(),
+            archive = emptyFlow(),
+            storage = MemoryStorage(),
+            now = { 5 },
+            startScan = { scans += "screen" },
+            tapScan = { scans += "tap" },
+            findScan = { scans += "bluetooth" },
+            stopScan = { scans += "stop" },
+            forget = { _, _ -> },
+            collect = { _, _ -> },
+        )
+        bridge.startFind()
+        bridge.stopFind()
+        assertEquals(listOf("bluetooth", "stop"), scans, "setup Find never runs the browse that may ask for local network")
+        bridge.scanTapped()
+        assertEquals("tap", scans.last(), "only a Scan tap on My devices browses")
+    }
 
     @Test fun mergeListsRecordsAndCredentialsOncePerPeripheral() {
         val records = listOf(KnownRecord(a, "Kitchen", "st-a", "aabbccddeeff", 10))
@@ -276,6 +298,7 @@ class DevicesBridgeTest {
             now = { 5 },
             startScan = {},
             tapScan = {},
+            findScan = {},
             stopScan = {},
             forget = { _, _ -> },
             collect = { _, _ -> },
@@ -305,6 +328,7 @@ class DevicesBridgeTest {
             now = { 5 },
             startScan = {},
             tapScan = {},
+            findScan = {},
             stopScan = {},
             forget = { p, d -> calls.forgotten += p to d },
             collect = { _, _ -> },

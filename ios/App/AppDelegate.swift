@@ -70,6 +70,7 @@ final class AppServices {
         state: bluetooth.state, sync: engine,
         startScan: { [weak self] in self?.scanDevices(tapped: false) },
         tapScan: { [weak self] in self?.scanDevices(tapped: true) },
+        findScan: { [weak self] in self?.bluetooth.scan() },
         stopScan: { [weak self] in self?.stopDeviceScan() },
         forget: { [weak self] peripheral, device in self?.forget(peripheral: peripheral, device: device) },
         collect: { [weak self] id, wifiName in self?.collect(id: id, wifiName: wifiName) }
@@ -138,6 +139,7 @@ final class AppServices {
             }
         }
         lan.onCredentialRemoved = { [weak self] in self?.credentialsChanged() }
+        lan.migrateBrowseFlag()
         credentialsChanged()
         bluetooth.launchedOffScreen()
         autoSync.register()
