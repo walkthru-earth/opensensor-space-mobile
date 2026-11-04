@@ -97,8 +97,8 @@ Owner decisions of 2026-10-08 are recorded in
 question was still open, the safest choice is taken. These are product rules, not legal advice.
 Have counsel read the privacy policy before the first public release.
 
-1. **Published cells are H3 resolution 8** (owner decision 2026-11-04, about 0.74 km², edge
-   about 530 m). This replaces the earlier resolution 7 cap. Every published Thing, fixed or
+1. **Published cells are H3 resolution 8** (owner decision 2026-11-04, on average about 0.74 km²
+   with an edge of about 530 m). This replaces the earlier resolution 7 cap. Every published Thing, fixed or
    moving, carries res 8, and no publisher coarsens it. Play's Data safety guidance treats
    location finer than about 3 km² as precise, so a published res 8 cell is declared as precise
    location on Play once upload ships. Apple calls location precise from about three decimal
