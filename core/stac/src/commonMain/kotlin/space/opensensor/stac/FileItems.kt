@@ -3,7 +3,6 @@ package space.opensensor.stac
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonArray
 import kotlinx.serialization.json.addJsonObject
@@ -25,10 +24,7 @@ import space.opensensor.publicfeed.H3Grid
 import space.opensensor.publicfeed.H3Index
 import space.opensensor.publicfeed.LatLng
 import space.opensensor.publicfeed.platformH3Grid
-import kotlin.math.ceil
-import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.round
 
 /** What [FileItems.build] returns, an Item or the reason a file gets none. */
 sealed interface FileItemResult {
@@ -56,6 +52,12 @@ sealed interface FileItemResult {
     /** No row carries an H3 cell. See [FileItems.ITEM_NEEDS_LOCATION]. */
     data object NoLocation : NoItem
 
+    /**
+     * A located row whose cell is at resolution [res], not the published one. A publisher never
+     * coarsens, so such a file is not published rather than given a cell its rows do not name.
+     */
+    data class WrongResolution(val res: Int) : NoItem
+
     /** A fixed Thing whose rows name more than one cell, which the profile cannot describe. */
     data class FixedThingMoved(val cells: Int) : NoItem
 
@@ -64,7 +66,8 @@ sealed interface FileItemResult {
 }
 
 /**
- * The STAC File Item of a synced device file, as the stac-opensensor v0.1.0 profile (815fc45) asks.
+ * The STAC File Item of a synced device file, as the stac-opensensor v0.1.0 profile (tag v0.1.0,
+ * commit 9943282) asks.
  * The board writes this Item as a sidecar beside its file, and the phone is its transport and
  * validator. An Item built here must equal the board's Item as JSON values. Once upload exists, the
  * phone uploads the board's sidecar `.json` together with its `.parquet`.
@@ -72,7 +75,8 @@ sealed interface FileItemResult {
  *
  * The geometry is H3 cells only, never a device position. A fixed Thing gets its one cell polygon
  * and `grid:code`. A moving Thing gets the union of the cells its rows visited, a Polygon or a
- * MultiPolygon. Cells of mixed resolution are coarsened to the coarsest one first.
+ * MultiPolygon, and does not list Grid. Every cell is at the published resolution, and a file with
+ * any other cell gets no Item, because a publisher never coarsens.
  */
 object FileItems {
     /**
@@ -82,14 +86,23 @@ object FileItems {
     const val ITEM_NEEDS_LOCATION = true
 
     const val STAC_VERSION = "1.1.0"
+    const val GRID_EXTENSION = "https://stac-extensions.github.io/grid/v1.1.0/schema.json"
+
+    /** Every extension a File Item can list, in the profile's order. A moving Item leaves out [GRID_EXTENSION]. */
     val EXTENSIONS = listOf(
-        "https://stac-extensions.github.io/grid/v1.1.0/schema.json",
-        "https://stac-extensions.github.io/anonymized-location/v1.0.0/schema.json",
         "https://stac-extensions.github.io/table/v1.3.0/schema.json",
         "https://stac-extensions.github.io/file/v2.1.0/schema.json",
+        GRID_EXTENSION,
+        "https://stac-extensions.github.io/anonymized-location/v1.0.0/schema.json",
         "https://walkthru-earth.github.io/stac-opensensor/v0.1.0/schema.json",
         "https://walkthru-earth.github.io/stac-opensensor/v0.1.0/profile.json",
     )
+
+    /**
+     * `anon:size` of every Item, fixed or moving. Twice the mean H3 edge at resolution 8 in degrees,
+     * 2 × 0.5314 km ÷ 111.32 km = 0.00955, rounded up as the profile says.
+     */
+    const val ANON_SIZE = 0.01
 
     const val H3_CELL_COLUMN = "h3_cell_id"
     const val PARQUET_MEDIA_TYPE = "application/vnd.apache.parquet"
@@ -105,20 +118,20 @@ object FileItems {
      * The Item of the device file [fileName], whose verified bytes [reader] holds, with its parsed
      * [footer] and the [template] of the board that wrote it. Its data href is `./<fileName>`, relative
      * to the sidecar beside the file, so the Item stays valid in any bucket or mirror.
-     * A cell finer than [maxRes] is coarsened to its parent at [maxRes] first, so the Item never names
-     * a finer place than its publish policy allows (`PublishGate` in `:core:thing`). [maxRes] has no
-     * default, so every caller states the precision it publishes. The contract publishes res 8, so a
-     * res 8 file keeps its own cells and the Item equals the one the board wrote.
+     * Every located row must name a cell at exactly [publishedRes], the precision of the publish
+     * policy (`PublishGate` in `:core:thing`). Any other cell gives [FileItemResult.WrongResolution],
+     * so the Item only names cells the file itself holds and equals the one the board wrote.
+     * [publishedRes] has no default, so every caller states the precision it publishes.
      */
     fun build(
         fileName: String,
         reader: ByteReader,
         footer: OpenSensorFooter?,
         template: BoardTemplate,
-        maxRes: Int,
+        publishedRes: Int,
         h3: H3Grid = platformH3Grid(),
     ): FileItemResult {
-        require(maxRes in 0..H3Index.MAX_RES) { "maxRes $maxRes is not an H3 resolution" }
+        require(publishedRes in 0..H3Index.MAX_RES) { "publishedRes $publishedRes is not an H3 resolution" }
         if (!DATED_FILE.matches(fileName)) return FileItemResult.NotDatedFile
         if (footer == null) return FileItemResult.NoThingId
         val thing = footer.thingId?.takeIf { UUID.matches(it) } ?: return FileItemResult.NoThingId
@@ -131,22 +144,21 @@ object FileItems {
         val startNs = times.values.min()
         val endNs = times.values.max()
 
-        val cells = visitedCells(file).map { if (H3Index.resolution(it) > maxRes) H3Index.parent(it, maxRes) else it }.distinct()
+        val cells = visitedCells(file)
+        cells.firstOrNull { H3Index.resolution(it) != publishedRes }?.let { return FileItemResult.WrongResolution(H3Index.resolution(it)) }
+        val fixed = mobility == OpenSensorFooter.Mobility.FIXED
         val geometry: Geometry? = when {
             cells.isEmpty() -> if (ITEM_NEEDS_LOCATION) return FileItemResult.NoLocation else null
             !h3.available -> return FileItemResult.NoH3
-            mobility == OpenSensorFooter.Mobility.FIXED -> {
-                if (cells.size > 1) return FileItemResult.FixedThingMoved(cells.size)
-                Geometry.fixed(cells.single(), h3)
-            }
-            else -> Geometry.moving(cells, h3)
+            fixed && cells.size > 1 -> return FileItemResult.FixedThingMoved(cells.size)
+            else -> Geometry.of(cells, h3)
         }
 
         val id = fileName.removeSuffix(".parquet")
         val json = buildJsonObject {
             put("type", "Feature")
             put("stac_version", STAC_VERSION)
-            putJsonArray("stac_extensions") { EXTENSIONS.forEach { add(it) } }
+            putJsonArray("stac_extensions") { EXTENSIONS.filter { fixed || it != GRID_EXTENSION }.forEach { add(it) } }
             put("id", id)
             put("collection", thing)
             put("geometry", geometry?.geoJson() ?: JsonNull)
@@ -156,23 +168,22 @@ object FileItems {
                 put("start_datetime", rfc3339(startNs))
                 put("end_datetime", rfc3339(endNs))
                 put("opensensor:mobility", mobility.wire)
-                footer.sampleIntervalMs?.let { put("opensensor:sample_interval_s", it / 1000.0) }
+                footer.sampleIntervalMs?.let { put("opensensor:sample_interval_s", jsonNumber(it / 1000.0)) }
                 if (geometry != null) {
-                    if (mobility == OpenSensorFooter.Mobility.FIXED) put("grid:code", "H3-${H3Index.toHex(cells.single())}")
-                    put("anon:size", geometry.anonSize)
-                    put("anon:warning", if (mobility == OpenSensorFooter.Mobility.FIXED) FIXED_WARNING else MOVING_WARNING)
+                    if (fixed) put("grid:code", "H3-${H3Index.toHex(cells.single())}")
+                    put("anon:size", ANON_SIZE)
+                    put("anon:warning", if (fixed) FIXED_WARNING else MOVING_WARNING)
                 }
             }
             putJsonArray("links") {
                 link("root", "../../../../catalog.json")
-                link("collection", "../../../collection.json")
                 link("parent", "../../../collection.json")
+                link("collection", "../../../collection.json")
             }
             putJsonObject("assets") {
                 putJsonObject("data") {
                     put("href", "./$fileName")
                     put("type", PARQUET_MEDIA_TYPE)
-                    put("title", "One file of samples, at most 1 hour")
                     putJsonArray("roles") { add("data") }
                     put("file:size", reader.size)
                     put("file:checksum", "1220" + sha256Hex(reader))
@@ -193,7 +204,7 @@ object FileItems {
         return "thing=$thing/year=$y/month=${pad2(m)}/day=${pad2(d)}"
     }
 
-    /** The distinct H3 cells of the located rows, in first seen order. */
+    /** The distinct H3 cells of the located rows, sorted by their 15 character hex as the profile asks. */
     private fun visitedCells(file: ParquetFile): List<Long> {
         val leaf = file.metadata.leaf(H3_CELL_COLUMN) ?: return emptyList()
         if (leaf.type != ParquetType.INT64) return emptyList()
@@ -204,7 +215,7 @@ object FileItems {
             val cell = column.values[i]
             if (cell != 0L) seen += cell
         }
-        return seen.toList()
+        return seen.sortedBy(H3Index::toHex)
     }
 
     private fun sha256Hex(reader: ByteReader): String {
@@ -254,12 +265,15 @@ object FileItems {
     }
 }
 
-/** An Item geometry built from H3 cells, polygons of closed rings in degrees. */
+/**
+ * An Item geometry built from H3 cells, polygons of closed rings in degrees. Every writer builds it
+ * the same way, so a regenerated Item equals the board's. The sorted cells go through H3
+ * `cellsToMultiPolygon`, each ring is closed on its first vertex, and one polygon is a Polygon while
+ * more are a MultiPolygon. A fixed Thing follows the same steps with its one cell.
+ */
 internal class Geometry private constructor(
     /** Polygons, each its outer ring then its holes, every ring closed. */
     private val polygons: List<List<List<LatLng>>>,
-    /** `anon:size`, the widest extent in degrees of one cell, rounded up to 3 decimals. */
-    val anonSize: Double,
 ) {
     fun geoJson(): JsonObject = buildJsonObject {
         if (polygons.size == 1) {
@@ -288,25 +302,10 @@ internal class Geometry private constructor(
     }
 
     companion object {
-        fun fixed(cell: Long, h3: H3Grid): Geometry {
-            val ring = h3.cellToBoundary(cell)
-            return Geometry(listOf(listOf(close(ring))), anonSize(listOf(ring)))
-        }
-
-        fun moving(cells: List<Long>, h3: H3Grid): Geometry {
-            val res = cells.minOf { H3Index.resolution(it) }
-            val coarse = cells.map { if (H3Index.resolution(it) == res) it else H3Index.parent(it, res) }.distinct()
-            val polygons = h3.cellsToMultiPolygon(coarse).map { polygon -> polygon.map(::close) }
-            return Geometry(polygons, anonSize(coarse.map(h3::cellToBoundary)))
-        }
+        /** The geometry of [cells], already sorted and all at one resolution. */
+        fun of(cells: List<Long>, h3: H3Grid): Geometry =
+            Geometry(h3.cellsToMultiPolygon(cells).map { polygon -> polygon.map(::close) })
 
         private fun close(ring: List<LatLng>): List<LatLng> = if (ring.first() == ring.last()) ring else ring + ring.first()
-
-        private fun anonSize(boundaries: List<List<LatLng>>): Double {
-            val widest = boundaries.maxOf { b ->
-                max(b.maxOf { it.lng } - b.minOf { it.lng }, b.maxOf { it.lat } - b.minOf { it.lat })
-            }
-            return ceil(round(widest * 1e9) / 1e6) / 1000.0
-        }
     }
 }

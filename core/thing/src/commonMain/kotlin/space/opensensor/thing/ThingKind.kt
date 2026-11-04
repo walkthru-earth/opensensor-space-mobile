@@ -99,12 +99,12 @@ sealed interface PublishPolicy {
     data object Never : PublishPolicy
 
     /**
-     * Published under CC BY 4.0 once the owner opts the Thing in, with no cell finer than [maxRes].
+     * Published under CC BY 4.0 once the owner opts the Thing in, every cell at exactly [publishedRes].
      * [trimSessionEnds] drops the ends of a moving session, which a recording kind applies.
      */
-    data class OptInCcBy(val maxRes: Int, val trimSessionEnds: Boolean) : PublishPolicy {
+    data class OptInCcBy(val publishedRes: Int, val trimSessionEnds: Boolean) : PublishPolicy {
         init {
-            require(maxRes in 0..15) { "an H3 resolution is 0 to 15" }
+            require(publishedRes in 0..15) { "an H3 resolution is 0 to 15" }
         }
     }
 }
