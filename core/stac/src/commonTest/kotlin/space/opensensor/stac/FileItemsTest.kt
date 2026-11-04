@@ -81,10 +81,7 @@ class FileItemsTest {
         assertEquals(10.0, properties["opensensor:sample_interval_s"]!!.jsonPrimitive.double)
 
         val data = item["assets"]!!.jsonObject["data"]!!.jsonObject
-        assertEquals(
-            "${FileItems.DATA_BASE_URL}thing=$THING/year=2026/month=10/day=24/$FILE_NAME",
-            data["href"]!!.jsonPrimitive.content,
-        )
+        assertEquals("./$FILE_NAME", data["href"]!!.jsonPrimitive.content, "relative, so the Item stays valid when its folder moves")
         assertEquals(6, data["table:row_count"]!!.jsonPrimitive.int)
         assertEquals(bytes.size.toLong(), data["file:size"]!!.jsonPrimitive.long)
         val sha = Sha256().apply { update(bytes, 0, bytes.size) }.digest().toHex()

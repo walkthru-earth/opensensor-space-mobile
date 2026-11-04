@@ -78,9 +78,6 @@ object FileItems {
      */
     const val ITEM_NEEDS_LOCATION = true
 
-    /** Where the public archive serves `thing=` partitions. */
-    const val DATA_BASE_URL = "https://data.source.coop/walkthru-earth/opensensor-space/"
-
     const val STAC_VERSION = "1.1.0"
     val EXTENSIONS = listOf(
         "https://stac-extensions.github.io/grid/v1.1.0/schema.json",
@@ -103,10 +100,12 @@ object FileItems {
 
     /**
      * The Item of the device file [fileName], whose verified bytes [reader] holds, with its parsed
-     * [footer] and the [template] of the board that wrote it. [dataBaseUrl] is the public archive root.
+     * [footer] and the [template] of the board that wrote it. Its data href is `./<fileName>`, relative
+     * to the sidecar beside the file, so the Item stays valid in any bucket or mirror.
      * A cell finer than [maxRes] is coarsened to its parent at [maxRes] first, so the Item never names
      * a finer place than its publish policy allows (`PublishGate` in `:core:thing`). [maxRes] has no
-     * default, so every caller states the precision it publishes.
+     * default, so every caller states the precision it publishes. The contract publishes res 8, so a
+     * res 8 file keeps its own cells and the Item equals the one the board wrote.
      */
     fun build(
         fileName: String,
@@ -115,7 +114,6 @@ object FileItems {
         template: BoardTemplate,
         maxRes: Int,
         h3: H3Grid = platformH3Grid(),
-        dataBaseUrl: String = DATA_BASE_URL,
     ): FileItemResult {
         require(maxRes in 0..H3Index.MAX_RES) { "maxRes $maxRes is not an H3 resolution" }
         if (!DATED_FILE.matches(fileName)) return FileItemResult.NotDatedFile
@@ -142,7 +140,6 @@ object FileItems {
         }
 
         val id = fileName.removeSuffix(".parquet")
-        val partition = partition(thing, startNs)
         val json = buildJsonObject {
             put("type", "Feature")
             put("stac_version", STAC_VERSION)
@@ -170,7 +167,7 @@ object FileItems {
             }
             putJsonObject("assets") {
                 putJsonObject("data") {
-                    put("href", "$dataBaseUrl$partition/$fileName")
+                    put("href", "./$fileName")
                     put("type", PARQUET_MEDIA_TYPE)
                     put("title", "One file of samples, at most 1 hour")
                     putJsonArray("roles") { add("data") }

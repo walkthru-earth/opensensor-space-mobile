@@ -58,10 +58,9 @@ class PublishGate(
         footer: OpenSensorFooter?,
         template: BoardTemplate,
         h3: H3Grid = platformH3Grid(),
-        dataBaseUrl: String = FileItems.DATA_BASE_URL,
     ): FileItemResult? {
         if (!consent.optedIn(ticket.thing)) return null
         if (footer?.thingId != ticket.thing) return FileItemResult.NoThingId
-        return FileItems.build(fileName, reader, footer, template, ticket.policy.maxRes, h3, dataBaseUrl)
+        return FileItems.build(fileName, reader, footer, template, ticket.policy.maxRes, h3)
     }
 }
