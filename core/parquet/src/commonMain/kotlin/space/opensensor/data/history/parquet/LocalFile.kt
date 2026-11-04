@@ -20,7 +20,7 @@ internal expect val LocalFile.displayName: String
  */
 expect class LocalRangeSource(file: LocalFile) : RangeSource {
     // The commonMain metadata compile sees this declaration and not the actuals, so the expect class
-    // declares every abstract member it inherits.
+    // declares the inherited members its actuals implement.
     override suspend fun id(): SourceId
 
     override suspend fun readTail(n: Int): ByteView

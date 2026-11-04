@@ -40,39 +40,40 @@ kotlin {
 // H3 on iOS. The vendored H3 C library (src/nativeInterop/h3c, v4.5.0, the reference of the
 // stac-opensensor profile, com.uber:h3 4.5.1 on Android) is compiled per iOS target with xcrun clang into a static library, which
 // cinterop binds and embeds in the klib, so the Xcode project needs no extra step.
+// The build needs xcrun and the iOS SDKs, so it is left out when the build skips iOS (Linux, a Mac
+// without Xcode, or `opensensor.skipIos=true`). The iOS compiles of this module then fail on `h3c`,
+// and the gates turn off its iOS metadata compile (build-logic Gates.kt).
 val h3Source = layout.projectDirectory.dir("src/nativeInterop/h3c")
-kotlin {
-    targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
-        val (sdk, triple) = when (konanTarget.name) {
-            "ios_arm64" -> "iphoneos" to "arm64-apple-ios15.5"
-            "ios_simulator_arm64" -> "iphonesimulator" to "arm64-apple-ios15.5-simulator"
-            else -> error("no H3 build for $konanTarget")
+if (iosBuildsEnabled) {
+    kotlin {
+        targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
+            val (sdk, triple) = when (konanTarget.name) {
+                "ios_arm64" -> "iphoneos" to "arm64-apple-ios15.5"
+                "ios_simulator_arm64" -> "iphonesimulator" to "arm64-apple-ios15.5-simulator"
+                else -> error("no H3 build for $konanTarget")
+            }
+            val out = layout.buildDirectory.dir("h3c/$name")
+            val buildH3 = tasks.register<Exec>("buildH3${name.replaceFirstChar { it.uppercase() }}") {
+                inputs.dir(h3Source).withPropertyName("h3Source")
+                outputs.dir(out).withPropertyName("h3Library")
+                val outDir = out.get().asFile
+                val src = h3Source.asFile
+                doFirst { outDir.mkdirs() }
+                commandLine(
+                    "sh",
+                    "-c",
+                    "set -e; for f in \"$src\"/lib/*.c; do " +
+                        "xcrun --sdk $sdk clang -c -O2 -fPIC -target $triple -DH3_HAVE_VLA -I \"$src/include\" \"\$f\" -o \"$outDir/\$(basename \"\$f\" .c).o\"; " +
+                        "done; rm -f \"$outDir/libh3.a\"; xcrun libtool -static -o \"$outDir/libh3.a\" \"$outDir\"/*.o",
+                )
+            }
+            compilations.getByName("main").cinterops.create("h3c") {
+                definitionFile.set(project.file("src/nativeInterop/cinterop/h3c.def"))
+                includeDirs(h3Source.dir("include").asFile)
+                extraOpts("-libraryPath", out.get().asFile.absolutePath)
+            }
+            tasks.named("cinteropH3c${name.replaceFirstChar { it.uppercase() }}") { dependsOn(buildH3) }
         }
-        val out = layout.buildDirectory.dir("h3c/$name")
-        val buildH3 = tasks.register<Exec>("buildH3${name.replaceFirstChar { it.uppercase() }}") {
-            inputs.dir(h3Source).withPropertyName("h3Source")
-            outputs.dir(out).withPropertyName("h3Library")
-            // xcrun exists on a Mac only. On Linux the iOS cinterop is disabled, but Gradle still runs the
-            // tasks it depends on whenever the metadata compiles pull it into the graph, so the H3 build
-            // skips itself there. A static call, so the configuration cache holds no script reference.
-            onlyIf("xcrun needs a Mac host") { org.jetbrains.kotlin.konan.target.HostManager.hostIsMac }
-            val outDir = out.get().asFile
-            val src = h3Source.asFile
-            doFirst { outDir.mkdirs() }
-            commandLine(
-                "sh",
-                "-c",
-                "set -e; for f in \"$src\"/lib/*.c; do " +
-                    "xcrun --sdk $sdk clang -c -O2 -fPIC -target $triple -DH3_HAVE_VLA -I \"$src/include\" \"\$f\" -o \"$outDir/\$(basename \"\$f\" .c).o\"; " +
-                    "done; rm -f \"$outDir/libh3.a\"; xcrun libtool -static -o \"$outDir/libh3.a\" \"$outDir\"/*.o",
-            )
-        }
-        compilations.getByName("main").cinterops.create("h3c") {
-            definitionFile.set(project.file("src/nativeInterop/cinterop/h3c.def"))
-            includeDirs(h3Source.dir("include").asFile)
-            extraOpts("-libraryPath", out.get().asFile.absolutePath)
-        }
-        tasks.named("cinteropH3c${name.replaceFirstChar { it.uppercase() }}") { dependsOn(buildH3) }
     }
 }
 
