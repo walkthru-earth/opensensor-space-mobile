@@ -29,6 +29,9 @@ val waveshareTemplate: BoardTemplate = checkNotNull(BundledCatalog.template("a86
 
 val h3: H3Grid = platformH3Grid()
 
+/** The H3 resolution the contract publishes for every Thing, fixed or moving. */
+const val PUBLISHED_RES = 8
+
 /** The res 8 cell of Osu, Accra, the stac-opensensor example. */
 val OSU_CELL: Long get() = h3.latLngToCell(5.6018, -0.1881, 8)
 
