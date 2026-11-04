@@ -264,8 +264,18 @@ phones run the same shared rules (`LanTokenPolicy`, `LanAutoEnable`) once per Bl
 - **Wi-Fi sync on.** A sensor that reports `lan.on=0` gets `SET_CONFIG lan.on=1` once
   (`LanAutoEnable`, `DeviceSession.enableLanOnce`). Old firmware without the field is left alone.
   At Developer the switch is shown and its state is respected, so a Developer may keep it off.
+  The setting lives on the sensor, so a second phone below Developer turns it back on at its
+  next Bluetooth connection. This is intended. Wi-Fi sync is the default every owner gets, and a
+  Developer who needs it off for a test keeps other phones away from that sensor meanwhile.
+  A switch that is cancelled, answered BUSY or left unanswered is tried again on the same
+  connection. Any other error reply is the sensor's answer and keeps the once per connection claim.
+- **Token fetch on iOS.** The quiet fetch stays wanted until the link is idle and a request
+  starts, so a command in flight only delays it. A fetch the user did not ask for that wedges the
+  link closes it with the plain disconnected notice, never an error.
 - **No prompts.** None of this browses mDNS. The Local Network prompt comes only from the Scan
-  tap on My devices or the Developer Allow button. A background run never asks for it.
+  tap on My devices or the Developer Allow button. A background run never asks for it. Setup Find
+  scans over Bluetooth only. On iOS a phone updated with Wi-Fi sync access already in the
+  Keychain counts as having asked once, so on-screen browsing keeps working after the update.
 - **Developer.** The Sync over Wi-Fi card, the no-token tag on My devices, Fetch token and
   Rotate token stay on the Device page.
 
