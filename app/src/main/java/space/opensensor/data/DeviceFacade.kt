@@ -410,6 +410,7 @@ class DeviceFacade internal constructor(
     val currentKnownDevice get() = linkOwner.currentKnownDevice
     val knownDevices get() = linkOwner.knownDevices
     val connectsRunning get() = linkOwner.connectsRunning
+    val connectFailure get() = linkOwner.connectFailure
     fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO): Boolean = linkOwner.connect(address, name, fake, preference)
     fun disconnect() {
         val disconnectClaim = linkOwner.claimDisconnectIntent()

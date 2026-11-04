@@ -230,6 +230,12 @@ class DeviceLinkOwner @Inject constructor(
     private var forgetting = false
     val connectsRunning: StateFlow<Int> = _connectsRunning.asStateFlow()
 
+    /**
+     * The failure [connectionState] is built from, read without its lag. An accepted [connect] clears
+     * it at once, so a non null value after that is a failure recorded since.
+     */
+    val connectFailure: StateFlow<String?> = connectionFailure.asStateFlow()
+
     @Volatile private var closing = false
     val session: StateFlow<DeviceSession?> = _session.asStateFlow()
 

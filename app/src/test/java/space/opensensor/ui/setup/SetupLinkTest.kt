@@ -35,11 +35,12 @@ class SetupLinkTest {
         val stale = ConnectionState.Failed("connection failed")
         val again = ConnectionState.Failed("connection failed")
         val running = flowOf(1)
-        val seen = flowOf(stale, stale, ConnectionState.Connecting, again).skipStale(stale, running).toList()
+        val failure = flowOf<String?>(null)
+        val seen = flowOf(stale, stale, ConnectionState.Connecting, again).skipStale(stale, running, failure).toList()
         assertEquals(listOf(ConnectionState.Connecting, again), seen)
         // A failure with the same words that is not the old one shows at once.
-        assertSame(again, flowOf(again).skipStale(stale, running).toList().single())
-        assertEquals(listOf(stale), flowOf(stale).skipStale(null, running).toList())
+        assertSame(again, flowOf(again).skipStale(stale, running, failure).toList().single())
+        assertEquals(listOf(stale), flowOf(stale).skipStale(null, running, failure).toList())
     }
 
     @Test
@@ -47,15 +48,36 @@ class SetupLinkTest {
         val stale = ConnectionState.Failed("connection failed")
         val state = MutableStateFlow<ConnectionState>(stale)
         val running = MutableStateFlow(1)
+        val failure = MutableStateFlow<String?>(null)
         val seen = mutableListOf<ConnectionState>()
-        val job = launch { state.skipStale(stale, running).collect { seen += it } }
+        val job = launch { state.skipStale(stale, running, failure).collect { seen += it } }
         runCurrent()
         assertEquals("the old failure stays hidden while the retry runs", emptyList<ConnectionState>(), seen)
         // The retry failed with equal words, so the StateFlow keeps the old instance and never emits.
+        failure.value = "connection failed"
         state.value = ConnectionState.Failed("connection failed")
         running.value = 0
         runCurrent()
         assertEquals(listOf<ConnectionState>(stale), seen)
+        job.cancel()
+    }
+
+    @Test
+    fun `a retry that ends at once with no failure never shows the old one`() = runTest {
+        val stale = ConnectionState.Failed("connection failed")
+        val state = MutableStateFlow<ConnectionState>(stale)
+        val running = MutableStateFlow(1)
+        val failure = MutableStateFlow<String?>(null)
+        val seen = mutableListOf<ConnectionState>()
+        val job = launch { state.skipStale(stale, running, failure).collect { seen += it } }
+        runCurrent()
+        // The connect ended before the lagging state saw its cleared failure.
+        running.value = 0
+        runCurrent()
+        assertEquals("the old failure stays hidden until the state moves", emptyList<ConnectionState>(), seen)
+        state.value = ConnectionState.Disconnected
+        runCurrent()
+        assertEquals(listOf<ConnectionState>(ConnectionState.Disconnected), seen)
         job.cancel()
     }
 }
