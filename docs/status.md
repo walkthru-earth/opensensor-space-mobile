@@ -13,8 +13,12 @@ Host tests, `ios/tests/verify-native.sh` and a simulator build only. No phone ru
   `LanAutoEnable`). Their cards and switches show only at Developer. A phone clock before the build
   floor is never sent. A network clock is replaced only after a measured difference within a
   minute, and any anchor under six hours old is kept, so two phones never flip-flop the clock.
+- Setup Find scans over Bluetooth only, and setup offers Reconnect over Bluetooth when its link
+  runs on Wi-Fi. Today so far says the phone sets the clock while it is pending, and Finalize shows
+  before the first STATUS. A quiet token fetch on iOS waits for an idle link and never shows an error.
 - To check on phones. Clock set after a power cut, the token after a sensor reset, Wi-Fi sync
-  switched back on below Developer, and no Local Network prompt outside the Scan tap.
+  switched back on below Developer, no Local Network prompt outside the Scan tap, and Wi-Fi
+  browsing still on after an iOS update for a phone that already held Wi-Fi sync access.
 
 ## 2026-10-27, templates at opensensor-space-firmware da9bd03 (code only)
 
