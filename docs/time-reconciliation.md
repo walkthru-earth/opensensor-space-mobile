@@ -13,22 +13,29 @@ A fresh `STATUS` snapshot reports clock source, current `utc_ms` and `clk_age_s`
 
 1. A phone clock earlier than the app build floor (`PHONE_CLOCK_FLOOR_MILLIS`, 2026-10-29) is
    wrong and is never sent.
-2. Send phone UTC when no anchor exists, the clock came from RTC after a power cut, or the
-   status is unavailable.
-3. A difference beyond one minute plus expected drift and half the measured request delay means
-   one side was set by hand. Send phone UTC, except over a network (`clk=3`, SNTP) anchor, which
-   the phone never overwrites by that much.
-4. A difference beyond two seconds plus half the request delay is fixed only when the anchor is
-   at least six hours old. A recent anchor within a minute is kept, so two phones that disagree
-   slightly never flip-flop the sensor clock.
-5. An anchor at least six hours old is refreshed.
+2. A proto 3 sensor that did not answer `STATUS` (no push in 5 s and no cached read) is left
+   alone. Nothing is known about its clock.
+3. Send phone UTC when no anchor exists or the clock came from RTC after a power cut.
+4. A network (`clk=3`, SNTP) anchor is replaced only when the phone measured the difference from
+   a pushed `STATUS` and found it within a minute plus expected drift and half the request delay.
+   A cached read carries no usable `utc_ms`, so a network anchor read that way is kept at any age.
+   Beyond a minute one side was set by hand, and a hand-set phone is the likelier fault.
+5. Any anchor under six hours old is kept, whatever the difference. Two phones whose clocks
+   disagree, by seconds or by minutes, then set the sensor at most once per six hours between
+   them and never flip-flop it.
+6. An anchor at least six hours old is refreshed, and so is one whose age the sensor does not
+   report when it differs by more than two seconds plus half the request delay.
 
+The cost of rule 5 is that a phone with a wrong clock that set the sensor first is not corrected
+by another phone for up to six hours. A sensor on Wi-Fi corrects itself sooner through SNTP.
 The six-hour cadence uses the existing 50 ppm drift assumption (about 1.08 seconds), not
 measured oscillator accuracy. A recent host or network clock survives reconnects, switching
 transports and creating a new iOS byte pipe without another `SET_TIME`. The phone sends UTC,
 so a time zone change on the phone changes nothing on the sensor. Legacy firmware with a usable UTC clock but no age/drift fields keeps
-that anchor; unavailable status obtains an initial acknowledged phone anchor. A failed clock
-check does not prevent downloading verified original files. There is no user-facing device-time setting or confirmation.
+that anchor. A check that is cancelled, or fails before `STATUS` answers, made no decision and
+runs again on the next call on the same connection. A `STATUS` timeout or a failed `SET_TIME`
+is a decision and is not retried until the next connection. A failed clock check does not
+prevent downloading verified original files. There is no user-facing device-time setting or confirmation.
 Only the Developer level shows the Clock card on Today, read only, with the source, age and drift.
 The optional microsecond remainder in `SET_TIME` retains the phone's millisecond precision;
 legacy firmware falls back to integer seconds. Only the acknowledged UTC/monotonic pair is
