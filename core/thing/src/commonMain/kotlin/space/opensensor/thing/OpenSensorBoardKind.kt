@@ -18,13 +18,13 @@ object OpenSensorBoardKind : ThingKind {
     override val contractVersion = 1
 
     /**
-     * The H3 resolution a published board file names (docs/devices-and-discovery.md, privacy rule 2).
-     * The board writes its cells at 8 by default, so the phone's Item keeps them as they are and
-     * equals the board's own Item. Only a finer cell is pulled to 8, which the contract never publishes.
+     * The H3 resolution of every cell a published board file names (docs/devices-and-discovery.md,
+     * privacy rule 2). The board writes its cells at 8, so the phone's Item names the file's own cells
+     * and equals the board's Item. A file with a cell at any other resolution is not published.
      */
-    const val PUBLISHED_MAX_RES = 8
+    const val PUBLISHED_RES = 8
 
-    override val source: DataSource = DataSource.PullSync(PublishPolicy.OptInCcBy(maxRes = PUBLISHED_MAX_RES, trimSessionEnds = false))
+    override val source: DataSource = DataSource.PullSync(PublishPolicy.OptInCcBy(publishedRes = PUBLISHED_RES, trimSessionEnds = false))
 
     /** None of its own. The families the app installs name what its sensors derive ([ThingKinds.metricProviders]). */
     override val derivedMetrics: List<DerivedMetricProvider> = emptyList()

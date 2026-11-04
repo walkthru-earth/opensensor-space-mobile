@@ -47,8 +47,8 @@ class PublishGate(
     }
 
     /**
-     * The Item of one of the ticket's Thing's files ([FileItems.build]), with no cell finer than the
-     * policy's `maxRes`, or null once the owner turned upload off for that Thing after the ticket was
+     * The Item of one of the ticket's Thing's files ([FileItems.build]), every cell at the policy's
+     * `publishedRes`, or null once the owner turned upload off for that Thing after the ticket was
      * issued. A file whose footer names another Thing gets [FileItemResult.NoThingId].
      */
     fun item(
@@ -61,6 +61,6 @@ class PublishGate(
     ): FileItemResult? {
         if (!consent.optedIn(ticket.thing)) return null
         if (footer?.thingId != ticket.thing) return FileItemResult.NoThingId
-        return FileItems.build(fileName, reader, footer, template, ticket.policy.maxRes, h3)
+        return FileItems.build(fileName, reader, footer, template, ticket.policy.publishedRes, h3)
     }
 }

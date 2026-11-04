@@ -47,30 +47,34 @@ class PublishGateTest {
     fun anOptedInBoardGetsATicketForItsThingOnly() {
         val gate = PublishGate(kinds, optedIn)
         val ticket = assertNotNull(gate.ticket(OpenSensorBoardKind.id, thing))
-        assertEquals(8, ticket.policy.maxRes)
-        assertEquals(OpenSensorBoardKind.PUBLISHED_MAX_RES, ticket.policy.maxRes)
+        assertEquals(8, ticket.policy.publishedRes)
+        assertEquals(OpenSensorBoardKind.PUBLISHED_RES, ticket.policy.publishedRes)
         assertNull(gate.ticket(OpenSensorBoardKind.id, "0b7e0f53-8f5e-4c3a-9d55-1a2b3c4d5e6f"))
     }
 
     @Test
     fun theItemKeepsTheBoardsOwnResolution8Cell() {
         val cell = platformH3Grid().latLngToCell(5.6018, -0.1881, 8)
-        assertEquals("H3-${H3Index.toHex(cell)}", gridCode(cell))
+        val item = Json.parseToJsonElement(assertIs<FileItemResult.Item>(itemOf(cell)).json).jsonObject
+        assertEquals("H3-${H3Index.toHex(cell)}", item["properties"]!!.jsonObject["grid:code"]!!.jsonPrimitive.content)
     }
 
     @Test
-    fun theItemNamesNoCellFinerThanResolution8() {
+    fun aFileFinerThanResolution8IsNotPublished() {
         val cell = platformH3Grid().latLngToCell(5.6018, -0.1881, 10)
-        assertEquals("H3-${H3Index.toHex(H3Index.parent(cell, 8))}", gridCode(cell))
+        assertEquals(FileItemResult.WrongResolution(10), itemOf(cell))
     }
 
-    /** The `grid:code` of the Item the gate builds for a fixed board file whose rows sit in [cell]. */
-    private fun gridCode(cell: Long): String {
-        val h3 = platformH3Grid()
+    @Test
+    fun aFileCoarserThanResolution8IsNotPublished() {
+        val cell = platformH3Grid().latLngToCell(5.6018, -0.1881, 7)
+        assertEquals(FileItemResult.WrongResolution(7), itemOf(cell))
+    }
+
+    /** What the gate builds for a fixed board file whose rows sit in [cell]. */
+    private fun itemOf(cell: Long): FileItemResult? {
         val ticket = assertNotNull(PublishGate(kinds, optedIn).ticket(OpenSensorBoardKind.id, thing))
-        val result = PublishGate(kinds, optedIn).item(ticket, FILE_NAME, ByteArrayReader(deviceFile(cell)), footer(thing), template, h3)
-        val item = Json.parseToJsonElement(assertIs<FileItemResult.Item>(result).json).jsonObject
-        return item["properties"]!!.jsonObject["grid:code"]!!.jsonPrimitive.content
+        return PublishGate(kinds, optedIn).item(ticket, FILE_NAME, ByteArrayReader(deviceFile(cell)), footer(thing), template, platformH3Grid())
     }
 
     @Test

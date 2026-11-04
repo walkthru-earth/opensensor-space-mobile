@@ -37,16 +37,28 @@ class FileItemsTest {
     }
 
     @Test
-    fun aCellFinerThanMaxResIsCoarsenedToItsParent() {
+    fun aFileFinerThanThePublishedResolutionGetsNoItem() {
         val fine = h3.latLngToCell(5.6018, -0.1881, 10)
-        val bytes = deviceFile(rowsIn(fine, 6))
-        val result = FileItems.build(FILE_NAME, ByteArrayReader(bytes), footer(Mobility.FIXED), coreS3Template, maxRes = PUBLISHED_RES, h3 = h3)
-        val properties = json(result)["properties"]!!.jsonObject
-        assertEquals("H3-${H3Index.toHex(H3Index.parent(fine, PUBLISHED_RES))}", properties["grid:code"]!!.jsonPrimitive.content)
+        assertEquals(FileItemResult.WrongResolution(10), item(deviceFile(rowsIn(fine, 6)), Mobility.FIXED))
     }
 
     @Test
-    fun aMaxResOutsideH3IsRefused() {
+    fun aFileCoarserThanThePublishedResolutionGetsNoItem() {
+        val coarse = h3.latLngToCell(5.6018, -0.1881, 7)
+        assertEquals(FileItemResult.WrongResolution(7), item(deviceFile(rowsIn(coarse, 6)), Mobility.FIXED))
+    }
+
+    @Test
+    fun onePublishedCellAmongOthersIsNotEnough() {
+        // A publisher never coarsens, so a res 10 row among res 8 rows keeps the whole file out.
+        val fine = h3.latLngToCell(5.6018, -0.1881, 10)
+        val rows = rowsIn(OSU_CELL, 2) + rowsIn(fine, 2).map { it.copy(utcUs = it.utcUs!! + 20_000_000L) }
+        assertEquals(FileItemResult.WrongResolution(10), item(deviceFile(rows), Mobility.MOVING))
+        assertEquals(FileItemResult.WrongResolution(10), item(deviceFile(rows), Mobility.FIXED))
+    }
+
+    @Test
+    fun aPublishedResOutsideH3IsRefused() {
         val bytes = deviceFile(rowsIn(OSU_CELL, 6))
         for (res in listOf(-1, H3Index.MAX_RES + 1)) {
             assertFailsWith<IllegalArgumentException> { FileItems.build(FILE_NAME, ByteArrayReader(bytes), footer(Mobility.FIXED), coreS3Template, res, h3) }
@@ -76,16 +88,43 @@ class FileItemsTest {
         assertEquals("2026-10-24T13:00:50Z", properties["end_datetime"]!!.jsonPrimitive.content)
         assertEquals("fixed", properties["opensensor:mobility"]!!.jsonPrimitive.content)
         assertEquals("H3-${H3Index.toHex(OSU_CELL)}", properties["grid:code"]!!.jsonPrimitive.content)
-        assertEquals(0.008, properties["anon:size"]!!.jsonPrimitive.double)
+        assertEquals("0.01", properties["anon:size"]!!.jsonPrimitive.content, "the profile's constant")
         assertEquals(FileItems.FIXED_WARNING, properties["anon:warning"]!!.jsonPrimitive.content)
-        assertEquals(10.0, properties["opensensor:sample_interval_s"]!!.jsonPrimitive.double)
+        assertEquals("10", properties["opensensor:sample_interval_s"]!!.jsonPrimitive.content, "a whole number of seconds")
+        assertEquals(FileItems.EXTENSIONS, item["stac_extensions"]!!.jsonArray.map { it.jsonPrimitive.content })
+        val links = item["links"]!!.jsonArray.map { it.jsonObject["rel"]!!.jsonPrimitive.content }
+        assertEquals(listOf("root", "parent", "collection"), links, "the profile's order")
 
         val data = item["assets"]!!.jsonObject["data"]!!.jsonObject
         assertEquals("./$FILE_NAME", data["href"]!!.jsonPrimitive.content, "relative, so the Item stays valid when its folder moves")
+        assertEquals(setOf("href", "type", "roles", "file:size", "file:checksum", "table:row_count", "table:columns"), data.keys)
         assertEquals(6, data["table:row_count"]!!.jsonPrimitive.int)
         assertEquals(bytes.size.toLong(), data["file:size"]!!.jsonPrimitive.long)
         val sha = Sha256().apply { update(bytes, 0, bytes.size) }.digest().toHex()
         assertEquals("1220$sha", data["file:checksum"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun theFixedGeometryIsTheProfileExampleRing() {
+        // stac-opensensor v0.1.0 (9943282), the fixed example Item. Every writer builds the same ring,
+        // within the 1e-9 degrees its own check allows, because H3 builds differ in the last bits.
+        val cell = H3Index.fromHex("887576970bfffff")
+        val geometry = json(item(deviceFile(rowsIn(cell)), Mobility.FIXED))["geometry"]!!.jsonObject
+        val ring = geometry["coordinates"]!!.jsonArray.single().jsonArray.map { p -> p.jsonArray.map { it.jsonPrimitive.double } }
+        val example = listOf(
+            listOf(-0.18879745033151518, 5.597861712437427),
+            listOf(-0.18483174817989717, 5.5986605211969),
+            listOf(-0.18411316394230728, 5.602568013027744),
+            listOf(-0.1873606129471792, 5.605676661461849),
+            listOf(-0.19132642369093855, 5.604877563219264),
+            listOf(-0.19204467683924653, 5.600970106043236),
+            listOf(-0.18879745033151518, 5.597861712437427),
+        )
+        assertEquals(example.size, ring.size)
+        example.zip(ring).forEach { (want, got) ->
+            assertEquals(want[0], got[0], 1e-9)
+            assertEquals(want[1], got[1], 1e-9)
+        }
     }
 
     @Test
@@ -106,10 +145,13 @@ class FileItemsTest {
         val properties = item["properties"]!!.jsonObject
         assertEquals("moving", properties["opensensor:mobility"]!!.jsonPrimitive.content)
         assertNull(properties["grid:code"])
+        assertEquals("0.01", properties["anon:size"]!!.jsonPrimitive.content)
         assertEquals(FileItems.MOVING_WARNING, properties["anon:warning"]!!.jsonPrimitive.content)
+        val extensions = item["stac_extensions"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(FileItems.EXTENSIONS - FileItems.GRID_EXTENSION, extensions, "a moving Thing has no grid:code, so no Grid")
 
         val geometry = item["geometry"]!!.jsonObject
-        val union = h3.cellsToMultiPolygon(listOf(a, b))
+        val union = h3.cellsToMultiPolygon(listOf(a, b).sortedBy(H3Index::toHex))
         if (union.size == 1) {
             assertEquals("Polygon", geometry["type"]!!.jsonPrimitive.content)
         } else {
@@ -145,12 +187,14 @@ class FileItemsTest {
     }
 
     @Test
-    fun mixedResolutionsAreCoarsenedBeforeTheUnion() {
-        val fine = h3.latLngToCell(5.6018, -0.1881, 10)
-        val rows = rowsIn(OSU_CELL, 2) + rowsIn(fine, 2).map { it.copy(utcUs = it.utcUs!! + 20_000_000L) }
-        val geometry = json(item(deviceFile(rows), Mobility.MOVING))["geometry"]!!.jsonObject
-        assertEquals("Polygon", geometry["type"]!!.jsonPrimitive.content)
-        assertEquals(7, geometry["coordinates"]!!.jsonArray.single().jsonArray.size, "the res 10 cell lies in the res 8 cell")
+    fun theUnionDoesNotDependOnTheOrderTheCellsWereVisited() {
+        val far = h3.latLngToCell(5.70, -0.30, 8)
+        val there = rowsIn(OSU_CELL, 2) + rowsIn(far, 2).map { it.copy(utcUs = it.utcUs!! + 20_000_000L) }
+        val back = rowsIn(far, 2) + rowsIn(OSU_CELL, 2).map { it.copy(utcUs = it.utcUs!! + 20_000_000L) }
+        assertEquals(
+            json(item(deviceFile(there), Mobility.MOVING))["geometry"],
+            json(item(deviceFile(back), Mobility.MOVING))["geometry"],
+        )
     }
 
     @Test
@@ -215,23 +259,31 @@ class FileItemsTest {
         assertEquals(9L, pm["minimum"]!!.jsonPrimitive.long)
         assertEquals(22L, pm["maximum"]!!.jsonPrimitive.long)
         assertEquals(15.5, pm["mean"]!!.jsonPrimitive.double)
-        assertEquals(2, pm["count"]!!.jsonPrimitive.int)
         assertEquals(50.0, pm["valid_percent"]!!.jsonPrimitive.double)
+        assertEquals(setOf("minimum", "maximum", "mean", "valid_percent"), pm.keys, "the profile's statistics")
 
         val t = byName.getValue("ambient_temperature_c").jsonObject["statistics"]!!.jsonObject
         assertEquals(27.25, t["minimum"]!!.jsonPrimitive.double)
         assertEquals(28.5, t["maximum"]!!.jsonPrimitive.double)
-        assertEquals(27.875, t["mean"]!!.jsonPrimitive.double)
+        assertEquals(27.88, t["mean"]!!.jsonPrimitive.double, "27.875 rounds half away from zero")
         assertEquals(50.0, t["valid_percent"]!!.jsonPrimitive.double)
     }
 
     @Test
-    fun aColumnWithNoValidRowHasOnlyItsCount() {
+    fun aColumnWithNoValidRowHasOnlyItsValidPercent() {
         val rows = rowsIn(OSU_CELL, 3).map { it.copy(pmsStatus = 1) }
         val columns = json(item(deviceFile(rows), Mobility.FIXED))["assets"]!!.jsonObject["data"]!!.jsonObject["table:columns"] as JsonArray
         val pm = columns.first { it.jsonObject["name"]!!.jsonPrimitive.content == "pm25_atmospheric_ug_m3" }.jsonObject["statistics"]!!.jsonObject
-        assertEquals(setOf("count", "valid_percent"), pm.keys)
-        assertEquals(0, pm["count"]!!.jsonPrimitive.int)
+        assertEquals(setOf("valid_percent"), pm.keys)
+        assertEquals("0", pm["valid_percent"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun roundingIsHalfAwayFromZero() {
+        assertEquals(0.13, ColumnStatistics.round2(0.125))
+        assertEquals(-0.13, ColumnStatistics.round2(-0.125))
+        assertEquals(98.89, ColumnStatistics.round2(100.0 * 89 / 90))
+        assertEquals(96.67, ColumnStatistics.round2(100.0 * 87 / 90))
     }
 
     @Test
