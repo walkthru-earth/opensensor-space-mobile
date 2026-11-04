@@ -46,24 +46,27 @@ private class IosSetupPort(private val devices: DevicesBridge, private val openS
         openSensor(id)
     }
 
-    override fun link(id: String): Flow<SetupLink> = snapshotFlow {
-        val mine = state.selectedId.equals(id, ignoreCase = true)
-        val info = state.info
-        when {
-            state.bluetoothPoweredOff -> SetupLink.NoBluetooth
-            state.outdatedId.equals(id, ignoreCase = true) -> SetupLink.UpdateFirmware
-            state.failedId.equals(id, ignoreCase = true) -> SetupLink.Unreachable
-            state.closedId.equals(id, ignoreCase = true) -> SetupLink.Unreachable
-            mine && state.connected && info != null -> SetupLink.Ready(info.proto)
-            else -> SetupLink.Connecting
-        }
-    }.distinctUntilChanged()
+    override fun link(id: String): Flow<SetupLink> = snapshotFlow { iosSetupLink(state, id) }.distinctUntilChanged()
 
     override suspend fun nickname(id: String): String? = settingsRepository.nicknames.first()[id.lowercase()]
 
     override suspend fun saveNickname(id: String, nickname: String?) = settingsRepository.setNickname(id, nickname)
 
     override suspend fun setPending(id: String, pending: Boolean) = settingsRepository.setSetupPending(id, pending)
+}
+
+/** What the wizard sees of the iOS link to [id], read from the companion [state]. */
+internal fun iosSetupLink(state: CompanionState, id: String): SetupLink {
+    val mine = state.selectedId.equals(id, ignoreCase = true)
+    val info = state.info
+    return when {
+        state.bluetoothPoweredOff -> SetupLink.NoBluetooth
+        state.outdatedId.equals(id, ignoreCase = true) -> SetupLink.UpdateFirmware
+        state.failedId.equals(id, ignoreCase = true) -> SetupLink.Unreachable
+        state.closedId.equals(id, ignoreCase = true) -> SetupLink.Unreachable
+        mine && state.connected && info != null -> SetupLink.Ready(info.proto)
+        else -> SetupLink.Connecting
+    }
 }
 
 /** Holds one wizard run for its entry, cleared when the entry leaves the back stack. */
