@@ -212,9 +212,11 @@ keep rules live in `app/src/main/keepRules/opensensor.keep`, the source set the 
 | `-keepattributes SourceFile,LineNumberTable` | readable stack traces after retrace |
 | `-keep class com.uber.h3core.** { *; }` | the h3 JNI library binds `NativeMethods` by name and constructs `LatLng`, `H3Exception` and `ArrayList` from native code |
 
-Each release publishes `mapping-<version>.txt` next to the APK, and the release workflow fails if
-the mapping is missing. Retrace a stack trace with `retrace` from the Android SDK command-line tools
-and that mapping.
+Each release publishes `mapping-<version>.txt.gz` next to the APK, and the release workflow fails if
+the mapping is missing. The workflow compresses it with `gzip -9 -n`, so the same mapping always
+gives the same bytes, and `SHA256SUMS.txt` lists the `.gz` file. Run
+`gunzip mapping-<version>.txt.gz` first, then retrace a stack trace with `retrace` from the Android
+SDK command-line tools and the unpacked `mapping-<version>.txt`.
 
 **Local check without the release key.** `-Popensensor.localRelease=true` lets
 `./gradlew :app:assembleRelease -Popensensor.localRelease=true` build the minified release signed with
@@ -305,7 +307,8 @@ permission bypass. Never retarget an older APK to a newer source SHA to avoid th
 restriction. See the [release API permission rules](https://docs.github.com/en/rest/releases/releases#create-a-release).
 
 Update the rolling release in place. Keep its existing assets until the new upload
-succeeds, then remove only generated APK/mapping assets from previous builds.
+succeeds, then remove only generated APK/mapping assets from previous builds
+(both `mapping-*.txt.gz` and the plain `mapping-*.txt` of older builds).
 Do not delete the release or tag before a potentially failing update. The signed
 APK artifact is uploaded before publication, so publication failures still leave
 the verified build available. No `gh` CLI or additional credential is needed.
