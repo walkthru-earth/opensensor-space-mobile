@@ -20,7 +20,7 @@ flowchart TB
     SE[":core:settings<br/>app preferences on DataStore, detail level, cache quotas"]
     ST[":core:storage<br/>atomic files, storage budget, quotas, memory caches"]
     SY1[":core:sync<br/>LinkSession, SyncEngine, ArchiveCollector, CollectionController"]
-    SC[":core:stac<br/>one STAC File Item per synced device file"]
+    SC[":core:stac<br/>regenerates and checks the board's STAC File Item"]
     TH[":core:thing<br/>ThingKind contract, board kind, ThingKinds registry, PublishGate, PlatformNeedsTable"]
   end
   subgraph family["Sensor families, JVM and iOS"]
