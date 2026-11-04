@@ -35,7 +35,12 @@ class OpenSensorFooterTest {
         for (s in listOf(600L, 900L, 1800L, 3600L)) assertEquals(s, window("$s")?.rotationIntervalS)
         assertEquals(null, window("700")?.rotationIntervalS)
         assertEquals(null, window("0")?.rotationIntervalS)
-        assertEquals(null, window("\"900\""))
+        // A window of the wrong kind leaves the field null and keeps the rest of the footer.
+        for (bad in listOf("\"900\"", "900.5", "true", "{}", "[900]")) {
+            val footer = window(bad)
+            assertEquals(bad, "thing-a", footer?.thingId)
+            assertEquals(bad, null, footer?.rotationIntervalS)
+        }
     }
 
     @Test
