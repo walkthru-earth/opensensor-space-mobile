@@ -18,4 +18,15 @@ internal expect val LocalFile.displayName: String
  * wrap it in a [CoalescingRangeSource] to merge neighbours. The [SourceId] version is size plus
  * modification time. Safe for concurrent reads. Reads run on `Dispatchers.IO`.
  */
-expect class LocalRangeSource(file: LocalFile) : RangeSource
+expect class LocalRangeSource(file: LocalFile) : RangeSource {
+    // The commonMain metadata compile sees this declaration and not the actuals, so the expect class
+    // declares every abstract member it inherits.
+    override suspend fun id(): SourceId
+
+    override suspend fun readTail(n: Int): ByteView
+
+    override suspend fun readRanges(ranges: List<LongRange>): List<ByteView>
+
+    /** Closes the file descriptor. */
+    override fun close()
+}

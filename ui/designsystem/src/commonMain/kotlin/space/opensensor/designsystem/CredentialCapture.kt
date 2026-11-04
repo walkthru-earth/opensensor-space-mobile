@@ -28,7 +28,10 @@ interface CredentialCaptureGuard {
 val LocalCredentialCaptureGuard = staticCompositionLocalOf<CredentialCaptureGuard> { PlatformCredentialCaptureGuard }
 
 /** `FLAG_SECURE` on Android, the scene cover, capture state and screenshot notice on iOS. */
-internal expect object PlatformCredentialCaptureGuard : CredentialCaptureGuard
+internal expect object PlatformCredentialCaptureGuard : CredentialCaptureGuard {
+    @Composable
+    override fun guard(onScreenshot: () -> Unit): Boolean
+}
 
 /**
  * Counts the credential fields on screen, so the platform protection turns on with the first one

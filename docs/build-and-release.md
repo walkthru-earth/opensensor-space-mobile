@@ -116,7 +116,10 @@ Bump `libs.versions.toml` only to versions you have verified build, and note the
 The iOS app lives in `ios/OpenSensor.xcodeproj`, with the Compose framework in
 `:ios:shared`, which targets iOS only. `verifyIos` runs the simulator tests of every shared module,
 including the `:ios:shared` presentation-state tests, and links the framework. Each convention
-plugin adds its module's tasks to `verify` and `verifyIos` (`build-logic/src/main/kotlin/Gates.kt`).
+plugin adds its module's tasks to `verify` and `verifyIos` (`build-logic/src/main/kotlin/Gates.kt`),
+including the metadata compile of every shared source set. Only that compile checks `commonMain` on
+its own (an expect class must declare the members it inherits), and `assemble` runs it, so CodeQL
+autobuild fails without it. `commonMain` joins `verify`, the iOS only source sets join `verifyIos`.
 On a Mac `verify` runs `verifyIos` too, so the pre-push hook covers iOS. Linux CI skips it, and
 `-Popensensor.skipIos=true` skips it locally. Xcode compiles the Swift app. Signing teams stay in local Xcode settings
 or command-line overrides. See [ios.md](ios.md) for commands,
@@ -148,7 +151,7 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | Separate `~/.konan` cache | Reuses the native compiler/dependencies, keyed by architecture, Xcode and dependency/build definitions. No DerivedData cache. |
 | Two Gradle workers | Limits simultaneous native compilation on the standard runner's 7 GB RAM. |
 | `ios/tests/verify-native.sh` | Compiles native archive export, LAN framing/policy, RunSlot cancellation and Bluetooth GATT queue checks in Swift 6 with complete concurrency checking and warnings as errors. Shared transfer checks run in Kotlin tests. No radio or UI qualification. |
-| `verifyIos` | Runs the simulator tests of every shared module (each `:core` module, `:ui:designsystem`, `:feature:discover`, `:ios:shared`) and links the Debug framework. |
+| `verifyIos` | Runs the simulator tests of every shared module (each `:core` module, `:ui:designsystem`, `:feature:discover`, `:ios:shared`), compiles the `iosMain`, `appleMain` and `nativeMain` metadata, and links the Debug framework. |
 | Xcode Debug simulator build | Compiles Swift adapters, app entry point and the Compose framework through the existing direct-integration build phase. |
 | Xcode Release device build, signing disabled | Checks optimized Kotlin and Swift for device ARM64. Catches failures hidden by Debug/simulator builds; produces no distributable IPA. |
 

@@ -31,5 +31,6 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
         registerTestAlias("jvmTest")
         addToGate(Gates.HOST, "jvmTest")
         addToGate(Gates.IOS, "iosSimulatorArm64Test")
+        gateMetadataCompiles()
     }
 }

@@ -21,7 +21,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 
 internal actual object PlatformCredentialCaptureGuard : CredentialCaptureGuard {
     @Composable
-    override fun guard(onScreenshot: () -> Unit): Boolean {
+    actual override fun guard(onScreenshot: () -> Unit): Boolean {
         val window = LocalContext.current.findActivity()?.window
         DisposableEffect(window) {
             if (window != null && secureWindows.getOrPut(window) { CaptureGuardCount() }.acquire()) {
