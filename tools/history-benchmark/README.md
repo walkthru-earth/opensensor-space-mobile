@@ -10,11 +10,12 @@ oracle. The combined before path runs those two passes. The combined after path
 runs one DayPass. Raw and derived chart reads both use the current reader, so that
 comparison measures the source choice rather than an old reader implementation.
 
-Build the kotlinx-benchmark JMH harness with the bundled JBR.
+Build the kotlinx-benchmark JMH harness with the JDK 25 from [CONTRIBUTING.md](../../CONTRIBUTING.md)
+(the 2026-10-11 results ran on the Android Studio JBR 25).
 
 ```sh
-JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home' ./gradlew --no-daemon :tools:history-benchmark:mainBenchmarkJar
-'/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java' -jar tools/history-benchmark/build/benchmarks/main/jars/history-benchmark-main-jmh-JMH.jar -wi 3 -i 5 -w 1s -r 1s -f 1 -bm avgt -tu ns -prof gc -rf json -rff /tmp/history-benchmark.json
+JAVA_HOME='/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home' ./gradlew --no-daemon :tools:history-benchmark:mainBenchmarkJar
+'/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home/bin/java' -jar tools/history-benchmark/build/benchmarks/main/jars/history-benchmark-main-jmh-JMH.jar -wi 3 -i 5 -w 1s -r 1s -f 1 -bm avgt -tu ns -prof gc -rf json -rff /tmp/history-benchmark.json
 ```
 
 Divide `primaryMetric.score` by 8,640 for ns per row and
