@@ -17,6 +17,8 @@ kotlin.sourceSets.main {
         "space/opensensor/data/history/LegacyHistoryPipeline.kt",
         "space/opensensor/data/history/HistoryBenchmark.kt",
         "space/opensensor/data/history/FirmwareFooterFixture.kt",
+        "space/opensensor/data/history/LiveFixtures.kt",
+        "space/opensensor/data/history/BenchmarkTemplates.kt",
     )
 }
 

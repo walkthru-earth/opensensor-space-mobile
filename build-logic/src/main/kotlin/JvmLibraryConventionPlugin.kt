@@ -23,5 +23,7 @@ class JvmLibraryConventionPlugin : Plugin<Project> {
                 openSensorDefaults()
             }
         }
+        // `assemble` (and so GitHub CodeQL autobuild) compiles these modules, so `verify` does too.
+        addToGate(Gates.HOST, "compileKotlin")
     }
 }
