@@ -24,3 +24,16 @@ kotlin {
         }
     }
 }
+
+// The files copied from stac-opensensor live once, under src/commonTest/fixtures. The common tests read
+// them on the JVM and in the simulator, which sees the host file system. `SIMCTL_CHILD_` variables
+// reach the simulator process without the prefix.
+val stacFixtureRoot = layout.projectDirectory.dir("src/commonTest/fixtures/stac-opensensor").asFile
+tasks.withType<Test>().configureEach {
+    systemProperty("stac.fixture.root", stacFixtureRoot.absolutePath)
+    inputs.dir(stacFixtureRoot).withPropertyName("stacFixtures")
+}
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest>().configureEach {
+    environment("SIMCTL_CHILD_STAC_FIXTURE_ROOT", stacFixtureRoot.absolutePath)
+    inputs.dir(stacFixtureRoot).withPropertyName("stacFixtures")
+}
