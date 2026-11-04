@@ -25,16 +25,24 @@ import kotlin.test.assertTrue
 
 class FileItemsTest {
     private fun item(bytes: ByteArray, mobility: Mobility?, template: space.opensensor.model.BoardTemplate = coreS3Template, name: String = FILE_NAME) =
-        FileItems.build(name, ByteArrayReader(bytes), footer(mobility), template, H3Index.MAX_RES, h3)
+        FileItems.build(name, ByteArrayReader(bytes), footer(mobility), template, PUBLISHED_RES, h3)
 
     private fun json(result: FileItemResult): JsonObject = Json.parseToJsonElement(assertIs<FileItemResult.Item>(result).json).jsonObject
 
     @Test
+    fun aResolution8CellIsPublishedAsItIs() {
+        assertEquals(8, H3Index.resolution(OSU_CELL))
+        val properties = json(item(deviceFile(rowsIn(OSU_CELL, 6)), Mobility.FIXED))["properties"]!!.jsonObject
+        assertEquals("H3-${H3Index.toHex(OSU_CELL)}", properties["grid:code"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun aCellFinerThanMaxResIsCoarsenedToItsParent() {
-        val bytes = deviceFile(rowsIn(OSU_CELL, 6))
-        val result = FileItems.build(FILE_NAME, ByteArrayReader(bytes), footer(Mobility.FIXED), coreS3Template, maxRes = 7, h3 = h3)
+        val fine = h3.latLngToCell(5.6018, -0.1881, 10)
+        val bytes = deviceFile(rowsIn(fine, 6))
+        val result = FileItems.build(FILE_NAME, ByteArrayReader(bytes), footer(Mobility.FIXED), coreS3Template, maxRes = PUBLISHED_RES, h3 = h3)
         val properties = json(result)["properties"]!!.jsonObject
-        assertEquals("H3-${H3Index.toHex(H3Index.parent(OSU_CELL, 7))}", properties["grid:code"]!!.jsonPrimitive.content)
+        assertEquals("H3-${H3Index.toHex(H3Index.parent(fine, PUBLISHED_RES))}", properties["grid:code"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -183,10 +191,10 @@ class FileItemsTest {
         assertEquals(FileItemResult.NotDatedFile, item(bytes, Mobility.FIXED, name = "data_unsynced_0001_ab_1-2-0.parquet"))
         assertEquals(FileItemResult.NotDatedFile, item(bytes, Mobility.FIXED, name = "day_2026-10-24.parquet"))
         assertEquals(FileItemResult.NoMobility, item(bytes, null))
-        assertEquals(FileItemResult.NoThingId, FileItems.build(FILE_NAME, ByteArrayReader(bytes), null, coreS3Template, H3Index.MAX_RES, h3))
+        assertEquals(FileItemResult.NoThingId, FileItems.build(FILE_NAME, ByteArrayReader(bytes), null, coreS3Template, PUBLISHED_RES, h3))
         assertEquals(
             FileItemResult.NoThingId,
-            FileItems.build(FILE_NAME, ByteArrayReader(bytes), footer(Mobility.FIXED, thing = "not-a-uuid"), coreS3Template, H3Index.MAX_RES, h3),
+            FileItems.build(FILE_NAME, ByteArrayReader(bytes), footer(Mobility.FIXED, thing = "not-a-uuid"), coreS3Template, PUBLISHED_RES, h3),
         )
         assertEquals(FileItemResult.NoRows, item(deviceFile(emptyList()), Mobility.FIXED))
     }
