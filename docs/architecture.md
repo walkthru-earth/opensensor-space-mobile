@@ -144,7 +144,7 @@ It holds four convention plugins, so a new shared module is one `plugins {}` lin
 
 The conventions compile against the Kotlin, Android and Compose Gradle plugins as `compileOnly`.
 The root `build.gradle.kts` declares every plugin once with `apply false`, so all modules share one
-plugin classloader. Bytecode 17 is a compiler target, not `jvmToolchain(17)`, so the build needs one JDK only.
+plugin classloader. The shared modules' bytecode 17 is a compiler target, not `jvmToolchain(17)`, so the build needs one JDK only. `:app` keeps AGP's default JVM target.
 Gradle runs on JDK 25, pinned in `gradle/gradle-daemon-jvm.properties`, which Android Studio, the terminal and CI
 all follow ([build-and-release.md](build-and-release.md#build-jdk)). A `jvmToolchain(17)` would need a second JDK or a download.
 Warnings are not errors yet, since existing code still has a few.

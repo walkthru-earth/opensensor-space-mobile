@@ -32,9 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
-      - name: Read the build JDK version
-        id: jdk
-        run: echo "version=$(sed -n 's/^toolchainVersion=//p' gradle/gradle-daemon-jvm.properties)" >> "$GITHUB_OUTPUT"
+      - id: jdk
+        uses: ./.github/actions/build-jdk-version
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -56,9 +55,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
-      - name: Read the build JDK version
-        id: jdk
-        run: echo "version=$(sed -n 's/^toolchainVersion=//p' gradle/gradle-daemon-jvm.properties)" >> "$GITHUB_OUTPUT"
+      - id: jdk
+        uses: ./.github/actions/build-jdk-version
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -111,9 +109,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
-      - name: Read the build JDK version
-        id: jdk
-        run: echo "version=$(sed -n 's/^toolchainVersion=//p' gradle/gradle-daemon-jvm.properties)" >> "$GITHUB_OUTPUT"
+      - id: jdk
+        uses: ./.github/actions/build-jdk-version
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin

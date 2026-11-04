@@ -31,8 +31,8 @@ tasks.register("verify") {
 }
 
 // The JDK that runs Gradle is pinned in gradle/gradle-daemon-jvm.properties (docs/build-and-release.md).
-// No download URLs are written: a machine without a matching JDK fails fast instead of downloading
-// one, and CI reads the same file for actions/setup-java. Change it with
+// No download URLs are written, so a machine without a matching JDK fails fast instead of downloading
+// one. CI reads the same file for actions/setup-java. Change it with
 // `./gradlew updateDaemonJvm --jvm-version=<major>`.
 tasks.named<UpdateDaemonJvm>("updateDaemonJvm") {
     toolchainPlatforms.empty()

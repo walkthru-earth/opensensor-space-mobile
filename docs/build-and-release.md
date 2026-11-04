@@ -58,25 +58,40 @@ phone radio, screen-off collection or board behavior.
 ## Build JDK
 
 Gradle runs on **JDK 25**, pinned once in `gradle/gradle-daemon-jvm.properties` (`toolchainVersion=25`).
-That file is Gradle's Daemon JVM criteria, stable since Gradle 9.2. It takes precedence over `JAVA_HOME`,
-so the terminal, Android Studio (Panda and newer read it) and CI all start the Gradle daemon on a JDK 25.
-The file has no download URLs, so Gradle never downloads a JDK. It uses a JDK 25 it finds through
-`JAVA_HOME`, `org.gradle.java.installations.paths`, `/usr/libexec/java_home` on macOS, `/usr/lib/jvm` on
-Linux and the other [auto-detection locations](https://docs.gradle.org/current/userguide/toolchains.html#sec:auto_detection).
+That file is Gradle's Daemon JVM criteria, stable since Gradle 9.2. It takes precedence over `JAVA_HOME`
+and `org.gradle.java.home`, so the terminal, Android Studio (Panda and newer read it) and CI all start the
+Gradle daemon on a JDK 25. The file has no download URLs, so Gradle never downloads a JDK. It uses a JDK 25
+it finds through `JAVA_HOME`, `/usr/libexec/java_home` on macOS, `/usr/lib/jvm` on Linux and the other
+[auto-detection locations](https://docs.gradle.org/current/userguide/toolchains.html#sec:auto_detection).
 Without one the build stops at once with `Unable to download toolchain matching the requirements
-({languageVersion=25, ...})`. The compiled bytecode stays Java 17, Android's floor
-(`OpenSensorConventions.jvmTarget`), so a newer build JDK changes nothing in the APK or the jars.
+({languageVersion=25, ...})`.
 
-Local setup, once per machine. The Android Studio bundled JBR is a JDK 25, so either
+The build JDK does not set the bytecode. The shared modules compile to Java 17, Android's floor
+(`OpenSensorConventions.jvmTarget`). `:app` sets no JVM target and keeps AGP's default, so its classes
+are Java 11 (class file major 55).
 
-- export `JAVA_HOME` as in the block above, or
-- add `org.gradle.java.installations.paths=/Applications/Android Studio.app/Contents/jbr/Contents/Home`
-  to `~/.gradle/gradle.properties`, so `./gradlew` finds it in any terminal without `JAVA_HOME`, or
-- install any JDK 25, for example Temurin 25, in the system location.
+This is a behavior change. Before, any JDK 17 or newer could run the build. Now a `./gradlew` started
+without a JDK 25 in reach fails at once. macOS auto-detection reads `/usr/libexec/java_home`, which does
+not list the Android Studio JBR, so the JBR counts only when `JAVA_HOME` points at it. Two common cases
+miss it. The pre-push `gradle-verify` hook, when a GUI git client or an IDE runs the push without your
+shell's `JAVA_HOME`. And the Xcode build phase (`ios/OpenSensor.xcodeproj/project.pbxproj`), which exports
+the JBR only when `JAVA_HOME` is unset, so a `JAVA_HOME` already set to another JDK wins there.
+
+Local setup, once per machine. The bundled JBR of current Android Studio releases is a JDK 25. Check yours.
+
+```sh
+"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java" -version   # expect 25
+```
+
+- In a terminal, export `JAVA_HOME` to the JBR as in the block above.
+- If you push from a GUI git client or an IDE, or build from Xcode, install a JDK 25 (for example
+  Temurin 25) in the system location `/Library/Java/JavaVirtualMachines`, so auto-detection finds it
+  without `JAVA_HOME`.
 
 In Android Studio keep the Gradle JDK setting (Settings, Build, Execution, Deployment, Build Tools, Gradle)
-on Daemon JVM criteria. CI reads `toolchainVersion` from the same file and passes it to `actions/setup-java`,
-so the version lives in one place. To move to another JDK, run
+on Daemon JVM criteria. CI reads `toolchainVersion` from the same file through the local action
+`.github/actions/build-jdk-version`, which fails unless the key appears once as a plain major version,
+and passes it to `actions/setup-java`. The version lives in one place. To move to another JDK, run
 `./gradlew updateDaemonJvm --jvm-version=<major>` on a machine that has that JDK and commit the file.
 The root `build.gradle.kts` configures that task to write no download URLs.
 
@@ -87,7 +102,7 @@ The root `build.gradle.kts` configures that task to write no download URLs.
 | Language / UI | Kotlin (`kotlin`), Jetpack Compose through its BOM (`androidxComposeBom`, material3 included), the shared `:ui:designsystem` theme and vendored icons (no dynamic color, no `material-icons-extended`), Navigation 3 (`nav3Core` and `jetbrainsNavigation3`). Versions are the `gradle/libs.versions.toml` keys named here |
 | DI / data | Hilt (`hilt`), Room (`androidxRoom`, **schema v1**), DataStore Preferences (`androidxDatastore`), WorkManager (`androidxWork`) + `androidx.hilt:hilt-work` (`androidxHilt`), kotlinx.serialization (`kotlinxSerialization`), kotlinx-datetime (`kotlinxDatetime`, shared calendar math, added 2026-10-08), coroutines (`coroutines`). Versions are the `gradle/libs.versions.toml` keys named here |
 | Native | `zstd-jni` 1.5.7-20 (`@aar`). Discover (W12, 2026-10-08) adds `maplibre-compose` (0.20.0 since 2026-10-11) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.1 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
-| Build | Gradle as `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` names it (configuration cache on). AGP (`androidGradlePlugin`), KSP (`ksp`) and Compose Multiplatform (`composeMultiplatform`) as `gradle/libs.versions.toml` pins them. R8 for release. Every `:core` module (protocol, parquet, history, publicfeed, units, archive, storage, net, sync and settings) and `:family:air` target JVM (Java 17) and iOS. `:ui:designsystem` and `:feature:discover` use `opensensor.kmp.compose-feature`, Compose Multiplatform for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. `:ios:shared` targets iOS only |
+| Build | Gradle as `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` names it (configuration cache on), with the daemon on JDK 25 through the Daemon JVM criteria (see Build JDK). AGP (`androidGradlePlugin`), KSP (`ksp`) and Compose Multiplatform (`composeMultiplatform`) as `gradle/libs.versions.toml` pins them. R8 for release. Every `:core` module (protocol, parquet, history, publicfeed, units, archive, storage, net, sync and settings) and `:family:air` target JVM (Java 17) and iOS. `:ui:designsystem` and `:feature:discover` use `opensensor.kmp.compose-feature`, Compose Multiplatform for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. `:ios:shared` targets iOS only |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 
@@ -125,7 +140,7 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | --- | --- |
 | `xcode-27` (standard ARM64 runner, public preview) | Matches `iosSimulatorArm64`; validates the latest chosen Apple SDK without an Intel target or a multi-version matrix. |
 | Explicit Xcode 27.0 through `DEVELOPER_DIR` | Matches the locally checked release build; avoids the runner's moving default and pre-release Xcode installations. |
-| Temurin, version read from `gradle/gradle-daemon-jvm.properties` (25), + repository Gradle wrapper | Uses the same Java major as Linux CI and local builds; preserves the project's pinned Gradle distribution. |
+| Temurin, version read from `gradle/gradle-daemon-jvm.properties` (25), + repository Gradle wrapper | Uses the same Java major as Linux CI and local builds, and keeps the project's pinned Gradle distribution. |
 | `setup-gradle` with `cache-provider: basic` | Owns Gradle caching and wrapper validation, using standard GitHub caching. Do not also enable Gradle caching in `setup-java`. |
 | Separate `~/.konan` cache | Reuses the native compiler/dependencies, keyed by architecture, Xcode and dependency/build definitions. No DerivedData cache. |
 | Two Gradle workers | Limits simultaneous native compilation on the standard runner's 7 GB RAM. |

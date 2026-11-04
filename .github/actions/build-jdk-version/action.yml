@@ -1,0 +1,23 @@
+# Reads the JDK major that runs Gradle from gradle/gradle-daemon-jvm.properties, the one place it is
+# pinned (docs/build-and-release.md, Build JDK), so actions/setup-java installs the same version.
+# Fails with an annotation on that file when the key is missing, repeated or not a plain major.
+name: Build JDK version
+description: Outputs toolchainVersion from gradle/gradle-daemon-jvm.properties as a validated major version.
+outputs:
+  version:
+    description: The JDK major version, for example 25.
+    value: ${{ steps.read.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - id: read
+      shell: bash
+      run: |
+        set -euo pipefail
+        file=gradle/gradle-daemon-jvm.properties
+        values="$(sed -n 's/^toolchainVersion=//p' "$file" 2>/dev/null || true)"
+        if [[ ! "$values" =~ ^[0-9]+$ ]]; then
+          echo "::error file=$file::toolchainVersion must appear exactly once as a JDK major version, found '${values//$'\n'/,}'"
+          exit 1
+        fi
+        echo "version=$values" >> "$GITHUB_OUTPUT"
