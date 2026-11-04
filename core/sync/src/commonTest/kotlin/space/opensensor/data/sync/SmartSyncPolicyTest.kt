@@ -66,15 +66,37 @@ class SmartSyncPolicyTest {
     }
 
     @Test
-    fun sixHourAgeRefreshesBothHostAndNetworkAnchors() {
+    fun sixHourAgeRefreshesAHostAnchorAndAMeasuredNetworkAnchor() {
+        val recent = DeviceStatus(utc = 1, clockSource = 1, clockAgeSeconds = 21_599)
+        assertEquals(ClockSyncAction.CONTINUE, decide(recent))
+        assertEquals(ClockSyncAction.SET_TIME, decide(recent.copy(clockAgeSeconds = 21_600)))
         for (source in listOf(1, 3)) {
-            val recent = DeviceStatus(utc = 1, clockSource = source, clockAgeSeconds = 21_599)
-            assertEquals(ClockSyncAction.CONTINUE, decide(recent))
-            assertEquals(ClockSyncAction.SET_TIME, decide(recent.copy(clockAgeSeconds = 21_600)))
             // With a measured clock that agrees, an old anchor still refreshes.
             assertEquals(ClockSyncAction.SET_TIME, decide(anchored(source, 500, 21_600)))
             assertEquals(ClockSyncAction.CONTINUE, decide(anchored(source, 500, 21_599)))
         }
+    }
+
+    @Test
+    fun `network anchor whose drift was not measured is never set however old`() {
+        // A cached STATUS read carries no usable utc_ms, so the difference is unknown.
+        for (age in listOf(null, 120L, 21_600L, 10_000_000L)) {
+            val cached = DeviceStatus(utc = 1, clockSource = 3, clockAgeSeconds = age)
+            assertEquals(ClockSyncAction.CONTINUE, decide(cached))
+            assertEquals(ClockSyncAction.CONTINUE, decide(cached, uncertainty = 5_000))
+        }
+    }
+
+    @Test
+    fun `no STATUS on a proto 3 link leaves the clock alone`() {
+        for (proto in listOf(3, 4)) {
+            val decision = SmartSyncPolicy.decide(null, now, 0, proto)
+            assertEquals(ClockQuality.UNKNOWN, decision.quality)
+            assertEquals(ClockSyncAction.CONTINUE, decision.action)
+        }
+        // Only a legacy caller, with no proto, still asks for an initial anchor.
+        assertEquals(ClockSyncAction.SET_TIME, SmartSyncPolicy.decide(null, now, 0, null).action)
+        assertEquals(ClockSyncAction.SET_TIME, SmartSyncPolicy.decide(null, now, 0, 2).action)
     }
 
     @Test
@@ -107,9 +129,33 @@ class SmartSyncPolicyTest {
     }
 
     @Test
-    fun `recent host anchor far from the phone is replaced`() {
-        assertEquals(ClockSyncAction.SET_TIME, decide(anchored(1, 61_000L, 120)))
-        assertEquals(ClockSyncAction.SET_TIME, decide(anchored(1, -3_600_000L, 120)))
+    fun `a host anchor far from the phone is kept until it is six hours old`() {
+        for (offset in listOf(61_000L, 90_000L, -3_600_000L)) {
+            assertEquals(ClockSyncAction.CONTINUE, decide(anchored(1, offset, 120)))
+            assertEquals(ClockSyncAction.CONTINUE, decide(anchored(1, offset, 21_599)))
+            assertEquals(ClockSyncAction.SET_TIME, decide(anchored(1, offset, 21_600)))
+        }
+        // A legacy status with no age cannot show the anchor is recent, so it is replaced.
+        assertEquals(ClockSyncAction.SET_TIME, decide(anchored(1, 90_000L, null)))
+    }
+
+    @Test
+    fun `two phones ninety seconds apart do not flip-flop the clock`() {
+        val phoneA = now
+        val phoneB = now + 90_000L
+        // Phone A just set the sensor. Phone B connects two minutes later and keeps A's anchor.
+        val setByA = DeviceStatus(utc = 1, clockSource = 1, utcEpochMillis = phoneA + 120_000L, clockAgeSeconds = 120)
+        assertEquals(ClockSyncAction.CONTINUE, decide(setByA, phone = phoneB + 120_000L))
+        // Phone A reconnects and still agrees with its own anchor.
+        assertEquals(ClockSyncAction.CONTINUE, decide(setByA.copy(clockAgeSeconds = 600), phone = phoneA + 120_000L))
+        // Only once the anchor is six hours old does phone B refresh it, and then A keeps B's.
+        val late = 21_600_000L
+        assertEquals(
+            ClockSyncAction.SET_TIME,
+            decide(setByA.copy(utcEpochMillis = phoneA + late, clockAgeSeconds = 21_600), phone = phoneB + late),
+        )
+        val setByB = DeviceStatus(utc = 1, clockSource = 1, utcEpochMillis = phoneB + late + 60_000L, clockAgeSeconds = 60)
+        assertEquals(ClockSyncAction.CONTINUE, decide(setByB, phone = phoneA + late + 60_000L))
     }
 
     @Test

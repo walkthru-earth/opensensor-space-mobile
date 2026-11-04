@@ -18,18 +18,25 @@ data class ClockSyncDecision(
  * connection and send phone UTC whenever it returns [ClockSyncAction.SET_TIME]. There is no user
  * setting.
  *
- * The phone fills a missing or RTC-only anchor and refreshes an old one. It does not replace a
- * recent anchor from another source unless the two differ by more than a minute, so two phones
- * cannot flip-flop the clock. It never replaces a network (SNTP) anchor by a large difference,
- * since a hand-set phone is then the likelier fault. A phone earlier than
- * [PHONE_CLOCK_FLOOR_MILLIS] never sends its time.
+ * The phone fills a missing or RTC-only anchor and refreshes an old one. It keeps any anchor that
+ * is under six hours old, whatever the difference, so two phones whose clocks disagree set the
+ * sensor at most once per six hours between them and never flip-flop it. It never replaces a
+ * network (SNTP) anchor unless it measured the difference and found it within a minute, since a
+ * hand-set phone is the likelier fault. A proto 3 sensor that did not answer STATUS is left alone.
+ * A phone earlier than [PHONE_CLOCK_FLOOR_MILLIS] never sends its time.
  */
 object SmartSyncPolicy {
-    /** A fresh snapshot is compared at the request midpoint; [uncertaintyMillis] bounds link delay. */
+    /**
+     * A fresh snapshot is compared at the request midpoint, and [uncertaintyMillis] bounds link
+     * delay. [proto] is the version the link reported. A null [status] on proto 3 or newer means
+     * STATUS did not answer, so nothing is known and the clock is left alone. Only a legacy caller
+     * (no [proto]) still treats a missing status as a reason to set the clock.
+     */
     fun decide(
         status: DeviceStatus?,
         nowEpochMillis: Long? = null,
         uncertaintyMillis: Long = 0,
+        proto: Int? = null,
     ): ClockSyncDecision {
         val quality = quality(status)
         val ageSeconds = status?.clockAgeSeconds
@@ -38,21 +45,24 @@ object SmartSyncPolicy {
         val drift = if (nowEpochMillis != null && deviceUtcMillis != null) abs(deviceUtcMillis - nowEpochMillis) else null
         val stale = ageSeconds != null && ageSeconds >= REFRESH_AGE_SECONDS
         val fresh = ageSeconds != null && ageSeconds < REFRESH_AGE_SECONDS
+        val network = status?.clockSource == NETWORK_SOURCE
         // Oscillator drift expected since the anchor, at the archive's 50 ppm assumption.
         val agedDrift = (ageSeconds ?: 0L).coerceAtLeast(0) * DRIFT_PPM / 1_000
         val (set, reason) = when {
             nowEpochMillis != null && nowEpochMillis < PHONE_CLOCK_FLOOR_MILLIS ->
                 false to "phone clock is earlier than this build, so it is not sent"
+            status == null && proto != null && proto >= STATUS_PROTO ->
+                false to "STATUS did not answer, the clock is left alone"
             quality == ClockQuality.MISSING -> true to "device has no UTC anchor, new rows go to the unsynced tree"
             quality == ClockQuality.RTC_RESTORED -> true to "RTC clock needs an external anchor this boot"
             quality == ClockQuality.UNKNOWN -> true to "clock state unavailable, obtain an acknowledged phone anchor"
+            drift == null && network -> false to "network anchor kept, its difference from the phone was not measured"
             drift == null -> if (stale) true to AGED else false to KEEP
-            drift > LARGE_DRIFT_MILLIS + agedDrift + uncertainty ->
-                if (status?.clockSource == NETWORK_SOURCE) {
-                    false to "network anchor differs from the phone by over a minute, the phone is the likelier fault"
-                } else {
-                    true to "clock differs from the phone by more than a minute"
-                }
+            drift > LARGE_DRIFT_MILLIS + agedDrift + uncertainty -> when {
+                network -> false to "network anchor differs from the phone by over a minute, the phone is the likelier fault"
+                fresh -> false to "recent anchor from another phone is kept until it is six hours old, so two phones do not flip-flop"
+                else -> true to "clock differs from the phone by more than a minute"
+            }
             drift > MAX_DRIFT_MILLIS + uncertainty ->
                 if (fresh) {
                     false to "recent anchor from another source is within a minute, kept to avoid flip-flop"
@@ -69,6 +79,9 @@ object SmartSyncPolicy {
     private const val AGED = "external anchor is at least six hours old"
     private const val NETWORK_SOURCE = 3
 
+    /** The first protocol version every accepted link has, which always pushes STATUS. */
+    private const val STATUS_PROTO = 3
+
     // At the archive's 50 ppm drift assumption, six hours contributes about 1.08 seconds.
     const val REFRESH_AGE_SECONDS = 6 * 60 * 60L
     const val MAX_DRIFT_MILLIS = 2_000L
@@ -77,7 +90,8 @@ object SmartSyncPolicy {
     /**
      * Two clocks that follow network time agree within about a second, and a clock set by hand is
      * set to the minute. A difference beyond a minute, plus expected drift and link delay, means one
-     * side was set by hand. Below it, a recent anchor from another source is kept.
+     * side was set by hand. A network anchor is never replaced past it, and any anchor under six
+     * hours old is kept past it too.
      */
     const val LARGE_DRIFT_MILLIS = 60_000L
 
