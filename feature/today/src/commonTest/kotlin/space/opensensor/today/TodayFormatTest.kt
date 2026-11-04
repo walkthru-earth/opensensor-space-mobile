@@ -149,6 +149,17 @@ class TodayFormatTest {
     }
 
     @Test
+    fun todaySoFarOfATemplateWithoutHumidityKeepsTheRawPm25Basis() {
+        val bundled = BundledCatalog.template(WAVESHARE.dict!!)!!
+        val desc = "cd".repeat(32)
+        val dry = bundled.copy(key = TemplateKey(bundled.dict, desc), datastreams = bundled.datastreams.filterNot { it.name == AirFamily.RELATIVE_HUMIDITY })
+        val info = WAVESHARE.copy(thing = "st-1", desc = desc.take(TemplateKey.DESC_PREFIX_HEX))
+        val metrics = todayMetrics(DeviceCapabilities.from(info, listOf(dry)))
+        assertEquals(listOf(AirFamily.PM25_ATMOSPHERIC), metrics.map { it.id }, "no corrected PM2.5 without humidity")
+        assertEquals(Pm25Basis.RAW, metrics.single().basis)
+    }
+
+    @Test
     fun todaySoFarOfAThingWithoutParticlesAveragesItsFirstPrimary() {
         val soil = SoilFixture.capabilities()
         assertEquals(listOf(SoilFixture.MOISTURE), todayMetrics(soil).map { it.id })
