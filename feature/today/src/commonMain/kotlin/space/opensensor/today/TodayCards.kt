@@ -199,6 +199,7 @@ import space.opensensor.today.resources.sync_unplaced_detail
 import space.opensensor.today.resources.sync_unplaced_simple
 import space.opensensor.today.resources.today_average
 import space.opensensor.today.resources.today_none
+import space.opensensor.today.resources.today_none_clock
 import space.opensensor.today.resources.today_of_the_day
 import space.opensensor.today.resources.today_readings_since_midnight
 import space.opensensor.today.resources.today_so_far
@@ -487,13 +488,18 @@ internal fun EnvironmentCard(
  * covers. Without timed readings it says what to do next instead of showing a number.
  */
 @Composable
-internal fun TodaySoFarCard(today: TodaySoFar?, level: DetailLevel, modifier: Modifier = Modifier) {
+internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: DetailLevel, modifier: Modifier = Modifier) {
     BrandCard(modifier = modifier, tone = CardTone.SOFT) {
         Eyebrow(stringResource(Res.string.today_so_far), heading = true)
         today?.let { FitText(it.metric.basis?.let { basis -> pm25Label(basis) } ?: it.metric.label(Locale.current.language), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Spacer(Modifier.height(8.dp))
         if (today == null) {
-            Text(stringResource(Res.string.today_none), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // The Clock card is Developer only, so every level reads here why no timed readings show yet.
+            Text(
+                stringResource(if (clockMissing) Res.string.today_none_clock else Res.string.today_none),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             return@BrandCard
         }
         // The current reading owns the page's character. This summary adds the average and coverage.
@@ -884,6 +890,9 @@ internal fun StorageCard(
         Spacer(Modifier.height(8.dp))
         if (status == null) {
             Text(stringResource(Res.string.storage_none), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Finalize needs no status, so it stays reachable before the first STATUS arrives.
+            Spacer(Modifier.height(12.dp))
+            OutlinePillButton(stringResource(Res.string.flush), onClick = onFlush, enabled = enabled)
             return@BrandCard
         }
         val warn = MaterialTheme.colorScheme.error
