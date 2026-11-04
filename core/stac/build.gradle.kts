@@ -1,6 +1,7 @@
-// One STAC File Item per synced device file, as the stac-opensensor v0.1.0 profile describes it
-// (#190). A pure function over the verified file bytes, its footer and its board template. It never
-// uploads, reads Room or touches the network. Geometry comes from H3 cells only, never coordinates.
+// The STAC File Item of a synced device file, as the stac-opensensor v0.1.0 profile describes it
+// (#190). The board writes the Item, the phone regenerates it to check it. A pure function over the
+// verified file bytes, its footer and its board template. It never uploads, reads Room or touches the
+// network. Geometry comes from H3 cells only, never coordinates.
 plugins {
     id("opensensor.kmp.library")
 }

@@ -64,7 +64,10 @@ sealed interface FileItemResult {
 }
 
 /**
- * One STAC File Item per synced device file, as the stac-opensensor v0.1.0 profile (815fc45) asks.
+ * The STAC File Item of a synced device file, as the stac-opensensor v0.1.0 profile (815fc45) asks.
+ * The board writes this Item as a sidecar beside its file, and the phone is its transport and
+ * validator. An Item built here must equal the board's Item as JSON values. Once upload exists, the
+ * phone uploads the board's sidecar `.json` together with its `.parquet`.
  * Pure. It reads the verified file bytes and never uploads, writes or logs.
  *
  * The geometry is H3 cells only, never a device position. A fixed Thing gets its one cell polygon

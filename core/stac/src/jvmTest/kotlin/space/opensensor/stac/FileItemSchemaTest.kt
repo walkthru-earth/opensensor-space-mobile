@@ -22,9 +22,9 @@ import space.opensensor.publicfeed.H3Index
  *   a failure points at the writer, not at the copy.
  * - The core STAC 1.1.0 Item schema with the GeoJSON Feature and Geometry schemas it references, and
  *   the Grid v1.1.0, Anonymized Location v1.0.0, Table v1.3.0 and File v2.1.0 extension schemas.
- *   They are copied from their `$id` URLs on 2026-11-04 into `src/jvmTest/resources/schemas/`, one folder
- *   per host (only line endings normalized), and every `https://` reference resolves there. As in any STAC validator, an
- *   extension schema applies to the Items that list it in `stac_extensions`.
+ *   They are copied from their `$id` URLs on 2026-11-04 into `src/jvmTest/resources/schemas/`, one
+ *   folder per host, with only line endings normalized. Every `https://` reference resolves there.
+ *   As in any STAC validator, an extension schema applies to the Items that list it in `stac_extensions`.
  *
  * Items are built at the published resolution, 8, as `PublishGate` builds them for a board.
  */

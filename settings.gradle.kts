@@ -43,7 +43,7 @@ include(":core:database")
 // Storage classes, durable no-replace commits, free space and the startup janitor's walk (issue #60).
 include(":core:storage")
 include(":core:settings")
-// One STAC File Item per synced device file, the sidecar the upload will publish (#190).
+// The STAC File Item of a synced device file, regenerated to check the board's own sidecar (#190).
 include(":core:stac")
 // The Thing kinds each app lists, the opensensor board kind and the PublishGate in front of FileItems (#219).
 include(":core:thing")

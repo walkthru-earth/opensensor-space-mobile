@@ -40,20 +40,23 @@ the template a board serves over `GET_DESCRIPTOR` (`DeviceSession.downloadDescri
 keep at most 16 templates, oldest out first. `ArchiveIndexRepair` hands each indexed file's footer
 `template.sha256` to `BoardDescriptors.confirm`, which evicts a served template with the same 16 hex
 prefix and another full digest. Bundled templates are never evicted. All Kotlin code lives under `space.opensensor`.
-`stac/` builds one STAC File Item per synced device file (`FileItems.build`, #190), the sidecar
-JSON at `thing=<uuid>/year=YYYY/month=MM/day=DD/<file>.json`. It is a pure function of the verified
+`stac/` regenerates the STAC File Item of a synced device file (`FileItems.build`, #190). The board
+writes the Item, a sidecar JSON at `thing=<uuid>/year=YYYY/month=MM/day=DD/<file>.json` beside the
+file, and the phone is its transport and validator. An Item the phone builds must equal the board's
+Item as JSON values. Its data href is relative, `./<file>.parquet`. It is a pure function of the verified
 file bytes, its `opensensor` footer and its `BoardTemplate`, with no upload, network or Room. The
 geometry is H3 cells only, `ColumnStatistics` gives each measurement column `statistics` under its
 `valid_when` gate, and `FileItemResult.NoItem` names why a file gets none (no UTC anchor, no located
 row under `FileItems.ITEM_NEEDS_LOCATION`, a fixed Thing in two cells). Cells finer than its required `maxRes`
-are coarsened to their parent. `PublishGate` in `thing/` is its only caller.
+are coarsened to their parent. `PublishGate` in `thing/` is its only caller. Once upload exists, the
+phone uploads the board's sidecar `.json` together with its `.parquet`.
 `thing/` (`:core:thing`, #219) holds the `ThingKind` contract, its `DataSource` and `PublishPolicy`,
 `OpenSensorBoardKind` (#222) and the `ThingKinds` registry. Each app builds that registry as a plain
 list, Android in `data/di/ThingModule` and iOS in `ThingKindsIos.kt` from `AppServices`, with no self
 registration. Each app hands `ThingKinds.metricProviders` to `AirFamily.install`, which passes the family and then the kinds' `DerivedMetricProvider`s to `Metrics.install`,
 which rebuilds the catalog. `PublishGate` (#224) issues a ticket only for a `Recording` kind with
 `OptInCcBy` whose Thing the owner opted in (`UploadConsent`, none by default), then builds that file's
-Item at the policy's `maxRes` (7 for the board), asking consent again so an opt out stops it. Health, feeds and anything else get none. It never
+Item at the policy's `maxRes` (8 for the board, the contract's resolution), asking consent again so an opt out stops it. Health, feeds and anything else get none. It never
 uploads. `thing/testkit` (`:core:thing:testkit`) holds `ThingKindContract`, the checks every kind runs
 from its own tests. `PlatformNeedsTable` (#227) is the one table of what the app shell and each kind ask
 of the Android manifest (permissions, foreground service types) and the iOS bundle (Info.plist privacy

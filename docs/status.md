@@ -4,6 +4,17 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../opensensor-space-firmware/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-11-04, published resolution 8 and relative File Item hrefs (code only)
+
+Host tests and the iOS simulator only. No phone run is recorded. Owner decisions of 2026-11-04 (#255).
+
+- The board kind publishes H3 resolution 8, the file's own cells. The resolution 7 cap is gone.
+- The File Item data href is `./<file>.parquet`, relative to the sidecar beside it.
+- The board writes the Item. `FileItems` regenerates it and must equal the board's Item.
+- `FileItemSchemaTest` also checks the core STAC 1.1.0 Item schema and the Grid, Anonymized
+  Location, Table and File extension schemas. A moving Item still lists Grid without a
+  `grid:code`, as the 815fc45 profile asks. The spec update removes that (phase 2).
+
 ## 2026-10-29, silent clock, Wi-Fi token and Wi-Fi sync (code only)
 
 Host tests, `ios/tests/verify-native.sh` and a simulator build only. No phone run is recorded.
