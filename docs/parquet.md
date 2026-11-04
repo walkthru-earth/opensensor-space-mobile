@@ -54,8 +54,8 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
 - `RangePlanner` sorts the wanted ranges and merges those within `coalesceGapBytes`, up to
   `maxRequestBytes`. `CoalescingRangeSource` runs the merged requests at most `parallelism` at a time and
   hands back views into the fetched buffers. Presets are `RangePolicy.LOCAL`, `CELLULAR` and `WIFI`.
-- `:core:net` gives `HttpRangeSource`, a `RangeSource` over one URL through an `HttpRangeEngine` (OkHttp
-  5.5.0 on Android and the JVM, `NSURLSession` on iOS). The tail is a suffix range, later ranges carry
+- `:core:net` gives `HttpRangeSource`, a `RangeSource` over one URL through an `HttpRangeEngine` (OkHttp,
+  `okhttp` in `gradle/libs.versions.toml`, on Android and the JVM, `NSURLSession` on iOS). The tail is a suffix range, later ranges carry
   `If-Range` with a strong ETag, and a 200 for a changed object raises `SourceChangedException`. It
   sends `Accept-Encoding: identity`, skips the local HTTP cache and logs nothing. Issues #60 and #61
   are closed. `OpenAqAggregatesFeed` builds one per feed file.
