@@ -62,4 +62,27 @@ class ForgetWhenFreeTest {
         assertEquals(2, tries)
         assertFalse(job.isActive)
     }
+
+    @Test
+    fun `a forget that keeps losing the link stops after its attempts and reports Busy once`() = runTest {
+        val quiet = mutableListOf<Boolean>()
+        val forgot = forgetWhenFree(MutableStateFlow(false), attempts = 3) {
+            quiet += it
+            false
+        }
+        assertFalse(forgot)
+        assertEquals("only the last refused try may report Busy", listOf(true, true, false), quiet)
+    }
+
+    @Test
+    fun `a forget that runs on its first try is quiet`() = runTest {
+        val quiet = mutableListOf<Boolean>()
+        assertTrue(
+            forgetWhenFree(MutableStateFlow(false)) {
+                quiet += it
+                true
+            },
+        )
+        assertEquals(listOf(true), quiet)
+    }
 }

@@ -98,10 +98,11 @@ class TodayViewModel @AssistedInject constructor(
 
     /**
      * Forgets this device. It runs in the app scope, so leaving Today never cancels it, and it waits
-     * while Collect all or a command holds the link, so a confirmed Forget is never dropped as busy.
+     * while Collect all or a command holds the link, so a confirmed Forget is not dropped as busy. A
+     * forget refused [FORGET_ATTEMPTS] times in a row stops and reports Busy once.
      */
     fun forget() {
-        appScope.launch { forgetWhenFree(repository.busy) { repository.forget(deviceAddress) } }
+        appScope.launch { forgetWhenFree(repository.busy) { quiet -> repository.forget(deviceAddress, quiet) } }
     }
 
     fun reconnectLanOnly() {
@@ -110,16 +111,27 @@ class TodayViewModel @AssistedInject constructor(
 }
 
 /**
- * Runs [forget] once [busy] is false, and again while it answers false. The link owner refuses a
- * forget while another command holds the link, and one can take it between the check and the call.
+ * Runs [forget] once [busy] is false, and again while it answers false, at most [attempts] times. The
+ * link owner refuses a forget while another command holds the link, and one can take it between the
+ * check and the call. Every try but the last is quiet, so a forget that never runs reports Busy once.
+ * False when every try was refused.
  */
-internal suspend fun forgetWhenFree(busy: Flow<Boolean>, retryDelayMs: Long = 250, forget: suspend () -> Boolean) {
-    while (true) {
+internal suspend fun forgetWhenFree(
+    busy: Flow<Boolean>,
+    attempts: Int = FORGET_ATTEMPTS,
+    retryDelayMs: Long = 250,
+    forget: suspend (quiet: Boolean) -> Boolean,
+): Boolean {
+    require(attempts > 0)
+    repeat(attempts) { tried ->
         busy.first { !it }
-        if (forget()) return
-        delay(retryDelayMs)
+        if (forget(tried < attempts - 1)) return true
+        if (tried < attempts - 1) delay(retryDelayMs)
     }
+    return false
 }
+
+internal const val FORGET_ATTEMPTS = 5
 
 /** [DeviceFacade] as the shared Today port. Every verb is a call the old screen made. */
 private class RepositoryTodaySource(
