@@ -1,11 +1,9 @@
 package space.opensensor.stac
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.node.ObjectNode
-import com.networknt.schema.JsonSchema
-import com.networknt.schema.JsonSchemaFactory
+import com.networknt.schema.Schema
 import com.networknt.schema.SchemaLocation
-import com.networknt.schema.SpecVersion
+import com.networknt.schema.SchemaRegistry
+import com.networknt.schema.SpecificationVersion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -13,6 +11,9 @@ import org.junit.Test
 import space.opensensor.data.history.OpenSensorFooter.Mobility
 import space.opensensor.data.history.parquet.ByteArrayReader
 import space.opensensor.publicfeed.H3Index
+import tools.jackson.databind.ObjectMapper
+import tools.jackson.databind.node.ArrayNode
+import tools.jackson.databind.node.ObjectNode
 import kotlin.test.assertIs
 
 /**
@@ -34,28 +35,30 @@ import kotlin.test.assertIs
  */
 class FileItemSchemaTest {
     private val mapper = ObjectMapper()
-    private val factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7) { builder ->
-        builder.schemaMappers { it.mapPrefix("https://", "classpath:schemas/") }
+
+    // The default loader never fetches remote resources, so a reference that misses the bundled copies fails.
+    private val registry = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_7) { builder ->
+        builder.schemaIdResolvers { it.mapPrefix("https://", "classpath:schemas/") }
     }
-    private val profileSchemas: List<JsonSchema> = listOf("profile.json", "schema.json").map { name ->
-        stacFile(name).inputStream().use { factory.getSchema(it) }
+    private val profileSchemas: List<Schema> = listOf("profile.json", "schema.json").map { name ->
+        stacFile(name).inputStream().use { registry.getSchema(it) }
     }
-    private val coreSchema: JsonSchema = factory.getSchema(SchemaLocation.of(CORE_ITEM))
+    private val coreSchema: Schema = registry.getSchema(SchemaLocation.of(CORE_ITEM))
 
     /** The bundled schema of each STAC extension the writer can list, by its URL. */
-    private val extensionSchemas: Map<String, JsonSchema> = FileItems.EXTENSIONS
+    private val extensionSchemas: Map<String, Schema> = FileItems.EXTENSIONS
         .filter { it.startsWith(STAC_EXTENSIONS) }
-        .associateWith { factory.getSchema(SchemaLocation.of(it)) }
+        .associateWith { registry.getSchema(SchemaLocation.of(it)) }
 
     /** Every schema the Item [json] answers to, the profile, core STAC and each extension it lists. */
     private fun errors(json: String): List<String> {
         val node = mapper.readTree(json)
-        val listed = node["stac_extensions"].map { it.asText() }.filter { it.startsWith(STAC_EXTENSIONS) }
+        val listed = node.required("stac_extensions").values().map { it.asString() }.filter { it.startsWith(STAC_EXTENSIONS) }
         val schemas = profileSchemas + coreSchema + listed.map { checkNotNull(extensionSchemas[it]) { "no bundled schema for $it" } }
-        return schemas.flatMap { schema -> schema.validate(node).map { it.message } }
+        return schemas.flatMap { schema -> schema.validate(node).map { it.toString() } }
     }
 
-    private fun coreErrors(json: String): List<String> = coreSchema.validate(mapper.readTree(json)).map { it.message }
+    private fun coreErrors(json: String): List<String> = coreSchema.validate(mapper.readTree(json)).map { it.toString() }
 
     private fun example(name: String): String = stacFile(name).decodeToString()
 
@@ -94,40 +97,40 @@ class FileItemSchemaTest {
     @Test
     fun aFixedItemNamesItsResolution8Cell() {
         val item = mapper.readTree(itemJson(rowsIn(OSU_CELL), Mobility.FIXED, coreS3Template))
-        val code = item["properties"]["grid:code"].asText()
+        val code = item.required("properties").required("grid:code").asString()
         val cell = code.removePrefix("H3-").toLong(16)
         assertEquals(8, H3Index.resolution(cell))
         assertEquals(OSU_CELL, cell)
-        assertEquals(0.01, item["properties"]["anon:size"].asDouble(), 0.0)
-        assertEquals("./$FILE_NAME", item["assets"]["data"]["href"].asText())
+        assertEquals(0.01, item.required("properties").required("anon:size").asDouble(), 0.0)
+        assertEquals("./$FILE_NAME", item.required("assets").required("data").required("href").asString())
     }
 
     @Test
     fun aMovingWaveshareItemValidates() {
         val json = itemJson(movingRows(), Mobility.MOVING, waveshareTemplate)
         assertTrue(json.contains("\"MultiPolygon\""))
-        assertFalse(FileItems.GRID_EXTENSION in mapper.readTree(json)["stac_extensions"].map { it.asText() })
+        assertFalse(FileItems.GRID_EXTENSION in mapper.readTree(json).required("stac_extensions").values().map { it.asString() })
         assertEquals(emptyList<String>(), errors(json))
     }
 
     @Test
     fun theSchemasCatchAFixedItemWithoutItsCell() {
         val item = mapper.readTree(itemJson(rowsIn(OSU_CELL), Mobility.FIXED, coreS3Template)) as ObjectNode
-        (item["properties"] as ObjectNode).remove("grid:code")
+        (item.required("properties") as ObjectNode).remove("grid:code")
         assertTrue(errors(mapper.writeValueAsString(item)).isNotEmpty())
     }
 
     @Test
     fun theProfileCatchesACellAtAnotherResolution() {
         val item = mapper.readTree(itemJson(rowsIn(OSU_CELL), Mobility.FIXED, coreS3Template)) as ObjectNode
-        (item["properties"] as ObjectNode).put("grid:code", "H3-${H3Index.toHex(H3Index.parent(OSU_CELL, 7))}")
+        (item.required("properties") as ObjectNode).put("grid:code", "H3-${H3Index.toHex(H3Index.parent(OSU_CELL, 7))}")
         assertTrue(errors(mapper.writeValueAsString(item)).isNotEmpty())
     }
 
     @Test
     fun theProfileCatchesAMovingItemThatListsGrid() {
         val item = mapper.readTree(itemJson(movingRows(), Mobility.MOVING, waveshareTemplate)) as ObjectNode
-        (item["stac_extensions"] as com.fasterxml.jackson.databind.node.ArrayNode).add(FileItems.GRID_EXTENSION)
+        (item.required("stac_extensions") as ArrayNode).add(FileItems.GRID_EXTENSION)
         assertTrue(errors(mapper.writeValueAsString(item)).isNotEmpty())
     }
 
