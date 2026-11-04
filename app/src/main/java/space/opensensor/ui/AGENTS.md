@@ -9,6 +9,15 @@ app types or `R.string`.
 
 - Known devices are devices the owner connected to; a nearby advertisement is
   only a scan result. Forget must stay forgotten until explicit reconnection.
+  A confirmed Forget runs in `@ApplicationScope` through `forgetWhenFree`, which waits until the
+  link is not busy and retries a refused forget up to `FORGET_ATTEMPTS` (5). Every try but the last
+  is quiet, so the user sees Busy once and leaving Today never drops the forget.
+- Setup retries hide the failure they replaced. `SetupViewModel` keeps that `staleFailure`, and
+  `skipStale` drops the same instance (`===`) while `connectsRunning` is above zero or no new
+  `connectFailure` was recorded, so a retry that fails the same way still shows.
+- Setup never asks for Local Network and its Find is Bluetooth only. A Wi-Fi passphrase goes over
+  Bluetooth only, so the shared `ReconnectOverBluetooth` shows on a ready link that is not BLE and
+  the route answers it with `reconnectOverBluetooth()` behind Bluetooth access.
 - One bottom bar (Discover, My devices, Settings) lives in the shared `AppShell` (`:feature:shell`),
   which `Navigation.kt` hosts with the Android entries, and Discover is always the start tab.
   Screens never draw a bottom bar. Device sections use `DeviceSectionTabs` from `ThingChrome` (`:feature:today`)
@@ -47,6 +56,10 @@ app types or `R.string`.
   with `textColorOnSurface()`.
 - Design Simple first. Gate technical facts with `level.detailed` or `level.developer` and list
   new ones in the audit table in `docs/screens.md`. Debug is reachable only at Developer.
+  The clock and Wi-Fi token are automatic, so their surfaces are Developer only (the Today CLOCK
+  card, the token line in `AutoSyncCard`, the "no token" tag in device rows, the token sync
+  endings). Below Developer, Today says `today_none_clock` when the clock is missing, and Finalize
+  sits in the Detailed Storage card, shown even before the first STATUS.
 - Name components after what they show in general (`MetricHeroCard`, `SignalBars`,
   `MascotGuide`). Read labels, units and bands from the metric registry, not literals.
 - Large screens are a stateful `XRoute` (ViewModel, `CollectEvents`, launchers, permissions,

@@ -26,6 +26,22 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 - Core Bluetooth and Bonjour behavior needs iOS simulator/build checks plus real
   iPhone evidence where radio or privacy behavior is involved. Simulator success
   does not establish BLE, Local Network permission, background, or transfer behavior.
+- `DevicesBridge` takes three scans. `startScan` is automatic and stays Bluetooth only until the
+  user has browsed once, `tapScan` (a Scan tap) also browses the LAN, and `findScan` (setup Find)
+  is Bluetooth only, so setup never raises the Local Network prompt. `LanDiscovery.browseAllowed`
+  (UserDefaults `lanBrowseStarted`, set by `scan()`) gates every later browse, background ones
+  included. `migrateBrowseFlag()` runs once at launch and sets it when a Wi-Fi credential exists,
+  so an updated install keeps background Wi-Fi sync without a new tap.
+- Each Bluetooth or Wi-Fi link runs the shared `SensorSync.upkeep` once when it is first usable,
+  under one COMMAND lease (clock check, then GET_CONFIG and `enableLanOnce`). `BluetoothCompanion`
+  starts it from `settle()`, then makes the quiet token fetch when `tokenWanted` (no token stored,
+  read at INFO). A failed quiet fetch (`tokenAutomatic`) closes with the plain `.disconnected`
+  notice, and only the Developer `saveWifiAccess` action shows token errors. A missing credential
+  or a lost enrollment ends Wi-Fi with `.lanDisconnected`, and a failed Wi-Fi connect with a
+  Bluetooth fallback falls back with that same notice. Nothing here asks the user.
+- The setup wizard reads the link through `iosSetupLink` (`SetupIos.kt`, `SetupIosLinkTest`).
+  `CompanionState.closedId` marks a link that closed before INFO passed, except the user's own
+  disconnect, so the wizard shows Unreachable rather than Connecting forever.
 
 ## Swift and SwiftUI work
 
@@ -86,15 +102,17 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   `RunSlot` keeps the engine result, so it never crosses a continuation.
   `RunSlot.cancel` records an atomic cancellation marker synchronously before hopping to main.
   `set` checks that marker before returning, so an already cancelled caller cancels its new handle.
-- Three unchecked conformances remain, two in `LanSession.swift` and one in `BlePhysicalLink.swift`, each with a one-line invariant at its
-  declaration. `IosLink` is `@retroactive @unchecked Sendable` because its entry points are
+- Four unchecked conformances remain, two in `LanSession.swift`, one in `BlePhysicalLink.swift`
+  and one in `AppDelegate.swift`, each with a one-line invariant at its declaration. `IosLink` is `@retroactive @unchecked Sendable` because its entry points are
   thread safe in Kotlin and the ObjC header cannot say so. `IosLink.make` binds the identity
   before the link is shared, and Kotlin checks the one-time atomic binding in every build.
   `WriteDone` wraps Kotlin's write callback, which runs once from any
   thread, and debug builds trap a second call. The ports (`LanPort`, `BlePort`) are checked
   `Sendable` through `weak let` (SE-0481). `BlePort` holds the physical link and its sender id.
   The private `Delivered` box in `BlePhysicalLink.swift` is unchecked too. It carries Core
-  Bluetooth objects into `assumeIsolated` on the queue that delivered them.
+  Bluetooth objects into `assumeIsolated` on the queue that delivered them. The private
+  `DialAnswer` in `AppDelegate.swift` wraps Kotlin's dial answer, which is safe from any thread,
+  and its provider ignores a second call.
 - Default MainActor isolation (`SWIFT_DEFAULT_ACTOR_ISOLATION`, SE-0466) stays off. It would move
   `LanFrameBuffer` and `LanPolicy` onto the main actor, and socket framing would
   return to the UI thread.
@@ -108,14 +126,16 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 ## Tests
 
 `OpenSensorTests` is a hostless Swift Testing bundle. It compiles `App/SensorArchive.swift`,
-`App/LanFraming.swift`, `App/LanPolicy.swift`, `App/RunSlot.swift` and `App/BleGattQueue.swift` with
+`App/LanFraming.swift`, `App/LanPolicy.swift`, `App/RunSlot.swift`, `App/BleGattQueue.swift` and
+`App/BleBondFailure.swift` with
 `tests/ArchiveChecks.swift`, `tests/TransferChecks.swift`, `tests/CancellationChecks.swift` and
 `tests/BleGattChecks.swift`, so it needs neither the app host
 nor the Kotlin framework. Run it
 with `xcodebuild ... -destination 'platform=iOS Simulator,name=<installed iPhone>'
 CODE_SIGNING_ALLOWED=NO test`. `tests/verify-native.sh` runs the same checks on the Mac host.
 Add new socket or archive cases to the shared check files so both runners exercise them. File
-sync cases belong in `shared/src/iosTest` (`SensorSyncTest`, `SensorCollectionsTest`) and `core/sync` tests.
+sync cases belong in `shared/src/iosTest` (`SensorSyncTest`, `SensorCollectionsTest`) and `core/sync` tests,
+and setup link mapping in `SetupIosLinkTest`.
 Code that imports `OpenSensorShared` cannot join the hostless bundle and still needs
 simulator builds and iPhone runs.
 
