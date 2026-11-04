@@ -56,10 +56,6 @@ class DeviceMessagesTest {
     }
 
     @Test
-    fun `LAN fallback names the failure and an untyped one stays generic`() {
-    }
-
-    @Test
     fun `every reason command and change has its own copy`() {
         assertDistinct(DeviceContinuityPolicy.Reason.entries.map { DeviceMessage.IdentityRejected(it).toUiText() })
         assertDistinct(Command.entries.map { DeviceMessage.CommandRejected(it).toUiText() })
