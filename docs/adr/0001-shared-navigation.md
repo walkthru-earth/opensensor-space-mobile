@@ -37,7 +37,8 @@ Discover root Back closes the app. `TabNavigatorTest` and `AppNavConfigTest` cov
   `androidx.activity.compose.BackHandler`. Inner handlers win because Navigation Event dispatches
   last in, first out. The Discover sheet collapse lives in `DiscoverScreen` this way.
 - `jetbrainsNavigation3` and `jetbrainsLifecycle` move in lockstep with Compose Multiplatform, per
-  its release notes, and `nav3Core` must equal the runtime the JetBrains UI POM names.
+  its release notes, and `nav3Core` must equal the runtime the JetBrains UI POM names. When the
+  notes name a release candidate, use its stable release once it is out.
 - iOS saves state while the scene lives and starts on Discover after a cold launch.
 - Simulator results do not prove the gesture. The iPhone edge swipe, Android predictive back and
   Android process death restore need phone runs recorded in [status.md](../status.md).
