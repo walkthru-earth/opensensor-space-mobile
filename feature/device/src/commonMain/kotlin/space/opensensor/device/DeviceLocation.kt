@@ -58,7 +58,7 @@ fun LocationConfig.hasCell(): Boolean {
     val index = H3Index.fromHex(hex)
     if (!H3Index.isCell(index)) return false
     val res = H3Index.resolution(index)
-    return res in 0..15 && (cellResolution == null || cellResolution == res) && res <= (resolution ?: 15)
+    return (cellResolution == null || cellResolution == res) && res <= (resolution ?: 15)
 }
 
 /** Tap-only, cancellable foreground location. The implementation returns only a coarsened cell. */
