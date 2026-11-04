@@ -26,6 +26,17 @@ The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads throug
 - No secret is logged. `SET_CONFIG` is recorded as opcode only. Pairing and
   state-changing calls need the explicit paths and confirmations in root
   `AGENTS.md`; `DeviceSession.rawCommand` refuses `REBOOT` and `SET_CONFIG`.
+- Forget and connect exclude each other. `DeviceLinkOwner.tryBeginForget` takes the command slot
+  and sets `forgetting` under one `stateLock`, and `endForget` clears both, so `connect` refuses
+  (returns false, reports Busy) while a forget or a collection holds the device. An accepted
+  connect clears the last failure and counts in `connectsRunning` until its job ends.
+  `connectFailure` is that failure as recorded, without the `connectionState` lag.
+  `forget(address, quiet)` returns false when another command held the device or a newer connect
+  took the link, and a quiet try reports nothing, so a retrying caller tells the user once.
+- The clock check (`synchronizeClockQuietly`, through `synchronizeClockOnce`), the quiet token
+  fetch and `enableLanOnce` after GET_CONFIG (skipped at the Developer level, read through the
+  injected `DeveloperLevel`) report to diagnostics only. A failed LAN connect falls back to BLE
+  silently. `DeviceMessage` has no clock, LAN fallback or token renewed code. Keep them silent.
 - Plaintext LAN tokens stay in the data layer. DAO rows carry ciphertext; only
   `LanCredentialStore` decrypts, when a LAN transport is built.
 - Coroutines: wrap suspend calls in `suspendRunCatching`, never `runCatching`.

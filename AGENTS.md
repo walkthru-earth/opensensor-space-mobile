@@ -1,4 +1,4 @@
-# Agent map — opensensor.space mobile (Android + iOS)
+# Agent map, opensensor.space mobile (Android + iOS)
 
 Mobile companion for `../opensensor-space-firmware`. Android and iOS apps live in this repository with
 shared Kotlin modules. The Gradle project is `opensensor-space-mobile`. The Android
@@ -10,7 +10,7 @@ concern you are changing in `docs/README.md`.
 
 | Task | Open next | Code |
 | --- | --- | --- |
-| Current status and real-phone evidence | `docs/status.md`, then `../opensensor-space-firmware/docs/boards/*/bench-verified.md` | — |
+| Current status and real-phone evidence | `docs/status.md`, then `../opensensor-space-firmware/docs/boards/*/bench-verified.md` | None |
 | Cross-platform design and sync rules | `docs/cross-platform-guide.md` | `core/`, `app/`, `ios/` |
 | Device families, sensor-agnostic model, public H3 discover map | `docs/devices-and-discovery.md` | `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/` |
 | iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios.md`, `ios/AGENTS.md` | `core/`, `ios/` |
@@ -50,13 +50,20 @@ concern you are changing in `docs/README.md`.
   the sensor reports it off below the Developer level (`LanAutoEnable`). None of
   them browses mDNS or asks for a permission. Reboot, token rotation, forgetting
   bonds and pairing mode `none` require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
+- The clock check and `lan.on` each take a per-link claim (`LinkSession.claimOnce`). A sensor
+  answer keeps it, even a STATUS timeout or an ERROR reply. A cancelled, BUSY or unanswered try
+  calls `release(key)`, so the next run or screen on that link tries again. `SmartSyncPolicy` sends
+  no `SET_TIME` when STATUS timed out on proto 3 or newer, or when the phone clock is before
+  `PHONE_CLOCK_FLOOR_MILLIS`. It keeps any anchor under 6 h old, so two phones never flip-flop the
+  clock, and replaces a network anchor (`clk=3`) only when it is stale and measured within a
+  minute of the phone, since a hand-set phone is the likelier fault.
 - `:core:*` stays reusable without Android or Hilt. Room lives only in `:core:database`,
   one Room KMP schema on the bundled SQLite driver for both phones. Every other `:core` module
-  (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `archive`,
+  (`model`, `protocol`, `parquet`, `history`, `publicfeed`, `units`, `archive`,
   `storage`, `net`, `sync`, `settings`, `stac`, `thing`) compiles for JVM and iOS from `commonMain`.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
-  H3). `:ui:designsystem`, `:ui:permissions` and `:feature:discover` are Compose
-  for Android and iOS. A sensor family (`:family:air`) holds its own science and plugs in through
+  H3). Every `:feature:*` module and `:ui:designsystem`, `:ui:permissions` and `:ui:strings`
+  are Compose for Android and iOS (`opensensor.kmp.compose-feature`). A sensor family (`:family:air`) holds its own science and plugs in through
   `DerivedMetricProvider`. No `:core` source names PM, WHO, EPA, Plantower or the moods, and
   `CoreStaysAirFreeTest` fails the gate if one does.
   `:ios:shared` is iOS only. Common code cannot import `java.*`; platform
@@ -106,3 +113,8 @@ plugin adds its module to the gates, so a new module needs no list edit.
 `app/src/androidTest` is not gated. The installed pre-commit hook checks hygiene,
 secrets and ktlint; the pre-push hook runs `verify`. For setup and CI details see
 `docs/build-and-release.md`. Phone behavior requires a phone run and dated evidence.
+
+CI (`.github/workflows/verify.yml`) runs the same gates. The "iOS native validation" job has a
+60 minute timeout, and under macOS runner contention it hits it and shows as cancelled. That is
+infrastructure, not a code failure. Rerun the job, or run `./gradlew --no-daemon verify` and
+`verifyIos` locally before calling a change broken.
