@@ -59,8 +59,11 @@ class SetupViewModel @AssistedInject constructor(
     private val adverts = NearbyAdverts(touch = { knownDeviceDao.touch(it.address, it.name, it.lastSeenEpochMs) })
     private var scanJob: Job? = null
 
-    /** The failure each accepted connect replaced, by lowercase id, until its [SetupPort.link] skips it. */
-    private val staleFailures = mutableMapOf<String, ConnectionState.Failed>()
+    /**
+     * The failure the last accepted connect replaced, with its lowercase id, until [SetupPort.link] of
+     * that id skips it. The wizard links one sensor at a time, so a connect to another drops it.
+     */
+    private var staleFailure: Pair<String, ConnectionState.Failed>? = null
 
     private val port = object : SetupPort {
         override val nearby: Flow<List<SetupCandidate>> = combine(adverts.seen, knownDeviceDao.observeAll()) { seen, known ->
@@ -92,18 +95,18 @@ class SetupViewModel @AssistedInject constructor(
             val facade = manager.controller(id)
             val state = facade.connectionState.value
             if (state.isReady || state.isBusy) return
-            if (facade.connect(id, name)) {
-                if (state is ConnectionState.Failed) staleFailures[id.lowercase()] = state else staleFailures.remove(id.lowercase())
-            }
+            staleFailure = null
+            if (facade.connect(id, name) && state is ConnectionState.Failed) staleFailure = id.lowercase() to state
         }
 
         override fun link(id: String): Flow<SetupLink> = flow {
             if (!bluetoothReady()) return@flow emit(SetupLink.NoBluetooth)
             val facade = manager.controller(id)
-            val stale = staleFailures.remove(id.lowercase())
+            val stale = staleFailure?.takeIf { it.first == id.lowercase() }?.second
+            if (stale != null) staleFailure = null
             var bonding = false
             emitAll(
-                combine(facade.connectionState.skipStale(stale, facade.connectsRunning), facade.info) { state, info ->
+                combine(facade.connectionState.skipStale(stale, facade.connectsRunning, facade.connectFailure), facade.info) { state, info ->
                     if (state is ConnectionState.Bonding) bonding = true
                     setupLink(state, info?.proto, info != null, bonding)
                 }.distinctUntilChanged(),
@@ -139,16 +142,18 @@ class SetupViewModel @AssistedInject constructor(
 
 /**
  * Drops the leading [stale] failure the shared state still holds after a retry, while that retry's
- * connect still [running]. The same instance, never an equal one, so a new failure with the same
- * words still shows. Once no connect runs, the failure shows even when the state never moved,
- * because a retry that failed the same way leaves an equal state that a StateFlow does not emit.
+ * connect still [running] or no new [failure] was recorded. The same instance, never an equal one,
+ * so a new failure with the same words still shows. Once no connect runs and a failure was recorded
+ * since the retry cleared it, the failure shows even when the state never moved, because a retry
+ * that failed the same way leaves an equal state that a StateFlow does not emit. A connect that ends
+ * at once with no failure stays hidden until the lagging state moves on.
  */
-internal fun Flow<ConnectionState>.skipStale(stale: ConnectionState.Failed?, running: Flow<Int>): Flow<ConnectionState> =
+internal fun Flow<ConnectionState>.skipStale(stale: ConnectionState.Failed?, running: Flow<Int>, failure: Flow<String?>): Flow<ConnectionState> =
     if (stale == null) {
         this
     } else {
-        combine(this, running) { state, connects -> state to connects }
-            .dropWhile { (state, connects) -> state === stale && connects > 0 }
+        combine(this, running, failure) { state, connects, failed -> Triple(state, connects, failed) }
+            .dropWhile { (state, connects, failed) -> state === stale && (connects > 0 || failed == null) }
             .map { it.first }
             .distinctUntilChanged()
     }
