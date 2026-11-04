@@ -311,9 +311,11 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
 
     /**
      * The automatic clock check, at most once per connection. A later call on the same link,
-     * from a run or a screen, returns null without asking again, also when the first one timed out.
-     * A check that is cancelled, or fails before STATUS answers, made no decision, so it gives the
-     * claim back and the next call runs it.
+     * from a run or a screen, returns null without asking again, also when STATUS timed out, since
+     * that is a decision to leave the clock alone. A sensor ERROR reply to `SET_TIME` is its answer
+     * and keeps the claim too. A check that is cancelled, fails before STATUS answers, or sends
+     * `SET_TIME` and gets no reply (a timeout or a transport error) gives the claim back, so the
+     * next call runs it, the same way [enableLanOnce] retries.
      */
     suspend fun synchronizeClockOnce(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet? {
         if (!link.claimOnce(CLOCK_CHECK)) return null
@@ -324,7 +326,8 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
             link.release(CLOCK_CHECK)
             throw e
         } catch (e: Exception) {
-            if (!decided) link.release(CLOCK_CHECK)
+            // An ERROR reply is the sensor's answer, except BUSY, which asks for a later try.
+            if (!decided || e !is DeviceErrorException || e is DeviceBusyException) link.release(CLOCK_CHECK)
             throw e
         }
     }

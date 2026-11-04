@@ -37,6 +37,7 @@ import space.opensensor.link.LinkClosedException
 import space.opensensor.link.LinkEvent
 import space.opensensor.link.LinkSession
 import space.opensensor.link.LinkState
+import space.opensensor.link.LinkTimeoutException
 import space.opensensor.link.ScriptedLinkDriver
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
@@ -561,19 +562,57 @@ class DeviceSessionTest {
     }
 
     @Test
-    fun aTimedOutSetTimeKeepsTheClaim() = runTest {
+    fun aSetTimeWithNoReplyGivesTheClaimBack() = runTest {
         val p = peer()
         val first = async { runCatching { p.view().synchronizeClockOnce { PHONE_NOW } } }
         runCurrent()
         p.transport.statusNotifications.emit("{\"utc\":0}".encodeToByteArray())
         runCurrent()
         assertContentEquals(Request.SetTime(PHONE_NOW / 1000, 0).encode(), p.bodies.last())
-        advanceTimeBy(60_000)
+        assertIs<LinkTimeoutException>(first.await().exceptionOrNull())
+        // The answer to the ABORT that ends the abandoned SET_TIME.
+        p.driver.emit(Frame.Aborted(0))
         runCurrent()
-        assertTrue(first.await().isFailure)
-        val sent = p.bodies.size
+        assertIs<LinkState.Ready>(p.link.state.value)
+        // No reply is not an answer, so the next call checks the clock again.
+        val second = async { p.view().synchronizeClockOnce { PHONE_NOW } }
+        runCurrent()
+        assertEquals(Opcode.STATUS, p.driver.sent.last())
+        p.transport.statusNotifications.emit("{\"utc\":0}".encodeToByteArray())
+        runCurrent()
+        val ack = Frame.TimeSet(PHONE_NOW / 1000, 501L, 0)
+        p.driver.emit(ack)
+        assertEquals(ack, second.await())
+        assertEquals(2, p.driver.sent.count { it == Opcode.SET_TIME })
+    }
+
+    @Test
+    fun aRefusedSetTimeKeepsTheClaim() = runTest {
+        val p = peer()
+        p.reply = { op, _ -> if (op == Opcode.SET_TIME) emit(Frame.Error(Opcode.SET_TIME, ProtocolError.INVALID_EPOCH.code, "")) }
+        val first = async { runCatching { p.view().synchronizeClockOnce { PHONE_NOW } } }
+        runCurrent()
+        p.transport.statusNotifications.emit("{\"utc\":0}".encodeToByteArray())
+        assertIs<DeviceErrorException>(first.await().exceptionOrNull())
+        val sent = p.driver.sent.size
         assertNull(p.view().synchronizeClockOnce { PHONE_NOW })
-        assertEquals(sent, p.bodies.size)
+        assertEquals(sent, p.driver.sent.size)
+    }
+
+    @Test
+    fun aClockCheckThatFailsBeforeStatusAnswersRunsAgainOnTheNextCall() = runTest {
+        val p = peer()
+        p.reply = { op, _ -> if (op == Opcode.STATUS) throw TransportException("write failed") }
+        assertFailsWith<TransportException> { p.view().synchronizeClockOnce { PHONE_NOW } }
+        assertEquals(listOf(Opcode.STATUS), p.driver.sent)
+        p.reply = { _, _ -> }
+        val second = async { p.view().synchronizeClockOnce { PHONE_NOW } }
+        runCurrent()
+        assertEquals(listOf(Opcode.STATUS, Opcode.STATUS), p.driver.sent)
+        p.transport.statusNotifications.emit("{\"utc\":1,\"clk\":1,\"utc_ms\":$PHONE_NOW,\"clk_age_s\":60}".encodeToByteArray())
+        assertNull(second.await())
+        assertNull(p.view().synchronizeClockOnce { PHONE_NOW })
+        assertEquals(2, p.driver.sent.size)
     }
 
     @Test
@@ -649,6 +688,40 @@ class DeviceSessionTest {
         assertFailsWith<DeviceErrorException> { p.view().enableLanOnce(off, developer = false) }
         assertNull(p.view().enableLanOnce(off, developer = false))
         assertEquals(1, p.bodies.size)
+    }
+
+    @Test
+    fun aBusyWifiSyncSwitchRetriesOnTheNextCall() = runTest {
+        val p = peer()
+        val off = DeviceConfig(lan = LanConfig(on = 0))
+        fun setConfigs() = p.driver.sent.count { it == Opcode.SET_CONFIG }
+        p.reply = { op, _ -> if (op == Opcode.SET_CONFIG) emit(Frame.Error(Opcode.SET_CONFIG, ProtocolError.BUSY.code, "")) }
+        assertFailsWith<DeviceBusyException> { p.view().enableLanOnce(off, developer = false) }
+        assertEquals(1, setConfigs())
+        p.reply = { op, _ -> if (op == Opcode.SET_CONFIG) emit(Frame.Config(0, "{\"lan\":{\"on\":1}}")) }
+        assertEquals(1, p.view().enableLanOnce(off, developer = false)?.config?.lan?.on)
+        assertEquals(2, setConfigs())
+        assertNull(p.view().enableLanOnce(off, developer = false))
+        assertEquals(2, setConfigs())
+    }
+
+    @Test
+    fun anUnansweredWifiSyncSwitchRetriesOnTheNextCall() = runTest {
+        val p = peer()
+        val off = DeviceConfig(lan = LanConfig(on = 0))
+        fun setConfigs() = p.driver.sent.count { it == Opcode.SET_CONFIG }
+        val first = async { runCatching { p.view().enableLanOnce(off, developer = false) } }
+        assertIs<LinkTimeoutException>(first.await().exceptionOrNull())
+        assertEquals(1, setConfigs())
+        // The answer to the ABORT that ends the abandoned SET_CONFIG.
+        p.driver.emit(Frame.Aborted(0))
+        runCurrent()
+        assertIs<LinkState.Ready>(p.link.state.value)
+        p.reply = { op, _ -> if (op == Opcode.SET_CONFIG) emit(Frame.Config(0, "{\"lan\":{\"on\":1}}")) }
+        assertEquals(1, p.view().enableLanOnce(off, developer = false)?.config?.lan?.on)
+        assertEquals(2, setConfigs())
+        assertNull(p.view().enableLanOnce(off, developer = false))
+        assertEquals(2, setConfigs())
     }
 
     @Test
