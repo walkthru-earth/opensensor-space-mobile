@@ -223,7 +223,10 @@ class DeviceLinkOwner @Inject constructor(
      */
     private val _connectsRunning = MutableStateFlow(0)
 
-    /** A [forget] holds the command slot, so a UI [connect] is refused until it ends. Guarded by stateLock. */
+    /**
+     * A [forget] holds the command slot, so a UI [connect] is refused until it ends. Set with the slot in
+     * [tryBeginForget] and cleared with it in [endForget]. Guarded by stateLock.
+     */
     private var forgetting = false
     val connectsRunning: StateFlow<Int> = _connectsRunning.asStateFlow()
 
@@ -1288,6 +1291,20 @@ class DeviceLinkOwner @Inject constructor(
         stateLock.withLock { _busy.value = false }
     }
 
+    /** [tryBeginCommand] for a [forget], which marks itself in the same step so no connect lands in between. */
+    internal fun tryBeginForget(): Boolean = stateLock.withLock {
+        if (!tryBeginCommand()) return false
+        forgetting = true
+        true
+    }
+
+    internal fun endForget() {
+        stateLock.withLock {
+            forgetting = false
+            _busy.value = false
+        }
+    }
+
     /** Reserve commands and link replacement before starting the shared controller. */
     internal fun reserveCollection(owner: String?): Boolean {
         val handoff = stateLock.withLock {
@@ -1743,12 +1760,11 @@ class DeviceLinkOwner @Inject constructor(
      */
     suspend fun forget(address: String): Boolean = withContext(io) {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
-        if (!tryBeginCommand()) {
+        if (!tryBeginForget()) {
             refuseBusy()
             return@withContext false
         }
         try {
-            stateLock.withLock { forgetting = true }
             uiConnectionWanted.set(false)
             val claim = connectionIntent.claim()
             cancelPendingConnect()
@@ -1766,8 +1782,7 @@ class DeviceLinkOwner @Inject constructor(
                 true
             }
         } finally {
-            stateLock.withLock { forgetting = false }
-            endCommand()
+            endForget()
         }
     }
 

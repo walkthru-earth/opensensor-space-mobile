@@ -405,6 +405,16 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `a connect is refused from the moment a forget takes the command slot`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        assertTrue(h.owner.tryBeginForget())
+        assertFalse("no connect lands between the slot and the forget mark", h.repo.connect(ADDRESS, "OS-6b40", fake = true))
+        h.owner.endForget()
+        assertTrue(h.repo.connect(ADDRESS, "OS-6b40", fake = true))
+    }
+
+    @Test
     fun `forgetting a Thing removes the saved cells of its older epochs`() = harnessTest { h ->
         h.device.locationCell = "85283473fffffff"
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
