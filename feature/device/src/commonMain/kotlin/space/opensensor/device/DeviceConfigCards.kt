@@ -108,6 +108,7 @@ import space.opensensor.device.resources.lan_title
 import space.opensensor.device.resources.lan_token_explain
 import space.opensensor.device.resources.lan_token_held
 import space.opensensor.device.resources.lan_token_missing
+import space.opensensor.device.resources.msg_secret_needs_bluetooth
 import space.opensensor.device.resources.pairing_default_pin
 import space.opensensor.device.resources.pairing_display
 import space.opensensor.device.resources.pairing_fixed
@@ -454,6 +455,23 @@ fun LanCard(
             OutlinePillButton(stringResource(Res.string.lan_rotate), onClick = onRotateToken, enabled = state.canDisrupt)
         }
         if (!state.overBle) InfoNote(stringResource(Res.string.lan_fetch_ble_only))
+    }
+}
+
+/**
+ * Reconnect over Bluetooth, for a screen that sends a passphrase while the link runs on Wi-Fi. It
+ * shows only on a ready link that is not Bluetooth, since a Wi-Fi password never goes over Wi-Fi.
+ */
+@Composable
+fun ReconnectOverBluetooth(state: DeviceConfigUiState, onReconnectBle: () -> Unit, modifier: Modifier = Modifier) {
+    if (!state.ready || state.overBle) return
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        InfoNote(stringResource(Res.string.msg_secret_needs_bluetooth))
+        OutlinePillButton(
+            stringResource(Res.string.lan_reconnect_ble),
+            onClick = onReconnectBle,
+            enabled = !state.snapshot.busy && !state.snapshot.heldInBackground,
+        )
     }
 }
 

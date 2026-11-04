@@ -60,6 +60,7 @@ import space.opensensor.device.DeviceConfigController
 import space.opensensor.device.DeviceConfigEffects
 import space.opensensor.device.DeviceConfigUiState
 import space.opensensor.device.DeviceLocationForm
+import space.opensensor.device.ReconnectOverBluetooth
 import space.opensensor.device.WifiCard
 import space.opensensor.permissions.RuntimeAccess
 import space.opensensor.setup.resources.Res
@@ -121,7 +122,8 @@ fun SetupScreen(
         isBackEnabled = !s.closed,
         onBackCompleted = controller::requestClose,
     )
-    if (config != null) DeviceConfigEffects(config, snackbar)
+    // The snackbar's Bluetooth reconnect goes through the platform route too, which asks for Bluetooth.
+    if (config != null) DeviceConfigEffects(config, snackbar) { onConfigAction(DeviceConfigAction.ReconnectOverBluetooth) }
     val configState = config?.state?.collectAsState()?.value
     // Only the board's confirmed answer counts, never an unsaved draft.
     val located = configState?.location?.saved == true
@@ -276,7 +278,10 @@ private fun LazyListScope.configItem(state: DeviceConfigUiState?, content: @Comp
     }
 }
 
-/** Join over Bluetooth, the same card as Device settings. Wi-Fi sync stays on by itself. */
+/**
+ * Join over Bluetooth, the same card as Device settings. Wi-Fi sync stays on by itself. A setup
+ * whose link runs on Wi-Fi gets a way back to Bluetooth, since the passphrase goes over Bluetooth only.
+ */
 @Composable
 private fun WifiForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -287,6 +292,7 @@ private fun WifiForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction) 
             onClearScan = { onAction(DeviceConfigAction.ClearWifiScan) },
             onJoin = { onAction(DeviceConfigAction.JoinWifi(it)) },
         )
+        ReconnectOverBluetooth(state, onReconnectBle = { onAction(DeviceConfigAction.ReconnectOverBluetooth) })
     }
 }
 
