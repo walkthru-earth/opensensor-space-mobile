@@ -50,13 +50,7 @@ concern you are changing in `docs/README.md`.
   the sensor reports it off below the Developer level (`LanAutoEnable`). None of
   them browses mDNS or asks for a permission. Reboot, token rotation, forgetting
   bonds and pairing mode `none` require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
-- The clock check and `lan.on` each take a per-link claim (`LinkSession.claimOnce`). A sensor
-  answer keeps it, even a STATUS timeout or an ERROR reply. A cancelled, BUSY or unanswered try
-  calls `release(key)`, so the next run or screen on that link tries again. `SmartSyncPolicy` sends
-  no `SET_TIME` when STATUS timed out on proto 3 or newer, or when the phone clock is before
-  `PHONE_CLOCK_FLOOR_MILLIS`. It keeps any anchor under 6 h old, so two phones never flip-flop the
-  clock, and replaces a network anchor (`clk=3`) only when it is stale and measured within a
-  minute of the phone, since a hand-set phone is the likelier fault.
+- The once-per-link claim and the `SmartSyncPolicy` clock rule are in `core/AGENTS.md`.
 - `:core:*` stays reusable without Android or Hilt. Room lives only in `:core:database`,
   one Room KMP schema on the bundled SQLite driver for both phones. Every other `:core` module
   (`model`, `protocol`, `parquet`, `history`, `publicfeed`, `units`, `archive`,
