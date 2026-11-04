@@ -27,6 +27,7 @@ import space.opensensor.model.BundledCatalog
 import space.opensensor.model.TemplateKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
 class TodayFormatTest {
