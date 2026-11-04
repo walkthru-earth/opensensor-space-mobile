@@ -29,7 +29,8 @@ data class OpenSensorFooter(
     val purpose: String? = null,
     /**
      * `file.rotation_interval_s`, the length of the file's rotation window, one of [ROTATION_WINDOWS_S].
-     * Null when absent or another value, since the window then cannot be placed.
+     * Null when absent, of another kind or another value, since the window then cannot be placed. Such
+     * a value never drops the rest of the footer.
      */
     val rotationIntervalS: Long? = null,
 ) {
@@ -58,7 +59,7 @@ data class OpenSensorFooter(
         /**
          * The footer of a file with Parquet [keyValues], or null when it has none History can trust. A
          * missing [KEY], JSON that is not an object, an unknown major version, a missing `thing.id` or
-         * `thing.mobility`, a malformed digest, a mobility other than `fixed` or `moving` or an interval
+         * `thing.mobility`, a malformed digest, a mobility other than `fixed` or `moving` or a sample interval
          * that is not an integer all mean no footer, the same as a file written without one.
          */
         fun of(keyValues: Map<String, String>): OpenSensorFooter? = keyValues[KEY]?.let(::parse)
@@ -78,10 +79,13 @@ data class OpenSensorFooter(
                 thingId = text(root.member(THING, ID) ?: throw Malformed()),
                 mobility = Mobility.of(text(root.member(THING, MOBILITY) ?: throw Malformed())) ?: throw Malformed(),
                 purpose = root.member(FILE, PURPOSE)?.let(::text),
-                rotationIntervalS = root.member(FILE, ROTATION_INTERVAL_S)?.let { s ->
-                    if (s.isString) throw Malformed()
-                    s.longOrNull ?: throw Malformed()
-                }?.takeIf { it in ROTATION_WINDOWS_S },
+                // A window of the wrong kind is treated like one outside the set. The rest of the
+                // footer survives, so History keeps its digests and the File Item reports the window.
+                rotationIntervalS = (root[FILE] as? JsonObject)?.get(ROTATION_INTERVAL_S)
+                    ?.let { it as? JsonPrimitive }
+                    ?.takeIf { !it.isString }
+                    ?.longOrNull
+                    ?.takeIf { it in ROTATION_WINDOWS_S },
             )
         } catch (_: Malformed) {
             null
