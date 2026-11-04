@@ -404,6 +404,8 @@ class DevicesBridgeTest {
             storage = MemoryStorage(),
             now = { 5 },
             startScan = {},
+            tapScan = {},
+            findScan = {},
             stopScan = {},
             forget = { p, d -> calls.forgotten += p to d },
             collect = { id, wifi -> calls.collected += id to wifi },
