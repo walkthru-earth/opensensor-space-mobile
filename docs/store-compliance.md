@@ -97,10 +97,16 @@ Owner decisions of 2026-10-08 are recorded in
 question was still open, the safest choice is taken. These are product rules, not legal advice.
 Have counsel read the privacy policy before the first public release.
 
-1. **Published cells are capped at H3 resolution 7** (about 5 km²). Play's Data safety guidance
-   treats location finer than about 3 km² as precise. Resolution 8 (about 0.7 km²) could count as
-   precise location, resolution 7 stays approximate on both stores. The owner may pick a coarser
-   cell, never a finer one. `devices-and-discovery.md` applies the same cap.
+1. **Published cells are H3 resolution 8** (owner decision 2026-11-04, about 0.74 km², edge
+   about 460 m). This replaces the earlier resolution 7 cap. Every published Thing, fixed or
+   moving, carries res 8, and no publisher coarsens it. Play's Data safety guidance treats
+   location finer than about 3 km² as precise, so a published res 8 cell is declared as precise
+   location on Play once upload ships. Apple calls location precise from about three decimal
+   places of latitude and longitude (about 100 m). A res 8 cell is coarser than that, so by our
+   reading it stays "Coarse Location" on the App Store. Have counsel confirm both answers before
+   the first upload release. The owner may pick a coarser cell, never a finer one. Each File Item
+   states its own precision in its Anonymized Location fields (`anon:size`, `anon:warning`).
+   `devices-and-discovery.md` privacy rule 2 says the same.
 2. **Feed hosting is source.coop** (owner decision, Radiant Earth partnership on AWS Open Data).
    Requests carry no cookies, no query identifiers and load no third-party scripts. We receive no
    access logs. Confirm in writing with Radiant Earth what source.coop and AWS log for public
@@ -109,15 +115,16 @@ Have counsel read the privacy policy before the first public release.
    App functionality, not linked to the user, no tracking. Never add a tracking domain to the
    privacy manifest.
 3. **Uploads stay opt-in per device, off by default**, with one confirmation that lists what is
-   shared (readings, the resolution 7 cell, the public name) and what never is (exact location,
+   shared (readings, the resolution 8 cell, the public name) and what never is (exact location,
    thing UUID, MAC address, Wi-Fi, PIN, token), and states that published data is released
    under CC BY 4.0 and cannot be withdrawn (owner decision). "Stop sharing" lives in that
    device's settings and stops publication from the next UTC day. Already published data stays
    public. The privacy policy keeps a contact for legal removal requests, since a device's series
    may still be personal data under laws such as the GDPR. Update both store forms in the same
    release.
-   - Play Data safety. Collected and shared, "Approximate location" and "Other app activity or
-     Other" (sensor readings), purpose App functionality, optional, encrypted in transit (HTTPS).
+   - Play Data safety. Collected and shared, "Precise location" (the res 8 cell, rule 1) and
+     "Other app activity or Other" (sensor readings), purpose App functionality, optional,
+     encrypted in transit (HTTPS).
      Answer the deletion question as stated above, with the legal request contact.
    - App Store label. "Coarse Location" and "Other Data", not linked to the user, not used for
      tracking.

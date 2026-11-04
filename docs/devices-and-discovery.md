@@ -488,10 +488,18 @@ treat each public series as personal data until it is aggregated.
    the cell on the map when opting in, optionally starting from an approximate "Near me" fix.
    Coordinates never leave the phone. No jitter is added to
    cells, since snapping already coarsens the place and noise only helps for points.
-2. **Precision.** Resolution 7 (5.16 km², edge about 1.4 km) is the finest published and the
-   one stored for a shared device. Coarser levels are derived from it. Resolution 8 (0.74 km²)
-   is never published, because Play treats location finer than about 3 km² as precise, and
-   resolution 7 keeps both store labels at approximate location.
+2. **Precision (owner decision 2026-11-04).** Every published Thing, fixed or moving, carries
+   H3 resolution 8. This replaces the earlier resolution 7 cap. The board writes its cells at 8
+   and no publisher coarsens them, so a File Item's `grid:code` and the `h3_cell_id` rows of the
+   Parquet file beside it name the same cell. A res 8 cell averages about 0.74 km², with an edge
+   of about 460 m. That is an area, not an address, but it is not anonymous on its own. Where few
+   people live, one cell can hold a single home. The Item says this about itself. Its Anonymized
+   Location fields declare the cell size (`anon:size`, the cell's widest extent in degrees) and
+   that the geometry is a cell, not the device position (`anon:warning`). The owner may set a
+   coarser cell on the device. A finer cell is never published, the phone pulls it to its res 8
+   parent. Play treats location finer than about 3 km² as precise, so the store forms declare a
+   published cell as precise location on Play
+   ([store-compliance.md](store-compliance.md#decisions-for-discover-and-uploads-conservative-defaults-2026-10-08)).
 3. **Crowd rule for every number.** A cell's aggregate and its device list are published only
    when it holds at least three publishing devices. With fewer, the devices count only toward
    the parent. A parent is published only when the devices it holds outside its published
