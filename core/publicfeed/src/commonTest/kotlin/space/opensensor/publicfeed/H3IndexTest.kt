@@ -32,6 +32,25 @@ class H3IndexTest {
     }
 
     @Test
+    fun `a grid without its own cell check answers like the platform binding`() {
+        val bare = object : H3Grid {
+            override fun latLngToCell(lat: Double, lng: Double, res: Int): Long = 0L
+
+            override fun cellToLatLng(cell: Long): LatLng = LatLng(0.0, 0.0)
+
+            override fun cellToBoundary(cell: Long): List<LatLng> = emptyList()
+
+            override fun polygonToCells(ring: List<LatLng>, res: Int): List<Long> = emptyList()
+        }
+        val platform = platformH3Grid()
+        // The last one is res 8 with a digit 9 of 0 where 7 belongs.
+        for (hex in listOf("871f1d489ffffff", "841f1d5ffffffff", "8001fffffffffff", "80f5fffffffffff", "887576970a3ffff")) {
+            val cell = H3Index.fromHex(hex)
+            assertEquals(platform.isValidCell(cell), bare.isValidCell(cell), hex)
+        }
+    }
+
+    @Test
     fun `parent matches h3`() {
         assertEquals(berlin4, H3Index.parent(berlin7, 4))
         assertEquals(berlin7, H3Index.parent(berlin7, 7))
