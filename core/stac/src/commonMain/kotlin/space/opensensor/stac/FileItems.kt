@@ -67,6 +67,9 @@ sealed interface FileItemResult {
      */
     data class WrongResolution(val res: Int) : NoItem
 
+    /** A located row whose `h3_cell_id`, [hex], is not a valid H3 cell, so no polygon can be drawn. */
+    data class InvalidCell(val hex: String) : NoItem
+
     /** A fixed Thing whose rows name more than one cell, which the profile cannot describe. */
     data class FixedThingMoved(val cells: Int) : NoItem
 
@@ -164,9 +167,12 @@ object FileItems {
         val cells = visitedCells(file)
         cells.firstOrNull { H3Index.resolution(it) != publishedRes }?.let { return FileItemResult.WrongResolution(H3Index.resolution(it)) }
         val fixed = mobility == OpenSensorFooter.Mobility.FIXED
+        // A corrupt cell is a reason, not a throw out of the H3 binding.
+        val invalid = if (h3.available) cells.firstOrNull { !h3.isValidCell(it) } else null
         val geometry: Geometry? = when {
             cells.isEmpty() -> if (ITEM_NEEDS_LOCATION) return FileItemResult.NoLocation else null
             !h3.available -> return FileItemResult.NoH3
+            invalid != null -> return FileItemResult.InvalidCell(H3Index.toHex(invalid))
             fixed && cells.size > 1 -> return FileItemResult.FixedThingMoved(cells.size)
             else -> Geometry.of(cells, h3)
         }
@@ -338,7 +344,12 @@ internal class Geometry private constructor(
     }
 
     companion object {
-        /** The geometry of [cells], already sorted and all at one resolution. */
+        /**
+         * The geometry of [cells], already sorted, valid and all at one resolution. The polygons keep
+         * the order H3 returns, as `scripts/canonical.mjs` does. Polygons of equal area may come back
+         * in another order from another H3 build, a known spec issue (stac-opensensor #12, item N1).
+         * A MultiPolygon that differs from the board's only in its order points there, not at the phone.
+         */
         fun of(cells: List<Long>, h3: H3Grid): Geometry =
             Geometry(h3.cellsToMultiPolygon(cells).map { polygon -> polygon.map(::close) })
 

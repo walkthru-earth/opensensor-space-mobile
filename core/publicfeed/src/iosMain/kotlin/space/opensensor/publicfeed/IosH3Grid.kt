@@ -21,12 +21,13 @@ import kotlin.math.PI
 import space.opensensor.publicfeed.h3c.LatLng as CLatLng
 import space.opensensor.publicfeed.h3c.cellToBoundary as cCellToBoundary
 import space.opensensor.publicfeed.h3c.cellToLatLng as cCellToLatLng
+import space.opensensor.publicfeed.h3c.isValidCell as cIsValidCell
 import space.opensensor.publicfeed.h3c.latLngToCell as cLatLngToCell
 import space.opensensor.publicfeed.h3c.polygonToCells as cPolygonToCells
 
 /**
- * H3 through the vendored H3 C library v4.5.0 (`src/nativeInterop/h3c`), bound with cinterop. The
- * same C version `com.uber:h3` 4.5.0 wraps on Android, so both phones agree on every index.
+ * H3 through the vendored H3 C library v4.5.0 (`src/nativeInterop/h3c`), bound with cinterop.
+ * `com.uber:h3` 4.5.1 on Android gives the same indexes and matches its polygons within 1e-9 degrees.
  * The C API works in radians, this interface in degrees.
  */
 @OptIn(ExperimentalForeignApi::class)
@@ -75,6 +76,8 @@ internal object NativeH3Grid : H3Grid {
         check(cPolygonToCells(polygon.ptr, res, 0u, out) == 0u) { "polygonToCells failed" }
         buildList { for (i in 0 until n) if (out[i] != 0uL) add(out[i].toLong()) }
     }
+
+    override fun isValidCell(cell: Long): Boolean = cIsValidCell(cell.toULong()) != 0
 
     override fun cellsToMultiPolygon(cells: Collection<Long>): List<List<List<LatLng>>> {
         if (cells.isEmpty()) return emptyList()

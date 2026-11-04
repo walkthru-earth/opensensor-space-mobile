@@ -29,6 +29,10 @@ interface H3Grid {
      */
     fun cellsToMultiPolygon(cells: Collection<Long>): List<List<List<LatLng>>> =
         throw UnsupportedOperationException("this H3 binding has no cell union")
+
+    /** True when [cell] is a valid H3 cell index, as H3 `isValidCell` decides. */
+    fun isValidCell(cell: Long): Boolean =
+        throw UnsupportedOperationException("this H3 binding has no cell check")
 }
 
 /** The platform H3 binding. */
