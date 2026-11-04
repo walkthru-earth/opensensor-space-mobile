@@ -35,8 +35,10 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 - Each Bluetooth or Wi-Fi link runs the shared `SensorSync.upkeep` once when it is first usable,
   under one COMMAND lease (clock check, then GET_CONFIG and `enableLanOnce`). `BluetoothCompanion`
   starts it from `settle()`, then makes the quiet token fetch when `tokenWanted` (no token stored,
-  read at INFO). A failed quiet fetch (`tokenAutomatic`) closes with the plain `.disconnected`
-  notice, and only the Developer `saveWifiAccess` action shows token errors. A missing credential
+  read at INFO). A quiet fetch (`tokenAutomatic`) that fails in transport, or times out while its
+  GATT write is still in flight, closes the link with the plain `.disconnected` notice. A late
+  reply on an idle GATT queue, an invalid reply or a failed credential save only ends the request,
+  and the link stays. Only the Developer `saveWifiAccess` action shows token errors. A missing credential
   or a lost enrollment ends Wi-Fi with `.lanDisconnected`, and a failed Wi-Fi connect with a
   Bluetooth fallback falls back with that same notice. Nothing here asks the user.
 - The setup wizard reads the link through `iosSetupLink` (`SetupIos.kt`, `SetupIosLinkTest`).

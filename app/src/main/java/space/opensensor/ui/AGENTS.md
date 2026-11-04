@@ -10,7 +10,7 @@ app types or `R.string`.
 - Known devices are devices the owner connected to; a nearby advertisement is
   only a scan result. Forget must stay forgotten until explicit reconnection.
   A confirmed Forget runs in `@ApplicationScope` through `forgetWhenFree`, which waits until the
-  link is not busy and retries a refused forget up to `FORGET_ATTEMPTS` (5). Every try but the last
+  link is not busy and tries the forget `FORGET_ATTEMPTS` (5) times in total. Every try but the last
   is quiet, so the user sees Busy once and leaving Today never drops the forget.
 - Setup retries hide the failure they replaced. `SetupViewModel` keeps that `staleFailure`, and
   `skipStale` drops the same instance (`===`) while `connectsRunning` is above zero or no new
@@ -58,8 +58,8 @@ app types or `R.string`.
   new ones in the audit table in `docs/screens.md`. Debug is reachable only at Developer.
   The clock and Wi-Fi token are automatic, so their surfaces are Developer only (the Today CLOCK
   card, the token line in `AutoSyncCard`, the "no token" tag in device rows, the token sync
-  endings). Below Developer, Today says `today_none_clock` when the clock is missing, and Finalize
-  sits in the Detailed Storage card, shown even before the first STATUS.
+  endings). At every level Today says `today_none_clock` when the clock is missing and no timed
+  reading exists, and Finalize sits in the Detailed Storage card, shown even before the first STATUS.
 - Name components after what they show in general (`MetricHeroCard`, `SignalBars`,
   `MascotGuide`). Read labels, units and bands from the metric registry, not literals.
 - Large screens are a stateful `XRoute` (ViewModel, `CollectEvents`, launchers, permissions,

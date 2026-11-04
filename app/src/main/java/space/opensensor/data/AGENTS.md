@@ -36,7 +36,7 @@ The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads throug
 - The clock check (`synchronizeClockQuietly`, through `synchronizeClockOnce`), the quiet token
   fetch and `enableLanOnce` after GET_CONFIG (skipped at the Developer level, read through the
   injected `DeveloperLevel`) report to diagnostics only. A failed LAN connect falls back to BLE
-  silently. `DeviceMessage` has no clock, LAN fallback or token renewed code. Keep them silent.
+  silently. `DeviceMessage` has no code for the clock, the LAN fallback or a token renewal. Keep them silent.
 - Plaintext LAN tokens stay in the data layer. DAO rows carry ciphertext; only
   `LanCredentialStore` decrypts, when a LAN transport is built.
 - Coroutines: wrap suspend calls in `suspendRunCatching`, never `runCatching`.
