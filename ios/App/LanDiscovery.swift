@@ -137,9 +137,21 @@ final class LanDiscovery {
     }
 
     /// The user browsed the local network once, so iOS has asked for access. Until then nothing
-    /// browses on its own, neither on screen nor in Auto-sync.
+    /// browses on its own, neither on screen nor in Auto-sync. The key only gates that first
+    /// prompt. It never turns Wi-Fi sync itself on or off.
     var browseAllowed: Bool { UserDefaults.standard.bool(forKey: Self.browsedKey) }
     private static let browsedKey = "lanBrowseStarted"
+    private static let browsedMigratedKey = "lanBrowseStartedMigrated"
+
+    /// Once, at the first launch that knows [browsedKey]. An install that already holds Wi-Fi
+    /// access browsed on every scan before the key existed, so it keeps background Wi-Fi sync and
+    /// the automatic Wi-Fi session after the update instead of waiting for a Scan tap.
+    func migrateBrowseFlag() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: Self.browsedMigratedKey) else { return }
+        defaults.set(true, forKey: Self.browsedMigratedKey)
+        if !credentials.list().isEmpty { defaults.set(true, forKey: Self.browsedKey) }
+    }
 
     /// Browses for sensors. Every caller is a user action or follows the first one.
     func scan() {
