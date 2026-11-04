@@ -14,7 +14,7 @@
 #
 # Least privilege. The `apk` job builds and signs with a read-only token and a read-only Gradle
 # cache, then hands dist/ to the `publish` job, the only one allowed to write tags and releases.
-# The release APK is minified by R8, so mapping.txt is required and published for retrace.
+# The release APK is minified by R8, so mapping.txt is required and published gzipped for retrace.
 # Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
 name: release
 
@@ -173,7 +173,13 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk "dist/opensensor-space-${{ steps.meta.outputs.version_name }}-universal.apk"
           # R8 is on for release, so a missing mapping means the build is not what we expect.
-          cp app/build/outputs/mapping/release/mapping.txt "dist/mapping-${{ steps.meta.outputs.version_name }}.txt"
+          # gzip -n leaves out the name and time, so the same mapping gives the same bytes.
+          mapping=app/build/outputs/mapping/release/mapping.txt
+          if [ ! -s "$mapping" ]; then
+            echo "::error::R8 mapping $mapping is missing or empty"
+            exit 1
+          fi
+          gzip -9 -n -c "$mapping" > "dist/mapping-${{ steps.meta.outputs.version_name }}.txt.gz"
           (cd dist && sha256sum -- * > SHA256SUMS.txt)
           ls -l dist
 
@@ -186,7 +192,7 @@ jobs:
             echo
             echo "Signed with the validated project release certificate (SHA-256 \`${{ steps.keystore.outputs.cert_sha256 }}\`)."
             echo "Universal APK for Android 12+ (minSdk 31), including the bundled ZSTD native ABIs."
-            echo "Code is minified by R8. Use the attached mapping file to retrace stack traces."
+            echo "Code is minified by R8. The attached \`mapping-${{ steps.meta.outputs.version_name }}.txt.gz\` is gzipped. Run \`gunzip\` on it, then retrace stack traces with the mapping."
             echo
             if [ "${{ steps.meta.outputs.channel }}" = "rolling" ]; then
               echo "_Rolling build: this release is replaced on every push to \`main\`._"
@@ -270,7 +276,7 @@ jobs:
           files: |
             dist/*.apk
             dist/SHA256SUMS.txt
-            dist/mapping-*.txt
+            dist/mapping-*.txt.gz
           fail_on_unmatched_files: false
           overwrite_files: true
 
@@ -287,7 +293,7 @@ jobs:
               ...context.repo, release_id: Number(process.env.RELEASE_ID), per_page: 100,
             });
             for (const asset of assets) {
-              const generated = /^opensensor-space-.*-universal\.apk$/.test(asset.name) || /^mapping-.*\.txt$/.test(asset.name);
+              const generated = /^opensensor-space-.*-universal\.apk$/.test(asset.name) || /^mapping-.*\.txt(\.gz)?$/.test(asset.name);
               if (generated && !currentFiles.has(asset.name)) {
                 await github.rest.repos.deleteReleaseAsset({ ...context.repo, asset_id: asset.id });
               }
