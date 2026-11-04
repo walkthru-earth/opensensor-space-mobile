@@ -98,7 +98,7 @@ class PublishGateTest {
 
     private val template = checkNotNull(BundledCatalog.template("3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"))
 
-    private fun footer(thing: String) = OpenSensorFooter(sampleIntervalMs = 10_000, thingId = thing, mobility = OpenSensorFooter.Mobility.FIXED, purpose = "telemetry")
+    private fun footer(thing: String) = OpenSensorFooter(sampleIntervalMs = 10_000, thingId = thing, mobility = OpenSensorFooter.Mobility.FIXED, purpose = "telemetry", rotationIntervalS = 900)
 
     /** Six rows 10 s apart from 2026-10-24T13:00:00Z in [cell]. */
     private fun deviceFile(cell: Long): ByteArray {

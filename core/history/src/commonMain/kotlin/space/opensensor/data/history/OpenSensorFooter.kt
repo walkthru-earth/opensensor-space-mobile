@@ -27,6 +27,11 @@ data class OpenSensorFooter(
     val mobility: Mobility? = null,
     /** `file.purpose`, `telemetry` for thing data. */
     val purpose: String? = null,
+    /**
+     * `file.rotation_interval_s`, the length of the file's rotation window, one of [ROTATION_WINDOWS_S].
+     * Null when absent or another value, since the window then cannot be placed.
+     */
+    val rotationIntervalS: Long? = null,
 ) {
     companion object {
         /** The only footer key of the contract. */
@@ -44,6 +49,10 @@ data class OpenSensorFooter(
         private const val PURPOSE = "purpose"
         private const val SHA256 = "sha256"
         private const val SAMPLE_INTERVAL_MS = "sample_interval_ms"
+        private const val ROTATION_INTERVAL_S = "rotation_interval_s"
+
+        /** The rotation windows the stac-opensensor profile allows. Each divides an hour. */
+        val ROTATION_WINDOWS_S: Set<Long> = setOf(600L, 900L, 1800L, 3600L)
         private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
 
         /**
@@ -69,6 +78,10 @@ data class OpenSensorFooter(
                 thingId = text(root.member(THING, ID) ?: throw Malformed()),
                 mobility = Mobility.of(text(root.member(THING, MOBILITY) ?: throw Malformed())) ?: throw Malformed(),
                 purpose = root.member(FILE, PURPOSE)?.let(::text),
+                rotationIntervalS = root.member(FILE, ROTATION_INTERVAL_S)?.let { s ->
+                    if (s.isString) throw Malformed()
+                    s.longOrNull ?: throw Malformed()
+                }?.takeIf { it in ROTATION_WINDOWS_S },
             )
         } catch (_: Malformed) {
             null
