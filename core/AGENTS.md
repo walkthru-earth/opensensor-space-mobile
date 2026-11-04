@@ -48,8 +48,10 @@ file bytes, its `opensensor` footer and its `BoardTemplate`, with no upload, net
 geometry is H3 cells only, `ColumnStatistics` gives each measurement column `statistics` under its
 `valid_when` gate, and `FileItemResult.NoItem` names why a file gets none (no UTC anchor, no located
 row under `FileItems.ITEM_NEEDS_LOCATION`, a fixed Thing in two cells, a cell not at its required
-`publishedRes`). It never coarsens. It follows stac-opensensor v0.1.0 (9943282), and `FileItemSchemaTest`
-proves a rebuilt Item equals the profile's examples. `PublishGate` in `thing/` is its only caller. Once upload exists, the
+`publishedRes`, a name whose `HHMM` is not the rotation window of its first row). It never coarsens. It
+follows the canonical form of stac-opensensor v0.1.0 (83787768cc8451109d48a03d4ef5493ffcd403dd), and `FileItemSchemaTest`
+proves an Item rebuilt from the profile's row fixtures equals its examples. `PublishGate` in `thing/` is its
+only caller. Once upload exists, the
 phone uploads the board's sidecar `.json` together with its `.parquet`.
 `thing/` (`:core:thing`, #219) holds the `ThingKind` contract, its `DataSource` and `PublishPolicy`,
 `OpenSensorBoardKind` (#222) and the `ThingKinds` registry. Each app builds that registry as a plain
