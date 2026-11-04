@@ -34,9 +34,9 @@ and do not use it to identify you. You can turn the public map off in Settings.
 ## Sharing a sensor publicly (optional, off by default)
 
 You can choose to share one sensor's readings on the public map from that sensor's settings. Only
-the readings, the sensor's public name and an area of about 0.74 km² are published. The area is
-a hexagon with sides of about 530 m. Where few people live, an area this small can point to a
-single home. The sensor's exact location, identifiers, Wi-Fi details, PIN and token are never
+the readings, the sensor's public name and one area of a standard map grid, an H3 resolution 8
+cell, are published. A typical cell covers about 0.74 km² with sides of about 530 m. Real cells vary
+a little in size and shape. Where few people live, an area this small can point to a single home. The sensor's exact location, identifiers, Wi-Fi details, PIN and token are never
 published. Published data is released under the Creative Commons Attribution 4.0 licence and
 cannot be withdrawn. You can
 stop sharing at any time from the same place, and nothing is published after the end of that
