@@ -31,8 +31,8 @@ Resolution 0 through 15 is configurable. The menu names each choice by its
 average area (`LocationArea`, km² down to 0.11 km², then m²), and Detailed adds
 the resolution number and the cell index. Lower values disclose a larger area;
 resolution 8, the default for every Thing, fixed or moving, averages about 0.74 km² with an edge
-of about 460 m. Actual cell area varies. Finer values can expose a particular place, and the
-app warns above 8. Raising precision after coarsening cannot recover
+of about 530 m. Only resolution 8 files are published. Actual cell area varies. Finer values
+can expose a particular place, and the app warns above 8. Raising precision after coarsening cannot recover
 the original fix; the app requires a new fix. Firmware applies the maximum again
 before saving and derives the published center from the retained cell. Country
 is declared by the owner, not inferred from the cell or used as NTP residency
