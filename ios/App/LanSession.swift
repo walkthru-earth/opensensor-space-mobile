@@ -11,8 +11,10 @@ enum LanFailure: Error {
     var notice: CompanionNotice {
         switch self {
         case .invalidReply: return .verificationFailed
-        // A missing or refused token is dropped and fetched again over Bluetooth, silently.
-        case .credentialsUnavailable, .enrollmentRequired, .authentication: return .verificationFailed
+        // No token yet is normal. The next Bluetooth connection fetches it quietly, so the session
+        // just closes with no error. A token the sensor refused is a real verification failure.
+        case .credentialsUnavailable, .enrollmentRequired: return .lanDisconnected
+        case .authentication: return .verificationFailed
         case .thingChanged: return .thingChanged
         case .hardwareChanged: return .hardwareChanged
         case .busy: return .busy
