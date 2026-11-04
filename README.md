@@ -98,7 +98,7 @@ separates measured CoreS3 host throughput from pending phone speed checks.
 Android and host gate:
 
 ```sh
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"   # Gradle needs a JDK 25 (docs/build-and-release.md#build-jdk)
 tools/setup-hooks.sh                 # once per clone: git hooks (ktlint, gitleaks, hygiene; verify on push)
 ./gradlew --no-daemon clean verify   # lint + assembleDebug + every module's unit tests
 adb install app/build/outputs/apk/debug/app-debug.apk

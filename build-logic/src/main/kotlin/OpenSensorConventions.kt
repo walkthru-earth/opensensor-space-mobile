@@ -11,8 +11,10 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
  * Settings every shared module agrees on.
  *
  * The JVM bytecode target is 17 (Android's floor for this app). It is set as a compiler target, not
- * with `jvmToolchain(17)`, because the bundled Android Studio JBR and CI provide JDK 21 only and a
- * toolchain would need auto-provisioning (a network download) on every fresh machine.
+ * with `jvmToolchain(17)`, so the build needs one JDK only. Gradle runs on JDK 25, pinned in
+ * `gradle/gradle-daemon-jvm.properties` for Android Studio, the terminal and CI, and compiles 17
+ * bytecode from there. A JDK 17 toolchain would need a second JDK on every machine, or
+ * auto-provisioning (a network download).
  */
 internal object OpenSensorConventions {
     val jvmTarget: JvmTarget = JvmTarget.JVM_17
