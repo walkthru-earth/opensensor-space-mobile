@@ -1756,12 +1756,13 @@ class DeviceLinkOwner @Inject constructor(
 
     /**
      * Forgets [address]. False when another command held the device, or when a newer connect took the
-     * link before the forget reached it, so nothing was deleted and the caller may try again.
+     * link before the forget reached it, so nothing was deleted and the caller may try again. A [quiet]
+     * forget does not report Busy when it is refused, so a caller that retries tells the user once.
      */
-    suspend fun forget(address: String): Boolean = withContext(io) {
+    suspend fun forget(address: String, quiet: Boolean = false): Boolean = withContext(io) {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
         if (!tryBeginForget()) {
-            refuseBusy()
+            if (!quiet) refuseBusy()
             return@withContext false
         }
         try {

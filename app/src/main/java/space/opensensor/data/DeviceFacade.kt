@@ -450,9 +450,9 @@ class DeviceFacade internal constructor(
     suspend fun touchSeen(address: String, name: String?) = linkOwner.touchSeen(address, name)
 
     /** False when the link owner refused the forget because another command held the device. */
-    suspend fun forget(address: String): Boolean {
+    suspend fun forget(address: String, quiet: Boolean = false): Boolean {
         if (this.address == address) disconnectNow()
-        return linkOwner.forget(address)
+        return linkOwner.forget(address, quiet)
     }
 
     private companion object {
