@@ -49,6 +49,15 @@ sealed interface FileItemResult {
     /** A row has no UTC time, so the file is not anchored to the calendar. */
     data object NoUtcAnchor : NoItem
 
+    /** The footer names no rotation window the profile allows, so the file's window cannot be placed. */
+    data object NoRotationWindow : NoItem
+
+    /**
+     * The `HHMM` of the file name, [named], is not the UTC start of the rotation window that holds the
+     * first row, [window]. The board names its files after that window, so the name and the rows disagree.
+     */
+    data class WindowMismatch(val named: String, val window: String) : NoItem
+
     /** No row carries an H3 cell. See [FileItems.ITEM_NEEDS_LOCATION]. */
     data object NoLocation : NoItem
 
@@ -66,8 +75,8 @@ sealed interface FileItemResult {
 }
 
 /**
- * The STAC File Item of a synced device file, as the stac-opensensor v0.1.0 profile (tag v0.1.0,
- * commit 9943282) asks.
+ * The STAC File Item of a synced device file, in the canonical form of the stac-opensensor v0.1.0
+ * profile (tag v0.1.0, commit 83787768cc8451109d48a03d4ef5493ffcd403dd).
  * The board writes this Item as a sidecar beside its file, and the phone is its transport and
  * validator. An Item built here must equal the board's Item as JSON values. Once upload exists, the
  * phone uploads the board's sidecar `.json` together with its `.parquet`.
@@ -109,10 +118,13 @@ object FileItems {
     const val FIXED_WARNING = "The geometry is the H3 cell chosen by the owner, not the device position."
     const val MOVING_WARNING = "The geometry is the H3 cells the device visited, not its track."
 
-    private val DATED_FILE = Regex("^data_\\d{4}_[^/]+\\.parquet$")
+    /** A dated board file, `data_HHMM_<boot>_<first>-<last>-<attempt>.parquet`, the profile's file name. */
+    private val DATED_FILE = Regex("^data_[0-9]{4}_[0-9a-f]{32}_[0-9]+-[0-9]+-[0-9]+\\.parquet$")
     private val UUID = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private const val NS_PER_S = 1_000_000_000L
+    private const val NS_PER_US = 1_000L
     private const val HASH_CHUNK = 64 * 1024
+    private const val DATE_PREFIX = "data_"
 
     /**
      * The Item of the device file [fileName], whose verified bytes [reader] holds, with its parsed
@@ -143,6 +155,11 @@ object FileItems {
         if (times.nullCount > 0) return FileItemResult.NoUtcAnchor
         val startNs = times.values.min()
         val endNs = times.values.max()
+        val rotationS = footer.rotationIntervalS ?: return FileItemResult.NoRotationWindow
+        val windowS = windowStart(startNs, rotationS)
+        val named = fileName.substring(DATE_PREFIX.length, DATE_PREFIX.length + 4)
+        val window = hhmm(windowS)
+        if (named != window) return FileItemResult.WindowMismatch(named, window)
 
         val cells = visitedCells(file)
         cells.firstOrNull { H3Index.resolution(it) != publishedRes }?.let { return FileItemResult.WrongResolution(H3Index.resolution(it)) }
@@ -192,16 +209,32 @@ object FileItems {
                 }
             }
         }
-        return FileItemResult.Item(id, sidecarPath(thing, startNs, id), json.toString())
+        return FileItemResult.Item(id, sidecarPath(thing, windowS, id), json.toString())
+    }
+
+    /**
+     * The UTC start, in seconds, of the rotation window of [rotationS] seconds that holds the row at
+     * [ns], floor(seconds ÷ window) × window as the firmware logger computes it. The file name `HHMM`
+     * and the partition date come from it.
+     */
+    fun windowStart(ns: Long, rotationS: Long): Long {
+        val seconds = ns.floorDiv(NS_PER_S)
+        return seconds - seconds.mod(rotationS)
     }
 
     /** Where the Item of file [id] sits, beside the file: `thing=<uuid>/year=YYYY/month=MM/day=DD/<id>.json`. */
-    fun sidecarPath(thing: String, startNs: Long, id: String): String = "${partition(thing, startNs)}/$id.json"
+    fun sidecarPath(thing: String, windowS: Long, id: String): String = "${partition(thing, windowS)}/$id.json"
 
-    /** The Hive partition of a file whose first row is at [startNs], by its UTC date. */
-    fun partition(thing: String, startNs: Long): String {
-        val (y, m, d) = civil(startNs.floorDiv(NS_PER_S).floorDiv(86_400L))
+    /** The Hive partition of a file whose rotation window starts at [windowS], by the window's UTC date. */
+    fun partition(thing: String, windowS: Long): String {
+        val (y, m, d) = civil(windowS.floorDiv(86_400L))
         return "thing=$thing/year=$y/month=${pad2(m)}/day=${pad2(d)}"
+    }
+
+    /** `HHMM` of the UTC time [seconds], as a board file name carries it. */
+    private fun hhmm(seconds: Long): String {
+        val ofDay = seconds.mod(86_400L)
+        return pad2((ofDay / 3600).toInt()) + pad2((ofDay / 60 % 60).toInt())
     }
 
     /** The distinct H3 cells of the located rows, sorted by their 15 character hex as the profile asks. */
@@ -235,16 +268,19 @@ object FileItems {
         put("type", "application/json")
     }
 
-    /** RFC 3339 UTC, with a fraction only when the instant has one. */
+    /**
+     * RFC 3339 UTC with `Z`. Whole seconds have no fraction, otherwise the microseconds with trailing
+     * zeros removed, as the canonical form asks. Rows carry microseconds, so nothing finer is lost.
+     */
     internal fun rfc3339(ns: Long): String {
         val seconds = ns.floorDiv(NS_PER_S)
-        val nanos = ns.mod(NS_PER_S)
+        val micros = ns.mod(NS_PER_S) / NS_PER_US
         val days = seconds.floorDiv(86_400L)
         val secOfDay = seconds.mod(86_400L)
         val (y, m, d) = civil(days)
         val base = "${y.toString().padStart(4, '0')}-${pad2(m)}-${pad2(d)}T" +
             "${pad2((secOfDay / 3600).toInt())}:${pad2((secOfDay / 60 % 60).toInt())}:${pad2((secOfDay % 60).toInt())}"
-        val fraction = if (nanos == 0L) "" else "." + nanos.toString().padStart(9, '0').trimEnd('0')
+        val fraction = if (micros == 0L) "" else "." + micros.toString().padStart(6, '0').trimEnd('0')
         return "${base}${fraction}Z"
     }
 

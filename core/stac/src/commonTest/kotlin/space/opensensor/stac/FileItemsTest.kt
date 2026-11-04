@@ -106,8 +106,9 @@ class FileItemsTest {
 
     @Test
     fun theFixedGeometryIsTheProfileExampleRing() {
-        // stac-opensensor v0.1.0 (9943282), the fixed example Item. Every writer builds the same ring,
-        // within the 1e-9 degrees its own check allows, because H3 builds differ in the last bits.
+        // The fixed example Item of stac-opensensor v0.1.0 (83787768cc8451109d48a03d4ef5493ffcd403dd).
+        // Every writer builds the same ring, within the 1e-9 degrees its own check allows, because H3
+        // builds differ in the last bits.
         val cell = H3Index.fromHex("887576970bfffff")
         val geometry = json(item(deviceFile(rowsIn(cell)), Mobility.FIXED))["geometry"]!!.jsonObject
         val ring = geometry["coordinates"]!!.jsonArray.single().jsonArray.map { p -> p.jsonArray.map { it.jsonPrimitive.double } }
@@ -119,6 +120,39 @@ class FileItemsTest {
             listOf(-0.19132642369093855, 5.604877563219264),
             listOf(-0.19204467683924653, 5.600970106043236),
             listOf(-0.18879745033151518, 5.597861712437427),
+        )
+        assertEquals(example.size, ring.size)
+        example.zip(ring).forEach { (want, got) ->
+            assertEquals(want[0], got[0], 1e-9)
+            assertEquals(want[1], got[1], 1e-9)
+        }
+    }
+
+    @Test
+    fun theMovingGeometryIsTheProfileExampleUnion() {
+        // The moving example Item of stac-opensensor v0.1.0 (83787768cc8451109d48a03d4ef5493ffcd403dd),
+        // three cells in Cairo visited out of order. H3 C 4.5.0 is the reference, within 1e-9 degrees.
+        val cells = listOf("883e628e67fffff", "883e628e05fffff", "883e628e29fffff").map(H3Index::fromHex)
+        val rows = cells.mapIndexed { i, cell -> Row((HOUR_S + 10L * i) * 1_000_000L, cell) }
+        val geometry = json(item(deviceFile(rows), Mobility.MOVING))["geometry"]!!.jsonObject
+        assertEquals("Polygon", geometry["type"]!!.jsonPrimitive.content)
+        val ring = geometry["coordinates"]!!.jsonArray.single().jsonArray.map { p -> p.jsonArray.map { it.jsonPrimitive.double } }
+        val example = listOf(
+            listOf(31.26070644322702, 30.04162701583852),
+            listOf(31.26324747040906, 30.04634104795571),
+            listOf(31.259829638284863, 30.05063219298801),
+            listOf(31.25387048570393, 30.050209144315733),
+            listOf(31.251329696972434, 30.045494883980734),
+            listOf(31.245370678310426, 30.045071384286565),
+            listOf(31.241951916723245, 30.049362211412824),
+            listOf(31.23599250057747, 30.04893832717151),
+            listOf(31.23345237773389, 30.044223549458206),
+            listOf(31.236871432181157, 30.03993288406646),
+            listOf(31.242830316666684, 30.04035683465431),
+            listOf(31.24624873503418, 30.036066012887776),
+            listOf(31.25220722207681, 30.036489579075116),
+            listOf(31.254747822316556, 30.041203900535017),
+            listOf(31.26070644322702, 30.04162701583852),
         )
         assertEquals(example.size, ring.size)
         example.zip(ring).forEach { (want, got) ->
@@ -231,6 +265,8 @@ class FileItemsTest {
         val bytes = deviceFile(rowsIn(OSU_CELL))
         assertEquals(FileItemResult.NotDatedFile, item(bytes, Mobility.FIXED, name = "data_unsynced_0001_ab_1-2-0.parquet"))
         assertEquals(FileItemResult.NotDatedFile, item(bytes, Mobility.FIXED, name = "day_2026-10-24.parquet"))
+        assertEquals(FileItemResult.NotDatedFile, item(bytes, Mobility.FIXED, name = "data_1300_0F3A9C2E5B7D41E8A6C3F0B2D9E4A713_2881-3240-0.parquet"))
+        assertEquals(FileItemResult.NotDatedFile, item(bytes, Mobility.FIXED, name = "data_1300_0f3a_2881-3240-0.parquet"))
         assertEquals(FileItemResult.NoMobility, item(bytes, null))
         assertEquals(FileItemResult.NoThingId, FileItems.build(FILE_NAME, ByteArrayReader(bytes), null, coreS3Template, PUBLISHED_RES, h3))
         assertEquals(
@@ -287,10 +323,49 @@ class FileItemsTest {
     }
 
     @Test
-    fun timesKeepTheirFractionAndCrossMidnightByTheFirstRow() {
+    fun timesKeepTheirMicrosecondsWithoutTrailingZeros() {
         assertEquals("2026-10-24T13:00:00.25Z", FileItems.rfc3339(HOUR_S * 1_000_000_000L + 250_000_000L))
+        assertEquals("2026-10-24T13:00:00.4123Z", FileItems.rfc3339(HOUR_S * 1_000_000_000L + 412_300_000L))
+        assertEquals("2026-10-24T13:00:00.000001Z", FileItems.rfc3339(HOUR_S * 1_000_000_000L + 1_999L))
+        assertEquals("2026-10-24T13:00:00Z", FileItems.rfc3339(HOUR_S * 1_000_000_000L + 999L))
         assertEquals("1970-01-01T00:00:00Z", FileItems.rfc3339(0))
         assertEquals("2024-02-29T23:59:59Z", FileItems.rfc3339(1_709_251_199L * 1_000_000_000L))
-        assertEquals("thing=$THING/year=2026/month=01/day=05/x.json", FileItems.sidecarPath(THING, 1_767_571_200L * 1_000_000_000L, "x"))
+    }
+
+    @Test
+    fun thePartitionIsTheDateOfTheRotationWindow() {
+        // 13:17:30 falls in the 13:10, 13:15, 13:00 and 13:00 windows of 600, 900, 1800 and 3600 s.
+        val ns = (HOUR_S + 17 * 60 + 30) * 1_000_000_000L
+        assertEquals(HOUR_S + 600, FileItems.windowStart(ns, 600))
+        assertEquals(HOUR_S + 900, FileItems.windowStart(ns, 900))
+        assertEquals(HOUR_S, FileItems.windowStart(ns, 1800))
+        assertEquals(HOUR_S, FileItems.windowStart(ns, 3600))
+        // The window never crosses a day, so 23:59:59 stays on its own date.
+        assertEquals("thing=$THING/year=2026/month=10/day=24/x.json", FileItems.sidecarPath(THING, FileItems.windowStart((HOUR_S + 39_599) * 1_000_000_000L, 3600), "x"))
+        assertEquals("thing=$THING/year=2026/month=01/day=05/x.json", FileItems.sidecarPath(THING, 1_767_571_200L, "x"))
+    }
+
+    @Test
+    fun aFileNamedAfterAnotherWindowGetsNoItem() {
+        // The first row is 13:00:00, so a 900 s board names the file 1300, never 1315.
+        val bytes = deviceFile(rowsIn(OSU_CELL))
+        assertEquals(FileItemResult.WindowMismatch("1315", "1300"), item(bytes, Mobility.FIXED, name = FILE_NAME.replace("_1300_", "_1315_")))
+        val late = deviceFile(rowsIn(OSU_CELL).map { it.copy(utcUs = it.utcUs!! + 16 * 60 * 1_000_000L) })
+        assertEquals(FileItemResult.WindowMismatch("1300", "1315"), item(late, Mobility.FIXED))
+        val booted = deviceFile(rowsIn(OSU_CELL).map { it.copy(utcUs = it.utcUs!! + 7 * 60 * 1_000_000L) })
+        assertIs<FileItemResult.Item>(item(booted, Mobility.FIXED))
+    }
+
+    @Test
+    fun aFooterWithoutARotationWindowGetsNoItem() {
+        val result = FileItems.build(
+            FILE_NAME,
+            ByteArrayReader(deviceFile(rowsIn(OSU_CELL))),
+            footer(Mobility.FIXED).copy(rotationIntervalS = null),
+            coreS3Template,
+            PUBLISHED_RES,
+            h3,
+        )
+        assertEquals(FileItemResult.NoRotationWindow, result)
     }
 }

@@ -24,9 +24,18 @@ class OpenSensorFooterTest {
     @Test
     fun aFullFooterGivesOnlyTheFieldsTheAppReads() {
         assertEquals(
-            OpenSensorFooter(10_000, dict, desc, thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED, purpose = "telemetry"),
+            OpenSensorFooter(10_000, dict, desc, thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED, purpose = "telemetry", rotationIntervalS = 3600),
             parse(opensensorFooterJson(dict, desc, 10_000, thing = "thing-a")),
         )
+    }
+
+    @Test
+    fun theRotationWindowIsOneTheProfileAllows() {
+        fun window(value: String) = parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"file":{"rotation_interval_s":$value}}""")
+        for (s in listOf(600L, 900L, 1800L, 3600L)) assertEquals(s, window("$s")?.rotationIntervalS)
+        assertEquals(null, window("700")?.rotationIntervalS)
+        assertEquals(null, window("0")?.rotationIntervalS)
+        assertEquals(null, window("\"900\""))
     }
 
     @Test
@@ -46,6 +55,7 @@ class OpenSensorFooterTest {
                 thingId = "thing-3f2b9c1e",
                 mobility = OpenSensorFooter.Mobility.FIXED,
                 purpose = "telemetry",
+                rotationIntervalS = 3600,
             ),
             parse(example),
         )

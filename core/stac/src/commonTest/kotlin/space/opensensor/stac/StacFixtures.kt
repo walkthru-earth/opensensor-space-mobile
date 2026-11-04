@@ -36,7 +36,7 @@ const val PUBLISHED_RES = 8
 val OSU_CELL: Long get() = h3.latLngToCell(5.6018, -0.1881, 8)
 
 fun footer(mobility: OpenSensorFooter.Mobility?, thing: String? = THING) =
-    OpenSensorFooter(sampleIntervalMs = 10_000, thingId = thing, mobility = mobility, purpose = "telemetry")
+    OpenSensorFooter(sampleIntervalMs = 10_000, thingId = thing, mobility = mobility, purpose = "telemetry", rotationIntervalS = 900)
 
 /** One fixture row. Null is a missing cell. */
 data class Row(
