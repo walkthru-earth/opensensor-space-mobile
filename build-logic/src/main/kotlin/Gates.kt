@@ -55,7 +55,8 @@ internal fun Project.gateMetadataCompiles() {
  * SDK) and no `opensensor.skipIos=true`, the setting CONTRIBUTING.md gives a Mac without Xcode. The
  * root build script reads it to decide whether `verify` runs `verifyIos`, and module build scripts
  * read it to leave out iOS only work, such as the H3 C library build of `:core:publicfeed`. Checked
- * once per build. A Mac without an iOS SDK and without the setting gets a lifecycle notice.
+ * once per build. A Mac without an iOS SDK and without the setting gets a lifecycle notice while
+ * Gradle configures the build. A run that reuses the configuration cache does not print it again.
  */
 val Project.iosBuildsEnabled: Boolean
     get() {

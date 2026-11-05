@@ -123,7 +123,9 @@ autobuild fails without it. `commonMain` joins `verify`, the iOS only source set
 For the same reason `opensensor.jvm.library` adds `compileKotlin` of the `:tools` modules to `verify`.
 On a Mac with Xcode `verify` runs `verifyIos` too, so the pre-push hook covers iOS. Linux CI skips
 it, and `-Popensensor.skipIos=true` skips it locally. A Mac with only the Command Line Tools has no
-iOS SDK, so it skips `verifyIos` as well and prints a notice that names Xcode and that setting. In
+iOS SDK, so it skips `verifyIos` as well. When Gradle configures the build (the first run, or after
+a build script or setting changes, not a configuration cache reuse) it prints a notice that names
+Xcode and that setting. In
 each of these cases the build also leaves out the H3 C library build and cinterop of
 `:core:publicfeed` and turns off the iOS only metadata compiles, so `verify` needs no iOS SDK
 (`iosBuildsEnabled` in `Gates.kt`). Xcode compiles the Swift app. Signing teams stay in local Xcode settings
