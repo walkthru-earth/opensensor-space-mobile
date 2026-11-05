@@ -133,7 +133,9 @@ jobs:
           # is the outer net for downloads outside that retry, such as the Kotlin toolchain fetch. It
           # reruns only when the failure report names an upstream 5xx or a 429 rate limit (Maven Central
           # sends 429 Too Many Requests), with a growing pause between attempts. Compiler, test and
-          # signing failures still fail at once, with Gradle's own exit code.
+          # signing failures still fail at once, with Gradle's own exit code. The wrapper's own download
+          # of the Gradle distribution retries 3 times from 5 s (gradle-wrapper.properties), since its
+          # failure prints before any failure report and this loop does not see it.
           for attempt in 1 2 3; do
             log="${RUNNER_TEMP}/release-gradle-attempt-${attempt}.log"
             status=0
@@ -143,7 +145,7 @@ jobs:
             fi
             # Only the failure report counts, so a 429 that Gradle already retried past is ignored.
             if [ "$attempt" -eq 3 ] || ! sed -n '/What went wrong:/,$p' "$log" \
-              | grep -Eq 'Received status code (429|5[0-9][0-9]) from server|HTTP response code: (429|5[0-9][0-9])'; then
+              | grep -E 'Received status code (429|5[0-9][0-9]) from server|HTTP response code: (429|5[0-9][0-9])' >/dev/null; then
               exit "$status"
             fi
             echo "::warning::Dependency server returned 5xx or 429; retrying Gradle ($attempt/3)"
