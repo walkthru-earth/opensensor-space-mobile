@@ -19,7 +19,7 @@ flowchart LR
 ```sh
 export JAVA_HOME="/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home"   # a JDK 25, see Build JDK below
 tools/setup-hooks.sh                 # once per clone
-./gradlew --no-daemon clean verify   # the gate; on a Mac it includes verifyIos (needs Xcode)
+./gradlew --no-daemon clean verify   # the gate; on a Mac with Xcode it includes verifyIos
 ./gradlew --no-daemon :app:assembleRelease -Popensensor.localRelease=true   # R8 check, debug key, never publish
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -121,10 +121,12 @@ including the metadata compile of every shared source set. Only that compile che
 its own (an expect class must declare the members it inherits), and `assemble` runs it, so CodeQL
 autobuild fails without it. `commonMain` joins `verify`, the iOS only source sets join `verifyIos`.
 For the same reason `opensensor.jvm.library` adds `compileKotlin` of the `:tools` modules to `verify`.
-On a Mac `verify` runs `verifyIos` too, so the pre-push hook covers iOS. Linux CI skips it, and
-`-Popensensor.skipIos=true` skips it locally. Without Xcode or with that setting the build also leaves
-out the H3 C library build and cinterop of `:core:publicfeed` and turns off the iOS only metadata
-compiles, so `verify` needs no iOS SDK (`iosBuildsEnabled` in `Gates.kt`). Xcode compiles the Swift app. Signing teams stay in local Xcode settings
+On a Mac with Xcode `verify` runs `verifyIos` too, so the pre-push hook covers iOS. Linux CI skips
+it, and `-Popensensor.skipIos=true` skips it locally. A Mac with only the Command Line Tools has no
+iOS SDK, so it skips `verifyIos` as well and prints a notice that names Xcode and that setting. In
+each of these cases the build also leaves out the H3 C library build and cinterop of
+`:core:publicfeed` and turns off the iOS only metadata compiles, so `verify` needs no iOS SDK
+(`iosBuildsEnabled` in `Gates.kt`). Xcode compiles the Swift app. Signing teams stay in local Xcode settings
 or command-line overrides. See [ios.md](ios.md) for commands,
 current feature scope and simulator versus phone qualification.
 

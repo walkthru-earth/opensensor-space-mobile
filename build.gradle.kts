@@ -10,6 +10,8 @@ plugins {
     alias(libs.plugins.compose.multiplatform) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.androidx.room) apply false
+    // Puts build-logic on this script's classpath for `iosBuildsEnabled` below.
+    id("opensensor.kmp.library") apply false
 }
 
 // The gates (AGENTS.md). Only the :app tasks are listed here. Every shared module joins the gates
@@ -19,9 +21,9 @@ val verifyIos = tasks.register("verifyIos") {
     description = "iOS simulator tests of every shared module and the OpenSensorShared framework link"
 }
 
-// On a Mac, `verify` also runs `verifyIos`. Linux CI and `-Popensensor.skipIos=true` skip it.
-val runIos = org.jetbrains.kotlin.konan.target.HostManager.hostIsMac &&
-    providers.gradleProperty("opensensor.skipIos").orNull != "true"
+// On a Mac with Xcode, `verify` also runs `verifyIos`. Linux CI, a Mac with only the Command Line
+// Tools and `-Popensensor.skipIos=true` skip it (`iosBuildsEnabled` in build-logic Gates.kt).
+val runIos = iosBuildsEnabled
 
 tasks.register("verify") {
     group = "verification"

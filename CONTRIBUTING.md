@@ -24,8 +24,9 @@ export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
 ```
 
 On a Mac, `./gradlew verify` and the pre-push hook also run the iOS checks, which need Xcode 27 from
-the App Store. Without Xcode, put `opensensor.skipIos=true` in `~/.gradle/gradle.properties`, which
-skips them for every build, the hook included.
+the App Store. Without Xcode the build skips them and prints a notice each time. Put
+`opensensor.skipIos=true` in `~/.gradle/gradle.properties` to skip them quietly for every build, the
+hook included.
 
 ```sh
 java -version                        # expect 25

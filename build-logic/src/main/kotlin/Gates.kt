@@ -52,9 +52,10 @@ internal fun Project.gateMetadataCompiles() {
 
 /**
  * Whether this build compiles for iOS. It needs a Mac with Xcode (the Command Line Tools ship no iOS
- * SDK) and no `opensensor.skipIos=true`, the setting CONTRIBUTING.md gives a Mac without Xcode. Build
- * scripts read it to leave out iOS only work, such as the H3 C library build of `:core:publicfeed`.
- * Checked once per build.
+ * SDK) and no `opensensor.skipIos=true`, the setting CONTRIBUTING.md gives a Mac without Xcode. The
+ * root build script reads it to decide whether `verify` runs `verifyIos`, and module build scripts
+ * read it to leave out iOS only work, such as the H3 C library build of `:core:publicfeed`. Checked
+ * once per build. A Mac without an iOS SDK and without the setting gets a lifecycle notice.
  */
 val Project.iosBuildsEnabled: Boolean
     get() {
@@ -69,8 +70,16 @@ private fun Project.detectIosBuilds(): Boolean {
     if (!HostManager.hostIsMac) return false
     if (providers.gradleProperty("opensensor.skipIos").orNull == "true") return false
     // xcrun exits non zero when the active developer directory has no iOS SDK.
-    return providers.exec {
+    val hasSdk = providers.exec {
         commandLine("xcrun", "--sdk", "iphoneos", "--show-sdk-path")
         isIgnoreExitValue = true
     }.result.get().exitValue == 0
+    if (!hasSdk) {
+        logger.lifecycle(
+            "No iOS SDK found (xcrun --sdk iphoneos), so this build skips verifyIos and the iOS only " +
+                "builds. Install Xcode and select it with xcode-select to build for iOS, or set " +
+                "opensensor.skipIos=true to skip iOS without this notice.",
+        )
+    }
+    return hasSdk
 }
