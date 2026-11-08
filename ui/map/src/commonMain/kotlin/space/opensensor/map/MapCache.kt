@@ -1,4 +1,4 @@
-package space.opensensor.discover
+package space.opensensor.map
 
 import kotlinx.coroutines.flow.first
 import kotlinx.io.files.Path

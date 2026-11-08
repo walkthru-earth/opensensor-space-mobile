@@ -124,7 +124,7 @@ object CellGeoJson {
         sb.append("{\"type\":\"FeatureCollection\",\"features\":[")
         var first = true
         for (row in rows) {
-            val ring = unwrap(h3.cellToBoundary(row.h3))
+            val ring = ring(h3, row.h3)
             if (ring.isEmpty()) continue
             if (!first) sb.append(',')
             first = false
@@ -136,15 +136,28 @@ object CellGeoJson {
             sb.append(",\"stale\":").append(staleAt(row))
             val color = value?.let { scale?.color(it) }
             if (color != null) sb.append(",\"color\":\"").append(SequentialRamp.hex(color)).append('"')
-            sb.append("},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[")
-            for ((i, p) in (ring + ring.first()).withIndex()) {
-                if (i > 0) sb.append(',')
-                sb.append('[').append(coord(p.lng)).append(',').append(coord(p.lat)).append(']')
-            }
-            sb.append("]]}}")
+            sb.append("},\"geometry\":")
+            appendPolygon(sb, ring)
+            sb.append('}')
         }
         sb.append("]}")
         return sb.toString()
+    }
+
+    /**
+     * The boundary of [cell], kept continuous across the antimeridian. Empty when [h3] gives none.
+     * The plain cell outlines of `:ui:map` draw the same rings as this source.
+     */
+    fun ring(h3: H3Grid, cell: Long): List<LatLng> = unwrap(h3.cellToBoundary(cell))
+
+    /** Appends [ring] as a closed GeoJSON Polygon geometry, coordinates rounded to 6 decimals. */
+    fun appendPolygon(sb: StringBuilder, ring: List<LatLng>) {
+        sb.append("{\"type\":\"Polygon\",\"coordinates\":[[")
+        for ((i, p) in (ring + ring.first()).withIndex()) {
+            if (i > 0) sb.append(',')
+            sb.append('[').append(coord(p.lng)).append(',').append(coord(p.lat)).append(']')
+        }
+        sb.append("]]}")
     }
 
     /** Keeps a ring that crosses the antimeridian continuous, so it is not drawn across the world. */

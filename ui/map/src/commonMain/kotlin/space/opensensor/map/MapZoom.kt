@@ -1,4 +1,4 @@
-package space.opensensor.discover
+package space.opensensor.map
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -20,23 +20,29 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 import org.maplibre.compose.camera.CameraUpdate
 import org.maplibre.compose.map.MapState
 import org.maplibre.spatialk.geojson.Position
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.FloatingSurface
 import space.opensensor.designsystem.LocalReduceMotion
+import space.opensensor.map.resources.Res
+import space.opensensor.map.resources.map_zoom_in
+import space.opensensor.map.resources.map_zoom_out
 
-// Basemap tiles run from zoom 0 to about 16. Past that the H3 cells are all the map shows. The map
-// holds pinch to the same range (DiscoverMap), so pinch and the buttons agree.
-internal const val MIN_ZOOM = 1.0
-internal const val MAX_ZOOM = 16.0
+/** The zoom range of every map, for pinch ([BaseMap]) and the buttons ([ZoomControls]) alike. */
+object MapZoom {
+    // Basemap tiles run from zoom 0 to about 16. Past that the H3 cells are all the map shows.
+    const val MIN = 1.0
+    const val MAX = 16.0
 
-/**
- * The zoom a button press lands on, one step from [zoom] toward the basemap's range and never past
- * it. A camera already outside the range, from an older saved view, only moves the way pressed.
- */
-internal fun steppedZoom(zoom: Double, step: Int): Double = (zoom + step).coerceIn(minOf(zoom, MIN_ZOOM), maxOf(zoom, MAX_ZOOM))
+    /**
+     * The zoom a button press lands on, one step from [zoom] toward the basemap's range and never
+     * past it. A camera already outside the range, from an older saved view, only moves the way pressed.
+     */
+    fun stepped(zoom: Double, step: Int): Double = (zoom + step).coerceIn(minOf(zoom, MIN), maxOf(zoom, MAX))
+}
 
 /**
  * The zoom each button press aims at. A press while the camera still eases toward an earlier press
@@ -51,7 +57,7 @@ internal class ZoomSteps {
     data class Step(val target: Double, val token: Int)
 
     fun next(current: Double, step: Int): Step {
-        val target = steppedZoom(pending ?: current, step)
+        val target = MapZoom.stepped(pending ?: current, step)
         pending = target
         latest += 1
         return Step(target, latest)
@@ -67,7 +73,7 @@ internal class ZoomSteps {
  * Moves the camera to [center] (kept when null) at [zoom] (kept when null). With reduce motion on it
  * snaps there, otherwise it eases. A map that is not ready yet keeps its view.
  */
-internal suspend fun MapState.moveCamera(center: Position? = null, zoom: Double? = null, reduceMotion: Boolean) {
+suspend fun MapState.moveCamera(center: Position? = null, zoom: Double? = null, reduceMotion: Boolean) {
     catchingNonCancel {
         if (reduceMotion) {
             val now = cameraPosition
@@ -83,7 +89,7 @@ internal suspend fun MapState.moveCamera(center: Position? = null, zoom: Double?
  * full touch target with its own spoken name.
  */
 @Composable
-internal fun ZoomControls(mapState: MapState, zoomIn: String, zoomOut: String, modifier: Modifier = Modifier) {
+fun ZoomControls(mapState: MapState, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val reduce = LocalReduceMotion.current
     val steps = remember { ZoomSteps() }
@@ -97,17 +103,17 @@ internal fun ZoomControls(mapState: MapState, zoomIn: String, zoomOut: String, m
             }
         }
     }
-    ZoomPair(zoomIn, zoomOut, onZoomIn = { zoomBy(1) }, onZoomOut = { zoomBy(-1) }, modifier = modifier)
+    ZoomPair(onZoomIn = { zoomBy(1) }, onZoomOut = { zoomBy(-1) }, modifier = modifier)
 }
 
 /** The two buttons alone, apart from any map, so they render in tests. */
 @Composable
-internal fun ZoomPair(zoomIn: String, zoomOut: String, onZoomIn: () -> Unit, onZoomOut: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ZoomPair(onZoomIn: () -> Unit, onZoomOut: () -> Unit, modifier: Modifier = Modifier) {
     FloatingSurface(modifier.semantics { isTraversalGroup = true }) {
         Column(Modifier.width(FloatingControl.Size)) {
-            ZoomHalf(zoomIn, DiscoverIcons.Add, onZoomIn)
+            ZoomHalf(stringResource(Res.string.map_zoom_in), MapIcons.Add, onZoomIn)
             HorizontalDivider(Modifier.padding(horizontal = FloatingControl.Inset * 2), color = MaterialTheme.colorScheme.outlineVariant)
-            ZoomHalf(zoomOut, DiscoverIcons.Remove, onZoomOut)
+            ZoomHalf(stringResource(Res.string.map_zoom_out), MapIcons.Remove, onZoomOut)
         }
     }
 }

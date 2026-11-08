@@ -1,4 +1,4 @@
-package space.opensensor.discover
+package space.opensensor.map
 
 import space.opensensor.publicfeed.H3Grid
 import space.opensensor.publicfeed.LatLng

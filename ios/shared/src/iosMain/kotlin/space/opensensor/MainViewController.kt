@@ -4,7 +4,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
 import kotlinx.coroutines.runBlocking
 import platform.UIKit.UIViewController
-import space.opensensor.discover.MapCache
+import space.opensensor.map.MapCache
 import space.opensensor.settings.AppPrefs
 
 /**

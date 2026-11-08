@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Arabic map control copy for Android and iOS, same keys as values/strings.xml. Machine drafted,
+  needs a native speaker's review before release. Copy rules (docs/screens.md, CopyLintTest). No em
+  or en dashes, no colons or semicolons, Arabic semicolon included.
+-->
+<resources>
+    <!-- The zoom buttons, spoken only. -->
+    <string name="map_zoom_in">تكبير</string>
+    <string name="map_zoom_out">تصغير</string>
+    <!-- The Near me button, spoken only, and its miss, shown and announced. -->
+    <string name="map_near_me">بالقرب مني</string>
+    <string name="map_near_me_none">تعذّر تحديد الموقع</string>
+    <!-- Near me's location dialogs. The rationale shows only when Android says it is due. -->
+    <string name="map_near_me_access_title">السماح بالموقع التقريبي</string>
+    <string name="map_near_me_access_body">ميزة بالقرب مني تحرّك الخريطة إلى منطقتك. يبقى موقعك على هذا الهاتف.</string>
+    <string name="map_near_me_settings_title">الموقع متوقف</string>
+    <string name="map_near_me_settings_body">فعّل الموقع لتطبيق opensensor.space في إعدادات هاتفك لاستخدام بالقرب مني.</string>
+    <string name="map_access_continue">متابعة</string>
+    <string name="map_access_not_now">ليس الآن</string>
+    <string name="map_access_open_settings">فتح الإعدادات</string>
+    <string name="map_access_cancel">إلغاء</string>
+</resources>

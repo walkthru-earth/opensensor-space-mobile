@@ -16,16 +16,6 @@ internal expect fun nowEpochMillis(): Long
 /** The bundled sample feed, read from this module's Compose resources. */
 fun bundledSampleFeed(): PublicFeed = BundledSampleFeed { path -> Res.readBytes(path) }
 
-/** The basemap style, light or dark, bundled as a Compose resource (tools/discover-fixture). */
-internal suspend fun basemapStyle(dark: Boolean): String {
-    val flavour = if (dark) "dark" else "light"
-    return Res.readBytes("files/basemap/$flavour.json").decodeToString()
-}
-
-/** A style with no network sources, for when public data is off or before the style loads. */
-internal fun paperStyle(color: String): String =
-    "{\"version\":8,\"sources\":{},\"layers\":[{\"id\":\"paper\",\"type\":\"background\",\"paint\":{\"background-color\":\"$color\"}}]}"
-
 /**
  * A value at the property's precision from the dictionary (1 → "14", 0.5 → "21.5"). Without a
  * precision, one decimal. Common code has no `String.format`. Under [units] a convertible unit is

@@ -34,6 +34,7 @@ val copyAuditInputs = rootProject.fileTree(rootProject.projectDir) {
         "ios/shared/src/commonMain/kotlin/**/*.kt",
         "ios/shared/src/iosMain/kotlin/**/*.kt",
         "ui/designsystem/src/commonMain/kotlin/**/*.kt",
+        "ui/map/src/commonMain/kotlin/**/*.kt",
         "ui/permissions/src/commonMain/kotlin/**/*.kt",
         "app/src/main/res/xml/locales_config.xml",
         "app/src/main/AndroidManifest.xml",

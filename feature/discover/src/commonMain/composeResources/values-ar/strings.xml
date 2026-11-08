@@ -38,16 +38,6 @@
     <string name="discover_no_places">لا توجد أماكن مطابقة</string>
     <string name="discover_clear_search">مسح البحث</string>
     <string name="discover_updated_recently">حُدّثت خلال الساعة</string>
-    <string name="discover_near_me">بالقرب مني</string>
-    <!-- Near me's location dialogs. The rationale shows only when Android says it is due. -->
-    <string name="discover_near_me_access_title">السماح بالموقع التقريبي</string>
-    <string name="discover_near_me_access_body">ميزة بالقرب مني تحرّك الخريطة إلى منطقتك. يبقى موقعك على هذا الهاتف.</string>
-    <string name="discover_near_me_settings_title">الموقع متوقف</string>
-    <string name="discover_near_me_settings_body">فعّل الموقع لتطبيق opensensor.space في إعدادات هاتفك لاستخدام بالقرب مني.</string>
-    <string name="discover_access_continue">متابعة</string>
-    <string name="discover_access_not_now">ليس الآن</string>
-    <string name="discover_access_open_settings">فتح الإعدادات</string>
-    <string name="discover_access_cancel">إلغاء</string>
     <string name="discover_window_short_hour">1 س</string>
     <string name="discover_window_short_day">24 س</string>
     <string name="discover_window_short_week">7 أيام</string>
@@ -161,12 +151,9 @@
     <string name="discover_property_no2">NO2</string>
     <string name="discover_category_air">الهواء</string>
     <string name="discover_category_weather">الطقس</string>
-    <string name="discover_zoom_in">تكبير</string>
-    <string name="discover_zoom_out">تصغير</string>
     <string name="discover_sheet_expand">عرض المزيد</string>
     <string name="discover_sheet_collapse">عرض أقل</string>
     <string name="discover_clear_filter">إلغاء التصفية</string>
-    <string name="discover_near_me_none">تعذّر تحديد الموقع</string>
     <string name="discover_own_heading">مستشعراتك</string>
     <string name="discover_own_unnamed">مستشعر</string>
     <string name="discover_own_show">عرض %1$s على الخريطة</string>

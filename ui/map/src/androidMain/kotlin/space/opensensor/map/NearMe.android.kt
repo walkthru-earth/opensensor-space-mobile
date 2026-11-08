@@ -1,4 +1,4 @@
-package space.opensensor.discover
+package space.opensensor.map
 
 import android.Manifest
 import android.content.Context

@@ -43,7 +43,7 @@ import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.ListCursors
 import space.opensensor.data.sync.ThingPlaces
 import space.opensensor.data.sync.ThingSources
-import space.opensensor.discover.MapCache
+import space.opensensor.map.MapCache
 import space.opensensor.net.BlockCache
 import space.opensensor.net.DiskBlockStore
 import space.opensensor.settings.OldFilesPlan

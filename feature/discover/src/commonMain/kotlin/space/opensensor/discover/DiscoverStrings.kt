@@ -8,10 +8,6 @@ import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.preferredLanguage
 import space.opensensor.discover.resources.Res
-import space.opensensor.discover.resources.discover_access_cancel
-import space.opensensor.discover.resources.discover_access_continue
-import space.opensensor.discover.resources.discover_access_not_now
-import space.opensensor.discover.resources.discover_access_open_settings
 import space.opensensor.discover.resources.discover_add_sensor
 import space.opensensor.discover.resources.discover_all_measurements
 import space.opensensor.discover.resources.discover_area_count
@@ -39,12 +35,6 @@ import space.opensensor.discover.resources.discover_mood_info1
 import space.opensensor.discover.resources.discover_mood_info2
 import space.opensensor.discover.resources.discover_mood_info_title
 import space.opensensor.discover.resources.discover_more
-import space.opensensor.discover.resources.discover_near_me
-import space.opensensor.discover.resources.discover_near_me_access_body
-import space.opensensor.discover.resources.discover_near_me_access_title
-import space.opensensor.discover.resources.discover_near_me_none
-import space.opensensor.discover.resources.discover_near_me_settings_body
-import space.opensensor.discover.resources.discover_near_me_settings_title
 import space.opensensor.discover.resources.discover_no_areas
 import space.opensensor.discover.resources.discover_no_health_scale
 import space.opensensor.discover.resources.discover_no_places
@@ -101,9 +91,6 @@ import space.opensensor.discover.resources.discover_window_short_day
 import space.opensensor.discover.resources.discover_window_short_hour
 import space.opensensor.discover.resources.discover_window_short_latest_day
 import space.opensensor.discover.resources.discover_window_short_week
-import space.opensensor.discover.resources.discover_zoom_in
-import space.opensensor.discover.resources.discover_zoom_out
-import space.opensensor.permissions.AccessDialogTexts
 import space.opensensor.publicfeed.StepScale
 
 /**
@@ -147,13 +134,6 @@ class DiscoverStrings internal constructor(
     val noPlaces: String,
     val clearSearch: String,
     val updatedRecently: String,
-    /** The map button that centres on approximate location, spoken only. */
-    val nearMe: String,
-    /**
-     * Near me's approximate location dialogs. The rationale shows only when Android says it is due,
-     * the settings dialog only after the system stops asking. iOS never shows the rationale.
-     */
-    val nearMeAccess: AccessDialogTexts,
     /** Short labels beside the time slider stops. The full window names are spoken. */
     val windowShortHour: String,
     val windowShortDay: String,
@@ -203,16 +183,11 @@ class DiscoverStrings internal constructor(
     val loadFailed: String,
     /** Short month names, January first, for [dayMonth]. */
     val monthsShort: List<String>,
-    /** The map's zoom buttons, spoken only. */
-    val zoomIn: String,
-    val zoomOut: String,
     /** The sheet handle, spoken only. It says what a tap does next. */
     val sheetExpand: String,
     val sheetCollapse: String,
     /** Lets go of a pinned chart bar. */
     val clearFilter: String,
-    /** Near me found no fix in time. Announced, the map stays where it is. */
-    val nearMeNone: String,
     /** The sheet's list of the user's own fixed Things, the list alternative to their map pins. */
     val ownHeading: String,
     /** An own Thing with no name. */
@@ -294,12 +269,9 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     realInfo = InfoText(stringResource(Res.string.discover_real_title), listOf(stringResource(Res.string.discover_real_info))),
     loadFailed = stringResource(Res.string.discover_load_failed),
     monthsShort = stringArrayResource(Res.array.discover_months_short),
-    zoomIn = stringResource(Res.string.discover_zoom_in),
-    zoomOut = stringResource(Res.string.discover_zoom_out),
     sheetExpand = stringResource(Res.string.discover_sheet_expand),
     sheetCollapse = stringResource(Res.string.discover_sheet_collapse),
     clearFilter = stringResource(Res.string.discover_clear_filter),
-    nearMeNone = stringResource(Res.string.discover_near_me_none),
     ownHeading = stringResource(Res.string.discover_own_heading),
     ownUnnamed = stringResource(Res.string.discover_own_unnamed),
     searchPlaces = stringResource(Res.string.discover_search_places),
@@ -340,18 +312,6 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     noPlaces = stringResource(Res.string.discover_no_places),
     clearSearch = stringResource(Res.string.discover_clear_search),
     updatedRecently = stringResource(Res.string.discover_updated_recently),
-    nearMe = stringResource(Res.string.discover_near_me),
-    nearMeAccess = AccessDialogTexts(
-        rationaleTitle = stringResource(Res.string.discover_near_me_access_title),
-        rationaleBody = stringResource(Res.string.discover_near_me_access_body),
-        settingsTitle = stringResource(Res.string.discover_near_me_settings_title),
-        settingsBody = stringResource(Res.string.discover_near_me_settings_body),
-        continueLabel = stringResource(Res.string.discover_access_continue),
-        notNow = stringResource(Res.string.discover_access_not_now),
-        openSettings = stringResource(Res.string.discover_access_open_settings),
-        cancel = stringResource(Res.string.discover_access_cancel),
-        icon = DiscoverIcons.MyLocation,
-    ),
     windowShortHour = stringResource(Res.string.discover_window_short_hour),
     windowShortDay = stringResource(Res.string.discover_window_short_day),
     windowShortWeek = stringResource(Res.string.discover_window_short_week),

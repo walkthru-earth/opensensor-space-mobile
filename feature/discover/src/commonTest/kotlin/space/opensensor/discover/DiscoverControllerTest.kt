@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.WhoStep
+import space.opensensor.map.CameraRest
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.CellStat
 import space.opensensor.publicfeed.CellsFileInfo

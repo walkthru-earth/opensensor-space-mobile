@@ -1,7 +1,7 @@
 // The Discover map (docs/devices-and-discovery.md Part 2). Shared Compose in `commonMain` for the
-// Android app and the iOS framework. It targets Android directly (not the JVM like :core:*),
-// because maplibre-compose ships a separate Android artifact and its desktop JVM variant needs
-// Java 25. The bundled sample feed is a Compose resource (tools/discover-fixture).
+// Android app and the iOS framework. The map itself, its styles, zoom, tile cache and Near me come
+// from :ui:map. Discover draws the public cells, own pins and legend on it. The bundled sample feed
+// is a Compose resource (tools/discover-fixture).
 // opensensor.kmp.compose-feature sets the Android and iOS targets, Compose and the resources package.
 plugins {
     id("opensensor.kmp.compose-feature")
@@ -20,25 +20,18 @@ kotlin {
             // DiscoverScreen takes the host's DetailLevel (Simple speaks in moods).
             api(project(":core:settings"))
             api(project(":ui:designsystem"))
-            // Near me follows the shared permission policy and its settings link.
-            api(project(":ui:permissions"))
+            // The shared map, its camera rest, zoom controls and Near me.
+            api(project(":ui:map"))
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.maplibre.compose)
             // Back first returns an open sheet to peek, on both apps (NavigationBackHandler).
             implementation(libs.jetbrains.navigationevent.compose)
-        }
-        androidMain.dependencies {
-            // One render backend for Android. OpenGL first, Vulkan after a phone check.
-            runtimeOnly(libs.maplibre.compose.runtime.opengl.android)
-            // The "Near me" coarse location prompt (NearMe.android.kt).
-            implementation(libs.androidx.activity.compose)
         }
         commonTest.dependencies {
             // DiscoverControllerTest drives the controller on a test scheduler.
             implementation(libs.kotlinx.coroutines.test)
         }
         iosTest.dependencies {
-            // The map controls semantics tests render on the iOS simulator.
+            // The window slider and sheet semantics tests render on the iOS simulator.
             implementation(libs.compose.ui.test)
         }
     }

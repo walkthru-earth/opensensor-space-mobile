@@ -1,4 +1,4 @@
-// Writes the Discover basemap styles (light and dark) from @protomaps/basemaps 5.7.2.
+// Writes the basemap styles of the shared map, :ui:map (light and dark), from @protomaps/basemaps 5.7.2.
 //
 //   mkdir -p /tmp/pm && cd /tmp/pm && npm install @protomaps/basemaps@5.7.2
 //   node <repo>/tools/discover-fixture/make_basemap_style.mjs /tmp/pm/node_modules/@protomaps/basemaps
@@ -18,7 +18,7 @@ if (!pkg) throw new Error("pass the path of node_modules/@protomaps/basemaps");
 const { layers, namedFlavor } = await import(pathToFileURL(join(resolve(pkg), "dist/esm/index.js")).href);
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const out = join(repo, "feature/discover/src/commonMain/composeResources/files/basemap");
+const out = join(repo, "ui/map/src/commonMain/composeResources/files/basemap");
 mkdirSync(out, { recursive: true });
 
 const TILES = "pmtiles://https://data.source.coop/protomaps/openstreetmap/v4.pmtiles";

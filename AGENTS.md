@@ -12,7 +12,7 @@ concern you are changing in `docs/README.md`.
 | --- | --- | --- |
 | Current status and real-phone evidence | `docs/status.md`, then `../opensensor-space-firmware/docs/boards/*/bench-verified.md` | None |
 | Cross-platform design and sync rules | `docs/cross-platform-guide.md` | `core/`, `app/`, `ios/` |
-| Device families, sensor-agnostic model, public H3 discover map | `docs/devices-and-discovery.md` | `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/` |
+| Device families, sensor-agnostic model, public H3 discover map | `docs/devices-and-discovery.md` | `core/publicfeed/`, `ui/map/`, `feature/discover/`, `tools/discover-fixture/` |
 | iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios.md`, `ios/AGENTS.md` | `core/`, `ios/` |
 | App layers and dependencies | `docs/architecture.md`, `core/AGENTS.md` | `core/`, `app/` |
 | BLE, LAN, sync, pairing, background work | `docs/transports.md`, `docs/sync-engine.md`, `docs/background-sync.md`, `app/src/main/java/space/opensensor/data/AGENTS.md` | `data/` |
@@ -56,7 +56,7 @@ concern you are changing in `docs/README.md`.
   (`model`, `protocol`, `parquet`, `history`, `publicfeed`, `units`, `archive`,
   `storage`, `net`, `sync`, `settings`, `stac`, `thing`, `thing:testkit`) compiles for JVM and iOS from `commonMain`.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
-  H3). Every `:feature:*` module and `:ui:designsystem`, `:ui:permissions` and `:ui:strings`
+  H3). Every `:feature:*` module and `:ui:designsystem`, `:ui:map`, `:ui:permissions` and `:ui:strings`
   are Compose for Android and iOS (`opensensor.kmp.compose-feature`). A sensor family (`:family:air`) holds its own science and plugs in through
   `DerivedMetricProvider`. No `:core` source names PM, WHO, EPA, Plantower or the moods, and
   `CoreStaysAirFreeTest` fails the gate if one does.
