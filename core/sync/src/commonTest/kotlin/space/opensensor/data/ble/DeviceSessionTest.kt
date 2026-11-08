@@ -539,7 +539,9 @@ class DeviceSessionTest {
     @Test
     fun aPhoneClockBeforeTheBuildFloorNeverSetsTime() = runTest {
         val p = peer()
-        val request = async { p.view().synchronizeClockIfNeeded { SmartSyncPolicy.PHONE_CLOCK_FLOOR_MILLIS - 1 } }
+        // A day early, not a millisecond. The policy judges the request midpoint, which adds the real
+        // monotonic time STATUS took, and a slow simulator would carry FLOOR - 1 past the floor.
+        val request = async { p.view().synchronizeClockIfNeeded { SmartSyncPolicy.PHONE_CLOCK_FLOOR_MILLIS - 86_400_000L } }
         runCurrent()
         p.transport.statusNotifications.emit("{\"utc\":0}".encodeToByteArray())
         assertNull(request.await())
