@@ -58,14 +58,4 @@ class MapControlsTest {
             }
         }
     }
-
-    @Test
-    fun ghanaCitiesAreFoundByName() {
-        for (city in listOf("Kumasi", "Tema", "Tamale", "Takoradi", "Cape Coast")) {
-            val hit = Places.search(city).firstOrNull()
-            assertEquals(city, hit?.name, "search for $city")
-            assertEquals("Ghana", hit?.country)
-        }
-        assertEquals("Kumasi", Places.search("كوماسي").firstOrNull()?.name)
-    }
 }

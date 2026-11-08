@@ -26,6 +26,7 @@ import space.opensensor.discover.resources.discover_load_failed
 import space.opensensor.discover.resources.discover_loading
 import space.opensensor.discover.resources.discover_map_info1
 import space.opensensor.discover.resources.discover_map_info2
+import space.opensensor.discover.resources.discover_map_info3
 import space.opensensor.discover.resources.discover_map_label
 import space.opensensor.discover.resources.discover_map_title
 import space.opensensor.discover.resources.discover_max
@@ -294,7 +295,11 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     osm = stringResource(Res.string.discover_osm),
     mapInfo = InfoText(
         stringResource(Res.string.discover_map_title),
-        listOf(stringResource(Res.string.discover_map_info1), stringResource(Res.string.discover_map_info2)),
+        listOf(
+            stringResource(Res.string.discover_map_info1),
+            stringResource(Res.string.discover_map_info2),
+            stringResource(Res.string.discover_map_info3),
+        ),
     ),
     noAreas = stringResource(Res.string.discover_no_areas),
     notMeasured = stringResource(Res.string.discover_not_measured),

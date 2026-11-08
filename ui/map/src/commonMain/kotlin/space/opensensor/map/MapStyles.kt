@@ -3,6 +3,7 @@ package space.opensensor.map
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.Color
@@ -42,3 +43,9 @@ fun rememberMapStyle(networkAllowed: Boolean, paper: Color = MaterialTheme.color
     }
     return style
 }
+
+/**
+ * The Settings switch for public data, which also allows the basemap. Each app provides it at its
+ * root. Off by default, so a map that is not told stays offline on the paper style.
+ */
+val LocalMapNetwork = compositionLocalOf { false }

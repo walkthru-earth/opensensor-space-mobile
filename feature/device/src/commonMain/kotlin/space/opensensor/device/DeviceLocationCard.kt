@@ -1,10 +1,18 @@
 package space.opensensor.device
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -13,18 +21,25 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.compose.resources.stringResource
+import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BrandCard
 import space.opensensor.designsystem.CardHeader
+import space.opensensor.designsystem.FitText
+import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.PillButton
 import space.opensensor.device.resources.Res
@@ -32,7 +47,6 @@ import space.opensensor.device.resources.action_cancel
 import space.opensensor.device.resources.location_area_detail
 import space.opensensor.device.resources.location_area_km2
 import space.opensensor.device.resources.location_area_m2
-import space.opensensor.device.resources.location_area_size
 import space.opensensor.device.resources.location_clear
 import space.opensensor.device.resources.location_configure
 import space.opensensor.device.resources.location_country
@@ -56,6 +70,9 @@ import space.opensensor.device.resources.location_title
 import space.opensensor.device.resources.location_unset
 import space.opensensor.device.resources.location_unsupported
 import space.opensensor.device.resources.location_use_phone
+import space.opensensor.map.CellFocus
+import space.opensensor.map.CellPicker
+import space.opensensor.map.PickerLocateButton
 import space.opensensor.permissions.AccessDialogTexts
 import space.opensensor.permissions.AccessDialogs
 
@@ -69,16 +86,16 @@ internal fun DeviceLocationCard(state: DeviceConfigUiState, onAction: (DeviceCon
 }
 
 /**
- * The sensor location, its Configure button and the dialog that saves it. Shared by the Device
- * settings card and the setup wizard, so both send the same `location.*` keys. Approximate location
- * is asked for only from Use phone location.
+ * The sensor location, its Choose area button and the map that saves it. Shared by the Device
+ * settings card and the setup wizard, so both send the same `location.*` keys. The map picks one
+ * resolution 8 cell. Approximate phone location is asked for only from its locate button, and its
+ * cell only moves the map.
  */
 @Composable
 fun DeviceLocationForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction) -> Unit) {
     val loc = state.location
     val draft = loc.draft
     var open by remember { mutableStateOf(false) }
-    val title = stringResource(Res.string.location_title)
     Column {
         Text(if (draft.cell.isEmpty()) stringResource(Res.string.location_unset) else stringResource(Res.string.location_set))
         // The cell id is for people who read H3. Simple shows the words only.
@@ -97,12 +114,28 @@ fun DeviceLocationForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction
             )
         }
     }
-    if (!open) return
+    if (open) LocationPickerDialog(state, onAction, onClose = { open = false })
+}
+
+/**
+ * The full screen area map. A tap on a cell drafts it, Save sends it. The phone fix becomes a
+ * [CellFocus] that moves the camera and never drafts a cell by itself.
+ */
+@Composable
+private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceConfigAction) -> Unit, onClose: () -> Unit) {
+    val loc = state.location
+    val draft = loc.draft
+    val title = stringResource(Res.string.location_title)
     val request = rememberDeviceLocationRequest()
     val scope = rememberCoroutineScope()
     var locating by remember { mutableStateOf(false) }
     var fixJob by remember { mutableStateOf<Job?>(null) }
     var fixFailed by remember { mutableStateOf(false) }
+    var focus by remember { mutableStateOf<CellFocus?>(null) }
+    val close = {
+        fixJob?.cancel()
+        onClose()
+    }
     AccessDialogs(
         request.access,
         AccessDialogTexts(
@@ -112,87 +145,100 @@ fun DeviceLocationForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction
             settingsBody = stringResource(Res.string.location_permission_settings),
         )
     )
-    AlertDialog(
-        onDismissRequest = { if (!loc.working) open = false },
-        title = { Text(title, modifier = Modifier.semantics { heading() }) },
-        text = {
-            Column {
-                Text(stringResource(Res.string.location_placement))
-                // The cell size in words. Detailed adds the H3 resolution behind it.
-                Text(stringResource(Res.string.location_area_size), style = MaterialTheme.typography.labelMedium)
-                Text(areaText(draft.resolution, state.level.detailed))
-                Text(stringResource(Res.string.location_precision_info))
-                OutlinedTextField(
-                    value = draft.country,
-                    onValueChange = { if (it.length <= 2) onAction(DeviceConfigAction.LocationCountry(it)) },
-                    label = { Text(stringResource(Res.string.location_country)) },
-                    // The hint turns into the reason when the code cannot be saved, and is read out then.
-                    isError = !countryValid(draft.country),
-                    supportingText = {
-                        Text(
-                            stringResource(if (countryValid(draft.country)) Res.string.location_country_info else Res.string.location_country_error),
-                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    val locate = {
+        request.access.run(onDeclined = { fixFailed = true }) {
+            locating = true
+            fixFailed = false
+            fixJob = scope.launch {
+                try {
+                    val cell = withTimeoutOrNull(FIX_TIMEOUT_MS) { request.cell(DeviceLocationDraft.RESOLUTION) }
+                    if (cell == null) fixFailed = true else focus = CellFocus(cell, (focus?.serial ?: 0) + 1)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    fixFailed = true
+                } finally {
+                    locating = false
+                    fixJob = null
+                }
+            }
+        }
+    }
+    val canPick = state.canEdit && !loc.working
+    val canSave = state.canEdit && !state.snapshot.syncRunning && !loc.working && !locating && !draft.needsFix && countryValid(draft.country)
+    Dialog(onDismissRequest = { if (!loc.working) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = close, enabled = !loc.working) {
+                        Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_cancel))
+                    }
+                    FitText(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
+                    InfoButton(InfoContent(title, listOf(stringResource(Res.string.location_info), stringResource(Res.string.location_precision_info))))
+                    TextButton(enabled = canSave, onClick = {
+                        onAction(DeviceConfigAction.SaveLocation)
+                        close()
+                    }) { Text(stringResource(Res.string.location_save)) }
+                }
+                CellPicker(
+                    selected = draft.cell.ifEmpty { null },
+                    onSelect = { cell -> onAction(DeviceConfigAction.LocationCell(cell, DeviceLocationDraft.RESOLUTION)) },
+                    modifier = Modifier.weight(1f),
+                    focus = focus,
+                    enabled = canPick,
+                    controls = {
+                        PickerLocateButton(
+                            onClick = {
+                                if (locating) {
+                                    fixJob?.cancel()
+                                } else if (canPick) {
+                                    locate()
+                                }
+                            },
+                            // While a slow fix runs the same button stops it. Nothing is kept from a stopped fix.
+                            contentDescription = stringResource(if (locating) Res.string.location_stop else Res.string.location_use_phone),
+                            busy = locating,
                         )
                     },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !loc.working,
                 )
-                if (state.level.detailed && draft.cell.isNotEmpty()) Text(draft.cell)
-                if (draft.needsFix) Text(stringResource(Res.string.location_fresh_required))
-                // One status line, read out as the fix starts, lands or fails.
-                val status = when {
-                    locating -> stringResource(Res.string.location_locating)
-                    fixFailed -> stringResource(Res.string.location_fix_failed)
-                    draft.cell.isNotEmpty() -> stringResource(Res.string.location_set)
-                    else -> null
-                }
-                if (status != null) Text(status, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                if (locating) {
-                    // A slow fix can be stopped. Nothing is kept from a stopped fix.
-                    TextButton(onClick = { fixJob?.cancel() }) { Text(stringResource(Res.string.location_stop)) }
-                } else {
-                    TextButton(enabled = state.canEdit && !loc.working, onClick = {
-                        val resolution = draft.resolution
-                        request.access.run(onDeclined = { fixFailed = true }) {
-                            locating = true
-                            fixFailed = false
-                            fixJob = scope.launch {
-                                try {
-                                    val cell = withTimeoutOrNull(FIX_TIMEOUT_MS) { request.cell(resolution) }
-                                    if (cell == null) fixFailed = true else onAction(DeviceConfigAction.LocationCell(cell, resolution))
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (_: Exception) {
-                                    fixFailed = true
-                                } finally {
-                                    locating = false
-                                    fixJob = null
-                                }
-                            }
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    // One status line, read out as a cell is picked or a fix lands or fails.
+                    val status = when {
+                        locating -> stringResource(Res.string.location_locating)
+                        fixFailed -> stringResource(Res.string.location_fix_failed)
+                        draft.needsFix -> stringResource(Res.string.location_fresh_required)
+                        draft.cell.isNotEmpty() -> stringResource(Res.string.location_set)
+                        else -> stringResource(Res.string.location_placement)
+                    }
+                    Text(status, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    // The cell size in words. Detailed adds the H3 resolution and the cell id.
+                    Text(areaText(draft.resolution, state.level.detailed), style = MaterialTheme.typography.labelMedium)
+                    if (state.level.detailed && draft.cell.isNotEmpty()) Text(draft.cell, style = MaterialTheme.typography.labelMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = draft.country,
+                            onValueChange = { if (it.length <= 2) onAction(DeviceConfigAction.LocationCountry(it)) },
+                            label = { Text(stringResource(Res.string.location_country)) },
+                            // The hint turns into the reason when the code cannot be saved, and is read out then.
+                            isError = !countryValid(draft.country),
+                            supportingText = {
+                                Text(
+                                    stringResource(if (countryValid(draft.country)) Res.string.location_country_info else Res.string.location_country_error),
+                                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                                )
+                            },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            enabled = !loc.working,
+                        )
+                        TextButton(enabled = canPick && !locating && draft.cell.isNotEmpty(), onClick = { onAction(DeviceConfigAction.ClearLocation) }) {
+                            Text(stringResource(Res.string.location_clear))
                         }
-                    }) { Text(stringResource(Res.string.location_use_phone)) }
-                }
-                TextButton(enabled = !loc.working && !locating, onClick = { onAction(DeviceConfigAction.ClearLocation) }) {
-                    Text(stringResource(Res.string.location_clear))
+                    }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = state.canEdit && !state.snapshot.syncRunning && !loc.working && !locating && !draft.needsFix && countryValid(draft.country),
-                onClick = { onAction(DeviceConfigAction.SaveLocation); open = false }
-            ) {
-                Text(stringResource(Res.string.location_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = {
-                fixJob?.cancel()
-                open = false
-            }, enabled = !loc.working) { Text(stringResource(Res.string.action_cancel)) }
-        },
-    )
+        }
+    }
 }
 
 private const val FIX_TIMEOUT_MS = 25_000L

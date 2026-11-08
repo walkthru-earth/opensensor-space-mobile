@@ -418,9 +418,10 @@ The map never asks for location at launch. It opens on the first of these that e
    lands on the right country or metro for most people, and on a continent overview otherwise,
    like Google Maps zooming out to an overview.
 
-Search uses a small built-in list of large cities and the main Ghana cities (Accra, Cape Coast,
-Kumasi, Takoradi, Tamale and Tema), named in English and Arabic (`Places.kt`). Search is local, so
-typing never leaves the phone.
+Search uses the bundled GeoNames cities15000 list, every place of 15,000 people or more, with its
+ASCII and Arabic names (`PlaceSearch` in `:ui:map`, written by `tools/places/make_places.py`).
+It ignores case, accents, Arabic hamza forms and the article. Search is local, so typing never
+leaves the phone. The same search sits on the area map of setup and Device settings.
 
 **"Near me" (owner decision 2026-10-08).** A map button that asks for approximate location only
 at the moment it is tapped, because a time-zone guess fails for large zones and store rules
@@ -743,7 +744,7 @@ starts with the target layout from the producer guidance.
 
 - **Attribution.** "© OpenStreetMap" visible on the map at launch, collapsing to an info button,
   linking to openstreetmap.org/copyright (OSMF guidelines, ODbL Produced Work). The Protomaps
-  credit and GeoNames (CC BY 4.0) sit in About, open source licences. Apple 5.2.2 expects
+  credit and GeoNames (CC BY 4.0) sit in the map info. Apple 5.2.2 expects
   permission for third-party content, which the licences give with attribution.
 - **Privacy policy.** Required by both stores for every app, as a public URL in the console and
   inside the app (Settings, About). It names the feed and basemap hosts, says each request
@@ -802,11 +803,11 @@ cells at `round(zoom * 0.8)` clamped to 2..7, and redraws one GeoJSON source aft
 rest. Chips rank properties by visible cells (three, then More), a vertical time slider on the left
 snaps between Last hour, 24 hours and 7 days, the legend shows the steps of the scale the feed publishes, WHO 2021 for PM2.5 and PM10 (host tests and builds only) and the 5th to 95th percentile of the cells in view on a viridis
 ramp, and the sheet peeks with the first-run card or the area count and opens on a cell tap with
-a spread chart of the chosen property and a range row per other property. Search moves the map over a small built-in city list. The basemap is
+a spread chart of the chosen property and a range row per other property. Search moves the map over the bundled GeoNames list. The basemap is
 the Protomaps OpenStreetMap PMTiles build on source.coop (`pmtiles://` rendered on the Android
 emulator and the iOS simulator), "© OpenStreetMap" shows at launch and collapses to an info button.
 "Show public sensors" in Settings (both apps) swaps in a plain background style, so no request
-leaves the phone. Not built yet. Near me, the GeoNames place list, the offline map download (TODO),
+leaves the phone. Not built yet. Near me, the offline map download (TODO),
 the half sheet height, stale outline dashes, the device list and device page, the live feed on screen, the
 peacock on the first-run card and recolouring the basemap to the sensing palette. The basemap
 still points at the Protomaps build on source.coop, not at our own extract. HTTP range reads use

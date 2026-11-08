@@ -239,7 +239,7 @@ Re-provision in this order on the Device settings page.
    handshake fails with `ERROR` 14 and the stored token is cleared (`LanTokenPolicy`, Android
    Room and iOS Keychain alike). The next Bluetooth connection fetches the new one quietly.
 6. Particle sensor sticker on Waveshare, which sends vendor, model, serial and the batch choice.
-7. Device location, with Use phone location or a chosen cell.
+7. Device location, a cell tapped on the area map.
 
 The display flag is detected again at first boot and has no setting. The app has no NTP settings,
 so NTP runs on the firmware defaults (on, DHCP servers, public fallback, one hour interval).

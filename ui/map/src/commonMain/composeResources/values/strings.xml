@@ -19,4 +19,21 @@
     <string name="map_access_not_now">Not now</string>
     <string name="map_access_open_settings">Open settings</string>
     <string name="map_access_cancel">Cancel</string>
+    <!-- Place search over the bundled GeoNames list. Picking a place only moves the map. -->
+    <string name="map_search_places">Search places</string>
+    <string name="map_search_clear">Clear search</string>
+    <string name="map_no_places">No matching places</string>
+    <!-- The area picker of setup and Device settings. -->
+    <string name="map_picker_label">Map of areas. Tap an area to choose it</string>
+    <string name="map_pick_zoom_in">Zoom in to pick an area</string>
+    <string name="map_pick_middle">Choose the area in the middle</string>
+    <string name="map_picker_selected">Chosen area</string>
+    <string name="map_picker_unavailable">The area map is not available on this phone</string>
+    <!-- The picker's map credits, in its info sheet. The OpenStreetMap lines show only while the basemap may load. -->
+    <string name="map_osm">© OpenStreetMap</string>
+    <string name="map_info_title">Map data</string>
+    <string name="map_info_osm">Map data © OpenStreetMap contributors, under the Open Database License. See openstreetmap.org/copyright.</string>
+    <string name="map_info_protomaps">Basemap by Protomaps.</string>
+    <string name="map_info_geonames">Place names © GeoNames, under CC BY 4.0. See geonames.org.</string>
+    <string name="map_info_grid">Each outline is one area of about 0.74 km². Only the area you choose is sent to the sensor.</string>
 </resources>

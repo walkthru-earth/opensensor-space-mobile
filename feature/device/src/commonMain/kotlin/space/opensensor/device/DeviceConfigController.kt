@@ -27,6 +27,7 @@ import space.opensensor.data.protocol.PairMode
 import space.opensensor.data.protocol.WifiState
 import space.opensensor.family.air.SensorLabel
 import space.opensensor.family.air.sensorIdentity
+import space.opensensor.model.H3Cell
 import space.opensensor.settings.DetailLevel
 
 /** A question the Device section asks before it changes the device. Only one is open at a time. */
@@ -169,8 +170,10 @@ class DeviceConfigController(
         location.value = location.value.copy(draft = location.value.draft.copy(country = value.trim().uppercase()), result = null)
     }
 
+    /** Drafts a picked cell. Anything but a resolution 8 cell id, such as a coordinate, is dropped. */
     fun acceptLocationCell(cell: String, resolution: Int) {
         if (!now.canEdit || location.value.working) return
+        if (resolution != DeviceLocationDraft.RESOLUTION || !H3Cell.isCellHex(cell, resolution)) return
         location.value = location.value.copy(draft = location.value.draft.withFix(cell, resolution), result = null)
     }
 

@@ -54,7 +54,7 @@ Effects are R (read only), L (local action, one tap Run chip) and D (device chan
 | `metrics(h)`, also the enum source for other tools | `Metrics.kt` | R |
 | `sync_status(h)` | `SyncProgress.kt` | R |
 | `sync(h)`, `stop_sync(h)` | `TodayController.kt` | L |
-| `cell_summary(cell, prop, window)`, `place_cell(query, res<=8)` | `Feed.kt`, `Places.kt`, `H3.kt` | R, uses the feed switch |
+| `cell_summary(cell, prop, window)`, `place_cell(query, res<=8)` | `Feed.kt`, `PlaceSearch.kt`, `H3.kt` | R, uses the feed switch |
 | `explain_scale(prop, value?)` | `HealthScale.kt` | R |
 | `get_settings()`, `set_units()`, `set_detail()` | `SettingsController.kt` | R, L |
 | `storage()`, `files(h)` | `SettingsController.kt`, `FilesController.kt` | R |
@@ -71,7 +71,7 @@ Device-changing tools and the confirmation each one reaches. Every one first sho
 | `propose_pair_none` | `savePairing(NONE)`, `DeviceConfigDialog.PairingNone`, `confirm()` | `canEdit` |
 | `propose_wifi(on)` | `setWifiOn(on)`. Turning Wi-Fi on or off only, never a join | the card is the confirmation, as today's switch tap is |
 | `propose_lan(on)` | `setLanOn(on)` | the card is the confirmation |
-| `propose_location()` | opens the empty location form. The cell comes only from the user's own Use phone location tap, then Save, `saveLocation()` | the form's own fix and Save. The model never supplies a device cell |
+| `propose_location()` | opens the empty location form. The cell comes only from the user's own tap on the area map, then Save, `saveLocation()` | the area map's own pick and Save. The model never supplies a device cell |
 | `propose_flush` | `TodayController.requestFlush()` opens `TodayDialog.Flush`, then `TodayController.confirm()` | its existing dialog |
 | `propose_forget` | `TodayController.requestForget` opens the Forget dialog, then `confirm` | its existing dialog and test |
 

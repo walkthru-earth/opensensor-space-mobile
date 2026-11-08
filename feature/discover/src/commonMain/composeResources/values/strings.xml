@@ -22,6 +22,7 @@
     <string name="discover_map_title">Map data</string>
     <string name="discover_map_info1">Map data © OpenStreetMap contributors, under the Open Database License. See openstreetmap.org/copyright.</string>
     <string name="discover_map_info2">Basemap by Protomaps.</string>
+    <string name="discover_map_info3">Place names © GeoNames, under CC BY 4.0. See geonames.org.</string>
     <string name="discover_no_areas">No sensor areas here yet</string>
     <string name="discover_not_measured">Not measured here</string>
     <string name="discover_stale">No new value for 3 hours</string>

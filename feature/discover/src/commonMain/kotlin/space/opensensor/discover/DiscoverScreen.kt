@@ -54,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -75,13 +76,16 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.maplibre.spatialk.geojson.Position
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
@@ -109,10 +113,13 @@ import space.opensensor.family.air.who
 import space.opensensor.map.BaseMap
 import space.opensensor.map.MapZoom
 import space.opensensor.map.NearMeButton
+import space.opensensor.map.Place
 import space.opensensor.map.ZoomControls
+import space.opensensor.map.countryName
 import space.opensensor.map.moveCamera
 import space.opensensor.map.rememberMapStyle
 import space.opensensor.map.rememberNearMe
+import space.opensensor.map.rememberPlaceIndex
 import space.opensensor.model.HealthScale
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.CellScale
@@ -387,7 +394,12 @@ private fun TopControls(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val focus = LocalFocusManager.current
-    val results = remember(query) { Places.search(query) }
+    val places = rememberPlaceIndex()
+    val results by produceState(emptyList<Place>(), query, places) {
+        value = places?.let { withContext(Dispatchers.Default) { it.search(query) } }.orEmpty()
+    }
+    val locale = Locale.current
+    val arabic = locale.language == "ar"
     Column(modifier.fillMaxWidth().statusBarsPadding().padding(top = 8.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             TextField(
@@ -420,7 +432,7 @@ private fun TopControls(
                 Icon(DiscoverIcons.Sensors, contentDescription = strings.addSensor)
             }
         }
-        if (query.isNotBlank()) {
+        if (query.isNotBlank() && places != null) {
             FloatingSurface(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 4.dp)) {
                     if (results.isEmpty()) {
@@ -430,8 +442,8 @@ private fun TopControls(
                         Column(
                             Modifier.fillMaxWidth().clickable(role = Role.Button) { query = ""; focus.clearFocus(); onPlace(place) }.padding(horizontal = 16.dp, vertical = 10.dp),
                         ) {
-                            Text(place.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(place.country, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(place.label(arabic), style = MaterialTheme.typography.bodyLarge)
+                            Text(countryName(place.country, locale.toLanguageTag()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
