@@ -541,12 +541,21 @@ a sync; raw box accepting `0b`) were closed anyway.
 to say a Thing still needs setup (#272). It reads the advert flags byte and the CONFIG page 1, and
 either may be null when the phone has not seen it. It sends nothing and changes nothing.
 
-- Advert bit 6 `setup` (`Advertisement.needsSetup`) set means setup is needed. Firmware #147
-  proposes the bit. Current firmware always leaves it at 0, so the page decides today.
-- A `fixed` Thing, or a page with no `thing.mobility` that still reports a `location` object,
-  needs setup until `location.cell` holds an H3 cell.
+- Advert bit 6 `setup` (`Advertisement.needsSetup`) set means setup is needed. CoreS3 `v6.24` and
+  Waveshare `v2.18` set it (firmware #147). Older firmware leaves it at 0.
+- Otherwise page 1 `thing.setup` is the answer when the page carries it. 0 means no setup, even with
+  an empty cell.
+- Without `thing.setup` (older firmware) the rule is derived. A `fixed` Thing, or a page with no
+  `thing.mobility` that still reports a `location` object, needs setup until `location.cell` holds an
+  H3 cell. Any valid cell counts, since the board clears the bit for any stored cell.
 - A `moving` Thing never needs a cell. A mobility value this build does not know claims nothing.
 - Without bit 6 and without page 1, nothing is claimed.
+
+A caller passes advert flags only from an advert newer than its last page 1 read. Right after a
+save, a cached advert can still carry bit 6 while a fresh page 1 already says setup is done. The
+setup wizard confirms completion by reading page 1 `thing.setup` again after its SET_CONFIG and
+checking it is 0, as the firmware
+[migration note](../../opensensor-space-firmware/docs/shared/mobile-migration.md) asks.
 
 The bit does not enter `changeKey`, so it never starts a sync by itself. Nothing on screen reads
 the rule yet.

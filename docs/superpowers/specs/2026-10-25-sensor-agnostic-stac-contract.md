@@ -308,7 +308,7 @@ Thing profile. The [OpenSensor Thing Profile](https://github.com/walkthru-earth/
 
 Location. The rows hold the location, and the `opensensor` footer key holds none. Raw device files carry `h3_cell_id` (int64), `h3_resolution` (int32), `location_source` (uint8, 0 none, 1 configured, 2 GNSS, 3 phone) and a root `geometry` column. `geometry` is a native Parquet GEOMETRY holding a 2D WKB Point at the H3 cell centre, null without location, with no `crs`. Beside it sits the standard GeoParquet 2.0 `geo` key. The app's derived day file leaves out GEOMETRY and GEOGRAPHY columns, writes no `geo` key and keeps `h3_cell_id`. Moving Features trajectories are out of scope.
 
-H3 resolution. The default is 8 for every Thing, fixed or moving (bridge decision 34). The app uses it for device setup (`DeviceLocationDraft.DEFAULT_RESOLUTION`) and as the Discover tie break (`DiscoverCollection.DEFAULT_RES`). The owner's chosen cell governs every public Item and Collection. The Collection `extent.spatial.bbox` covers those cells, never the fix.
+H3 resolution. It is 8 for every Thing, fixed or moving (bridge decision 34). The app uses it for device setup (`DeviceLocationDraft.RESOLUTION`) and as the Discover tie break (`DiscoverCollection.DEFAULT_RES`). The owner's chosen cell governs every public Item and Collection. The Collection `extent.spatial.bbox` covers those cells, never the fix.
 
 ### 4.5 Example board template and Thing Collection (shortened)
 

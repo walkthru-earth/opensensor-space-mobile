@@ -31,9 +31,9 @@ data class Advertisement(
     val clockRestored: Boolean get() = flags and FLAG_CLOCK_RESTORED != 0
 
     /**
-     * The board needs setup, a fixed Thing with no `location.cell`. Firmware #147 proposes this bit and
-     * no released firmware sets it yet, so bit 6 is always 0 today. `ThingSetupPolicy` also reads
-     * CONFIG page 1 for that case.
+     * The board needs setup, a fixed Thing with no `location.cell`. CoreS3 `v6.24` and Waveshare `v2.18`
+     * set bit 6 (firmware #147). Older firmware leaves it at 0, so `ThingSetupPolicy` also reads
+     * CONFIG page 1.
      */
     val needsSetup: Boolean get() = flags and FLAG_SETUP != 0
 
@@ -53,7 +53,7 @@ data class Advertisement(
         const val FLAG_FAIL = 1 shl 4
         const val FLAG_CLOCK_RESTORED = 1 shl 5
 
-        /** Bit 6 `setup`, proposed by firmware #147. Always 0 on current firmware. See [needsSetup]. */
+        /** Bit 6 `setup`, set from CoreS3 `v6.24` and Waveshare `v2.18`, 0 on older firmware. See [needsSetup]. */
         const val FLAG_SETUP = 1 shl 6
 
         /** Offset of the flags byte, for `ScanFilter.setServiceData(uuid, data, mask)`. */

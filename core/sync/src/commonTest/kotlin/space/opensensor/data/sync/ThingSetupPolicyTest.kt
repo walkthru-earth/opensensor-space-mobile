@@ -10,9 +10,10 @@ class ThingSetupPolicyTest {
     private val cell = "8828308281fffff"
     private val noFlags = 0
 
-    private fun page(mobility: String?, cell: String?, location: Boolean = true): DeviceConfig {
+    private fun page(mobility: String?, cell: String?, location: Boolean = true, setup: Int? = null): DeviceConfig {
         val loc = if (location) """"location":{"cell":${cell?.let { "\"$it\"" } ?: "null"},"resolution":8,"country":""}""" else null
-        val thing = mobility?.let { """"thing":{"mobility":"$it"}""" }
+        val fields = listOfNotNull(mobility?.let { """"mobility":"$it"""" }, setup?.let { """"setup":$it""" })
+        val thing = if (fields.isEmpty()) null else """"thing":{${fields.joinToString(",")}}"""
         return DeviceConfig.parse("{" + listOfNotNull(loc, thing).joinToString(",") + "}")
     }
 
@@ -24,9 +25,30 @@ class ThingSetupPolicyTest {
     }
 
     @Test
-    fun `bit 6 clear and page 1 unset is the current firmware case and needs setup`() {
+    fun `bit 6 clear and page 1 unset is the older firmware case and needs setup`() {
         assertTrue(ThingSetupPolicy.needsSetup(noFlags, page("fixed", "")))
         assertTrue(ThingSetupPolicy.needsSetup(null, page("fixed", "")))
+    }
+
+    @Test
+    fun `page 1 setup 1 needs setup`() {
+        assertTrue(ThingSetupPolicy.needsSetup(noFlags, page("fixed", "", setup = 1)))
+        assertTrue(ThingSetupPolicy.needsSetup(null, page("fixed", "", setup = 1)))
+    }
+
+    @Test
+    fun `page 1 setup 0 is trusted even with an empty cell`() {
+        assertFalse(ThingSetupPolicy.needsSetup(noFlags, page("fixed", "", setup = 0)))
+        assertFalse(ThingSetupPolicy.needsSetup(null, page(null, null, setup = 0)))
+        // Bit 6 from the advert still wins.
+        assertTrue(ThingSetupPolicy.needsSetup(Advertisement.FLAG_SETUP, page("fixed", cell, setup = 0)))
+    }
+
+    @Test
+    fun `without page 1 setup the rule is derived as on older firmware`() {
+        assertTrue(ThingSetupPolicy.needsSetup(noFlags, page("fixed", "")))
+        assertFalse(ThingSetupPolicy.needsSetup(noFlags, page("fixed", cell)))
+        assertFalse(ThingSetupPolicy.needsSetup(noFlags, page("moving", "")))
     }
 
     @Test

@@ -50,7 +50,10 @@ class UberH3Grid internal constructor(private val core: H3Core) : H3Grid {
             override fun latLngToCell(lat: Double, lng: Double, res: Int): Long = 0L
             override fun cellToLatLng(cell: Long): LatLng = LatLng(0.0, 0.0)
             override fun cellToBoundary(cell: Long): List<LatLng> = emptyList()
-            override fun gridDisk(cell: Long, k: Int): List<Long> = emptyList()
+            override fun gridDisk(cell: Long, k: Int): List<Long> {
+                require(k >= 0) { "grid disk k must not be negative" }
+                return emptyList()
+            }
             override fun polygonToCells(ring: List<LatLng>, res: Int): List<Long> = emptyList()
             override fun cellsToMultiPolygon(cells: Collection<Long>): List<List<List<LatLng>>> = emptyList()
             override fun isValidCell(cell: Long): Boolean = false

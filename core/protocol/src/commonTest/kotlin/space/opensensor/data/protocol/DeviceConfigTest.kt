@@ -200,6 +200,16 @@ class DeviceConfigTest {
     }
 
     @Test
+    fun `thing setup reads as the board answer and is null on older firmware`() {
+        fun thing(json: String) = DeviceConfig.parse(json).thing!!
+        val v624 = """{"location":{"cell":"","resolution":8,"cell_resolution":0,"lat":null,"lon":null,"country":""},"thing":{"mobility":"fixed","setup":1}}"""
+        assertEquals(true, thing(v624).needsSetup)
+        assertEquals(ThingMobility.FIXED, thing(v624).thingMobility)
+        assertEquals(false, thing("""{"thing":{"mobility":"fixed","setup":0}}""").needsSetup)
+        assertNull(thing("""{"thing":{"mobility":"fixed"}}""").needsSetup, "older firmware")
+    }
+
+    @Test
     fun `thing mobility parses and phone cell is not an app key`() {
         val page1 = """{"location":{"cell":"","resolution":8,"cell_resolution":null,"lat":null,"lon":null,"country":""},"thing":{"mobility":"fixed"}}"""
         assertEquals(ThingMobility.FIXED, DeviceConfig.parse(page1).thing?.thingMobility)

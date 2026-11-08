@@ -40,8 +40,9 @@ data class LocationConfig(
     val lon: Double? = null,
     val country: String? = null,
     /**
-     * `location.gnss_cell` as the board sent it. Firmware #147 proposes it for a board with GNSS, the
-     * board's fresh fix already coarsened to res 8, empty without one. Read [gnssCell] instead.
+     * `location.gnss_cell` as the board sent it. A board with a GNSS receiver sends it from Waveshare
+     * `v2.18` (firmware #147), its fix from the last 15 s as a res 8 cell, or empty without a fresh fix.
+     * Absent means no receiver. Read [gnssCell] unless that difference matters.
      */
     @SerialName("gnss_cell") val gnssCellText: String? = null,
 ) {
@@ -56,8 +57,16 @@ data class LocationConfig(
 @Serializable
 data class ThingConfig(
     val mobility: String? = null,
+    /**
+     * `thing.setup`, 1 while the board needs setup and 0 once it does not. It matches advert bit 6.
+     * CoreS3 `v6.24` and Waveshare `v2.18` send it (firmware #147). Older firmware leaves it out.
+     */
+    val setup: Int? = null,
 ) {
     val thingMobility: ThingMobility? get() = ThingMobility.fromWire(mobility)
+
+    /** [setup] as the board's answer, or null when the page has no `setup`. */
+    val needsSetup: Boolean? get() = setup?.let { it != 0 }
 }
 
 /** `thing.mobility`, whether a Thing stays in one H3 cell or moves. The firmware default is [FIXED]. */

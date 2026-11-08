@@ -41,10 +41,12 @@ things. See the firmware-owned [time/location contract](../../opensensor-space-f
 ## Code boundaries
 
 - `core/protocol` owns the typed page model, page selector and cell-only patch.
-  `location.gnss_cell` (`LocationConfig.gnssCell`) is the board's own GPS cell offer, as
-  firmware #147 proposes. It counts only when it is a resolution 8 cell, otherwise it reads as
-  absent, and absent means the board offers no GPS cell. `thing.mobility` (`fixed` or `moving`)
-  has a `ConfigFields` row and `ConfigPatch.Builder.thingMobility`. Nothing sends it yet.
+  `location.gnss_cell` is the board's own GPS cell offer, sent from Waveshare `v2.18` (firmware #147).
+  `LocationConfig.gnssCell` keeps it only when it is a resolution 8 cell. It is null both when the key
+  is absent (no receiver) and when it is empty (no fresh fix). `gnssCellText` keeps that difference.
+  `thing.mobility` (`fixed` or `moving`) has a `ConfigFields` row and
+  `ConfigPatch.Builder.thingMobility`. Nothing sends it yet. `thing.setup` reads as
+  `ThingConfig.needsSetup`.
 - `core/model` `H3Cell` checks a cell index and its hex form in pure Kotlin. `core/publicfeed`
   `H3Grid.gridDisk` lists a cell and its rings on the platform binding.
 - `core/sync` `ThingSetupPolicy.needsSetup` is the one rule for a Thing that still needs setup.

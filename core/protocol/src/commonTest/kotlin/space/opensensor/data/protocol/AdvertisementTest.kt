@@ -67,7 +67,7 @@ class AdvertisementTest {
         val setup = Advertisement.decode(payload(flags = 0x40, fin = 0, boot16 = 1))!!
         assertTrue(setup.needsSetup)
         assertFalse(setup.wantsSync || setup.noUtc || setup.newFiles || setup.sdMounted || setup.lanUp || setup.storageFailed || setup.clockRestored)
-        // Current firmware leaves bit 6 at 0.
+        // Older firmware leaves bit 6 at 0.
         assertFalse(Advertisement.decode(payload(flags = 0x3f, fin = 0, boot16 = 1))!!.needsSetup)
         // The bit does not change the sync key, so it never starts a sync run by itself.
         assertEquals(Advertisement.decode(payload(0, 3, 1))!!.changeKey, setup.copy(finalized = 3).changeKey)
