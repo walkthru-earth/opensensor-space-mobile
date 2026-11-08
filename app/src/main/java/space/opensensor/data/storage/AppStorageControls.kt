@@ -11,7 +11,7 @@ import space.opensensor.data.history.HistoryDeriver
 import space.opensensor.data.history.LegacyFileCleanup
 import space.opensensor.data.history.UtcDayRange
 import space.opensensor.data.sync.DeviceCoordinator
-import space.opensensor.discover.MapCache
+import space.opensensor.map.MapCache
 import space.opensensor.net.BlockCache
 import space.opensensor.settings.OldFilesPlan
 import space.opensensor.settings.OldFilesRange

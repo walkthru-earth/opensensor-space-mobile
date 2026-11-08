@@ -1,21 +1,10 @@
 package space.opensensor.discover
 
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.serialization.json.jsonPrimitive
-import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.expressions.dsl.all
 import org.maplibre.compose.expressions.dsl.asBoolean
 import org.maplibre.compose.expressions.dsl.asNumber
@@ -34,30 +23,25 @@ import org.maplibre.compose.expressions.dsl.not
 import org.maplibre.compose.expressions.dsl.span
 import org.maplibre.compose.expressions.dsl.switch
 import org.maplibre.compose.interaction.ClickResult
-import org.maplibre.compose.interaction.MapInteractions
 import org.maplibre.compose.layers.CircleLayer
 import org.maplibre.compose.layers.FillLayer
 import org.maplibre.compose.layers.LineLayer
-import org.maplibre.compose.layers.LocationIndicatorLayer
 import org.maplibre.compose.layers.SymbolLayer
-import org.maplibre.compose.location.LocationState
-import org.maplibre.compose.map.CameraConstraints
 import org.maplibre.compose.map.MapState
-import org.maplibre.compose.map.MaplibreMap
-import org.maplibre.compose.map.rememberMapState
 import org.maplibre.compose.sources.GeoJsonData
 import org.maplibre.compose.sources.rememberGeoJsonSource
-import org.maplibre.compose.style.BaseStyle
-import org.maplibre.spatialk.geojson.BoundingBox
 import org.maplibre.spatialk.geojson.Point
 import org.maplibre.spatialk.geojson.Position
-import space.opensensor.publicfeed.GeoBounds
+import space.opensensor.map.NearMe
+import space.opensensor.map.NearMeLayer
+import space.opensensor.map.rememberBaseMapState
+import space.opensensor.publicfeed.LatLng
 
 /**
  * The map and its one GeoJSON source of H3 cells. Measured cells are filled with the scale colour
  * (faded when stale), unmeasured cells are an outline only, and the selected cell has a thick ink
- * outline. Clicks on a cell select it, clicks elsewhere clear the selection. [location] is the
- * "Near me" puck, null until the user taps it and grants approximate location.
+ * outline. Clicks on a cell select it, clicks elsewhere clear the selection. [nearMe] draws its puck
+ * on top once the user taps Near me and grants approximate location.
  *
  * [ownGeoJson] is the user's own fixed Things, a clustered point source of its own above the cells
  * (#226). A pin is a [paper] dot ringed in [ink], a cluster an [ink] badge with its count. Neither
@@ -71,21 +55,18 @@ internal fun rememberDiscoverMapState(
     geoJson: String,
     selectedHex: String?,
     ink: Color,
-    location: LocationState?,
+    nearMe: NearMe,
     highlight: ValueBand?,
     ownGeoJson: String,
     paper: Color,
     onOwnCluster: (Position) -> Unit,
     onCellClick: (String?) -> Unit,
 ): MapState {
-    val initial = when (start) {
-        is StartView.Camera -> CameraPosition(center = Position(longitude = start.camera.lng, latitude = start.camera.lat), zoom = start.camera.zoom)
-        is StartView.Region -> CameraPosition(
-            center = Position(longitude = (start.bounds.west + start.bounds.east) / 2, latitude = (start.bounds.south + start.bounds.north) / 2),
-            zoom = 3.0,
-        )
+    val (center, zoom) = when (start) {
+        is StartView.Camera -> LatLng(start.camera.lat, start.camera.lng) to start.camera.zoom
+        is StartView.Region -> LatLng((start.bounds.south + start.bounds.north) / 2, (start.bounds.west + start.bounds.east) / 2) to 3.0
     }
-    return rememberMapState(baseStyle = BaseStyle.Json(styleJson), initialCameraPosition = initial) {
+    return rememberBaseMapState(styleJson, center, zoom) {
         val cells = rememberGeoJsonSource(GeoJsonData.JsonString(geoJson))
         val stale = feature["stale"].asBoolean()
         // While a chart bar is touched or pinned, areas outside it fade so the bar's areas stand out.
@@ -172,10 +153,8 @@ internal fun rememberDiscoverMapState(
             strokeColor = const(ink),
             strokeWidth = const(3.dp),
         )
-        if (location != null) {
-            // The library's standard blue puck and accuracy circle, drawn above the cells.
-            LocationIndicatorLayer(id = "discover-near-me", locationState = location)
-        }
+        // The library's standard blue puck and accuracy circle, drawn above the cells.
+        NearMeLayer(nearMe)
     }
 }
 
@@ -184,60 +163,3 @@ private const val OWN_CLUSTER_RADIUS = 44
 
 /** Past this zoom every own Thing shows its own pin. */
 private const val OWN_CLUSTER_MAX_ZOOM = 14
-
-@Composable
-internal fun DiscoverMap(
-    state: MapState,
-    start: StartView,
-    viewportInsets: PaddingValues,
-    onCamera: (CameraRest) -> Unit,
-    onMapClick: () -> Unit,
-    onFirstMove: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // The region fit runs once. Kept across a rotation, so a rebuilt map never refits over the user's view.
-    var fitted by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(state, start) {
-        if (start is StartView.Region && !fitted) {
-            val b = start.bounds
-            // A fit cut short by an unready map runs again next time. Cancellation propagates.
-            if (catchingNonCancel { state.fitCameraToBounds(BoundingBox(west = b.west, south = b.south, east = b.east, north = b.north)) }.isSuccess) fitted = true
-        }
-    }
-    LaunchedEffect(state) {
-        var first = true
-        snapshotFlow { state.viewport }.filterNotNull().collectLatest { vp ->
-            val bounds = vp.visibleBounds
-            val center = vp.cameraPosition.center
-            onCamera(CameraRest(GeoBounds(bounds.west, bounds.south, bounds.east, bounds.north), vp.cameraPosition.zoom, center.latitude, center.longitude))
-            if (!first) onFirstMove()
-            first = false
-        }
-    }
-    MaplibreMap(
-        modifier = modifier,
-        state = state,
-        viewportInsets = viewportInsets,
-        // The zoom buttons step inside the same range.
-        cameraConstraints = CameraConstraints {
-            minZoom = MIN_ZOOM
-            maxZoom = MAX_ZOOM
-        },
-        interactions = MapInteractions {
-            camera {
-                rotate { enabled = false }
-                pitch { enabled = false }
-            }
-            callbacks {
-                click {
-                    onUnhandled {
-                        onMapClick()
-                        ClickResult.Consume
-                    }
-                }
-            }
-        },
-        // Attribution is drawn by the screen ("© OpenStreetMap", then an info button).
-        overlay = {},
-    )
-}

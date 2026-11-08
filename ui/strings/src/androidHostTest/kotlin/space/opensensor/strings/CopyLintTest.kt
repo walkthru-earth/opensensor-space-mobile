@@ -22,6 +22,7 @@ class CopyLintTest {
             "feature/history/src/commonMain/composeResources/values/strings.xml",
             "feature/settings/src/commonMain/composeResources/values/strings.xml",
             "ui/designsystem/src/commonMain/composeResources/values/strings.xml",
+            "ui/map/src/commonMain/composeResources/values/strings.xml",
             "ui/strings/src/commonMain/composeResources/values/strings.xml",
         ).flatMap { listOf(it, it.replace("/values/", "/values-ar/")) }
         assertTrue(found.containsAll(expected), "catalogues found $found")

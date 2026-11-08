@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,7 +54,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -108,6 +106,13 @@ import space.opensensor.family.air.PublicSummary
 import space.opensensor.family.air.rangeOf
 import space.opensensor.family.air.stepOf
 import space.opensensor.family.air.who
+import space.opensensor.map.BaseMap
+import space.opensensor.map.MapZoom
+import space.opensensor.map.NearMeButton
+import space.opensensor.map.ZoomControls
+import space.opensensor.map.moveCamera
+import space.opensensor.map.rememberMapStyle
+import space.opensensor.map.rememberNearMe
 import space.opensensor.model.HealthScale
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.CellScale
@@ -176,12 +181,9 @@ private fun DiscoverContent(
     infoButton: @Composable (InfoText, Modifier) -> Unit,
 ) {
     val state by controller.state.collectAsState()
-    val dark = isSystemInDarkTheme()
     val paper = MaterialTheme.colorScheme.surfaceContainerLow
     val ink = MaterialTheme.colorScheme.onSurface
-    val styleJson by produceState<String?>(null, networkAllowed, dark) {
-        value = if (networkAllowed) catchingNonCancel { basemapStyle(dark) }.getOrNull() ?: paperStyle(SequentialRamp.hex(paperArgb(paper))) else paperStyle(SequentialRamp.hex(paperArgb(paper)))
-    }
+    val styleJson = rememberMapStyle(networkAllowed, paper)
     val scope = rememberCoroutineScope()
     val sheet = rememberBottomSheetScaffoldState(rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded))
     var showAll by rememberSaveable { mutableStateOf(false) }
@@ -262,7 +264,7 @@ private fun DiscoverContent(
                     state.geoJson,
                     selectedHex,
                     ink,
-                    nearMe.location,
+                    nearMe,
                     highlight,
                     ownGeoJson = state.ownGeoJson,
                     paper = paper,
@@ -275,7 +277,7 @@ private fun DiscoverContent(
                 }
                 LaunchedEffect(ownMove) {
                     val (centre, zoom) = ownMove ?: return@LaunchedEffect
-                    catchingNonCancel { mapState.moveCamera(centre, zoom ?: steppedZoom(mapState.cameraPosition.zoom, OWN_CLUSTER_STEP), reduceMotion) }
+                    catchingNonCancel { mapState.moveCamera(centre, zoom ?: MapZoom.stepped(mapState.cameraPosition.zoom, OWN_CLUSTER_STEP), reduceMotion) }
                     ownMove = null
                 }
                 var attributionOpen by remember { mutableStateOf(true) }
@@ -287,12 +289,12 @@ private fun DiscoverContent(
                 // Screen readers name the map and the measurement it colours. Its gestures stay as
                 // they are, the sheet's list reads each area.
                 val mapLabel = spokenList(listOfNotNull(strings.mapLabel, state.property?.shownLabel()), listSeparator())
-                DiscoverMap(
+                BaseMap(
                     modifier = Modifier.semantics { contentDescription = mapLabel },
                     state = mapState,
-                    start = mapStart,
                     viewportInsets = PaddingValues(top = 120.dp, bottom = PEEK_HEIGHT),
-                    onCamera = controller::onCamera,
+                    fitOnce = (mapStart as? StartView.Region)?.bounds,
+                    onCameraRest = controller::onCamera,
                     onMapClick = {
                         controller.selectCell(null)
                         clearSignal++
@@ -302,7 +304,7 @@ private fun DiscoverContent(
                     },
                     // The fit to the start region also moves the camera, so a move only counts
                     // as the first pan once the map has settled.
-                    onFirstMove = { if (nowEpochMillis() - shownAt > 2_000) attributionOpen = false },
+                    onMoved = { if (nowEpochMillis() - shownAt > 2_000) attributionOpen = false },
                 )
                 TopControls(
                     state = state,
@@ -342,8 +344,8 @@ private fun DiscoverContent(
                             }
                         }
                         Column(Modifier.padding(end = 8.dp).width(FloatingControl.Size), verticalArrangement = Arrangement.spacedBy(MinTouchSpacing)) {
-                            ZoomControls(mapState, strings.zoomIn, strings.zoomOut)
-                            NearMeButton(nearMe, mapState, controller::nearMeTarget, strings.nearMe, strings.nearMeNone, strings.nearMeAccess)
+                            ZoomControls(mapState)
+                            NearMeButton(nearMe, mapState, controller::nearMeTarget)
                         }
                     }
                     // Under the legend and the controls, on its own line, at the end.
@@ -369,11 +371,6 @@ internal fun SheetHandle(open: Boolean, strings: DiscoverStrings, onToggle: () -
     ) {
         Icon(if (open) DiscoverIcons.ExpandMore else DiscoverIcons.ExpandLess, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-}
-
-private fun paperArgb(color: Color): Int {
-    fun c(v: Float) = (v * 255).toInt().coerceIn(0, 255)
-    return (0xFF shl 24) or (c(color.red) shl 16) or (c(color.green) shl 8) or c(color.blue)
 }
 
 @Composable

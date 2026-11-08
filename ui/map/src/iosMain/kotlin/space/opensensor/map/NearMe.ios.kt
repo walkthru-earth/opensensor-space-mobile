@@ -1,4 +1,4 @@
-package space.opensensor.discover
+package space.opensensor.map
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect

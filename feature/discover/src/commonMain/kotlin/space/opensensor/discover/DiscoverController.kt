@@ -19,6 +19,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import space.opensensor.family.air.PublicSummary
 import space.opensensor.family.air.ThingSummary
+import space.opensensor.map.CameraRest
+import space.opensensor.map.nearMeTarget
 import space.opensensor.publicfeed.CellFreshness
 import space.opensensor.publicfeed.CellGeoJson
 import space.opensensor.publicfeed.CellRow
@@ -63,9 +65,6 @@ sealed interface StartView {
 
     data class Region(val bounds: GeoBounds) : StartView
 }
-
-/** The camera after it rested for 400 ms. */
-data class CameraRest(val bounds: GeoBounds, val zoom: Double, val lat: Double, val lng: Double)
 
 /** Everything the Discover screen draws. */
 data class DiscoverUiState(

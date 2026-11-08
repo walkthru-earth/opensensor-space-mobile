@@ -16,6 +16,7 @@ class SemanticsLintTest {
         "ios/shared/src/commonMain/kotlin",
         "ios/shared/src/iosMain/kotlin",
         "ui/designsystem/src/commonMain/kotlin",
+        "ui/map/src/commonMain/kotlin",
         "ui/permissions/src/commonMain/kotlin",
     ) + File(Catalogues.root, "feature").listFiles().orEmpty().filter { it.isDirectory }.sorted()
         .map { "feature/${it.name}/src/commonMain/kotlin" }

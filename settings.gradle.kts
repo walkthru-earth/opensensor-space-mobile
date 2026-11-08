@@ -49,12 +49,15 @@ include(":core:stac")
 include(":core:thing")
 // The ThingKindContract every kind passes from its own tests.
 include(":core:thing:testkit")
-// The Discover map, shared Compose for Android and iOS.
+// The design system, shared Compose for Android and iOS (docs/screens.md, Design system).
 include(":ui:designsystem")
+// The shared MapLibre map, its styles, zoom controls, tile cache, cell outlines and Near me.
+include(":ui:map")
 // The shared English copy and the repository copy lint (docs/screens.md, Copy).
 include(":ui:strings")
 // When each permission is asked and where its settings link goes, for both apps.
 include(":ui:permissions")
+// The Discover map, shared Compose for Android and iOS.
 include(":feature:discover")
 // The Settings screen, shared Compose for Android and iOS (docs/screens.md).
 include(":feature:settings")

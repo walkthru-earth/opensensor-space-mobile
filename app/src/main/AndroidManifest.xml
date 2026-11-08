@@ -54,7 +54,7 @@
       trigger (data/background/SyncTriggers) is re-registered; it schedules nothing by itself.
 
       ACCESS_COARSE_LOCATION only, never FINE: the Discover map's "Near me" button asks for it at
-      the moment it is tapped, never at launch (feature/discover NearMe*.kt). The approximate fix
+      the moment it is tapped, never at launch (ui/map NearMe*.kt). The approximate fix
       only moves the map camera and draws a puck. It is never stored, sent or published, and there
       is no background location.
     -->

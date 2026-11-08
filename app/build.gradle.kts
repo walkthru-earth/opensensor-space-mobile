@@ -240,6 +240,8 @@ dependencies {
     // The Today screen, shared Compose with iOS. The ViewModel adapts the repository to its port.
     implementation(project(":feature:today"))
     implementation(project(":ui:designsystem"))
+    // The shared map. The app sizes and clears its tile cache (MapCache).
+    implementation(project(":ui:map"))
     // The shared permission policy. The Android launchers stay in ui/permissions/RuntimeAccess.kt.
     implementation(project(":ui:permissions"))
     implementation(project(":core:publicfeed"))

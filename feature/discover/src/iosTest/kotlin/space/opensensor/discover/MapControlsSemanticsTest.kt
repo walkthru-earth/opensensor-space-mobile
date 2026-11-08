@@ -24,8 +24,8 @@ import kotlin.test.assertTrue
 
 /**
  * The floating map controls work for one tap and for screen readers (#116). The time window pill
- * is a button that stays open until a window is picked, zoom has two named buttons, and the sheet
- * header is a button that says what it does. Every target is at least 48 dp. Rendered headless on
+ * is a button that stays open until a window is picked, and the sheet header is a button that says
+ * what it does. Zoom is tested with ui:map. Every target is at least 48 dp. Rendered headless on
  * the iOS simulator (verifyIos).
  */
 @OptIn(ExperimentalTestApi::class)
@@ -72,30 +72,6 @@ class MapControlsSemanticsTest {
         waitForIdle()
         assertEquals(FeedWindow.WEEK, window)
         assertEquals(folded, slider.size().second)
-    }
-
-    @Test
-    fun zoomHasTwoNamedButtonsThatActOnOneTap() = runComposeUiTest {
-        var zoomIns = 0
-        var zoomOuts = 0
-        setContent {
-            MaterialTheme {
-                val s = discoverStrings()
-                ZoomPair(s.zoomIn, s.zoomOut, onZoomIn = { zoomIns++ }, onZoomOut = { zoomOuts++ })
-            }
-        }
-        val zoomIn = onNodeWithContentDescription("Zoom in")
-        val zoomOut = onNodeWithContentDescription("Zoom out")
-        for (button in listOf(zoomIn, zoomOut)) {
-            assertEquals(Role.Button, button.role())
-            button.assertTarget()
-        }
-        zoomIn.performClick()
-        zoomOut.performClick()
-        zoomOut.performClick()
-        waitForIdle()
-        assertEquals(1, zoomIns)
-        assertEquals(2, zoomOuts)
     }
 
     @Test

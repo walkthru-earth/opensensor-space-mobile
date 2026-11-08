@@ -17,7 +17,7 @@ import space.opensensor.data.coroutines.suspendRunCatching
 import space.opensensor.data.history.HistoryDeriver
 import space.opensensor.data.history.HistoryStartup
 import space.opensensor.data.local.security.LanTokenMigration
-import space.opensensor.discover.MapCache
+import space.opensensor.map.MapCache
 import space.opensensor.settings.SettingsRepository
 import space.opensensor.storage.MemoryPressure
 import space.opensensor.storage.RetentionPolicy

@@ -143,7 +143,7 @@ permission. The shared `:ui:permissions` module holds the policy for both apps. 
 is the one table from user action to permission, `PermissionFlow` decides ask, explain or settings,
 and `RuntimeAccess` runs it. `PermissionFlowTest` (commonTest, Android host and iOS simulator)
 covers the table, both decision paths and the iOS status mapping. The Android launchers stay in
-`app/.../ui/permissions/RuntimeAccess.kt`, the iOS ones in `ios/App` and the Near me actuals.
+`app/.../ui/permissions/RuntimeAccess.kt`, the iOS ones in `ios/App` and the Near me actuals in `:ui:map`.
 
 An in-app rationale appears only when Android reports one is due. Android offers the app's
 system settings page after a denial with no rationale due, but only when a rationale was due

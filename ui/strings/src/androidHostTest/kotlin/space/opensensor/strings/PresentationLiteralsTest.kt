@@ -7,14 +7,15 @@ import kotlin.test.assertTrue
 /**
  * English stays in Compose resources. The shared presentation sources must not pass a word literal
  * to `Text`, and must not hold an English sentence in a string literal. They are the iOS framework
- * (`ios/shared/src/commonMain` and `iosMain`), the permission dialogs (`ui/permissions`) and the
- * `commonMain` of every feature module. A template of values only, such as `"${value} $unit"`, is not
- * copy. A new literal fails the build, an exception goes in [allowed] with its reason.
+ * (`ios/shared/src/commonMain` and `iosMain`), the permission dialogs (`ui/permissions`), the map
+ * controls (`ui/map`) and the `commonMain` of every feature module. A template of values only, such
+ * as `"${value} $unit"`, is not copy. A new literal fails the build, an exception goes in [allowed] with its reason.
  */
 class PresentationLiteralsTest {
     private val sources: List<String> = listOf(
         "ios/shared/src/commonMain/kotlin",
         "ios/shared/src/iosMain/kotlin",
+        "ui/map/src/commonMain/kotlin",
         "ui/permissions/src/commonMain/kotlin",
     ) + File(Catalogues.root, "feature").listFiles().orEmpty().filter { it.isDirectory }.sorted()
         .map { "feature/${it.name}/src/commonMain/kotlin" }

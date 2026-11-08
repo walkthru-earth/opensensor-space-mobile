@@ -24,6 +24,8 @@ kotlin {
             // The Room index and removed-file marks, shared with Android (IosArchiveDatabase).
             implementation(project(":core:database"))
             implementation(project(":feature:discover"))
+            // The shared map. The app sizes and clears its tile cache (MapCache).
+            implementation(project(":ui:map"))
             implementation(project(":feature:history"))
             // Files, the inspector and export over the phone archive (docs/screens.md, Files).
             implementation(project(":feature:files"))

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Map control copy for Android and iOS, one catalogue for every screen with a map (ui:map). Copy
+  rules (docs/screens.md, CopyLintTest). No em or en dashes, no colons or semicolons.
+-->
+<resources>
+    <!-- The zoom buttons, spoken only. -->
+    <string name="map_zoom_in">Zoom in</string>
+    <string name="map_zoom_out">Zoom out</string>
+    <!-- The Near me button, spoken only, and its miss, shown and announced. -->
+    <string name="map_near_me">Near me</string>
+    <string name="map_near_me_none">Location not found</string>
+    <!-- Near me's location dialogs. The rationale shows only when Android says it is due. -->
+    <string name="map_near_me_access_title">Allow approximate location</string>
+    <string name="map_near_me_access_body">Near me moves the map to your area. Your location stays on this phone.</string>
+    <string name="map_near_me_settings_title">Location is off</string>
+    <string name="map_near_me_settings_body">Turn on location for opensensor.space in your phone settings to use Near me.</string>
+    <string name="map_access_continue">Continue</string>
+    <string name="map_access_not_now">Not now</string>
+    <string name="map_access_open_settings">Open settings</string>
+    <string name="map_access_cancel">Cancel</string>
+</resources>
