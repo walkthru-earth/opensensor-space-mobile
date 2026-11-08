@@ -35,6 +35,7 @@ import kotlin.test.assertTrue
 
 private const val SECRET_PIN = "482913"
 private const val SECRET_PSK = "correct horse battery"
+private const val CELL8 = "8828308281fffff"
 
 // The bundled Waveshare template has the sensor_serial_code column, so the board stores a sticker.
 private val v2Info = DeviceInfo(
@@ -505,13 +506,13 @@ class DeviceConfigControllerTest {
     @Test
     fun locationWritesRequireSupportAndMatchingReadback() = runTest {
         val source = FakeSource()
-        source.locationAnswer = LocationConfig(cell = "", resolution = 5, country = "")
+        source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "")
         val c = controller(source)
-        c.acceptLocationCell("85283083fffffff", 5)
+        c.acceptLocationCell(CELL8, 8)
         c.selectLocationCountry("us")
-        source.locationAnswer = LocationConfig(cell = "85283083fffffff", resolution = 5, country = "US")
+        source.locationAnswer = LocationConfig(cell = CELL8, resolution = 8, country = "US")
         c.saveLocation()
-        assertEquals(listOf("location.cell=85283083fffffff\nlocation.resolution=5\nlocation.country=US\n"), source.wire)
+        assertEquals(listOf("location.cell=$CELL8\nlocation.resolution=8\nlocation.country=US\n"), source.wire)
         assertEquals(DeviceLocationResult.SAVED, c.state.value.location.result)
         c.selectLocationCountry("CA")
         c.saveLocation()
@@ -521,17 +522,17 @@ class DeviceConfigControllerTest {
     @Test
     fun onlyAConfirmedValidCellCountsAsSaved() = runTest {
         val source = FakeSource()
-        source.locationAnswer = LocationConfig(cell = "", resolution = 5, country = "GH")
+        source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "GH")
         val c = controller(source)
         assertFalse(c.state.value.location.saved)
-        c.acceptLocationCell("85283083fffffff", 5)
+        c.acceptLocationCell(CELL8, 8)
         assertFalse(c.state.value.location.saved)
-        source.locationAnswer = LocationConfig(cell = "85283083fffffff", resolution = 5, cellResolution = 5, country = "")
+        source.locationAnswer = LocationConfig(cell = CELL8, resolution = 8, cellResolution = 8, country = "")
         c.saveLocation()
         assertTrue(c.state.value.location.saved)
         c.clearLocation()
         assertTrue(c.state.value.location.saved)
-        source.locationAnswer = LocationConfig(cell = "", resolution = 5, country = "")
+        source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "")
         c.saveLocation()
         assertFalse(c.state.value.location.saved)
     }
@@ -547,18 +548,19 @@ class DeviceConfigControllerTest {
     }
 
     @Test
-    fun unsupportedBusyOrFinerWithoutFreshFixCannotWriteLocation() = runTest {
+    fun unsupportedBusyOrCoarserWithoutFreshFixCannotWriteLocation() = runTest {
         val old = FakeSource()
         val unsupported = controller(old)
         unsupported.saveLocation()
         assertEquals(emptyList(), old.wire)
         val source = FakeSource()
+        // A res 5 cell kept from before the res 8 rule cannot be refined without a fresh fix.
         source.locationAnswer = LocationConfig(cell = "85283083fffffff", resolution = 5, country = "US")
         val c = controller(source)
-        c.selectLocationResolution(9)
+        assertTrue(c.state.value.location.draft.needsFix)
         c.saveLocation()
         assertEquals(emptyList(), source.wire)
-        c.acceptLocationCell("8928308280fffff", 9)
+        c.acceptLocationCell(CELL8, 8)
         source.snapshot.value = source.snapshot.value.copy(syncRunning = true)
         c.saveLocation()
         assertEquals(emptyList(), source.wire)

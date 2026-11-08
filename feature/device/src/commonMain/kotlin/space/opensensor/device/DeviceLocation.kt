@@ -2,39 +2,44 @@ package space.opensensor.device
 
 import androidx.compose.runtime.Composable
 import space.opensensor.data.protocol.LocationConfig
+import space.opensensor.model.H3Cell
 import space.opensensor.permissions.RuntimeAccess
 import space.opensensor.publicfeed.H3Index
 
 /** No phone coordinates enter UI state. The candidate is already a cell. */
 data class DeviceLocationDraft(
     val cell: String = "",
-    val resolution: Int = DEFAULT_RESOLUTION,
+    val resolution: Int = RESOLUTION,
     val country: String = "",
     val needsFix: Boolean = false,
 ) {
+    /**
+     * The draft at [value], which must be [RESOLUTION]. A finer cell is coarsened to it. A coarser cell
+     * cannot be made finer, so the draft keeps it and needs a fresh fix before Save.
+     */
     fun atResolution(value: Int): DeviceLocationDraft {
-        require(value in 0..15)
+        require(value == RESOLUTION) { "the location resolution is fixed at $RESOLUTION" }
         val index = cell.takeIf { it.isNotEmpty() }?.let(H3Index::fromHex)
         return when {
             index == null -> copy(resolution = value)
             value <= H3Index.resolution(index) -> copy(cell = H3Index.toHex(H3Index.parent(index, value)), resolution = value, needsFix = false)
-            else -> copy(resolution = value, needsFix = needsFix || value > resolution)
+            else -> copy(resolution = value, needsFix = true)
         }
     }
 
-    /** A late fix for another precision selection must not restore finer location. */
+    /** A fix taken at another resolution is dropped, so it never restores a finer location. */
     fun withFix(value: String, requestedResolution: Int): DeviceLocationDraft =
         if (requestedResolution != resolution) this else copy(cell = value, needsFix = false)
 
     companion object {
-        /** The default H3 resolution of every Thing, fixed or moving. Finer cells show a warning. */
-        const val DEFAULT_RESOLUTION = 8
+        /** The H3 resolution of every Thing, fixed or moving. The app sends no other. */
+        const val RESOLUTION = H3Cell.RESOLUTION
 
+        /** The board's page 1 brought to [RESOLUTION]. A value that is no H3 cell reads as unset. */
         fun from(config: LocationConfig) = DeviceLocationDraft(
-            cell = config.cell.orEmpty(),
-            resolution = config.resolution?.takeIf { it in 0..15 } ?: DEFAULT_RESOLUTION,
+            cell = config.cell?.takeIf { H3Cell.isCellHex(it) }.orEmpty(),
             country = config.country.orEmpty(),
-        )
+        ).atResolution(RESOLUTION)
     }
 }
 

@@ -85,6 +85,8 @@ object ConfigFields {
     const val LOCATION_CELL = "location.cell"
     const val LOCATION_RESOLUTION = "location.resolution"
     const val LOCATION_COUNTRY = "location.country"
+    const val THING_MOBILITY = "thing.mobility"
+    private const val PUBLISHED_RES = space.opensensor.model.H3Cell.RESOLUTION
     const val SENSOR_VENDOR = "sensor.vendor"
     const val SENSOR_MODEL = "sensor.model"
     const val SENSOR_SERIAL = "sensor.serial"
@@ -100,8 +102,10 @@ object ConfigFields {
         ConfigField(LAN_ON, FieldType.Toggle, Applies.IMMEDIATELY),
         ConfigField(LAN_ROTATE_TOKEN, FieldType.Action, Applies.ONCE, confirm = Confirm.Always, disrupts = true),
         ConfigField(LOCATION_CELL, FieldType.H3Cell, Applies.NEXT_SAMPLE),
-        ConfigField(LOCATION_RESOLUTION, FieldType.IntBetween(0, 15), Applies.NEXT_SAMPLE),
+        // The firmware still takes 0 to 15 until #139. The app only ever sends 8.
+        ConfigField(LOCATION_RESOLUTION, FieldType.IntBetween(PUBLISHED_RES, PUBLISHED_RES), Applies.NEXT_SAMPLE),
         ConfigField(LOCATION_COUNTRY, FieldType.Country, Applies.NEXT_SAMPLE),
+        ConfigField(THING_MOBILITY, FieldType.Choice(ThingMobility.entries.map { it.wire }), Applies.NEXT_SAMPLE),
         ConfigField(SENSOR_VENDOR, FieldType.Text(1, 32), Applies.IMMEDIATELY),
         ConfigField(SENSOR_MODEL, FieldType.Text(1, 32), Applies.IMMEDIATELY),
         ConfigField(SENSOR_SERIAL, FieldType.Text(1, 32), Applies.IMMEDIATELY),

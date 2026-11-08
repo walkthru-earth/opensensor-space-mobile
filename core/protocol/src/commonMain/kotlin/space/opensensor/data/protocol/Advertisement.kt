@@ -30,6 +30,13 @@ data class Advertisement(
     /** `status.clk == 2`: dated from the RTC only; a time refresh is welcome, not urgent. */
     val clockRestored: Boolean get() = flags and FLAG_CLOCK_RESTORED != 0
 
+    /**
+     * The board needs setup, a fixed Thing with no `location.cell`. Firmware #147 proposes this bit and
+     * no released firmware sets it yet, so bit 6 is always 0 today. `ThingSetupPolicy` also reads
+     * CONFIG page 1 for that case.
+     */
+    val needsSetup: Boolean get() = flags and FLAG_SETUP != 0
+
     /** Anything a phone should act on: new files to pull, or a clock to set. */
     val wantsSync: Boolean get() = newFiles || noUtc
 
@@ -45,6 +52,9 @@ data class Advertisement(
         const val FLAG_LAN = 1 shl 3
         const val FLAG_FAIL = 1 shl 4
         const val FLAG_CLOCK_RESTORED = 1 shl 5
+
+        /** Bit 6 `setup`, proposed by firmware #147. Always 0 on current firmware. See [needsSetup]. */
+        const val FLAG_SETUP = 1 shl 6
 
         /** Offset of the flags byte, for `ScanFilter.setServiceData(uuid, data, mask)`. */
         const val FLAGS_OFFSET = 1

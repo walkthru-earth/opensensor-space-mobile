@@ -31,7 +31,7 @@ sequenceDiagram
 
 `MTU_REQUEST = 517`, `MTU_MINIMUM = 247`, `PROTOCOL_VERSION = 2`. BLE `payload_max = min(MTU − 3, 512)`. Below MTU 483 a snapshot can exceed one notification and is skipped, so the app long reads STATUS and LIVE every 10 s.
 
-**Advertising service data** (`Advertisement`, protocol 2.1 / firmware ≥ `-v6.3`), under SERVICE in the ADV PDU; the name and UUID list are in the scan response (the `ScanRecord` merges both): `ver` u8 = 1 · `flags` u8 (bit 0 `no_utc`, 1 `new_files`, 2 `sd`, 3 `lan`, 4 `fail`, 5 `clk_restored`) · `fin` u32 LE · `boot16` u16 LE (last four hex digits of `info.boot`) · 2 reserved. `Advertisement.decode(scanRecord.getServiceData(SERVICE))`; `flagFilter(flag)` gives the `data/mask` pair for a hardware `ScanFilter`. Absent on older firmware → `null`.
+**Advertising service data** (`Advertisement`, protocol 2.1 / firmware ≥ `-v6.3`), under SERVICE in the ADV PDU; the name and UUID list are in the scan response (the `ScanRecord` merges both): `ver` u8 = 1 · `flags` u8 (bit 0 `no_utc`, 1 `new_files`, 2 `sd`, 3 `lan`, 4 `fail`, 5 `clk_restored`, 6 `setup` as firmware #147 proposes, always 0 on current firmware, read by `Advertisement.needsSetup`) · `fin` u32 LE · `boot16` u16 LE (last four hex digits of `info.boot`) · 2 reserved. `Advertisement.decode(scanRecord.getServiceData(SERVICE))`; `flagFilter(flag)` gives the `data/mask` pair for a hardware `ScanFilter`. Absent on older firmware → `null`.
 
 ## Opcodes (`Opcode`)
 
@@ -190,10 +190,13 @@ framing and 480-byte JSON limit. `Request.GetLocation` and `DeviceSession.getLoc
 return unsupported when older firmware returns the legacy object or rejects
 that selector. A missing location object is not an unset supported location.
 
-`ConfigPatch.location` sends only `location.cell`, `location.resolution` and
-`location.country`. SET_CONFIG acknowledges the legacy page; the app then reads
+Firmware #147 proposes an optional `location.gnss_cell`, the board's own GPS cell.
+`LocationConfig.gnssCell` keeps it only when it is a resolution 8 cell, and absent means no GPS offer.
+
+`ConfigPatch.Builder.location(cell, country)` sends only `location.cell`, `location.resolution=8` and
+`location.country`. The cell is empty or a resolution 8 cell. SET_CONFIG acknowledges the legacy page, and the app then reads
 page 1 and checks its saved values. No raw GPS coordinates cross this API.
-The app does not send `thing.mobility` yet. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
+`ConfigPatch.Builder.thingMobility` writes `thing.mobility`, but the app does not send it yet. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
 board keeps in RAM and writes with `location_source` 3. No released firmware accepts it, so the
 app names the key and never sends it.
 Pages 2–4 are firmware time policy/status and server configuration; this app

@@ -535,6 +535,22 @@ Audited 2026-09-17 after a `REBOOT` of uncertain origin reached the board;
 no phone-side cause of an unsolicited reboot was found, and these two gaps (buttons enabled during
 a sync; raw box accepting `0b`) were closed anyway.
 
+## Thing setup
+
+`ThingSetupPolicy.needsSetup(advertFlags, config)` in `core/sync` is the one rule both phones use
+to say a Thing still needs setup (#272). It reads the advert flags byte and the CONFIG page 1, and
+either may be null when the phone has not seen it. It sends nothing and changes nothing.
+
+- Advert bit 6 `setup` (`Advertisement.needsSetup`) set means setup is needed. Firmware #147
+  proposes the bit. Current firmware always leaves it at 0, so the page decides today.
+- A `fixed` Thing, or a page with no `thing.mobility` that still reports a `location` object,
+  needs setup until `location.cell` holds an H3 cell.
+- A `moving` Thing never needs a cell. A mobility value this build does not know claims nothing.
+- Without bit 6 and without page 1, nothing is claimed.
+
+The bit does not enter `changeKey`, so it never starts a sync by itself. Nothing on screen reads
+the rule yet.
+
 ## Historical decisions (v1, mirrored into the firmware contract 2026-09-16)
 
 The table records the original implementation. Current finalization starts `deriveAfterSync` for

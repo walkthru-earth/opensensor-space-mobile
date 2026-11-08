@@ -11,7 +11,7 @@ class ConfigFieldTest {
     private val everyBuilderKey: Set<String> = buildSet {
         addAll(ConfigPatch.build { blePair(PairMode.FIXED).blePin("000000").clearBonds() }.keys)
         addAll(ConfigPatch.build { wifiOn(true).wifiSsid("home").wifiPsk("").lanOn(true).rotateToken() }.keys)
-        addAll(ConfigPatch.build { location("", 8, "") }.keys)
+        addAll(ConfigPatch.build { location("", "").thingMobility(ThingMobility.FIXED) }.keys)
         addAll(ConfigPatch.build { sensorIdentity("Acme", "X1", "X1-0042", batchCandidate = false) }.keys)
     }
 
@@ -35,6 +35,7 @@ class ConfigFieldTest {
             "location.cell" to ConfigGroup.LOCATION,
             "location.resolution" to ConfigGroup.LOCATION,
             "location.country" to ConfigGroup.LOCATION,
+            "thing.mobility" to ConfigGroup.LOCATION,
             "sensor.vendor" to ConfigGroup.SENSOR,
             "sensor.model" to ConfigGroup.SENSOR,
             "sensor.serial" to ConfigGroup.SENSOR,

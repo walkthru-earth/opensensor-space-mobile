@@ -16,11 +16,13 @@ import space.opensensor.publicfeed.h3c.H3IndexVar
 import space.opensensor.publicfeed.h3c.LinkedGeoPolygon
 import space.opensensor.publicfeed.h3c.cellsToLinkedMultiPolygon
 import space.opensensor.publicfeed.h3c.destroyLinkedMultiPolygon
+import space.opensensor.publicfeed.h3c.maxGridDiskSize
 import space.opensensor.publicfeed.h3c.maxPolygonToCellsSize
 import kotlin.math.PI
 import space.opensensor.publicfeed.h3c.LatLng as CLatLng
 import space.opensensor.publicfeed.h3c.cellToBoundary as cCellToBoundary
 import space.opensensor.publicfeed.h3c.cellToLatLng as cCellToLatLng
+import space.opensensor.publicfeed.h3c.gridDisk as cGridDisk
 import space.opensensor.publicfeed.h3c.isValidCell as cIsValidCell
 import space.opensensor.publicfeed.h3c.latLngToCell as cLatLngToCell
 import space.opensensor.publicfeed.h3c.polygonToCells as cPolygonToCells
@@ -54,6 +56,18 @@ internal object NativeH3Grid : H3Grid {
         val b = alloc<CellBoundary>()
         check(cCellToBoundary(cell.toULong(), b.ptr) == 0u) { "cellToBoundary failed for ${H3Index.toHex(cell)}" }
         List(b.numVerts) { i -> LatLng(b.verts[i].lat * TO_DEG, b.verts[i].lng * TO_DEG) }
+    }
+
+    override fun gridDisk(cell: Long, k: Int): List<Long> = memScoped {
+        require(k >= 0) { "grid disk k must not be negative" }
+        val size = alloc<LongVar>()
+        check(maxGridDiskSize(k, size.ptr) == 0u) { "maxGridDiskSize failed for $k" }
+        val n = size.value.toInt()
+        val out = allocArray<H3IndexVar>(n)
+        for (i in 0 until n) out[i] = 0u
+        check(cGridDisk(cell.toULong(), k, out) == 0u) { "gridDisk failed for ${H3Index.toHex(cell)}" }
+        // Near a pentagon the disk holds fewer cells than the maximum, and the rest stay 0.
+        buildList { for (i in 0 until n) if (out[i] != 0uL) add(out[i].toLong()) }
     }
 
     override fun polygonToCells(ring: List<LatLng>, res: Int): List<Long> = memScoped {
