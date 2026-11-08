@@ -20,7 +20,7 @@ thing/Hive paths. Partial downloads are not exported. The original archive stays
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
-## Room schema v5 (`opensensor.db`)
+## Room schema v6 (`opensensor.db`)
 
 One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
 keeps the file in its app database directory. iOS keeps it at
@@ -54,7 +54,7 @@ erDiagram
     string thing
     string name "verbatim Hive path"
     long bytes
-    string sha256
+    string sha256 "index (thing,sha256), the file:checksum digest"
     long crc32
     long syncedAtEpochMs
     string sourceDevice
@@ -76,6 +76,7 @@ erDiagram
     string estAnchorFile
     string dictionarySha256 "footer digests, History resolves the template from them"
     string templateSha256
+    long uploadedAtEpochMs "null until an upload status listing proves it"
   }
   metric_bucket {
     long id PK "UNIQUE (thing,metricId,resolution,startEpochS)"
@@ -141,6 +142,13 @@ The EPA corrected PM2.5 (`metricId = pm25_epa`, #92) is one more `metric_bucket`
 from the raw cf1 and RH columns. Archived files and `archived_file` rows never change.
 `archived_file` is the index of the archive, never its source of truth (a file the reader refuses
 keeps its row with `indexError`).
+A file is the same file wherever it sits when its Thing, its File Item id (the file name without
+folders or `.parquet`) and its SHA-256 match (#273). `FileIdentity` in `:core:archive` holds the three,
+and `FileChecksum` in `:core:model` is the one reader and writer of the `file:checksum` multihash. The
+`(thing, sha256)` index answers `ArchiveIndex.withSha256` and `sameFile`. `uploadedAtEpochMs` is null
+until an upload status listing proves the file is in the cloud with the same bytes. Then
+`ArchiveIndex.markUploaded` sets it with one guarded `UPDATE`, which never marks a record with other
+bytes and keeps the first mark. No screen reads it yet.
 `list_cursor` keeps where each station's incremental `LIST_SINCE` left off, through `RoomListCursors`
 behind the `ListCursors` port in `:core:sync` ([sync-engine](sync-engine.md#incremental-listing)). A
 lost row only costs one whole listing. Forgetting a station keeps its row, and the next run still
@@ -182,9 +190,10 @@ already knows, from `known_device`, `thing_epoch` or `archived_file`, an `opense
 contract version 1, so no stored Thing is lost on upgrade. Version 4 adds `thing_place` through
 `AutoMigration(from = 3, to = 4)`. Version 5 adds the footer `dictionarySha256` and `templateSha256`
 to `archived_file` through `Migration4To5`, each with an index for the template change check, and
-reopens every row indexed without an error so the back-fill reads them. A schema change adds an
-explicit or auto migration and the next
-`core/database/schemas/<n>.json`.
+reopens every row indexed without an error so the back-fill reads them. Version 6 adds
+`uploadedAtEpochMs` and the `(thing, sha256)` index to `archived_file` through
+`AutoMigration(from = 5, to = 6)`, and every file starts as not uploaded. A schema change adds an
+explicit or auto migration and the next `core/database/schemas/<n>.json`.
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores
 the full sticker, vendor/model, batch, source (`barcode` or `manual`), phone UTC assertion time,

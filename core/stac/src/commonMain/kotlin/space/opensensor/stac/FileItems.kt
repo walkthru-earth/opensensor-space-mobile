@@ -20,6 +20,7 @@ import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.protocol.Sha256
 import space.opensensor.data.protocol.toHex
 import space.opensensor.model.BoardTemplate
+import space.opensensor.model.FileChecksum
 import space.opensensor.publicfeed.H3Grid
 import space.opensensor.publicfeed.H3Index
 import space.opensensor.publicfeed.LatLng
@@ -209,7 +210,7 @@ object FileItems {
                     put("type", PARQUET_MEDIA_TYPE)
                     putJsonArray("roles") { add("data") }
                     put("file:size", reader.size)
-                    put("file:checksum", "1220" + sha256Hex(reader))
+                    put("file:checksum", FileChecksum.multihash(sha256Hex(reader)))
                     put("table:row_count", rows)
                     ColumnStatistics.of(file, template).takeIf { it.isNotEmpty() }?.let { put("table:columns", it) }
                 }

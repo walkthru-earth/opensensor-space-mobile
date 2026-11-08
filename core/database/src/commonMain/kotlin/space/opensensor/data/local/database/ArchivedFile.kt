@@ -15,15 +15,21 @@ import kotlinx.coroutines.flow.Flow
 import space.opensensor.data.history.IndexedFileInfo
 
 /**
- * One verified Parquet file in the local archive. Identity is `(thing, name)`; the file is
- * immutable, so `bytes` and `crc32` are consistency checks against the device manifest.
+ * One verified Parquet file in the local archive. The row key is `(thing, name)`. The file is
+ * immutable, so `bytes` and `crc32` are consistency checks against the device manifest. The same
+ * file anywhere else, such as the cloud, is found by `(thing, sha256)` and its File Item id (#273).
  *
  * A row exists only after the file passed size + CRC-32 + `PAR1` verification and was renamed
  * into place: a partial or mismatched download never gets a row.
  */
 @Entity(
     tableName = "archived_file",
-    indices = [Index(value = ["thing", "name"], unique = true), Index("templateSha256"), Index("dictionarySha256")],
+    indices = [
+        Index(value = ["thing", "name"], unique = true),
+        Index(value = ["thing", "sha256"]),
+        Index("templateSha256"),
+        Index("dictionarySha256"),
+    ],
 )
 data class ArchivedFile(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -69,6 +75,10 @@ data class ArchivedFile(
     // History resolves its template at each derive and a newly served template rebuilds its days.
     val dictionarySha256: String? = null,
     val templateSha256: String? = null,
+
+    // ---- Upload status (schema v6, #273). When an upload status listing first showed this file in the
+    // cloud with the same File Item id and SHA-256, else null.
+    val uploadedAtEpochMs: Long? = null,
 ) {
     /** The same test as [space.opensensor.archive.ArchiveRecord.isIndexed]. */
     val isIndexed: Boolean get() = indexedAtEpochMs != null && indexError == null
@@ -224,6 +234,20 @@ interface ArchivedFileDao {
 
     @Query("DELETE FROM archived_file WHERE thing = :thing AND name = :name")
     suspend fun delete(thing: String, name: String)
+
+    /** One thing's files with these bytes, under any name, on the `(thing, sha256)` index. */
+    @Query("SELECT * FROM archived_file WHERE thing = :thing AND sha256 = :sha256 ORDER BY name")
+    suspend fun withSha256(thing: String, sha256: String): List<ArchivedFile>
+
+    /**
+     * Sets the upload time of `(thing, name)` from an upload status listing, only while the row still
+     * holds [sha256] and has no upload time. Returns the rows changed, 0 or 1.
+     */
+    @Query(
+        "UPDATE archived_file SET uploadedAtEpochMs = :atEpochMs " +
+            "WHERE thing = :thing AND name = :name AND sha256 = :sha256 AND uploadedAtEpochMs IS NULL",
+    )
+    suspend fun markUploaded(thing: String, name: String, sha256: String, atEpochMs: Long): Int
 }
 
 /**

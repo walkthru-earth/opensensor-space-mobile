@@ -7,11 +7,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import space.opensensor.archive.ArchiveKey
 import space.opensensor.archive.ArchiveRecord
+import space.opensensor.archive.FileIdentity
 import space.opensensor.data.local.database.inMemoryAppDatabase
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -120,5 +122,39 @@ class RoomArchiveIndexTest {
         assertEquals(listOf(b), index.observeThing("thing-a").first())
         assertEquals(setOf("thing-a", "thing-b"), index.things().toSet())
         assertEquals(listOf(b.name, c.name).sorted(), index.observeAll().first().map { it.name }.sorted())
+    }
+
+    @Test
+    fun theSameFileIsFoundByThingNameAndSha256() = runTest {
+        val thing = "11111111-2222-3333-4444-555555555555"
+        val sha = "ab".repeat(32)
+        val file = ArchiveRecord(thing, "thing=$thing/year=2026/month=10/day=01/data_1000.parquet", 10L, 1L, sha, 5L, "device")
+        val alias = file.copy(name = "thing=$thing/year=2026/month=10/day=01/data_1100.parquet")
+        val otherThing = file.copy(thing = "99999999-2222-3333-4444-555555555555")
+        listOf(file, alias, otherThing, file.copy(name = "x.parquet", sha256 = "cd".repeat(32))).forEach { index.put(it) }
+
+        assertEquals(listOf(file, alias), index.withSha256(thing, sha))
+        assertEquals(file, index.sameFile(FileIdentity(thing, "data_1000", sha)))
+        assertNull(index.sameFile(FileIdentity(thing, "data_1000", "cd".repeat(32))))
+        assertNull(index.sameFile(FileIdentity(thing, "data_1200", sha)))
+    }
+
+    @Test
+    fun markUploadedNeedsTheSameBytesAndKeepsTheFirstMark() = runTest {
+        val thing = "11111111-2222-3333-4444-555555555555"
+        val sha = "ab".repeat(32)
+        val file = ArchiveRecord(thing, "thing=$thing/year=2026/month=10/day=01/data_1000.parquet", 10L, 1L, sha, 5L, "device")
+        index.put(file)
+
+        assertFalse(index.markUploaded(FileIdentity(thing, "data_1000", "cd".repeat(32)), 7L))
+        assertNull(index.get(file.key)!!.uploadedAtEpochMs)
+        assertTrue(index.markUploaded(FileIdentity(thing, "data_1000", sha), 7L))
+        assertFalse(index.markUploaded(FileIdentity(thing, "data_1000", sha), 9L))
+        assertEquals(7L, index.get(file.key)!!.uploadedAtEpochMs)
+
+        // The index repair and the indexer write whole records, and the marker rides along.
+        index.update(file.key) { it.copy(indexedAtEpochMs = 11L) }
+        assertEquals(7L, index.get(file.key)!!.uploadedAtEpochMs)
+        assertEquals(1, index.observeThing(thing).first().size)
     }
 }

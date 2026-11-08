@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.withLock
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveKey
 import space.opensensor.archive.ArchiveRecord
+import space.opensensor.archive.FileIdentity
 import space.opensensor.archive.IosArchiveStore
 import space.opensensor.archive.LegacyReceiptImport
 import space.opensensor.archive.PrunedFile
@@ -71,6 +72,8 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
         override suspend fun timeline(thing: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = room().timeline(thing, fromNs, toNs)
         override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = room().indexedForThing(thing)
         override suspend fun things(): List<String> = room().things()
+        override suspend fun withSha256(thing: String, sha256: String): List<ArchiveRecord> = room().withSha256(thing, sha256)
+        override suspend fun markUploaded(identity: FileIdentity, atEpochMs: Long): Boolean = room().markUploaded(identity, atEpochMs)
     }
 
     val pruned: PrunedFiles = object : PrunedFiles {

@@ -32,6 +32,7 @@ fun ArchivedFile.toRecord(): ArchiveRecord = ArchiveRecord(
     estAnchorFile = estAnchorFile,
     dictionarySha256 = dictionarySha256,
     templateSha256 = templateSha256,
+    uploadedAtEpochMs = uploadedAtEpochMs,
 )
 
 /** [id] 0 lets Room assign one. The `(thing, name)` unique index replaces an existing row. */
@@ -62,4 +63,5 @@ fun ArchiveRecord.toEntity(id: Long = 0): ArchivedFile = ArchivedFile(
     estAnchorFile = estAnchorFile,
     dictionarySha256 = dictionarySha256,
     templateSha256 = templateSha256,
+    uploadedAtEpochMs = uploadedAtEpochMs,
 )
