@@ -572,7 +572,8 @@ it.
 - `DevicesController` turns the needs into a `needsSetup` row flag and one `prompt` at a time. My
   devices opens the wizard for the prompt once per sensor per foreground session, and any wizard run
   for that sensor, by itself or from a tap, spends it (`opened`). Leaving the foreground calls
-  `endSession`, which forgets the reads and the opens. Everything stays in memory.
+  `endSession`, which forgets the reads and the opens and skips any advert heard before it, so a
+  scan result kept from the last session cannot open the wizard. Everything stays in memory.
 - The watch sends nothing. Pairing a new sensor stays the user's tap on Find, and every save stays an
   explicit SET_CONFIG from the wizard or Device settings.
 

@@ -251,8 +251,8 @@ class DevicesBridge internal constructor(
     /** Which sensors ask for setup this foreground session, as on Android (#272). */
     internal val setup = ThingSetupWatch()
 
-    /** The app left the foreground, so the wizard may open by itself again next time. */
-    fun endSetupSession() = setup.endSession()
+    /** The app left the foreground, so the wizard may open by itself again for a sensor heard next time. */
+    fun endSetupSession() = setup.endSession(now())
 
     /** The setup wizard's Find looks for sensors over Bluetooth only, the same as Android. */
     internal fun startFind() = findScan()

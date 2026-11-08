@@ -128,8 +128,10 @@ class DevicesControllerTest {
         // The wizard opened from elsewhere, here its own init, also spends the automatic open.
         watch.opened("A")
         assertNull(controller.state.value.prompt)
-        watch.endSession()
+        watch.endSession(4)
         assertEquals(SetupRequest("A", "Kitchen", known = true), controller.state.value.prompt)
+        watch.endSession(5)
+        assertNull(controller.state.value.prompt, "an advert from before the session end does not prompt")
     }
 
     @Test

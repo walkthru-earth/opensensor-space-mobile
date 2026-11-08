@@ -67,7 +67,7 @@ class ThingSetupWatchTest {
         assertEquals(listOf(SetupNeed("AA:BB", false)), watch.needs(scan).first())
         watch.opened("aa:bb")
         assertEquals(listOf(SetupNeed("AA:BB", true)), watch.needs(scan).first())
-        watch.endSession()
+        watch.endSession(4)
         assertEquals(listOf(SetupNeed("AA:BB", false)), watch.needs(scan).first())
     }
 
@@ -77,7 +77,17 @@ class ThingSetupWatchTest {
         val scan = MutableStateFlow(listOf(SetupSighting("AA", Advertisement.FLAG_SETUP, 5)))
         watch.pageRead("AA", done, 6)
         assertEquals(emptyList(), watch.needs(scan).first())
-        watch.endSession()
+        watch.endSession(4)
+        assertEquals(listOf(SetupNeed("AA", false)), watch.needs(scan).first())
+    }
+
+    @Test
+    fun `a sighting kept from the last session claims nothing until heard again`() = runTest {
+        val watch = ThingSetupWatch()
+        val scan = MutableStateFlow(listOf(SetupSighting("AA", Advertisement.FLAG_SETUP, 5)))
+        watch.endSession(5)
+        assertEquals(emptyList(), watch.needs(scan).first())
+        scan.value = listOf(SetupSighting("AA", Advertisement.FLAG_SETUP, 6))
         assertEquals(listOf(SetupNeed("AA", false)), watch.needs(scan).first())
     }
 }

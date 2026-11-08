@@ -31,11 +31,13 @@ data class SetupNeed(val id: String, val opened: Boolean)
  *   undo the page that says setup is done.
  * - The wizard opens by itself once per sensor per foreground session. [opened] spends that open,
  *   for an automatic open and for any wizard run the user started. Ids match case insensitively.
+ * - A sighting heard before the last [endSession] claims nothing, so a scan result kept from the
+ *   last session cannot open the wizard for a sensor that has left.
  *
  * Everything it holds lasts one foreground session and stays in memory.
  */
 class ThingSetupWatch {
-    private data class Session(val pages: Map<String, Page> = emptyMap(), val opened: Set<String> = emptySet())
+    private data class Session(val pages: Map<String, Page> = emptyMap(), val opened: Set<String> = emptySet(), val sinceMs: Long? = null)
 
     private val session = MutableStateFlow(Session())
 
@@ -49,14 +51,17 @@ class ThingSetupWatch {
         session.update { it.copy(opened = it.opened + id.lowercase()) }
     }
 
-    /** The app left the foreground. The next session starts with nothing read and nothing opened. */
-    fun endSession() {
-        session.value = Session()
+    /**
+     * The app left the foreground at [atMs]. The next session starts with nothing read and nothing
+     * opened, and counts only sightings heard after [atMs].
+     */
+    fun endSession(atMs: Long) {
+        session.value = Session(sinceMs = atMs)
     }
 
     /** The sensors among [sightings], and those with a page 1 read, that need setup now. */
     fun needs(sightings: Flow<List<SetupSighting>>): Flow<List<SetupNeed>> =
-        combine(sightings, session) { seen, s -> decide(seen, s.pages.values.toList(), s.opened) }
+        combine(sightings, session) { seen, s -> decide(seen, s.pages.values.toList(), s.opened, s.sinceMs) }
 
     /** Page 1 of [id] as read at [readMs], the input of [decide]. */
     data class Page(val id: String, val config: DeviceConfig, val readMs: Long)
@@ -64,12 +69,14 @@ class ThingSetupWatch {
     companion object {
         /**
          * The pure rule behind [needs]. Sighted sensors come first in their order, then sensors known
-         * only from a page read. [opened] holds lowercase ids.
+         * only from a page read. [opened] holds lowercase ids. A sighting heard at or before [sinceMs]
+         * is skipped.
          */
-        fun decide(sightings: List<SetupSighting>, pages: List<Page>, opened: Set<String>): List<SetupNeed> {
+        fun decide(sightings: List<SetupSighting>, pages: List<Page>, opened: Set<String>, sinceMs: Long? = null): List<SetupNeed> {
             val byId = pages.associateBy { it.id.lowercase() }
             val out = LinkedHashMap<String, SetupNeed>()
             for (s in sightings) {
+                if (sinceMs != null && s.seenMs != null && s.seenMs <= sinceMs) continue
                 val key = s.id.lowercase()
                 if (key in out) continue
                 val page = byId[key]

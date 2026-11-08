@@ -40,10 +40,10 @@ class MainActivity : ComponentActivity() {
     }
 
     // Leaving the foreground ends the setup session, so a sensor that asks for setup opens the wizard
-    // once more on return (#272). A rotation is not a new session.
+    // once more when the scan hears it again (#272). A rotation is not a new session.
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations) setupWatch.endSession()
+        if (!isChangingConfigurations) setupWatch.endSession(System.currentTimeMillis())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

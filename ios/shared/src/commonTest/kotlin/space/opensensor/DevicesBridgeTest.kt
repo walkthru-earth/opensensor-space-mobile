@@ -1,5 +1,6 @@
 package space.opensensor
 
+import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -87,9 +88,13 @@ class DevicesBridgeTest {
     }
 
     @Test fun aSensorAskingForSetupPromptsOncePerForegroundSession() = runTest {
-        val state = CompanionState().apply { deviceFound(b, "OS-b", -50, advertFlags = Advertisement.FLAG_SETUP) }
+        var heard = 5L
+        val state = CompanionState().apply {
+            clock = { heard }
+            deviceFound(b, "OS-b", -50, advertFlags = Advertisement.FLAG_SETUP)
+        }
         // The list waits for the archive index, so this one emits an empty index.
-        val bridge = DevicesBridge(state, flowOf(emptyList()), MemoryStorage(), { 5 }, {}, {}, {}, {}, { _, _ -> }, { _, _ -> })
+        val bridge = DevicesBridge(state, flowOf(emptyList()), MemoryStorage(), { 6 }, {}, {}, {}, {}, { _, _ -> }, { _, _ -> })
         val controller = bridge.controller(backgroundScope)
         val prompt = controller.state.first { it.prompt != null }.prompt!!
         assertEquals(SetupRequest(b, "OS-b", known = false), prompt)
@@ -97,7 +102,13 @@ class DevicesBridgeTest {
         val spent = controller.state.first { it.prompt == null }
         assertTrue(spent.list.nearby.single().needsSetup, "the row keeps its resume entry")
         bridge.endSetupSession()
-        assertEquals(prompt, controller.state.first { it.prompt != null }.prompt, "the next session prompts again")
+        // An advert from the last session claims nothing, so the row loses its flag and nothing prompts.
+        val cleared = controller.state.first { s -> s.list.nearby.none { it.needsSetup } }
+        assertNull(cleared.prompt)
+        heard = 7
+        state.deviceFound(b, "OS-b", -50, advertFlags = Advertisement.FLAG_SETUP)
+        Snapshot.sendApplyNotifications()
+        assertEquals(prompt, controller.state.first { it.prompt != null }.prompt, "the next session prompts once it hears the sensor again")
     }
 
     @Test fun mergeListsRecordsAndCredentialsOncePerPeripheral() {
