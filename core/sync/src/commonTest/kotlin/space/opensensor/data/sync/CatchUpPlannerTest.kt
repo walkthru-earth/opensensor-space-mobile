@@ -1,9 +1,13 @@
 package space.opensensor.data.sync
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import space.opensensor.archive.ArchiveKey
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.archive.FileIdentity
 import space.opensensor.archive.PrunedFile
+import space.opensensor.archive.PrunedFiles
 import space.opensensor.model.FileChecksum
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -201,7 +205,7 @@ class CatchUpPlannerTest {
         val n = name(15, "1000", 0)
         index.put(archived(n))
         index.put(archived(name(15, "1100", 60), sha = shaB))
-        val catchUp = CloudCatchUp(index)
+        val catchUp = CloudCatchUp(index, DeviceCoordinator())
         val listing = listOf(raw(n, sha = shaA), raw(name(15, "1100", 60), sha = shaC))
         val result = catchUp.plan(thing, prefixes, listing)
         val puts = index.puts
@@ -212,5 +216,74 @@ class CatchUpPlannerTest {
         assertEquals(42L, index.records.single { it.name == n }.uploadedAtEpochMs)
         assertNull(index.records.single { it.name != n }.uploadedAtEpochMs)
         assertEquals(puts + 1, index.puts)
+    }
+
+    private fun compactedName(day: Int) = compacted(day).key.removePrefix("opensensor-space-daily/")
+
+    private fun archivedCompacted(day: Int, bytes: Long = 5000, sha: String = shaB) = archived(compactedName(day), bytes, sha)
+
+    @Test
+    fun compactedDayFilesAreMatchedByTheirFullNameNotTheirBareName() {
+        // Day 16 in the archive, day 17 listed. The same bare name, other days, other files.
+        val otherSha = compacted(17, sha = shaC)
+        assertEquals(CatchUpDecision.Fetch, plan(listOf(otherSha), archivedCompacted(16)).decision(otherSha))
+
+        val unchecksummed = compacted(17)
+        assertEquals(CatchUpDecision.Fetch, plan(listOf(unchecksummed), archivedCompacted(16)).decision(unchecksummed))
+
+        val removed = listOf(PrunedFile(thing, compactedName(16), 5000, 1, 5))
+        assertEquals(CatchUpDecision.Fetch, plan(listOf(otherSha), pruned = removed).decision(otherSha))
+
+        // The same day is still the same file.
+        val same = compacted(16, sha = shaB)
+        assertEquals(CatchUpDecision.Skip(SkipReason.SAME_FILE), plan(listOf(same), archivedCompacted(16)).decision(same))
+        assertEquals(CatchUpDecision.Skip(SkipReason.REMOVED_BY_USER), plan(listOf(compacted(16, sha = shaC)), pruned = removed).entries.single().decision)
+    }
+
+    @Test
+    fun aCompactedDayInTheArchiveSkipsTheRawFilesOfThatDay() {
+        val sameDay = raw(name(17, "1000", 0), sha = shaA)
+        val nextDay = raw(name(18, "1000", 0), sha = shaA)
+        val roll = compacted(17, sha = shaB)
+        val result = plan(listOf(sameDay, nextDay, roll), archivedCompacted(17))
+        assertEquals(CatchUpDecision.Skip(SkipReason.COMPACTED_COVERS_DAY), result.decision(sameDay))
+        assertEquals(CatchUpDecision.Fetch, result.decision(nextDay))
+        assertEquals(CatchUpDecision.Skip(SkipReason.SAME_FILE), result.decision(roll))
+        assertEquals(listOf(nextDay), result.toFetch.map { it.remote })
+    }
+
+    @Test
+    fun archivedRawFilesKeepTheirDayRawBesideAnArchivedCompactedFile() {
+        val listed = raw(name(17, "1100", 60), sha = shaC)
+        val roll = compacted(17, sha = shaB)
+        val result = plan(listOf(listed, roll), archived(name(17, "1000", 0)), archivedCompacted(17))
+        assertEquals(CatchUpDecision.Fetch, result.decision(listed))
+        assertEquals(CatchUpDecision.Skip(SkipReason.RAW_COVERS_DAY), result.decision(roll))
+    }
+
+    @Test
+    fun aRepeatedRawNamePlansTheCopyThatCarriesTheChecksum() {
+        val n = name(15, "1000", 0)
+        // The same board file twice, first without a checksum, then with one.
+        val bare = raw(n)
+        val proven = raw(n.replace("day=15", "day=16"), sha = shaA)
+        val result = plan(listOf(bare, proven), archived(n))
+        assertEquals(CatchUpDecision.Skip(SkipReason.REPEAT_IN_LISTING), result.decision(bare))
+        assertEquals(CatchUpDecision.Skip(SkipReason.SAME_FILE), result.decision(proven))
+        assertEquals(listOf(FileIdentity(thing, FileIdentity.itemIdOf(n), shaA)), result.uploaded)
+    }
+
+    @Test
+    fun theCatchUpReadsRemovedFilesFromTheCoordinator() = runTest {
+        val n = name(15, "1000", 0)
+        val removed = object : PrunedFiles {
+            override fun observeAll(): Flow<List<PrunedFile>> = flowOf(listOf(PrunedFile(thing, n, 1000, 1, 5)))
+            override suspend fun put(file: PrunedFile) = Unit
+            override suspend fun remove(key: ArchiveKey) = Unit
+            override suspend fun clear(): Int = 0
+        }
+        val catchUp = CloudCatchUp(MemoryArchiveIndex(), DeviceCoordinator(removed))
+        val result = catchUp.plan(thing, prefixes, listOf(raw(n, sha = shaA)))
+        assertEquals(CatchUpDecision.Skip(SkipReason.REMOVED_BY_USER), result.entries.single().decision)
     }
 }

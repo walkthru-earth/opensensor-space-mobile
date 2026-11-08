@@ -1,5 +1,6 @@
 package space.opensensor.archive
 
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -38,5 +39,28 @@ class FileIdentityTest {
         assertEquals(FileIdentity.of(thing, cloudName, sha), record.identity)
         assertFalse(record.isUploaded)
         assertTrue(record.copy(uploadedAtEpochMs = 5).isUploaded)
+    }
+
+    @Test
+    fun onlyBoardFilesAreMatchedByTheirItemId() {
+        assertTrue(FileIdentity.isBoardFile(name))
+        assertTrue(FileIdentity.isBoardFile(name.substringAfterLast('/')))
+        assertFalse(FileIdentity.isBoardFile("thing=$thing/year=2026/month=09/day=15/day.parquet"))
+        assertFalse(FileIdentity.isBoardFile("thing=$thing/year=2026/month=09/day=15/data_1000.parquet"))
+    }
+
+    @Test
+    fun theDefaultSameFileNeedsTheSameSha256() = runTest {
+        val index = InMemoryArchiveIndex()
+        val record = ArchiveRecord(thing, name, 1000, crc32 = 1, sha256 = sha, syncedAtEpochMs = 1, sourceDevice = "ble")
+        index.put(record)
+        val identity = FileIdentity.of(thing, name, sha)!!
+        assertEquals(record, index.sameFile(identity))
+        val otherBytes = identity.copy(sha256 = "cd".repeat(32))
+        assertNull(index.sameFile(otherBytes))
+        assertFalse(index.markUploaded(otherBytes, atEpochMs = 9))
+        assertNull(index.get(record.key)?.uploadedAtEpochMs)
+        assertTrue(index.markUploaded(identity, atEpochMs = 9))
+        assertEquals(9L, index.get(record.key)?.uploadedAtEpochMs)
     }
 }

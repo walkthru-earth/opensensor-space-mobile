@@ -115,35 +115,42 @@ the digests. Until the back-fill reaches it, such a row awaits its index.
 A file is the same file wherever it sits, on the card, in the phone archive or in the cloud, when its
 Thing id, its File Item id and its SHA-256 match. `FileIdentity` (`:core:archive`) holds the three, and
 `ArchiveRecord.identity` gives it for a record whose `sha256` is known. The File Item id is the file
-name without folders or `.parquet`, as `FileItems.build` sets it. `FileChecksum` (`:core:model`) is the
+name without folders or `.parquet`, as `FileItems.build` sets it. It names one file only for a board
+file, `data_HHMM_<boot>_...` (`FileIdentity.isBoardFile`). Any other file, such as a compacted
+`day.parquet`, repeats its bare name across days, so the planner matches it by its full Hive name. `FileChecksum` (`:core:model`) is the
 one parser and writer of the `file:checksum` multihash, `1220` then 64 hex characters, used by the
 File Item writer, the Collection parser and the planner below.
 
 `CatchUpPlanner` (`:core:sync`, pure) plans a restore or a catch up of one owned Thing from a remote
 listing, each object's key, size and `file:checksum` when the reader has it. `CloudCatchUp` runs it
-over the `ArchiveIndex` and downloads nothing. No reader exists yet. Each entry gets one decision.
+over the `ArchiveIndex` and the removed files of the archive's `DeviceCoordinator`, and downloads
+nothing. No reader exists yet. Each entry gets one decision.
 
 | Remote file | Decision |
 | --- | --- |
-| Same name and checksum as an archived file | Skip, `SAME_FILE`. Listed in `CatchUpPlan.uploaded` |
+| Same file as an archived one, by File Item id for a board file and full name otherwise, with the same checksum | Skip, `SAME_FILE`. Listed in `CatchUpPlan.uploaded` for raw files |
 | Same name, other checksum | Conflict, `OTHER_CHECKSUM`. The archived copy is never overwritten |
 | Same name, no checksum on one side, same size | Skip, `SAME_NAME_UNPROVEN`. Never fetched again |
 | Same name, no checksum on one side, other size | Conflict, `OTHER_SIZE` |
 | Archived bytes under another name | Skip, `SAME_BYTES_OTHER_NAME` |
-| The listing holds it twice | First one planned, the rest `REPEAT_IN_LISTING`. Two different files for one name are both a conflict |
+| The listing holds it twice | One planned, the first that carries a checksum, the rest `REPEAT_IN_LISTING`. Two different files for one name are both a conflict |
 | Removed by the user in Settings | Skip, `REMOVED_BY_USER` |
 | Anything else in this Thing's dated files | Fetch |
 
 Raw and compacted files never mix (bridge decision 13). `CloudPrefixes` names the raw prefix, the
-board's Hive tree, and the compacted prefix of day roll ups in the same `thing=` and date folders. A
-UTC day with any raw file, in the listing or in the archive, skips its compacted file
-(`RAW_COVERS_DAY`). A day with no raw file fetches its one compacted file, and several compacted files
-for one day are fetched once only when their checksums are known and equal, else they are a conflict.
+board's Hive tree, and the compacted prefix of day roll ups in the same `thing=` and date folders.
+Each UTC day reads one tree. The archive decides first. An archived board file makes it a raw day, and
+an archived file of any other name a compacted day. Otherwise any raw file in the listing makes it a
+raw day. A raw day skips its compacted files (`RAW_COVERS_DAY`) and a compacted day skips its raw files
+(`COMPACTED_COVERS_DAY`), so the archive never holds both trees for one day. A day with no raw file
+fetches its one compacted file, and several compacted files for one day are fetched once only when
+their checksums are known and equal, else they are a conflict.
 Keys outside both prefixes, Items, Collections, unsynced files and other Things are skipped.
 
 A fetched file must pass the same size, CRC-32 and `PAR1` checks as a device download before it is
 archived, and `RowKey` still drops repeated rows of one Thing and time. `CloudCatchUp.markUploaded`
-sets `uploadedAtEpochMs` on each file of `CatchUpPlan.uploaded`. The marker is not part of the day
+sets `uploadedAtEpochMs` on each file of `CatchUpPlan.uploaded`, under the coordinator's thing gate
+like every index write. The marker is not part of the day
 signature, so marking rebuilds no day. `CloudCatchUpHistoryTest` proves on the JVM and iOS that a
 skipped file adds no record and leaves the tier buckets and their row counts unchanged.
 

@@ -69,6 +69,9 @@ enum class SkipReason {
     /** Raw files cover this UTC day, so its compacted file is never read beside them (decision 13). */
     RAW_COVERS_DAY,
 
+    /** The archive holds this UTC day's compacted file, so its raw files are never read beside it (decision 13). */
+    COMPACTED_COVERS_DAY,
+
     /** A key of another Thing. */
     OTHER_THING,
 
@@ -122,13 +125,16 @@ data class CatchUpPlan(val thing: String, val entries: List<CatchUpEntry>) {
  * (#273). It is pure and does no I/O. A reader downloads [CatchUpPlan.toFetch] and commits each file
  * with the same size, CRC-32 and `PAR1` checks as a device download.
  *
- * - **Same file.** A raw file whose File Item id and checksum match an archived file is skipped, so
- *   its rows are never stored or counted twice.
+ * - **Same file.** A board file whose File Item id and checksum match an archived file is skipped, so
+ *   its rows are never stored or counted twice. Any other file, such as a compacted day file, is
+ *   matched by its full Hive name, since its bare name repeats across days.
  * - **Never a second copy.** Bytes already archived under another name are skipped, a name already
  *   archived is never fetched again, and a file the listing repeats is planned once.
  * - **Never overwrite.** The same name with other bytes is a conflict, left for the owner.
- * - **Raw or compacted, never both (decision 13).** A UTC day with any raw file, in the listing or the
- *   archive, skips its compacted file. A day with only a compacted file fetches that one file.
+ * - **Raw or compacted, never both (decision 13).** Each UTC day reads one tree. The archive decides
+ *   first, archived board files make it a raw day and an archived compacted file a compacted day.
+ *   Otherwise any raw file in the listing makes it a raw day. A raw day skips its compacted files, a
+ *   compacted day skips its raw files, and a day with only a compacted file fetches that one file.
  */
 object CatchUpPlanner {
     fun plan(
@@ -139,27 +145,34 @@ object CatchUpPlanner {
         pruned: Collection<PrunedFile> = emptyList(),
     ): CatchUpPlan {
         val mine = archived.filter { it.thing == thing }
-        val byItemId = mine.groupBy { FileIdentity.itemIdOf(it.name) }
+        val byKey = mine.groupBy { matchKey(it.name) }
         val bySha = mine.filter { it.sha256.isNotEmpty() }.groupBy { it.sha256 }
-        val removed = pruned.filter { it.thing == thing }.mapTo(HashSet()) { FileIdentity.itemIdOf(it.name) }
-        val located = listing.map { locate(thing, prefixes, it) }
+        val removed = pruned.filter { it.thing == thing }.mapTo(HashSet()) { matchKey(it.name) }
 
-        // A day counts as raw when the archive or the listing holds any of its raw files.
-        val rawDays = HashSet<String>()
-        mine.mapNotNullTo(rawDays) { (HivePartition.of(it.name) as? HivePartition.Dated)?.isoDate }
-        located.filter { it.kind == CloudFileKind.RAW }.mapNotNullTo(rawDays) { it.utcDate }
+        // The tree of each UTC day. The archive decides first, then any raw file in the listing. Raw
+        // files of a compacted day are settled before the repeat check, so they never stand for a
+        // raw file of another day.
+        val (archivedRaw, archivedCompacted) = mine.partition { FileIdentity.isBoardFile(it.name) }
+        val rawDays = archivedRaw.mapNotNullTo(HashSet()) { dayOf(it.name) }
+        val compactedDays = archivedCompacted.mapNotNullTo(HashSet()) { dayOf(it.name) } - rawDays
+        val located = listing.map { remote ->
+            val at = locate(thing, prefixes, remote)
+            val covered = at.decision == null && at.kind == CloudFileKind.RAW && at.utcDate in compactedDays
+            if (covered) Located(at.remote, at.kind, at.name, at.utcDate, skip(SkipReason.COMPACTED_COVERS_DAY)) else at
+        }
+        located.filter { it.decision == null && it.kind == CloudFileKind.RAW }.mapNotNullTo(rawDays) { it.utcDate }
 
         val repeats = repeatsInListing(located)
-        val compactedDays = located.filter { it.decision == null && it.kind == CloudFileKind.COMPACTED }
+        val listedCompacted = located.filter { it.decision == null && it.kind == CloudFileKind.COMPACTED }
             .groupBy { it.utcDate }
 
         val entries = located.mapIndexed { index, at ->
             val decision = when {
                 at.decision != null -> at.decision
                 at.kind == CloudFileKind.COMPACTED && at.utcDate in rawDays -> skip(SkipReason.RAW_COVERS_DAY)
-                at.kind == CloudFileKind.COMPACTED -> oneCompactedPerDay(at, compactedDays.getValue(at.utcDate))
-                    ?: againstArchive(at, byItemId, bySha, removed)
-                else -> repeats[index] ?: againstArchive(at, byItemId, bySha, removed)
+                at.kind == CloudFileKind.COMPACTED -> oneCompactedPerDay(at, listedCompacted.getValue(at.utcDate))
+                    ?: againstArchive(at, byKey, bySha, removed)
+                else -> repeats[index] ?: againstArchive(at, byKey, bySha, removed)
             }
             CatchUpEntry(at.remote, at.kind, at.name, at.utcDate, decision)
         }
@@ -186,8 +199,17 @@ object CatchUpPlanner {
         val utcDate: String?,
         val decision: CatchUpDecision? = null,
     ) {
-        val itemId: String? get() = name?.let(FileIdentity::itemIdOf)
+        val key: String? get() = name?.let(::matchKey)
     }
+
+    /**
+     * What names one file within a Thing. A board file's File Item id, the same in every tree and
+     * folder. Any other file's full Hive name, since its bare name, such as `day.parquet`, repeats
+     * across days. An id has no slash and a Hive name always has one, so the two never meet.
+     */
+    private fun matchKey(name: String): String = if (FileIdentity.isBoardFile(name)) FileIdentity.itemIdOf(name) else name
+
+    private fun dayOf(name: String): String? = (HivePartition.of(name) as? HivePartition.Dated)?.isoDate
 
     private fun locate(thing: String, prefixes: CloudPrefixes, remote: RemoteFile): Located {
         val compactedRoot = prefixes.compactedRoot
@@ -208,19 +230,21 @@ object CatchUpPlanner {
     }
 
     /**
-     * Per listing index, the decision of a raw file the listing holds more than once, by File Item id
-     * or by checksum. A group that agrees plans its first file and skips the rest. A group with other
-     * bytes for one name is a conflict in every key, so neither copy is picked by chance.
+     * Per listing index, the decision of a raw file the listing holds more than once, by [matchKey]
+     * or by checksum. A group that agrees plans one file and skips the rest, the first that carries a
+     * checksum, so its proof reaches [CatchUpPlan.uploaded]. A group with other bytes for one name is
+     * a conflict in every key, so neither copy is picked by chance.
      */
     private fun repeatsInListing(located: List<Located>): Map<Int, CatchUpDecision> {
         val out = HashMap<Int, CatchUpDecision>()
         val open = located.withIndex().filter { it.value.decision == null && it.value.kind == CloudFileKind.RAW }
-        for (group in open.groupBy { it.value.itemId }.values) {
+        for (group in open.groupBy { it.value.key }.values) {
             if (group.size < 2) continue
             if (!agree(group.map { it.value })) {
                 group.forEach { out[it.index] = CatchUpDecision.Conflict(ConflictReason.LISTING_DISAGREES) }
             } else {
-                group.drop(1).forEach { out[it.index] = skip(SkipReason.REPEAT_IN_LISTING) }
+                val kept = group.firstOrNull { it.value.remote.sha256 != null } ?: group.first()
+                group.filter { it !== kept }.forEach { out[it.index] = skip(SkipReason.REPEAT_IN_LISTING) }
             }
         }
         val bySha = open.filter { it.index !in out && it.value.remote.sha256 != null }
@@ -237,12 +261,12 @@ object CatchUpPlanner {
 
     private fun againstArchive(
         at: Located,
-        byItemId: Map<String, List<ArchiveRecord>>,
+        byKey: Map<String, List<ArchiveRecord>>,
         bySha: Map<String, List<ArchiveRecord>>,
         removed: Set<String>,
     ): CatchUpDecision {
         val sha = at.remote.sha256
-        val local = byItemId[at.itemId].orEmpty()
+        val local = byKey[at.key].orEmpty()
         if (local.isNotEmpty()) {
             if (sha != null) {
                 local.firstOrNull { it.sha256 == sha }?.let { return skip(SkipReason.SAME_FILE) }
@@ -257,7 +281,7 @@ object CatchUpPlanner {
             return skip(SkipReason.SAME_NAME_UNPROVEN)
         }
         if (sha != null && bySha[sha] != null) return skip(SkipReason.SAME_BYTES_OTHER_NAME)
-        if (at.itemId in removed) return skip(SkipReason.REMOVED_BY_USER)
+        if (at.key in removed) return skip(SkipReason.REMOVED_BY_USER)
         return CatchUpDecision.Fetch
     }
 
@@ -265,21 +289,19 @@ object CatchUpPlanner {
 }
 
 /**
- * Ties [CatchUpPlanner] to an [ArchiveIndex]. It plans from the Thing's archived records and marks
- * the files a listing proves are uploaded. It downloads nothing. Uploading stays off by default.
+ * Ties [CatchUpPlanner] to an [ArchiveIndex] and the archive's one [DeviceCoordinator]. It plans from
+ * the Thing's archived records and the files the user removed, and marks the files a listing proves
+ * are uploaded. It downloads nothing. Uploading stays off by default.
  */
-class CloudCatchUp(private val index: ArchiveIndex) {
-    suspend fun plan(
-        thing: String,
-        prefixes: CloudPrefixes,
-        listing: List<RemoteFile>,
-        pruned: Collection<PrunedFile> = emptyList(),
-    ): CatchUpPlan = CatchUpPlanner.plan(thing, prefixes, listing, index.observeThing(thing).first(), pruned)
+class CloudCatchUp(private val index: ArchiveIndex, private val coordinator: DeviceCoordinator) {
+    suspend fun plan(thing: String, prefixes: CloudPrefixes, listing: List<RemoteFile>): CatchUpPlan =
+        CatchUpPlanner.plan(thing, prefixes, listing, index.observeThing(thing).first(), coordinator.pruned.forThing(thing))
 
     /**
      * Sets the uploaded marker of every archived file in [plan]'s [CatchUpPlan.uploaded], at
-     * [atEpochMs]. Returns how many records changed. A file already marked keeps its first mark.
+     * [atEpochMs], each under the Thing gate like every index write. Returns how many records
+     * changed. A file already marked keeps its first mark. Never call it with the gate held.
      */
     suspend fun markUploaded(plan: CatchUpPlan, atEpochMs: Long): Int =
-        plan.uploaded.count { index.markUploaded(it, atEpochMs) }
+        plan.uploaded.count { identity -> coordinator.withThing(identity.thing) { index.markUploaded(identity, atEpochMs) } }
 }

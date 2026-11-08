@@ -19,6 +19,7 @@ import space.opensensor.data.sync.CatchUpDecision
 import space.opensensor.data.sync.CloudCatchUp
 import space.opensensor.data.sync.CloudPrefixes
 import space.opensensor.data.sync.ConflictReason
+import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.RemoteFile
 import space.opensensor.data.sync.SkipReason
 import space.opensensor.model.FileChecksum
@@ -94,7 +95,7 @@ class CloudCatchUpHistoryTest {
         assertTrue(before.rows() > 0)
         assertEquals(1, tiers.decodedDays)
 
-        val catchUp = CloudCatchUp(index)
+        val catchUp = CloudCatchUp(index, DeviceCoordinator())
         val remote = RemoteFile("walkthru-earth/opensensor-space/$name", board.size.toLong(), FileChecksum.multihash(sha))
         val plan = catchUp.plan(thing, prefixes, listOf(remote))
         assertEquals(CatchUpDecision.Skip(SkipReason.SAME_FILE), plan.entries.single().decision)
@@ -119,7 +120,7 @@ class CloudCatchUpHistoryTest {
         val before = tiers.snapshot()
         val recordBefore = index.rows.value.single()
 
-        val catchUp = CloudCatchUp(index)
+        val catchUp = CloudCatchUp(index, DeviceCoordinator())
         val remote = RemoteFile("walkthru-earth/opensensor-space/$name", board.size.toLong(), FileChecksum.multihash("0".repeat(64)))
         val plan = catchUp.plan(thing, prefixes, listOf(remote))
         assertEquals(CatchUpDecision.Conflict(ConflictReason.OTHER_CHECKSUM, recordBefore), plan.entries.single().decision)
