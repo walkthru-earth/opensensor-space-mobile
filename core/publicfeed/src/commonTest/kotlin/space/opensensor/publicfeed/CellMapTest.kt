@@ -3,6 +3,7 @@ package space.opensensor.publicfeed
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -59,6 +60,18 @@ class CellMapTest {
     fun `rings across the antimeridian stay continuous`() {
         val ring = listOf(LatLng(0.0, 179.0), LatLng(1.0, -179.0), LatLng(-1.0, -179.5))
         assertEquals(listOf(179.0, 181.0, 180.5), CellGeoJson.unwrap(ring).map { it.lng })
+    }
+
+    @Test
+    fun `a polygon closes its ring and rounds to six decimals`() {
+        val ring = listOf(LatLng(1.0, 2.0), LatLng(1.5, 2.1234567), LatLng(0.9999999, 2.5))
+        val sb = StringBuilder()
+        CellGeoJson.appendPolygon(sb, ring)
+        assertEquals(
+            "{\"type\":\"Polygon\",\"coordinates\":[[[2.0,1.0],[2.123457,1.5],[2.5,1.0],[2.0,1.0]]]}",
+            sb.toString(),
+        )
+        assertFailsWith<IllegalArgumentException> { CellGeoJson.appendPolygon(StringBuilder(), emptyList()) }
     }
 
     @Test

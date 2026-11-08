@@ -835,7 +835,8 @@ class DiscoverControllerTest {
 
     @Test
     fun ownThingsNeverReachThePublicSource() = runTest {
-        val c = controller(FakeFeed())
+        val feed = FakeFeed()
+        val c = controller(feed)
         // The own Thing stands in cell A, a cell the public feed also reports. The shared cell is allowed.
         c.showOwnThings(listOf(ownThing()))
         settle()
@@ -847,6 +848,17 @@ class DiscoverControllerTest {
         assertFalse(s.ownGeoJson.contains(ownUuid), "the own source carries an index, never the UUID")
         assertFalse(s.ownGeoJson.contains("Rooftop"), "the own source carries an index, never the name")
         assertTrue(s.ownGeoJson.contains("[-122.0,37.0]"), "the pin stands at the cell centre")
+        // A rows reload with the own Things still shown builds the public source again. It stays clean.
+        feed.calls.clear()
+        c.selectWindow(FeedWindow.WEEK)
+        settle()
+        assertTrue(feed.calls.any { it.first == FeedWindow.WEEK }, "the rows were read again")
+        val reloaded = c.state.value
+        assertEquals(FeedWindow.WEEK, reloaded.window)
+        assertTrue(reloaded.geoJson.contains(H3Index.toHex(cellA)), "the reloaded public source still draws cell A")
+        assertFalse(reloaded.geoJson.contains(ownUuid), "no own Thing UUID after a rows reload")
+        assertFalse(reloaded.geoJson.contains("Rooftop"), "no own Thing name after a rows reload")
+        assertEquals(1, reloaded.own.size)
     }
 
     /** [FakeGrid] that counts the cell centres asked, one per own Thing per source build. */

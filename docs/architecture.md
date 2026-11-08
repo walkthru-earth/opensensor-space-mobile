@@ -46,7 +46,7 @@ flowchart TB
   SC --> HI & PF & PR
   TH --> SC & HI & PR & MO1
   MP --> PF & DS & PM
-  DI --> MP & UN & SE
+  DI --> PF & DS & MP & UN & SE
   DS --> AQ
   SE --> UN & ST
   FS --> SE & DS
@@ -129,7 +129,7 @@ flowchart TB
   HI2 --> PQ2 & MO
   FE --> SY & ST & HI2 & DS
   MP --> PF & DS
-  DI --> MP & ST
+  DI --> PF & DS & MP & ST
   APP2 --> FE & DI
   IOS2 --> FE & DI
 ```

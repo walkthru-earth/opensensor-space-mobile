@@ -11,6 +11,7 @@ import space.opensensor.publicfeed.H3Index
  * ([CellGeoJson.ring]), continuous across the antimeridian. A cell with no boundary is left out.
  */
 object CellOutlines {
+    /** The outlines of [cells], each once, with the cell equal to [selected] marked `"selected":true`. */
     fun geoJson(h3: H3Grid, cells: Iterable<Long>, selected: Long? = null): String {
         val sb = StringBuilder(256)
         sb.append("{\"type\":\"FeatureCollection\",\"features\":[")

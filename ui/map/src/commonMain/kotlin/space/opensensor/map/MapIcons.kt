@@ -20,12 +20,3 @@ internal object MapIcons {
             .addPath(pathData = addPathNodes(pathData), fill = SolidColor(Color.Black))
             .build()
 }
-
-/** [runCatching] for suspend calls in composables. Cancellation still ends the coroutine. */
-internal inline fun <T> catchingNonCancel(block: () -> T): Result<T> = try {
-    Result.success(block())
-} catch (e: kotlin.coroutines.cancellation.CancellationException) {
-    throw e
-} catch (e: Exception) {
-    Result.failure(e)
-}

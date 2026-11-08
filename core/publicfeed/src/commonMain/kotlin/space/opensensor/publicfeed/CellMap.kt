@@ -150,8 +150,13 @@ object CellGeoJson {
      */
     fun ring(h3: H3Grid, cell: Long): List<LatLng> = unwrap(h3.cellToBoundary(cell))
 
-    /** Appends [ring] as a closed GeoJSON Polygon geometry, coordinates rounded to 6 decimals. */
+    /**
+     * Appends [ring] as a closed GeoJSON Polygon geometry, coordinates rounded to 6 decimals.
+     * The first point is repeated at the end to close it. [ring] must not be empty, so callers skip
+     * a cell whose [ring] came back empty.
+     */
     fun appendPolygon(sb: StringBuilder, ring: List<LatLng>) {
+        require(ring.isNotEmpty()) { "A polygon needs at least one point" }
         sb.append("{\"type\":\"Polygon\",\"coordinates\":[[")
         for ((i, p) in (ring + ring.first()).withIndex()) {
             if (i > 0) sb.append(',')

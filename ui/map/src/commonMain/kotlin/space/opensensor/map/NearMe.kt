@@ -81,13 +81,17 @@ class NearMe internal constructor(
 )
 
 // Low maps to Core Location's kilometre accuracy and Android's low-power fused request, which is
-// enough for a resolution 7 cell and works with a coarse grant.
+// enough for the resolution 6 cell of NEAR_ME_RES and works with a coarse grant.
 private val NEAR_ME_REQUEST = LocationRequest {
     accuracy = LocationAccuracy.Low
     minimumInterval = 30.seconds
     minimumDistance = 200.meters
 }
 
+/**
+ * One [NearMe] for the map on screen. Nothing asks for location until the first tap of
+ * [NearMeButton]. Each later tap recentres on the next fix.
+ */
 @Composable
 fun rememberNearMe(): NearMe {
     val access = rememberApproximateLocationAccess()

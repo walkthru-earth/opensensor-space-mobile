@@ -33,8 +33,10 @@ import space.opensensor.map.resources.map_zoom_out
 
 /** The zoom range of every map, for pinch ([BaseMap]) and the buttons ([ZoomControls]) alike. */
 object MapZoom {
-    // Basemap tiles run from zoom 0 to about 16. Past that the H3 cells are all the map shows.
+    /** The widest view the buttons and pinch allow. */
     const val MIN = 1.0
+
+    /** The closest view. Basemap tiles run to about 16, past that the H3 cells are all the map shows. */
     const val MAX = 16.0
 
     /**
