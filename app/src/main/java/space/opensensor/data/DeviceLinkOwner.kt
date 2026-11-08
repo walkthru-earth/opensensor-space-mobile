@@ -88,6 +88,7 @@ import space.opensensor.data.sync.ReadWindow
 import space.opensensor.data.sync.SyncListing
 import space.opensensor.data.sync.SyncPlan
 import space.opensensor.data.sync.ThingPlaces
+import space.opensensor.data.sync.ThingSetupWatch
 import space.opensensor.data.sync.recordFrom
 import space.opensensor.link.AuthKind
 import space.opensensor.link.DisconnectCause
@@ -196,6 +197,8 @@ class DeviceLinkOwner @Inject constructor(
     private val boardDescriptors: BoardDescriptors,
     /** Each fixed Thing's saved cell, for its pin on Discover (#226). Only the cell, never coordinates. */
     private val places: ThingPlaces,
+    /** Which sensors ask for setup (#272). Fed every page 1 this owner reads, never read here. */
+    private val setupWatch: ThingSetupWatch,
     /** Below Developer a sensor's Wi-Fi sync is switched back on once per connection. */
     private val developerLevel: DeveloperLevel,
 ) {
@@ -1583,7 +1586,10 @@ class DeviceLinkOwner @Inject constructor(
     /** Keeps the connected Thing's Discover pin in step with the location [page] it returned. */
     private suspend fun recordPlace(page: space.opensensor.data.protocol.DeviceConfig?): space.opensensor.data.protocol.LocationConfig? {
         val thing = _info.value?.thing
-        if (page != null && thing != null) places.recordFrom(thing, page, clock.nowEpochMs())
+        val now = clock.nowEpochMs()
+        if (page != null && thing != null) places.recordFrom(thing, page, now)
+        val id = boundAddress
+        if (page != null && id != null) setupWatch.pageRead(id, page, now)
         return page?.location
     }
 

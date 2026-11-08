@@ -557,8 +557,24 @@ setup wizard confirms completion by reading page 1 `thing.setup` again after its
 checking it is 0, as the firmware
 [migration note](../../opensensor-space-firmware/docs/shared/mobile-migration.md) asks.
 
-The bit does not enter `changeKey`, so it never starts a sync by itself. Nothing on screen reads
-the rule yet.
+The bit does not enter `changeKey`, so it never starts a sync by itself.
+
+`ThingSetupWatch` in `core/sync` applies the rule for My devices on both phones. Platforms only feed
+it.
+
+- The foreground Bluetooth scan gives each sensor's advert flags and when it was heard. Android reads
+  the service data in `BleScanner`, iOS in `BlePhysicalLink` (`CompanionState.deviceFound` with the
+  service data). An advert without service data gives null flags.
+- Each page 1 read the user already starts (Device settings, the setup wizard Location page) calls
+  `pageRead` with the read time. Android does it in `DeviceLinkOwner.recordPlace`, iOS in
+  `IosDeviceConfigSource.recordPlace`. The watch never asks for page 1 itself.
+- Advert flags count only when heard after that sensor's last page 1 read, as above.
+- `DevicesController` turns the needs into a `needsSetup` row flag and one `prompt` at a time. My
+  devices opens the wizard for the prompt once per sensor per foreground session, and any wizard run
+  for that sensor, by itself or from a tap, spends it (`opened`). Leaving the foreground calls
+  `endSession`, which forgets the reads and the opens. Everything stays in memory.
+- The watch sends nothing. Pairing a new sensor stays the user's tap on Find, and every save stays an
+  explicit SET_CONFIG from the wizard or Device settings.
 
 ## Historical decisions (v1, mirrored into the firmware contract 2026-09-16)
 

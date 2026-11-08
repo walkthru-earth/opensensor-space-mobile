@@ -69,13 +69,15 @@ internal fun iosSetupLink(state: CompanionState, id: String): SetupLink {
 }
 
 /** Holds one wizard run for its entry, cleared when the entry leaves the back stack. */
-private class SetupHolder(devices: DevicesBridge, openSensor: (String) -> Unit, resume: String?, pick: SetupCandidate?) : ViewModel() {
+private class SetupHolder(devices: DevicesBridge, openSensor: (String) -> Unit, resume: String?, pick: SetupCandidate?, offer: Boolean) : ViewModel() {
     val controller = SetupController(
         viewModelScope,
         IosSetupPort(devices, openSensor),
         resumeId = resume,
         resumeName = resume?.let { id -> devices.known.value.firstOrNull { it.peripheral.equals(id, ignoreCase = true) }?.name },
         pick = pick,
+        offer = offer,
+        opened = devices.setup::opened,
     )
 }
 
@@ -97,6 +99,7 @@ private class SetupConfigHolder(address: String, devices: DevicesBridge, links: 
 internal fun SetupEntry(
     resume: String?,
     pick: SetupCandidate?,
+    offer: Boolean,
     devices: DevicesBridge,
     links: DeviceConfigLinks,
     requestBluetooth: () -> Unit,
@@ -104,7 +107,7 @@ internal fun SetupEntry(
     onClose: () -> Unit,
     onOpenSensor: (String) -> Unit,
 ) {
-    val controller = viewModel(key = "setup-$resume-${pick?.id}") { SetupHolder(devices, openSensor, resume, pick) }.controller
+    val controller = viewModel(key = "setup-$resume-${pick?.id}-$offer") { SetupHolder(devices, openSensor, resume, pick, offer) }.controller
     val bluetooth = rememberIosBluetoothAccess(devices.state, requestBluetooth)
     val s by controller.state.collectAsState()
     val address = s.selected?.id.takeIf { s.paired }

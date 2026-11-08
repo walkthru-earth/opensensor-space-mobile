@@ -681,9 +681,9 @@ extension BluetoothCompanion {
     fileprivate func handle(_ event: BleEvent, connection number: UInt64) {
         switch event {
         case .power(let state): return powerChanged(state)
-        case .found(let id, let name, let rssi):
+        case .found(let id, let name, let rssi, let serviceData):
             guard foreground else { return }
-            state.deviceFound(id: id, name: name, rssi: rssi)
+            state.deviceFound(id: id, name: name, rssi: rssi, serviceData: serviceData)
             return
         case .wake(let id, let restored):
             // An armed pending connect completed. On screen the user drives the link, so it ends.

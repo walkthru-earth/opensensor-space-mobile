@@ -7,10 +7,18 @@ import space.opensensor.data.history.LatestDays
 /**
  * A Bluetooth advertisement seen in the current scan. [id] is the platform's peripheral id (the
  * Android MAC address, the iOS CBPeripheral identifier). A nearby sensor is only a scan result, it
- * becomes known once the owner connects to it.
+ * becomes known once the owner connects to it. [advertFlags] is the flags byte of its service data,
+ * null when the advert carried none. [seenMs] is the wall clock time the phone last heard it.
  */
 @Immutable
-data class NearbySensor(val id: String, val name: String?, val rssi: Int, val bonded: Boolean = false)
+data class NearbySensor(
+    val id: String,
+    val name: String?,
+    val rssi: Int,
+    val bonded: Boolean = false,
+    val advertFlags: Int? = null,
+    val seenMs: Long? = null,
+)
 
 /**
  * A sensor this phone connected to before. [thing] is the thing id from its INFO, null until it
@@ -80,6 +88,8 @@ data class DeviceRow(
     val wifi: WifiTag?,
     val lastSeenMs: Long?,
     val archive: ArchiveGlance?,
+    /** The sensor asks for setup (#272). A known row shows Finish setup, a new one a tag. */
+    val needsSetup: Boolean = false,
 ) {
     val nearby: Boolean get() = rssi != null
 }
@@ -107,6 +117,11 @@ data class DevicesUiState(
     val scanning: Boolean = false,
     val scanProblem: ScanProblem? = null,
     val collecting: Boolean = false,
+    /**
+     * A sensor that asks for setup and has not had the wizard open this foreground session. The
+     * screen opens the wizard for it once, through [DevicesAction.FinishSetup].
+     */
+    val prompt: SetupRequest? = null,
 ) {
     /** Collect all shows from two known sensors, one sensor syncs from its own row. */
     val showCollectAll: Boolean get() = list.knownCount >= 2
@@ -123,4 +138,18 @@ sealed interface DevicesAction {
     /** A nearby sensor this phone has not added yet. It opens the Add sensor wizard with it picked, never Today. */
     data class Add(val id: String, val name: String?) : DevicesAction
     data object CollectAll : DevicesAction
+
+    /**
+     * Open the setup wizard for a sensor that asks for it, by itself from [DevicesUiState.prompt] or
+     * from the Finish setup chip. The controller spends the automatic open, the route navigates.
+     */
+    data class FinishSetup(val request: SetupRequest) : DevicesAction
 }
+
+/**
+ * A sensor to set up (#272). [known] picks how the wizard opens. A known sensor resumes on its
+ * Location step over a silent reconnect. A new one is only offered on Find, as pairing is the
+ * owner's tap.
+ */
+@Immutable
+data class SetupRequest(val id: String, val name: String?, val known: Boolean)

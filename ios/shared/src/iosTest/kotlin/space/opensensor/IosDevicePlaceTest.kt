@@ -8,6 +8,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -20,6 +22,8 @@ import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
 import space.opensensor.data.protocol.Opcode
+import space.opensensor.data.sync.SetupNeed
+import space.opensensor.data.sync.SetupSighting
 import space.opensensor.data.sync.ThingPlace
 import space.opensensor.data.sync.ThingPlaces
 import kotlin.test.AfterTest
@@ -60,6 +64,9 @@ class IosDevicePlaceTest {
         override suspend fun remove(thing: String) = state.update { list -> list.filter { it.thing != thing } }
     }
 
+    /** The bridge behind the last [settings], so a test can read its setup watch. */
+    private lateinit var devices: DevicesBridge
+
     private fun IosLink.reply(frame: Frame) = offer(FrameCodec.encode(frame).toNSData())
 
     private fun page(cell: String, mobility: String) =
@@ -73,7 +80,7 @@ class IosDevicePlaceTest {
             connectionStarted(address)
             check(receiveInfo("""{"proto":3,"dev":"aabbccddeeff"}"""))
         }
-        val devices = DevicesBridge(state, emptyFlow(), NoRecords(), { 0L }, {}, {}, {}, {}, { _, _ -> }, { _, _ -> })
+        devices = DevicesBridge(state, emptyFlow(), NoRecords(), { 0L }, {}, {}, {}, {}, { _, _ -> }, { _, _ -> })
         check(devices.sensorOpened(address, "Kitchen", thing, "aabbccddeeff").accepted)
         val links = DeviceConfigLinks(
             openConfigLink = { link },
@@ -126,6 +133,34 @@ class IosDevicePlaceTest {
             assertEquals(cell, fixed.await()?.cell)
             assertEquals(listOf(thing to cell), places.all.map { it.thing to it.cell }, "a save records the pin")
             assertEquals(listOf(Opcode.GET_CONFIG, Opcode.SET_CONFIG, Opcode.GET_CONFIG, Opcode.SET_CONFIG, Opcode.GET_CONFIG), port.sent)
+        } finally {
+            link.close()
+            runCurrent()
+        }
+    }
+
+    @Test
+    fun everyPage1ReadFeedsTheSetupWatch() = runTest {
+        val port = RecordingPort()
+        val link = IosLink(port, false, "synthetic-setup-test", StandardTestDispatcher(testScheduler), StandardTestDispatcher(testScheduler))
+        val source = settings(link, MemoryThingPlaces())
+        val nothingSeen = flowOf(emptyList<SetupSighting>())
+        try {
+            assertEquals(emptyList(), devices.setup.needs(nothingSeen).first(), "nothing is claimed before a read")
+            val unset = async { source.readLocation() }
+            runCurrent()
+            link.reply(Frame.Config(0, page("", "fixed")))
+            runCurrent()
+            unset.await()
+            assertEquals(listOf(SetupNeed(address, opened = false)), devices.setup.needs(nothingSeen).first(), "a fixed page without a cell needs setup")
+
+            val done = async { source.readLocation() }
+            runCurrent()
+            link.reply(Frame.Config(0, page(cell, "fixed")))
+            runCurrent()
+            done.await()
+            assertEquals(emptyList(), devices.setup.needs(nothingSeen).first(), "a page with a cell clears it")
+            assertEquals(listOf(Opcode.GET_CONFIG, Opcode.GET_CONFIG), port.sent, "the watch adds no request of its own")
         } finally {
             link.close()
             runCurrent()

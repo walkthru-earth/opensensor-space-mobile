@@ -17,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import space.opensensor.AppLanguage
 import space.opensensor.data.settings.AppSettings
+import space.opensensor.data.sync.ThingSetupWatch
 import space.opensensor.designsystem.OpenSensorTheme
 import space.opensensor.map.LocalMapNetwork
 import space.opensensor.ui.components.LocalUnits
@@ -30,10 +31,19 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var settings: AppSettings
 
+    @Inject lateinit var setupWatch: ThingSetupWatch
+
     // The language `res/` resolved leads the configuration, so layout direction, Android strings and
     // the shared Compose strings agree (AppLanguage).
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
+
+    // Leaving the foreground ends the setup session, so a sensor that asks for setup opens the wizard
+    // once more on return (#272). A rotation is not a new session.
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) setupWatch.endSession()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

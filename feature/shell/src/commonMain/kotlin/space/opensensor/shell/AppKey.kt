@@ -54,10 +54,16 @@ data class FileMetricsKey(val thing: String, val name: String) : AppKey
 /**
  * The Add sensor wizard (`:feature:setup`), full screen over My devices. [resume] reopens Finish
  * setup for an added sensor at Location. [pick] is a new sensor tapped on My devices, which the
- * wizard pairs at once, then opens Name.
+ * wizard pairs at once, then opens Name. With [offer] the pick asked for setup by itself (#272), so
+ * the wizard only lists it first on Find and pairing waits for the owner's tap.
  */
 @Serializable
-data class SetupKey(val resume: String? = null, val pick: String? = null, val pickName: String? = null) : AppKey
+data class SetupKey(
+    val resume: String? = null,
+    val pick: String? = null,
+    val pickName: String? = null,
+    val offer: Boolean = false,
+) : AppKey
 
 /** Saves every [AppKey] in a back stack, the same way on Android and iOS. */
 @OptIn(ExperimentalSerializationApi::class)

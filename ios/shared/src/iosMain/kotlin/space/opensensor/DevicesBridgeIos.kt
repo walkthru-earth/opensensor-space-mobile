@@ -1,9 +1,11 @@
 package space.opensensor
 
+import platform.Foundation.NSData
 import platform.Foundation.NSDate
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.timeIntervalSince1970
 import space.opensensor.data.history.LatestDays
+import space.opensensor.data.protocol.Advertisement
 
 /** The known records in UserDefaults. Names, things and ids only, never a credential. */
 private class UserDefaultsKnownRecords(private val defaults: NSUserDefaults) : KnownRecordStorage {
@@ -45,3 +47,10 @@ fun devicesBridge(
     latestDay = { LatestDays.observe(IosArchive.tiers, it) },
     forgetPlaces = IosArchive::forgetPlaces,
 )
+
+/**
+ * A foreground scan result with the advert's opensensor service data, nil when it carried none.
+ * Only the flags byte is kept, so the setup watch can read the setup bit (#272).
+ */
+fun CompanionState.deviceFound(id: String, name: String, rssi: Int, serviceData: NSData?) =
+    deviceFound(id, name, rssi, advertFlags = Advertisement.decode(serviceData?.toByteArray())?.flags)

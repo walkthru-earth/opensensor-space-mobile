@@ -79,4 +79,18 @@ class DeviceListMergeTest {
     fun emptyInputsGiveAnEmptyList() {
         assertTrue(DeviceListMerge.merge(emptyList(), emptyList(), emptyList(), emptyList(), emptyMap()).isEmpty)
     }
+
+    @Test
+    fun setupMarksNearbyAndKnownRowsCaseInsensitively() {
+        val list = DeviceListMerge.merge(
+            nearby = listOf(NearbySensor("X", "New", -80), NearbySensor("A", null, -50)),
+            known = listOf(a, b),
+            wifi = emptyList(),
+            active = emptyList(),
+            archive = emptyMap(),
+            setup = setOf("x", "b"),
+        )
+        assertEquals(listOf("A" to false, "X" to true), list.nearby.map { it.id to it.needsSetup })
+        assertEquals(listOf(true), list.known.map { it.needsSetup })
+    }
 }

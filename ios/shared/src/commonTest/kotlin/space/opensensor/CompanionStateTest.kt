@@ -258,6 +258,13 @@ class CompanionStateTest {
         assertTrue(state.devices.isEmpty())
     }
 
+    @Test fun aScanResultKeepsItsAdvertFlagsAndWhenItWasHeard() {
+        val state = CompanionState().apply { clock = { 42L } }
+        state.deviceFound("a", "OS-a", -60, advertFlags = 1 shl 6)
+        state.deviceFound("b", "OS-b", -70)
+        assertEquals(listOf(NearbyDevice("a", "OS-a", -60, 1 shl 6, 42L), NearbyDevice("b", "OS-b", -70, null, 42L)), state.devices)
+    }
+
     @Test fun settingsLinksFollowTheReportedDenials() {
         val state = CompanionState()
         // Nothing is known, and no link is offered, before the first tap.

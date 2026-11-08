@@ -113,6 +113,15 @@ class TabNavigatorTest {
     }
 
     @Test
+    fun `a sensor asking for setup resumes when known and is offered when new`() {
+        nav.select(TopTab.MY_DEVICES)
+        nav.finishSetup("A", "OS-1", known = true)
+        assertEquals(listOf(ScanKey, SetupKey(resume = "A")), stack(TopTab.MY_DEVICES))
+        nav.finishSetup("B", "OS-2", known = false)
+        assertEquals(listOf(ScanKey, SetupKey(pick = "B", pickName = "OS-2", offer = true)), stack(TopTab.MY_DEVICES))
+    }
+
+    @Test
     fun `add sensor opens the wizard full screen over the My devices root`() {
         nav.select(TopTab.MY_DEVICES)
         nav.push(TodayKey("A"))

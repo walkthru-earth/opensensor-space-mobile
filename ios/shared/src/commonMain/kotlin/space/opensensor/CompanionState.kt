@@ -33,7 +33,8 @@ import space.opensensor.strings.resources.companion_status_unreadable
 import space.opensensor.strings.resources.now_waiting
 import kotlin.time.Clock
 
-internal data class NearbyDevice(val id: String, val name: String, val rssi: Int)
+/** One scan result. [advertFlags] is the advert flags byte, null without service data. [seenMs] is when it was heard. */
+internal data class NearbyDevice(val id: String, val name: String, val rssi: Int, val advertFlags: Int? = null, val seenMs: Long? = null)
 
 /**
  * Main-thread callbacks from the native BLE adapter. Never contains pairing or Wi-Fi secrets.
@@ -473,8 +474,11 @@ class CompanionState {
         scanning = false
     }
 
-    fun deviceFound(id: String, name: String, rssi: Int) {
-        val device = NearbyDevice(id, name, rssi)
+    fun deviceFound(id: String, name: String, rssi: Int) = deviceFound(id, name, rssi, advertFlags = null)
+
+    /** A scan result with its advert flags, which carry the setup bit (#272). */
+    internal fun deviceFound(id: String, name: String, rssi: Int, advertFlags: Int?) {
+        val device = NearbyDevice(id, name, rssi, advertFlags, clock())
         devices = (devices.filterNot { it.id == id } + device).sortedByDescending { it.rssi }
     }
 

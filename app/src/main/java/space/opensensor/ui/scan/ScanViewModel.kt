@@ -41,6 +41,7 @@ import space.opensensor.data.local.database.MetricBucket
 import space.opensensor.data.local.database.MetricBucketDao
 import space.opensensor.data.settings.AppSettings
 import space.opensensor.data.settings.DetailLevel
+import space.opensensor.data.sync.ThingSetupWatch
 import space.opensensor.devices.ActiveLink
 import space.opensensor.devices.ArchiveGlance
 import space.opensensor.devices.CollectAllPort
@@ -82,6 +83,7 @@ class ScanViewModel @Inject constructor(
     bucketDao: MetricBucketDao,
     private val autoSyncScheduler: AutoSyncScheduler,
     settings: AppSettings,
+    setupWatch: ThingSetupWatch,
 ) : ViewModel() {
 
     /** Per-thing totals come from one grouped query, so the list never loads every archived row (#63). */
@@ -110,7 +112,7 @@ class ScanViewModel @Inject constructor(
     }
 
     private val radio = object : DeviceRadio {
-        override val nearby: Flow<List<NearbySensor>> = seen.map { m -> m.values.map { NearbySensor(it.address, it.name, it.rssi, it.bonded) } }
+        override val nearby: Flow<List<NearbySensor>> = seen.map { m -> m.values.map { NearbySensor(it.address, it.name, it.rssi, it.bonded, it.advertFlags, it.lastSeenEpochMs) } }
         override val scanning: Flow<Boolean> = this@ScanViewModel.scanning
         override val scanProblem: Flow<ScanProblem?> = this@ScanViewModel.scanProblem
         override val wifi: Flow<List<WifiSensor>> = manager.lanDevices.map { m -> m.values.map { WifiSensor(it.serviceName, it.thing) } }
@@ -128,7 +130,7 @@ class ScanViewModel @Inject constructor(
         }
     }
 
-    private val controller = DevicesController(viewModelScope, knownStore, radio, summaries, collect)
+    private val controller = DevicesController(viewModelScope, knownStore, radio, summaries, collect, setupWatch)
     val state: StateFlow<DevicesUiState> get() = controller.state
 
     /** Shared actions go to the controller. Opening a sensor connects over any permitted link. */

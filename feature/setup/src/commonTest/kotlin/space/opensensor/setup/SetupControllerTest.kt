@@ -211,6 +211,44 @@ class SetupControllerTest {
     }
 
     @Test
+    fun aSensorAskingForSetupIsOfferedOnFindNotPaired() = runTest(UnconfinedTestDispatcher()) {
+        val port = FakePort()
+        port.nearby.value = emptyList()
+        val opened = mutableListOf<String>()
+        val offer = SetupCandidate("CC", "OS-3", added = false)
+        val c = SetupController(backgroundScope, port, pick = offer, offer = true, opened = { opened += it })
+        assertEquals(SetupStep.Find, c.state.value.page)
+        assertEquals(listOf(offer), c.state.value.candidates)
+        assertFalse(port.calls.any { it.startsWith("connect") }, "pairing stays the owner's tap")
+        assertEquals(listOf("CC"), opened)
+
+        // The scan on Find hears others, the offer stays first, and once heard it is listed once.
+        port.nearby.value = listOf(SetupCandidate("AA", "OS-1", added = false))
+        assertEquals(listOf("CC", "AA"), c.state.value.candidates.map { it.id })
+        port.nearby.value = listOf(SetupCandidate("AA", "OS-1", added = false), SetupCandidate("cc", "OS-3", added = false))
+        assertEquals(listOf("AA", "cc"), c.state.value.candidates.map { it.id })
+
+        c.choose(c.state.value.candidates.last())
+        assertTrue("connect cc" in port.calls)
+        assertEquals(listOf("CC", "cc"), opened)
+    }
+
+    @Test
+    fun everyRunTellsTheWatchItOpened() = runTest(UnconfinedTestDispatcher()) {
+        val opened = mutableListOf<String>()
+        SetupController(backgroundScope, FakePort(), resumeId = "BB", opened = { opened += it })
+        SetupController(backgroundScope, FakePort(), pick = SetupCandidate("AA", "OS-1", added = false), opened = { opened += it })
+        val port = FakePort()
+        val c = SetupController(backgroundScope, port, opened = { opened += it })
+        assertEquals(listOf("BB", "AA"), opened)
+        c.choose(port.nearby.value[1])
+        assertEquals(listOf("BB", "AA", "BB"), opened)
+        // Closing counts again, as the foreground session may have ended while the wizard showed.
+        c.finish()
+        assertEquals(listOf("BB", "AA", "BB", "BB"), opened)
+    }
+
+    @Test
     fun anAddedSensorRunsSetupAgain() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         port.nicknames["BB"] = "Kitchen"

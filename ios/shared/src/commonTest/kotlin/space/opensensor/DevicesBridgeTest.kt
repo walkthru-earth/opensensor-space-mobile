@@ -13,10 +13,13 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.data.history.LatestDay
+import space.opensensor.data.protocol.Advertisement
 import space.opensensor.devices.ActiveLink
 import space.opensensor.devices.ArchiveGlance
+import space.opensensor.devices.DevicesAction
 import space.opensensor.devices.KnownSensor
 import space.opensensor.devices.LinkPhase
+import space.opensensor.devices.SetupRequest
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.strings.UiText
@@ -81,6 +84,20 @@ class DevicesBridgeTest {
         assertEquals(listOf("bluetooth", "stop"), scans, "setup Find never runs the browse that may ask for local network")
         bridge.scanTapped()
         assertEquals("tap", scans.last(), "only a Scan tap on My devices browses")
+    }
+
+    @Test fun aSensorAskingForSetupPromptsOncePerForegroundSession() = runTest {
+        val state = CompanionState().apply { deviceFound(b, "OS-b", -50, advertFlags = Advertisement.FLAG_SETUP) }
+        // The list waits for the archive index, so this one emits an empty index.
+        val bridge = DevicesBridge(state, flowOf(emptyList()), MemoryStorage(), { 5 }, {}, {}, {}, {}, { _, _ -> }, { _, _ -> })
+        val controller = bridge.controller(backgroundScope)
+        val prompt = controller.state.first { it.prompt != null }.prompt!!
+        assertEquals(SetupRequest(b, "OS-b", known = false), prompt)
+        controller.onAction(DevicesAction.FinishSetup(prompt))
+        val spent = controller.state.first { it.prompt == null }
+        assertTrue(spent.list.nearby.single().needsSetup, "the row keeps its resume entry")
+        bridge.endSetupSession()
+        assertEquals(prompt, controller.state.first { it.prompt != null }.prompt, "the next session prompts again")
     }
 
     @Test fun mergeListsRecordsAndCredentialsOncePerPeripheral() {

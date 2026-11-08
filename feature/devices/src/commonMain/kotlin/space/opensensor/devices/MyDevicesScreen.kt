@@ -126,6 +126,10 @@ fun MyDevicesScreen(
         onStopOrDispose { onAction(DevicesAction.StopScan) }
     }
 
+    // A sensor that asks for setup opens the wizard once per foreground session (#272), only while
+    // this screen shows. The controller spends the open, so a back out leaves the Finish setup chip.
+    LaunchedEffect(state.prompt) { state.prompt?.let { onAction(DevicesAction.FinishSetup(it)) } }
+
     fun open(id: String, name: String?) = openThing(id, name, bluetooth, onAction)
 
     CompositionLocalProvider(LocalArchiveUnits provides units) {
@@ -247,6 +251,7 @@ fun MyDevicesScreen(
                         row = row,
                         level = level,
                         onClick = { openNearby(row, bluetooth, onAction) },
+                        onSetup = { onAction(DevicesAction.FinishSetup(SetupRequest(row.id, row.name, known = true))) },
                     )
                 }
 
@@ -260,6 +265,7 @@ fun MyDevicesScreen(
                             row = row,
                             level = level,
                             onClick = { open(row.id, row.name) },
+                            onSetup = { onAction(DevicesAction.FinishSetup(SetupRequest(row.id, row.name, known = true))) },
                         )
                     }
                 }

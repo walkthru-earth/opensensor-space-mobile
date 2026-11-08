@@ -14,7 +14,8 @@ enum BleLoss: Sendable {
 /// connection number they belong to, so a late callback from an ended connection is ignored.
 enum BleEvent: Sendable {
     case power(CBManagerState)
-    case found(id: String, name: String, rssi: Int32)
+    /// A scan result. [serviceData] is the advert's opensensor service data, nil when it carried none.
+    case found(id: String, name: String, rssi: Int32, serviceData: Data?)
     /// An armed pending connect completed. [restored] when it completed before this launch.
     case wake(id: String, restored: Bool)
     case connected
@@ -406,12 +407,13 @@ actor BlePhysicalLink {
         armed.arm(peripherals.map { $0.identifier.uuidString })
     }
 
-    fileprivate func found(_ peripheral: CBPeripheral, name: String?, rssi: Int32) {
+    fileprivate func found(_ peripheral: CBPeripheral, name: String?, rssi: Int32, serviceData: [CBUUID: Data]?) {
         let id = peripheral.identifier.uuidString
         discovered[id] = peripheral
         let name = name ?? peripheral.name ?? "Sensor"
         advertisedNames[id] = name
-        deliver(0, .found(id: id, name: name, rssi: rssi))
+        let data = serviceData?[CBUUID(string: uuids.service)]
+        deliver(0, .found(id: id, name: name, rssi: rssi, serviceData: data))
     }
 
     fileprivate func connected(_ peripheral: CBPeripheral) {
@@ -605,7 +607,8 @@ private final class Callbacks: NSObject, CBCentralManagerDelegate, CBPeripheralD
         let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String
         let rssi = RSSI.int32Value
         let peripheral = Delivered(peripheral)
-        link?.assumeIsolated { $0.found(peripheral.value, name: name, rssi: rssi) }
+        let serviceData = Delivered(advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data])
+        link?.assumeIsolated { $0.found(peripheral.value, name: name, rssi: rssi, serviceData: serviceData.value) }
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {

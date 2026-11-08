@@ -26,6 +26,7 @@ import space.opensensor.data.ble.BleScanner
 import space.opensensor.data.ble.BluetoothStatus
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.local.database.KnownDeviceDao
+import space.opensensor.data.sync.ThingSetupWatch
 import space.opensensor.settings.SettingsRepository
 import space.opensensor.setup.SetupCandidate
 import space.opensensor.setup.SetupController
@@ -46,14 +47,21 @@ class SetupViewModel @AssistedInject constructor(
     private val manager: DeviceConnectionManager,
     private val knownDeviceDao: KnownDeviceDao,
     private val settings: SettingsRepository,
+    setupWatch: ThingSetupWatch,
     @Assisted("resume") resume: String?,
     @Assisted("pick") pick: String?,
     @Assisted("pickName") pickName: String?,
+    @Assisted offer: Boolean,
 ) : ViewModel() {
 
     @AssistedFactory
     interface Factory {
-        fun create(@Assisted("resume") resume: String?, @Assisted("pick") pick: String?, @Assisted("pickName") pickName: String?): SetupViewModel
+        fun create(
+            @Assisted("resume") resume: String?,
+            @Assisted("pick") pick: String?,
+            @Assisted("pickName") pickName: String?,
+            offer: Boolean,
+        ): SetupViewModel
     }
 
     private val adverts = NearbyAdverts(touch = { knownDeviceDao.touch(it.address, it.name, it.lastSeenEpochMs) })
@@ -129,6 +137,8 @@ class SetupViewModel @AssistedInject constructor(
         resumeId = resume,
         resumeName = resume?.let { manager.controller(it).currentDisplayName },
         pick = pick?.let { SetupCandidate(it, pickName, added = false) },
+        offer = offer,
+        opened = setupWatch::opened,
     )
 
     override fun onCleared() {

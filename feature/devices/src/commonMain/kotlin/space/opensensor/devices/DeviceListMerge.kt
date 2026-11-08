@@ -10,6 +10,7 @@ package space.opensensor.devices
  * - A Wi-Fi sensor whose thing matches no known sensor is listed on its own. It cannot be opened
  *   until it is connected over Bluetooth once, because the token comes over Bluetooth only.
  * - The archive glance is keyed by thing.
+ * - A row whose id is in [setup] (lowercase) asks for setup, from the shared ThingSetupWatch.
  */
 object DeviceListMerge {
     fun merge(
@@ -18,6 +19,7 @@ object DeviceListMerge {
         wifi: List<WifiSensor>,
         active: List<ActiveLink>,
         archive: Map<String, ArchiveGlance>,
+        setup: Set<String> = emptySet(),
     ): DeviceList {
         val knownById = known.associateBy { it.id }
         val wifiThings = wifi.mapNotNull { it.thing }.toSet()
@@ -40,6 +42,7 @@ object DeviceListMerge {
                 wifi = wifiTag(k),
                 lastSeenMs = k?.lastSeenMs,
                 archive = k?.thing?.let(archive::get),
+                needsSetup = n.id.lowercase() in setup,
             )
         }
         val nearbyIds = nearbyRows.map { it.id }.toSet()
@@ -56,6 +59,7 @@ object DeviceListMerge {
                     wifi = wifiTag(k),
                     lastSeenMs = k.lastSeenMs,
                     archive = k.thing?.let(archive::get),
+                    needsSetup = k.id.lowercase() in setup,
                 )
             }
         val knownThings = known.mapNotNull { it.thing }.toSet()

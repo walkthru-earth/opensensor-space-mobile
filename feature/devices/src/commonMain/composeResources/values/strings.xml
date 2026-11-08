@@ -15,6 +15,8 @@
     <string name="scan_tag_known">known</string>
     <string name="scan_tag_on_lan">on Wi-Fi</string>
     <string name="scan_tag_on_lan_no_token">on Wi-Fi, no token</string>
+    <string name="scan_tag_setup">needs setup</string>
+    <string name="scan_finish_setup">Finish setup</string>
     <plurals name="scan_collecting">
         <item quantity="one">Collecting %1$d of %2$d file</item>
         <item quantity="other">Collecting %1$d of %2$d files</item>
