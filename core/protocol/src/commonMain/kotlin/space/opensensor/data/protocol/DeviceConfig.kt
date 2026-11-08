@@ -2,6 +2,7 @@ package space.opensensor.data.protocol
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import space.opensensor.model.H3Cell
 
 /**
  * The `CONFIG` JSON (protocol v2, "Device configuration"). Every field is nullable and every
@@ -38,14 +39,34 @@ data class LocationConfig(
     val lat: Double? = null,
     val lon: Double? = null,
     val country: String? = null,
-)
+    /**
+     * `location.gnss_cell` as the board sent it. A board with a GNSS receiver sends it from Waveshare
+     * `v2.18` (firmware #147), its fix from the last 15 s as a res 8 cell, or empty without a fresh fix.
+     * Absent means no receiver. Read [gnssCell] unless that difference matters.
+     */
+    @SerialName("gnss_cell") val gnssCellText: String? = null,
+) {
+    /**
+     * The board's own GNSS cell, offered as the Thing's `location.cell`, or null when there is no
+     * offer. Only a canonical res 8 H3 cell hex counts. Absent, empty or anything else is no offer.
+     */
+    val gnssCell: String? get() = gnssCellText?.takeIf { H3Cell.isCellHex(it, H3Cell.RESOLUTION) }
+}
 
 /** GET_CONFIG page 1 `thing` object. */
 @Serializable
 data class ThingConfig(
     val mobility: String? = null,
+    /**
+     * `thing.setup`, 1 while the board needs setup and 0 once it does not. It matches advert bit 6.
+     * CoreS3 `v6.24` and Waveshare `v2.18` send it (firmware #147). Older firmware leaves it out.
+     */
+    val setup: Int? = null,
 ) {
     val thingMobility: ThingMobility? get() = ThingMobility.fromWire(mobility)
+
+    /** [setup] as the board's answer, or null when the page has no `setup`. */
+    val needsSetup: Boolean? get() = setup?.let { it != 0 }
 }
 
 /** `thing.mobility`, whether a Thing stays in one H3 cell or moves. The firmware default is [FIXED]. */
@@ -184,15 +205,20 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
             return add(KEY_BLE_PIN, pin)
         }
 
-        /** Device location is already coarsened on the phone. No coordinates cross this API. */
-        fun location(cell: String, resolution: Int, country: String): Builder {
-            require(resolution in 0..15) { "H3 resolution must be 0 to 15" }
-            require(cell.isEmpty() || Regex("[0-9a-f]{15}").matches(cell)) { "invalid H3 cell text" }
+        /**
+         * The Thing's location as a res 8 H3 [cell], or empty to clear it. No coordinates cross this
+         * API. `location.resolution` is always [H3Cell.RESOLUTION], the only value the app sends.
+         */
+        fun location(cell: String, country: String): Builder {
+            require(cell.isEmpty() || H3Cell.isCellHex(cell, H3Cell.RESOLUTION)) { "location cell must be a res 8 H3 cell" }
             require(country.isEmpty() || Regex("[A-Z]{2}").matches(country)) { "country must be an uppercase ISO alpha2 code" }
             add(ConfigFields.LOCATION_CELL, cell)
-            add(ConfigFields.LOCATION_RESOLUTION, resolution.toString())
+            add(ConfigFields.LOCATION_RESOLUTION, H3Cell.RESOLUTION.toString())
             return add(ConfigFields.LOCATION_COUNTRY, country)
         }
+
+        /** `thing.mobility`, whether the Thing stays in one cell or moves. */
+        fun thingMobility(mobility: ThingMobility): Builder = add(ConfigFields.THING_MOBILITY, mobility.wire)
 
         fun clearBonds(): Builder = add(ConfigFields.BLE_CLEAR_BONDS, "1")
 

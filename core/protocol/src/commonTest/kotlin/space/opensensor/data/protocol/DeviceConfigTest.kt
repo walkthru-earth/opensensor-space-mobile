@@ -2,6 +2,7 @@ package space.opensensor.data.protocol
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -156,11 +157,56 @@ class DeviceConfigTest {
         assertEquals("US", location.country)
         assertEquals(listOf(Opcode.GET_CONFIG.toByte()), Request.GetConfig.encode().toList())
         assertEquals(listOf(Opcode.GET_CONFIG.toByte(), 1.toByte()), Request.GetLocation.encode().toList())
-        val patch = ConfigPatch.build { location("85283083fffffff", 5, "US") }
-        assertEquals("location.cell=85283083fffffff\nlocation.resolution=5\nlocation.country=US\n", patch.encode())
+        val patch = ConfigPatch.build { location("8828308281fffff", "US") }
+        assertEquals("location.cell=8828308281fffff\nlocation.resolution=8\nlocation.country=US\n", patch.encode())
         assertFalse("37.79" in patch.encode())
         assertNull(DeviceConfig.parse("{}").location)
-        assertEquals("location.cell=\nlocation.resolution=5\nlocation.country=\n", ConfigPatch.build { location("", 5, "") }.encode())
+        assertEquals("location.cell=\nlocation.resolution=8\nlocation.country=\n", ConfigPatch.build { location("", "") }.encode())
+    }
+
+    @Test
+    fun `the location patch sends only res 8 cells`() {
+        // Res 5, res 9, not a cell, upper case and a res 8 index with a bad digit.
+        for (cell in listOf("85283083fffffff", "8928308280fffff", "123", "8828308281FFFFF", "887576970a3ffff")) {
+            assertFailsWith<IllegalArgumentException>(cell) { ConfigPatch.build { location(cell, "") } }
+        }
+        val field = ConfigFields.of(ConfigFields.LOCATION_RESOLUTION)!!
+        assertEquals(FieldType.IntBetween(8, 8), field.type)
+    }
+
+    @Test
+    fun `thing mobility patch sends the wire value`() {
+        assertEquals("thing.mobility=moving\n", ConfigPatch.build { thingMobility(ThingMobility.MOVING) }.encode())
+        assertEquals("thing.mobility=fixed\n", ConfigPatch.build { thingMobility(ThingMobility.FIXED) }.encode())
+        val field = ConfigFields.of(ConfigFields.THING_MOBILITY)!!
+        assertEquals(FieldType.Choice(listOf("fixed", "moving")), field.type)
+        assertEquals(Applies.NEXT_SAMPLE, field.applies)
+        assertFalse(field.secret || field.disrupts)
+        assertEquals(Confirm.Never, field.confirm)
+    }
+
+    @Test
+    fun `gnss cell is an offer only when it is a res 8 cell`() {
+        fun offer(json: String) = DeviceConfig.parse("""{"location":{"cell":""$json}}""").location!!.gnssCell
+        assertEquals("8828308281fffff", offer(""","gnss_cell":"8828308281fffff""""))
+        assertNull(offer(""), "absent")
+        assertNull(offer(""","gnss_cell":"""""), "empty, no fresh fix")
+        assertNull(offer(""","gnss_cell":null"""), "null")
+        assertNull(offer(""","gnss_cell":"85283083fffffff""""), "res 5")
+        assertNull(offer(""","gnss_cell":"8928308280fffff""""), "res 9")
+        assertNull(offer(""","gnss_cell":"8828308281FFFFF""""), "upper case")
+        assertNull(offer(""","gnss_cell":"887576970a3ffff""""), "a res 8 index with a digit of 0 where 7 belongs")
+        assertNull(offer(""","gnss_cell":"not a cell""""), "garbage")
+    }
+
+    @Test
+    fun `thing setup reads as the board answer and is null on older firmware`() {
+        fun thing(json: String) = DeviceConfig.parse(json).thing!!
+        val v624 = """{"location":{"cell":"","resolution":8,"cell_resolution":0,"lat":null,"lon":null,"country":""},"thing":{"mobility":"fixed","setup":1}}"""
+        assertEquals(true, thing(v624).needsSetup)
+        assertEquals(ThingMobility.FIXED, thing(v624).thingMobility)
+        assertEquals(false, thing("""{"thing":{"mobility":"fixed","setup":0}}""").needsSetup)
+        assertNull(thing("""{"thing":{"mobility":"fixed"}}""").needsSetup, "older firmware")
     }
 
     @Test

@@ -31,7 +31,7 @@ sequenceDiagram
 
 `MTU_REQUEST = 517`, `MTU_MINIMUM = 247`, `PROTOCOL_VERSION = 2`. BLE `payload_max = min(MTU − 3, 512)`. Below MTU 483 a snapshot can exceed one notification and is skipped, so the app long reads STATUS and LIVE every 10 s.
 
-**Advertising service data** (`Advertisement`, protocol 2.1 / firmware ≥ `-v6.3`), under SERVICE in the ADV PDU; the name and UUID list are in the scan response (the `ScanRecord` merges both): `ver` u8 = 1 · `flags` u8 (bit 0 `no_utc`, 1 `new_files`, 2 `sd`, 3 `lan`, 4 `fail`, 5 `clk_restored`) · `fin` u32 LE · `boot16` u16 LE (last four hex digits of `info.boot`) · 2 reserved. `Advertisement.decode(scanRecord.getServiceData(SERVICE))`; `flagFilter(flag)` gives the `data/mask` pair for a hardware `ScanFilter`. Absent on older firmware → `null`.
+**Advertising service data** (`Advertisement`, protocol 2.1 / firmware ≥ `-v6.3`), under SERVICE in the ADV PDU; the name and UUID list are in the scan response (the `ScanRecord` merges both): `ver` u8 = 1 · `flags` u8 (bit 0 `no_utc`, 1 `new_files`, 2 `sd`, 3 `lan`, 4 `fail`, 5 `clk_restored`, 6 `setup` from CoreS3 `v6.24` and Waveshare `v2.18`, 0 on older firmware, read by `Advertisement.needsSetup`) · `fin` u32 LE · `boot16` u16 LE (last four hex digits of `info.boot`) · 2 reserved. `Advertisement.decode(scanRecord.getServiceData(SERVICE))`; `flagFilter(flag)` gives the `data/mask` pair for a hardware `ScanFilter`. Absent on older firmware → `null`.
 
 ## Opcodes (`Opcode`)
 
@@ -185,15 +185,21 @@ new session resume the run, and verified files already on the phone are never fe
 `GET_CONFIG` keeps its legacy empty body. Page byte `1` requests the `location`
 object with cell, maximum `resolution`, actual `cell_resolution`, derived
 center `lat`/`lon` and declared `country`, plus the `thing` object with
-`mobility` (`fixed` or `moving`, default `fixed`). It uses the same CONFIG/CONFIG_CHUNK
+`mobility` (`fixed` or `moving`, default `fixed`) and, from CoreS3 `v6.24` and Waveshare `v2.18`,
+`setup` (1 or 0, matching advert bit 6, read as `ThingConfig.needsSetup`). It uses the same CONFIG/CONFIG_CHUNK
 framing and 480-byte JSON limit. `Request.GetLocation` and `DeviceSession.getLocation`
 return unsupported when older firmware returns the legacy object or rejects
 that selector. A missing location object is not an unset supported location.
 
-`ConfigPatch.location` sends only `location.cell`, `location.resolution` and
-`location.country`. SET_CONFIG acknowledges the legacy page; the app then reads
+Waveshare `v2.18` adds `location.gnss_cell` (firmware #147), the receiver's fix from the last 15 s as a
+resolution 8 cell, or `""` without a fresh fix. CoreS3 has no receiver and omits it.
+`LocationConfig.gnssCell` keeps it only when it is a resolution 8 cell, so absent and `""` both read as
+null there. `gnssCellText` keeps the difference.
+
+`ConfigPatch.Builder.location(cell, country)` sends only `location.cell`, `location.resolution=8` and
+`location.country`. The cell is empty or a resolution 8 cell. SET_CONFIG acknowledges the legacy page, and the app then reads
 page 1 and checks its saved values. No raw GPS coordinates cross this API.
-The app does not send `thing.mobility` yet. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
+`ConfigPatch.Builder.thingMobility` writes `thing.mobility`, but the app does not send it yet. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
 board keeps in RAM and writes with `location_source` 3. No released firmware accepts it, so the
 app names the key and never sends it.
 Pages 2–4 are firmware time policy/status and server configuration; this app

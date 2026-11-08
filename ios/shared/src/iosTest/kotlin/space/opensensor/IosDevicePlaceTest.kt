@@ -34,7 +34,7 @@ import kotlin.test.assertTrue
 class IosDevicePlaceTest {
     private val address = "synthetic-peripheral"
     private val thing = "synthetic-thing-1"
-    private val cell = "85283473fffffff"
+    private val cell = "8828308281fffff"
 
     private class RecordingPort : IosLinkPort {
         val sent = mutableListOf<Int>()
@@ -108,7 +108,7 @@ class IosDevicePlaceTest {
             assertEquals(cell, reading.await()?.cell)
             assertEquals(listOf(thing to cell), places.all.map { it.thing to it.cell }, "a read records the pin")
 
-            val moving = async { source.writeLocation(ConfigPatch.build { location(cell, 8, "") }) }
+            val moving = async { source.writeLocation(ConfigPatch.build { location(cell, "") }) }
             runCurrent()
             link.reply(Frame.Config(0, "{}"))
             runCurrent()
@@ -117,7 +117,7 @@ class IosDevicePlaceTest {
             moving.await()
             assertTrue(places.all.isEmpty(), "a moving page drops the pin")
 
-            val fixed = async { source.writeLocation(ConfigPatch.build { location(cell, 8, "") }) }
+            val fixed = async { source.writeLocation(ConfigPatch.build { location(cell, "") }) }
             runCurrent()
             link.reply(Frame.Config(0, "{}"))
             runCurrent()

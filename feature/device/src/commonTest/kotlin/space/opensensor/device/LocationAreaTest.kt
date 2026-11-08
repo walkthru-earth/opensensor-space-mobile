@@ -19,8 +19,8 @@ class LocationAreaTest {
 
     @Test
     fun theDefaultMatchesTheInfoSheet() {
-        // location_precision_info says the default covers about 0.74 km².
-        assertEquals(LocationArea.Label("0.74", LocationArea.Unit.KM2), LocationArea.label(DeviceLocationDraft.DEFAULT_RESOLUTION))
+        // location_info says the area is about 0.74 km².
+        assertEquals(LocationArea.Label("0.74", LocationArea.Unit.KM2), LocationArea.label(DeviceLocationDraft.RESOLUTION))
     }
 
     @Test

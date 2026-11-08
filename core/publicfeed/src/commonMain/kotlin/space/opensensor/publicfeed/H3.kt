@@ -1,5 +1,7 @@
 package space.opensensor.publicfeed
 
+import space.opensensor.model.H3Cell
+
 /** A WGS 84 position in degrees. Used for H3 geometry only, never stored or sent. */
 data class LatLng(val lat: Double, val lng: Double)
 
@@ -18,6 +20,13 @@ interface H3Grid {
 
     /** The cell outline, counter-clockwise, without repeating the first vertex. */
     fun cellToBoundary(cell: Long): List<LatLng>
+
+    /**
+     * Every cell within [k] grid steps of [cell], [cell] included, in no set order. A res 8 hexagon
+     * gives 7 cells for k 1 and 19 for k 2. Near a pentagon the disk holds fewer. [k] must not be
+     * negative.
+     */
+    fun gridDisk(cell: Long, k: Int): List<Long> = throw UnsupportedOperationException("this H3 binding has no grid disk")
 
     /** Cells whose centres fall inside the polygon [ring] (no holes). */
     fun polygonToCells(ring: List<LatLng>, res: Int): List<Long>
@@ -48,34 +57,15 @@ expect fun platformH3Grid(): H3Grid
  * 7 base cell bits, then 15 digits of 3 bits for resolutions 1 to 15. Unused digits are 7.
  */
 object H3Index {
-    const val MAX_RES = 15
+    const val MAX_RES = H3Cell.MAX_RES
     private const val RES_OFFSET = 52
     private const val RES_MASK = 0xFL shl RES_OFFSET
     private const val DIGIT_BITS = 3
-    private const val MODE_OFFSET = 59
-    private const val BASE_OFFSET = 45
-    private const val BASE_CELLS = 122L
 
-    /** The 12 base cells that are pentagons. Their deleted K axis subsequence has no cell. */
-    private val PENTAGON_BASE_CELLS = setOf(4L, 14L, 24L, 38L, 49L, 58L, 63L, 72L, 83L, 97L, 107L, 117L)
-    private const val K_AXES_DIGIT = 1L
+    fun resolution(cell: Long): Int = H3Cell.resolution(cell)
 
-    fun resolution(cell: Long): Int = ((cell and RES_MASK) ushr RES_OFFSET).toInt()
-
-    /**
-     * True when [cell] is an H3 cell index. Its mode is 1, its base cell is one of the 122, each digit
-     * down to its resolution is 0 to 6 and every finer digit is 7. Under a pentagon base cell the first
-     * digit that is not 0 is never 1, the deleted K axis, as in the H3 library's `isValidCell`.
-     */
-    fun isCell(cell: Long): Boolean {
-        if (cell < 0 || ((cell ushr MODE_OFFSET) and 0xFL) != 1L || ((cell ushr (RES_OFFSET + 4)) and 0x7L) != 0L) return false
-        val base = (cell ushr BASE_OFFSET) and 0x7FL
-        if (base >= BASE_CELLS) return false
-        val res = resolution(cell)
-        val digits = (1..MAX_RES).map { r -> (cell ushr digitOffset(r)) and 7L }
-        if (!digits.withIndex().all { (i, digit) -> if (i < res) digit != 7L else digit == 7L }) return false
-        return base !in PENTAGON_BASE_CELLS || digits.take(res).firstOrNull { it != 0L } != K_AXES_DIGIT
-    }
+    /** True when [cell] is an H3 cell index, by the shared [H3Cell.isCell] check. */
+    fun isCell(cell: Long): Boolean = H3Cell.isCell(cell)
 
     private fun digitOffset(res: Int): Int = (MAX_RES - res) * DIGIT_BITS
 

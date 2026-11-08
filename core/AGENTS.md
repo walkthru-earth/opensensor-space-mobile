@@ -99,10 +99,11 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   ranges and explicit private device provisioning. Provisioning converts a
   one-shot foreground fix to a cell before passing it to UI/protocol state;
   neither exact coordinates nor uploading belong to that flow.
-  `H3Index.isCell` is the pure Kotlin cell check (mode 1, reserved bits clear, base cell under 122,
-  digits 0 to 6 down to the resolution and 7 below, no deleted K axis under a pentagon).
-  `LocationConfig.hasCell()` (in `DeviceLocation.kt`) uses it, and `H3Grid.isValidCell` defaults to it, so a fake grid checks
-  cells correctly. The JVM and iOS bindings keep their library call, and `H3IsCellTest` holds
+  `H3Cell` in `:core:model` is the pure Kotlin cell check (mode 1, reserved bits clear, base cell under 122,
+  digits 0 to 6 down to the resolution and 7 below, no deleted K axis under a pentagon) and its
+  hex parser. `H3Index.isCell` delegates to it, so `:core:protocol` and `:core:sync` check cells
+  without `publicfeed`. `LocationConfig.hasCell()` (in `DeviceLocation.kt`) uses it, and `H3Grid.isValidCell` defaults to it, so a fake grid checks
+  cells correctly. `H3Grid.gridDisk(cell, k)` lists a cell and its k rings on the platform binding. The JVM and iOS bindings keep their library call, and `H3IsCellTest` holds
   `isCell` to the H3 library.
 - Keep protocol and sensor-domain analysis pure and reusable by Android, iOS and
   host tools. Android files/DAO integration belongs in `:app` adapters; Apple OS

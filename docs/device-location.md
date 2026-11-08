@@ -5,9 +5,8 @@ authenticated BLE or LAN session. This is available in shared Android/iOS UI on
 firmware that supports GET_CONFIG page 1. Legacy firmware shows unsupported.
 
 1. Stand beside the sensor and open Configure location.
-2. Choose how large an area to share, initially about 0.74 km² (H3 resolution 8),
-   and optionally enter the owner-declared assigned ISO alpha-2 country code,
-   such as EG. A country code that is not two letters A to Z says so under the
+2. Optionally enter the owner-declared assigned ISO alpha-2 country code,
+   such as EG. The shared area is always one H3 resolution 8 cell, about 0.74 km². A country code that is not two letters A to Z says so under the
    field and keeps Save off.
 3. Tap Use phone location. Only this tap requests foreground approximate OS
    access and a one-shot fix. While it waits, Stop cancels it, and it gives up
@@ -27,13 +26,13 @@ A moving Thing keeps no cell on the phone, and Forget deletes the cell of every 
 Android retains only ACCESS_COARSE_LOCATION. iOS retains When In Use and reduced
 accuracy by default. A small chosen cell cannot improve an approximate OS fix.
 
-Resolution 0 through 15 is configurable. The menu names each choice by its
-average area (`LocationArea`, km² down to 0.11 km², then m²), and Detailed adds
-the resolution number and the cell index. Lower values disclose a larger area;
-resolution 8, the default for every Thing, fixed or moving, averages about 0.74 km² with an edge
-of about 530 m. Only resolution 8 files are published. Actual cell area varies. Finer values
-can expose a particular place, and the app warns above 8. Raising precision after coarsening cannot recover
-the original fix; the app requires a new fix. Firmware applies the maximum again
+Every Thing, fixed or moving, uses H3 resolution 8, about 0.74 km² with an edge of about
+530 m. Actual cell area varies. There is no resolution menu. The card shows the area size
+(`LocationArea`), and Detailed adds the resolution number and the cell index.
+`ConfigFields` accepts only `location.resolution=8`, and `ConfigPatch.Builder.location(cell, country)`
+takes only an empty or resolution 8 cell and always sends 8. Firmware still takes 0 to 15 until
+firmware #139. A finer cell read from a board becomes its resolution 8 parent. A coarser one cannot
+be refined, so the app asks for a new fix before Save. Firmware applies the maximum again
 before saving and derives the published center from the retained cell. Country
 is declared by the owner, not inferred from the cell or used as NTP residency
 proof. Exact GPS, cell-center coordinates and administrative country are different
@@ -42,6 +41,16 @@ things. See the firmware-owned [time/location contract](../../opensensor-space-f
 ## Code boundaries
 
 - `core/protocol` owns the typed page model, page selector and cell-only patch.
+  `location.gnss_cell` is the board's own GPS cell offer, sent from Waveshare `v2.18` (firmware #147).
+  `LocationConfig.gnssCell` keeps it only when it is a resolution 8 cell. It is null both when the key
+  is absent (no receiver) and when it is empty (no fresh fix). `gnssCellText` keeps that difference.
+  `thing.mobility` (`fixed` or `moving`) has a `ConfigFields` row and
+  `ConfigPatch.Builder.thingMobility`. Nothing sends it yet. `thing.setup` reads as
+  `ThingConfig.needsSetup`.
+- `core/model` `H3Cell` checks a cell index and its hex form in pure Kotlin. `core/publicfeed`
+  `H3Grid.gridDisk` lists a cell and its rings on the platform binding.
+- `core/sync` `ThingSetupPolicy.needsSetup` is the one rule for a Thing that still needs setup.
+  See [sync-engine.md](sync-engine.md#thing-setup).
 - `core/sync` reuses the existing serialized request and config-chunk parser.
 - `feature/device` owns shared draft/readback behavior and permission-triggered UI.
 - Its Android and iOS source sets own the temporary OS fix, cancellation and H3

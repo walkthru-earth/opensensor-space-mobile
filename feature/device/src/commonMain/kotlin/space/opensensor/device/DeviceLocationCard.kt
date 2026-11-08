@@ -3,8 +3,6 @@ package space.opensensor.device
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -17,7 +15,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -42,7 +39,6 @@ import space.opensensor.device.resources.location_country
 import space.opensensor.device.resources.location_country_error
 import space.opensensor.device.resources.location_country_info
 import space.opensensor.device.resources.location_failed
-import space.opensensor.device.resources.location_fine_warning
 import space.opensensor.device.resources.location_fix_failed
 import space.opensensor.device.resources.location_fresh_required
 import space.opensensor.device.resources.location_info
@@ -107,7 +103,6 @@ fun DeviceLocationForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction
     var locating by remember { mutableStateOf(false) }
     var fixJob by remember { mutableStateOf<Job?>(null) }
     var fixFailed by remember { mutableStateOf(false) }
-    var precisionMenu by remember { mutableStateOf(false) }
     AccessDialogs(
         request.access,
         AccessDialogTexts(
@@ -123,27 +118,10 @@ fun DeviceLocationForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction
         text = {
             Column {
                 Text(stringResource(Res.string.location_placement))
-                // The choice reads as an area size. Detailed adds the H3 resolution behind it.
-                val sizeLabel = stringResource(Res.string.location_area_size)
-                val chosen = areaText(draft.resolution, state.level.detailed)
-                Text(sizeLabel, style = MaterialTheme.typography.labelMedium)
-                TextButton(
-                    onClick = { precisionMenu = true },
-                    enabled = !loc.working && !locating,
-                    modifier = Modifier.semantics { contentDescription = "$sizeLabel, $chosen" },
-                ) {
-                    Text(chosen)
-                    DropdownMenu(expanded = precisionMenu, onDismissRequest = { precisionMenu = false }) {
-                        for (resolution in 0..15) {
-                            DropdownMenuItem(
-                                text = { Text(areaText(resolution, state.level.detailed)) },
-                                onClick = { precisionMenu = false; onAction(DeviceConfigAction.LocationResolution(resolution)) },
-                            )
-                        }
-                    }
-                }
+                // The cell size in words. Detailed adds the H3 resolution behind it.
+                Text(stringResource(Res.string.location_area_size), style = MaterialTheme.typography.labelMedium)
+                Text(areaText(draft.resolution, state.level.detailed))
                 Text(stringResource(Res.string.location_precision_info))
-                if (draft.resolution > DeviceLocationDraft.DEFAULT_RESOLUTION) Text(stringResource(Res.string.location_fine_warning))
                 OutlinedTextField(
                     value = draft.country,
                     onValueChange = { if (it.length <= 2) onAction(DeviceConfigAction.LocationCountry(it)) },

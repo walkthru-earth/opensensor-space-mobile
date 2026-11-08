@@ -355,11 +355,11 @@ class DeviceFacadeTest {
 
     @Test
     fun `a location read keeps the fixed Thing's Discover pin and drops it once it moves`() = harnessTest { h ->
-        h.device.locationCell = "85283473fffffff"
+        h.device.locationCell = "8828308281fffff"
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
-        assertEquals("85283473fffffff", h.repo.readLocation()?.cell)
-        assertEquals(listOf(h.device.thing to "85283473fffffff"), h.places.all.map { it.thing to it.cell })
+        assertEquals("8828308281fffff", h.repo.readLocation()?.cell)
+        assertEquals(listOf(h.device.thing to "8828308281fffff"), h.places.all.map { it.thing to it.cell })
         h.device.mobility = "moving"
         h.repo.readLocation()
         assertTrue("a moving Thing shows no pin", h.places.all.isEmpty())
@@ -369,17 +369,17 @@ class DeviceFacadeTest {
     fun `a location save keeps the pin the page it reads back gives`() = harnessTest { h ->
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
-        val saved = h.repo.writeLocation(ConfigPatch.build { location("85283473fffffff", 8, "") })
-        assertEquals("85283473fffffff", saved?.cell)
-        assertEquals(listOf(h.device.thing to "85283473fffffff"), h.places.all.map { it.thing to it.cell })
+        val saved = h.repo.writeLocation(ConfigPatch.build { location("8828308281fffff", "") })
+        assertEquals("8828308281fffff", saved?.cell)
+        assertEquals(listOf(h.device.thing to "8828308281fffff"), h.places.all.map { it.thing to it.cell })
         h.device.mobility = "moving"
-        h.repo.writeLocation(ConfigPatch.build { location("85283473fffffff", 8, "") })
+        h.repo.writeLocation(ConfigPatch.build { location("8828308281fffff", "") })
         assertTrue("a save that reads back a moving Thing shows no pin", h.places.all.isEmpty())
     }
 
     @Test
     fun `forgetting a Thing removes its saved cell`() = harnessTest { h ->
-        h.device.locationCell = "85283473fffffff"
+        h.device.locationCell = "8828308281fffff"
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         h.repo.readLocation()
@@ -416,7 +416,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `forgetting a Thing removes the saved cells of its older epochs`() = harnessTest { h ->
-        h.device.locationCell = "85283473fffffff"
+        h.device.locationCell = "8828308281fffff"
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         h.repo.readLocation()

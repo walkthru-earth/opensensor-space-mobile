@@ -164,11 +164,6 @@ class DeviceConfigController(
         }
     }
 
-    fun selectLocationResolution(value: Int) {
-        if (location.value.working) return
-        location.value = location.value.copy(draft = location.value.draft.atResolution(value), result = null)
-    }
-
     fun selectLocationCountry(value: String) {
         if (location.value.working) return
         location.value = location.value.copy(draft = location.value.draft.copy(country = value.trim().uppercase()), result = null)
@@ -188,7 +183,7 @@ class DeviceConfigController(
         val loc = location.value
         if (!now.canEdit || now.snapshot.syncRunning || loc.supported != true || loc.working || loc.draft.needsFix) return
         val draft = loc.draft
-        val patch = try { ConfigPatch.build { location(draft.cell, draft.resolution, draft.country) } } catch (_: IllegalArgumentException) {
+        val patch = try { ConfigPatch.build { location(draft.cell, draft.country) } } catch (_: IllegalArgumentException) {
             location.value = loc.copy(result = DeviceLocationResult.FAILED)
             return
         }

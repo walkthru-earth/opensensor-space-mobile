@@ -436,7 +436,7 @@ class FakeTransport(
                 "wifi.ssid" -> v.toByteArray().size in 1..32
                 "wifi.psk" -> v.toByteArray().size <= 63
                 "location.cell" -> v.isEmpty() || Regex("[0-9a-f]{15}").matches(v)
-                "location.resolution" -> v.toIntOrNull() in 0..15
+                "location.resolution" -> v.toIntOrNull() == 8
                 "location.country" -> v.isEmpty() || Regex("[A-Z]{2}").matches(v)
                 "thing.mobility" -> v == "fixed" || v == "moving"
                 else -> false
