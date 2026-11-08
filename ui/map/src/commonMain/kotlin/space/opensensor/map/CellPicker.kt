@@ -19,6 +19,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -34,7 +35,9 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -198,7 +201,10 @@ private fun PickerMap(
     val region = remember { if (start == null) TimeZoneRegions.regionFor(TimeZone.currentSystemDefault().id) else null }
     val ink = MaterialTheme.colorScheme.onSurface
     val chosenCell = remember(selected) { CellPickerGrid.pickable(selected)?.let(H3Index::fromHex) }
-    val gridJson = remember(cells, chosenCell) { CellOutlines.geoJson(h3, cells.filterNot { it == chosenCell }) }
+    // Up to about 800 cell boundaries, built off the main thread. The last grid stays until the next is ready.
+    val gridJson by produceState(remember { CellOutlines.geoJson(h3, emptyList()) }, cells, chosenCell) {
+        value = withContext(Dispatchers.Default) { CellOutlines.geoJson(h3, cells.filterNot { it == chosenCell }) }
+    }
     val selectedJson = remember(chosenCell) { CellOutlines.geoJson(h3, listOfNotNull(chosenCell), chosenCell) }
     val mapState = rememberBaseMapState(
         style = style,
