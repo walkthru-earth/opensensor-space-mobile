@@ -151,7 +151,7 @@ internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, 
                     if (row.needsSetup && !row.known) Tag(stringResource(Res.string.scan_tag_setup))
                 }
                 ArchiveLine(row.archive, level)
-                if (row.needsSetup && row.known) SetupChip(onSetup)
+                if (row.needsSetup && row.known) SetupChip(stringResource(Res.string.scan_finish_setup), onSetup)
             }
             Spacer(Modifier.width(12.dp))
             row.rssi?.let { SignalBars(it, showDbm = level.developer) }
@@ -184,7 +184,7 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, o
                 }
                 if (level.developer && row.archive == null) row.thing?.let { Mono(it.take(8)) }
                 ArchiveLine(row.archive, level)
-                if (row.needsSetup) SetupChip(onSetup)
+                if (row.needsSetup) SetupChip(stringResource(Res.string.scan_finish_setup), onSetup)
             }
             // Opens the sensor's page, where Forget lives.
             Icon(AppIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f))
@@ -194,16 +194,16 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, o
 }
 
 /**
- * Finish setup on a known sensor that asks for it (#272). The resume entry after the owner backed
- * out of the wizard, which opens by itself once per foreground session only.
+ * A compact neutral control for setup (#272). Finish setup on a known row that asks for it, the
+ * resume entry once the wizard opened this session, and the count prompt when several ask.
  */
 @Composable
-private fun SetupChip(onClick: () -> Unit) {
+internal fun SetupChip(text: String, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = FloatingControl.SmallShape,
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.padding(top = 8.dp).touchTarget(minWidth = 0.dp),
     ) {
         Row(
@@ -212,7 +212,7 @@ private fun SetupChip(onClick: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(AppIcons.ChevronRight, contentDescription = null)
-            FitText(stringResource(Res.string.scan_finish_setup), style = MaterialTheme.typography.labelLarge)
+            FitText(text, style = MaterialTheme.typography.labelLarge)
         }
     }
 }

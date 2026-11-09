@@ -113,12 +113,37 @@ class TabNavigatorTest {
     }
 
     @Test
-    fun `a sensor asking for setup resumes when known and is offered when new`() {
+    fun `a tap on Finish setup resumes a known sensor and offers a new one`() {
         nav.select(TopTab.MY_DEVICES)
         nav.finishSetup("A", "OS-1", known = true)
         assertEquals(listOf(ScanKey, SetupKey(resume = "A")), stack(TopTab.MY_DEVICES))
+        nav.pop()
         nav.finishSetup("B", "OS-2", known = false)
         assertEquals(listOf(ScanKey, SetupKey(pick = "B", pickName = "OS-2", offer = true)), stack(TopTab.MY_DEVICES))
+    }
+
+    @Test
+    fun `an automatic open only offers a known sensor so nothing resumes or connects`() {
+        nav.select(TopTab.MY_DEVICES)
+        nav.finishSetup("A", "OS-1", known = true, auto = true)
+        assertEquals(listOf(ScanKey, SetupKey(pick = "A", pickName = "OS-1", offer = true)), stack(TopTab.MY_DEVICES))
+    }
+
+    @Test
+    fun `a setup request acts only while the My devices root is on top`() {
+        nav.select(TopTab.MY_DEVICES)
+        nav.finishSetup("A", "OS-1", known = false, auto = true)
+        // A second request sent as My devices fades out does not replace the open wizard.
+        nav.finishSetup("B", "OS-2", known = false, auto = true)
+        assertEquals(listOf(ScanKey, SetupKey(pick = "A", pickName = "OS-1", offer = true)), stack(TopTab.MY_DEVICES))
+        nav.pop()
+        nav.push(TodayKey("C"))
+        nav.finishSetup("B", "OS-2", known = true)
+        assertEquals(listOf(ScanKey, TodayKey("C")), stack(TopTab.MY_DEVICES))
+        nav.select(TopTab.DISCOVER)
+        nav.finishSetup("B", "OS-2", known = false)
+        assertEquals(TopTab.DISCOVER, nav.tab)
+        assertEquals(listOf(ScanKey, TodayKey("C")), stack(TopTab.MY_DEVICES))
     }
 
     @Test

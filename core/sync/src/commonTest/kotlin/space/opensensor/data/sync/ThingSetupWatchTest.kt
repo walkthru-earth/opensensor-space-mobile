@@ -7,6 +7,8 @@ import space.opensensor.data.protocol.Advertisement
 import space.opensensor.data.protocol.DeviceConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ThingSetupWatchTest {
     private val cell = "8828308281fffff"
@@ -89,5 +91,32 @@ class ThingSetupWatchTest {
         assertEquals(emptyList(), watch.needs(scan).first())
         scan.value = listOf(SetupSighting("AA", Advertisement.FLAG_SETUP, 6))
         assertEquals(listOf(SetupNeed("AA", false)), watch.needs(scan).first())
+    }
+
+    @Test
+    fun `a sighting with no heard time claims nothing after a session end`() = runTest {
+        val watch = ThingSetupWatch()
+        val scan = MutableStateFlow(listOf(SetupSighting("AA", Advertisement.FLAG_SETUP, null)))
+        assertEquals(listOf(SetupNeed("AA", false)), watch.needs(scan).first())
+        watch.endSession(5)
+        assertEquals(emptyList(), watch.needs(scan).first())
+    }
+
+    @Test
+    fun `the wizard opens by itself once per session across all sensors`() = runTest {
+        val watch = ThingSetupWatch()
+        val scan = MutableStateFlow(listOf(SetupSighting("AA", Advertisement.FLAG_SETUP, 5), SetupSighting("BB", Advertisement.FLAG_SETUP, 5)))
+        assertTrue(watch.claimAutoOpen("aa"))
+        assertFalse(watch.claimAutoOpen("BB"), "a second sensor does not open again")
+        assertFalse(watch.claimAutoOpen("AA"))
+        assertEquals(listOf(SetupNeed("AA", true), SetupNeed("BB", false)), watch.needs(scan).first())
+
+        // A tap on a resume entry spends that sensor only and leaves the automatic open alone.
+        val tapped = ThingSetupWatch()
+        tapped.opened("AA")
+        assertTrue(tapped.claimAutoOpen("BB"))
+
+        watch.endSession(4)
+        assertTrue(watch.claimAutoOpen("BB"), "the next session opens again")
     }
 }

@@ -234,6 +234,22 @@ class SetupControllerTest {
     }
 
     @Test
+    fun anAutomaticOpenOfAnAddedSensorMakesNoConnectCallBeforeTheTap() = runTest(UnconfinedTestDispatcher()) {
+        // The shell opens it as an offer (TabNavigator.finishSetup with auto), never as a resume.
+        val port = FakePort()
+        val c = SetupController(backgroundScope, port, pick = SetupCandidate("BB", "OS-2", added = false), offer = true)
+        c.find()
+        assertEquals(SetupStep.Find, c.state.value.page)
+        assertFalse(c.state.value.paired)
+        assertTrue(port.calls.none { it.startsWith("connect") }, "the open alone never connects")
+
+        c.choose(c.state.value.candidates.single { it.id == "BB" })
+        assertEquals(listOf("connect BB"), port.calls.filter { it.startsWith("connect") })
+        port.ready("BB")
+        assertEquals(SetupStep.Name, c.state.value.page)
+    }
+
+    @Test
     fun everyRunTellsTheWatchItOpened() = runTest(UnconfinedTestDispatcher()) {
         val opened = mutableListOf<String>()
         SetupController(backgroundScope, FakePort(), resumeId = "BB", opened = { opened += it })

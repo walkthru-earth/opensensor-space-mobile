@@ -29,15 +29,22 @@ data class SetupNeed(val id: String, val opened: Boolean)
  * - Page 1 is the fallback for firmware whose advert has no setup flag. An advert counts only when
  *   it was heard after the last page 1 read of that sensor, so a cached advert with bit 6 cannot
  *   undo the page that says setup is done.
- * - The wizard opens by itself once per sensor per foreground session. [opened] spends that open,
- *   for an automatic open and for any wizard run the user started. Ids match case insensitively.
- * - A sighting heard before the last [endSession] claims nothing, so a scan result kept from the
- *   last session cannot open the wizard for a sensor that has left.
+ * - [opened] marks a sensor whose wizard ran this foreground session, by itself or from a tap, so it
+ *   shows a resume entry instead of opening again. Ids match case insensitively.
+ * - The wizard opens by itself at most once per foreground session across all sensors.
+ *   [claimAutoOpen] spends that one open, so a room of boards that all ask cannot chain wizards.
+ * - A sighting heard before the last [endSession], or with no heard time after one, claims nothing,
+ *   so a scan result kept from the last session cannot open the wizard for a sensor that has left.
  *
  * Everything it holds lasts one foreground session and stays in memory.
  */
 class ThingSetupWatch {
-    private data class Session(val pages: Map<String, Page> = emptyMap(), val opened: Set<String> = emptySet(), val sinceMs: Long? = null)
+    private data class Session(
+        val pages: Map<String, Page> = emptyMap(),
+        val opened: Set<String> = emptySet(),
+        val sinceMs: Long? = null,
+        val autoOpened: Boolean = false,
+    )
 
     private val session = MutableStateFlow(Session())
 
@@ -52,8 +59,22 @@ class ThingSetupWatch {
     }
 
     /**
+     * Claims this session's one automatic open for [id] and marks it [opened]. False when the wizard
+     * already opened by itself this session, for this sensor or another.
+     */
+    fun claimAutoOpen(id: String): Boolean {
+        var won = false
+        session.update { s ->
+            won = !s.autoOpened
+            if (won) s.copy(autoOpened = true, opened = s.opened + id.lowercase()) else s
+        }
+        return won
+    }
+
+    /**
      * The app left the foreground at [atMs]. The next session starts with nothing read and nothing
-     * opened, and counts only sightings heard after [atMs].
+     * opened, so firmware without the setup flag asks again only after a fresh page 1 read. It counts
+     * only sightings heard after [atMs].
      */
     fun endSession(atMs: Long) {
         session.value = Session(sinceMs = atMs)
@@ -69,14 +90,14 @@ class ThingSetupWatch {
     companion object {
         /**
          * The pure rule behind [needs]. Sighted sensors come first in their order, then sensors known
-         * only from a page read. [opened] holds lowercase ids. A sighting heard at or before [sinceMs]
-         * is skipped.
+         * only from a page read. [opened] holds lowercase ids. With a [sinceMs], a sighting heard at
+         * or before it, or with no heard time, is skipped.
          */
         fun decide(sightings: List<SetupSighting>, pages: List<Page>, opened: Set<String>, sinceMs: Long? = null): List<SetupNeed> {
             val byId = pages.associateBy { it.id.lowercase() }
             val out = LinkedHashMap<String, SetupNeed>()
             for (s in sightings) {
-                if (sinceMs != null && s.seenMs != null && s.seenMs <= sinceMs) continue
+                if (sinceMs != null && (s.seenMs == null || s.seenMs <= sinceMs)) continue
                 val key = s.id.lowercase()
                 if (key in out) continue
                 val page = byId[key]

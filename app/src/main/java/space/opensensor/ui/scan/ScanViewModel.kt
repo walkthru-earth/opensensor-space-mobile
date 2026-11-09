@@ -54,6 +54,7 @@ import space.opensensor.devices.KnownSensor
 import space.opensensor.devices.LinkPhase
 import space.opensensor.devices.NearbySensor
 import space.opensensor.devices.ScanProblem
+import space.opensensor.devices.SetupRequest
 import space.opensensor.devices.WifiSensor
 import space.opensensor.ui.permissions.LanPermission
 import space.opensensor.ui.permissions.hasBluetoothPermissions
@@ -112,7 +113,7 @@ class ScanViewModel @Inject constructor(
     }
 
     private val radio = object : DeviceRadio {
-        override val nearby: Flow<List<NearbySensor>> = seen.map { m -> m.values.map { NearbySensor(it.address, it.name, it.rssi, it.bonded, it.advertFlags, it.lastSeenEpochMs) } }
+        override val nearby: Flow<List<NearbySensor>> = seen.map { m -> m.values.map(ScannedDevice::toNearbySensor) }
         override val scanning: Flow<Boolean> = this@ScanViewModel.scanning
         override val scanProblem: Flow<ScanProblem?> = this@ScanViewModel.scanProblem
         override val wifi: Flow<List<WifiSensor>> = manager.lanDevices.map { m -> m.values.map { WifiSensor(it.serviceName, it.thing) } }
@@ -132,6 +133,9 @@ class ScanViewModel @Inject constructor(
 
     private val controller = DevicesController(viewModelScope, knownStore, radio, summaries, collect, setupWatch)
     val state: StateFlow<DevicesUiState> get() = controller.state
+
+    /** The controller's one shot automatic setup opens (#272), collected by My devices while it shows. */
+    val setupOpens: Flow<SetupRequest> get() = controller.setupOpens
 
     /** Shared actions go to the controller. Opening a sensor connects over any permitted link. */
     fun onAction(action: DevicesAction) {
@@ -275,3 +279,6 @@ private fun DeviceSnapshot.toActiveLink(): ActiveLink = ActiveLink(
     filesTotal = progress.filesTotal,
     background = ownership == DeviceOwnership.BACKGROUND,
 )
+
+/** One scan result as a My devices row input, with its advert flags and when it was heard (#272). */
+internal fun ScannedDevice.toNearbySensor(): NearbySensor = NearbySensor(address, name, rssi, bonded, advertFlags, lastSeenEpochMs)

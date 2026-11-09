@@ -239,7 +239,8 @@ internal fun AppRoot(
                             onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
                             onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
                             onAdd = { id, name -> nav.openSetup(pick = id, pickName = name) },
-                            onSetup = { nav.finishSetup(it.id, it.name, it.known) },
+                            onSetup = { nav.finishSetup(it.id, it.name, it.known, it.auto) },
+                            onSetupMany = { nav.openSetup() },
                         ) { id, connect ->
                             val peripheral = when {
                                 IosKnown.isPeripheral(id) -> id
@@ -429,6 +430,7 @@ private fun MyDevicesEntry(
     onHistory: () -> Unit,
     onAdd: (id: String, name: String?) -> Unit,
     onSetup: (SetupRequest) -> Unit,
+    onSetupMany: () -> Unit,
     onOpen: (id: String, connect: Boolean) -> Unit,
 ) {
     val controller = viewModel { DevicesHolder(bridge) }.controller
@@ -441,6 +443,7 @@ private fun MyDevicesEntry(
         units = remember(units) { UnitFormatter(units) },
         bluetooth = access,
         platform = IosDevices,
+        setupOpens = controller.setupOpens,
         onOpenLocalNetworkSettings = openSettings,
         // Only a tap browses the local network, so iOS asks for access when the user scans.
         onScanTap = bridge::scanTapped,
@@ -452,6 +455,7 @@ private fun MyDevicesEntry(
                     controller.onAction(action)
                     onSetup(action.request)
                 }
+                DevicesAction.SetupMany -> onSetupMany()
                 else -> controller.onAction(action)
             }
         },

@@ -17,6 +17,10 @@
     <string name="scan_tag_on_lan_no_token">on Wi-Fi, no token</string>
     <string name="scan_tag_setup">needs setup</string>
     <string name="scan_finish_setup">Finish setup</string>
+    <plurals name="scan_setup_many">
+        <item quantity="one">%1$d sensor needs setup</item>
+        <item quantity="other">%1$d sensors need setup</item>
+    </plurals>
     <plurals name="scan_collecting">
         <item quantity="one">Collecting %1$d of %2$d file</item>
         <item quantity="other">Collecting %1$d of %2$d files</item>

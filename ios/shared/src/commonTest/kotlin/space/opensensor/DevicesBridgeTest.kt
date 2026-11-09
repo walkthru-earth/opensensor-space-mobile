@@ -87,7 +87,7 @@ class DevicesBridgeTest {
         assertEquals("tap", scans.last(), "only a Scan tap on My devices browses")
     }
 
-    @Test fun aSensorAskingForSetupPromptsOncePerForegroundSession() = runTest {
+    @Test fun aSensorAskingForSetupOpensTheWizardOncePerForegroundSession() = runTest {
         var heard = 5L
         val state = CompanionState().apply {
             clock = { heard }
@@ -96,19 +96,22 @@ class DevicesBridgeTest {
         // The list waits for the archive index, so this one emits an empty index.
         val bridge = DevicesBridge(state, flowOf(emptyList()), MemoryStorage(), { 6 }, {}, {}, {}, {}, { _, _ -> }, { _, _ -> })
         val controller = bridge.controller(backgroundScope)
-        val prompt = controller.state.first { it.prompt != null }.prompt!!
-        assertEquals(SetupRequest(b, "OS-b", known = false), prompt)
-        controller.onAction(DevicesAction.FinishSetup(prompt))
-        val spent = controller.state.first { it.prompt == null }
-        assertTrue(spent.list.nearby.single().needsSetup, "the row keeps its resume entry")
+        val opens = mutableListOf<SetupRequest>()
+        backgroundScope.launch { controller.setupOpens.collect { opens += it } }
+        val asking = controller.state.first { s -> s.list.nearby.any { it.needsSetup } }
+        assertEquals(1, asking.setupCount)
+        runCurrent()
+        assertEquals(listOf(SetupRequest(b, "OS-b", known = false, auto = true)), opens)
         bridge.endSetupSession()
-        // An advert from the last session claims nothing, so the row loses its flag and nothing prompts.
+        // An advert from the last session claims nothing, so the row loses its flag and nothing opens.
         val cleared = controller.state.first { s -> s.list.nearby.none { it.needsSetup } }
-        assertNull(cleared.prompt)
+        assertEquals(0, cleared.setupCount)
         heard = 7
         state.deviceFound(b, "OS-b", -50, advertFlags = Advertisement.FLAG_SETUP)
         Snapshot.sendApplyNotifications()
-        assertEquals(prompt, controller.state.first { it.prompt != null }.prompt, "the next session prompts once it hears the sensor again")
+        controller.state.first { s -> s.list.nearby.any { it.needsSetup } }
+        runCurrent()
+        assertEquals(2, opens.size, "the next session opens once it hears the sensor again")
     }
 
     @Test fun mergeListsRecordsAndCredentialsOncePerPeripheral() {

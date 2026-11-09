@@ -118,10 +118,10 @@ data class DevicesUiState(
     val scanProblem: ScanProblem? = null,
     val collecting: Boolean = false,
     /**
-     * A sensor that asks for setup and has not had the wizard open this foreground session. The
-     * screen opens the wizard for it once, through [DevicesAction.FinishSetup].
+     * How many sensors ask for setup now (#272). From two on, the screen shows one compact prompt
+     * with the count, [DevicesAction.SetupMany], and the wizard never opens by itself.
      */
-    val prompt: SetupRequest? = null,
+    val setupCount: Int = 0,
 ) {
     /** Collect all shows from two known sensors, one sensor syncs from its own row. */
     val showCollectAll: Boolean get() = list.knownCount >= 2
@@ -140,16 +140,19 @@ sealed interface DevicesAction {
     data object CollectAll : DevicesAction
 
     /**
-     * Open the setup wizard for a sensor that asks for it, by itself from [DevicesUiState.prompt] or
-     * from the Finish setup chip. The controller spends the automatic open, the route navigates.
+     * Open the setup wizard for a sensor that asks for it, by itself from
+     * [DevicesController.setupOpens] or from the Finish setup chip. The route navigates.
      */
     data class FinishSetup(val request: SetupRequest) : DevicesAction
+
+    /** The compact prompt for several sensors that ask for setup. The route opens the wizard on Find. */
+    data object SetupMany : DevicesAction
 }
 
 /**
- * A sensor to set up (#272). [known] picks how the wizard opens. A known sensor resumes on its
- * Location step over a silent reconnect. A new one is only offered on Find, as pairing is the
- * owner's tap.
+ * A sensor to set up (#272). An [auto] request, the wizard opening by itself, only offers the sensor
+ * on Find, so nothing connects before the owner's tap. A tap on Finish setup for a [known] sensor
+ * resumes on its Location step over a silent reconnect. A new one is always only offered on Find.
  */
 @Immutable
-data class SetupRequest(val id: String, val name: String?, val known: Boolean)
+data class SetupRequest(val id: String, val name: String?, val known: Boolean, val auto: Boolean = false)

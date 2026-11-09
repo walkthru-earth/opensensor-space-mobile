@@ -104,7 +104,7 @@ object BleScanner {
                                 rssi = r.rssi,
                                 bonded = dev.bondState == BluetoothDevice.BOND_BONDED,
                                 lastSeenEpochMs = System.currentTimeMillis(),
-                                advertFlags = Advertisement.decode(r.scanRecord?.getServiceData(serviceUuid))?.flags,
+                                advertFlags = advertFlags(r.scanRecord?.getServiceData(serviceUuid)),
                             )
                         )
                     )
@@ -130,6 +130,12 @@ object BleScanner {
         }
         emitAll(events)
     }
+
+    /**
+     * The advert flags byte from the service data under the opensensor service (#272), bit 6 asks for
+     * setup. Null when there is no service data, an unknown version or a short payload.
+     */
+    internal fun advertFlags(serviceData: ByteArray?): Int? = Advertisement.decode(serviceData)?.flags
 
     /**
      * Runs [plan] over the radio that [open] registers. [open] gets the sink for its callback.

@@ -568,14 +568,23 @@ it.
 - Each page 1 read the user already starts (Device settings, the setup wizard Location page) calls
   `pageRead` with the read time. Android does it in `DeviceLinkOwner.recordPlace`, iOS in
   `IosDeviceConfigSource.recordPlace`. The watch never asks for page 1 itself.
-- Advert flags count only when heard after that sensor's last page 1 read, as above.
-- `DevicesController` turns the needs into a `needsSetup` row flag and one `prompt` at a time. My
-  devices opens the wizard for the prompt once per sensor per foreground session, and any wizard run
-  for that sensor, by itself or from a tap, spends it (`opened`). Leaving the foreground calls
-  `endSession`, which forgets the reads and the opens and skips any advert heard before it, so a
-  scan result kept from the last session cannot open the wizard. Everything stays in memory.
-- The watch sends nothing. Pairing a new sensor stays the user's tap on Find, and every save stays an
-  explicit SET_CONFIG from the wizard or Device settings.
+- Advert flags count only when heard after that sensor's last page 1 read, as above. A sighting with
+  no heard time counts only before the first session end.
+- `DevicesController` turns the needs into a `needsSetup` row flag and a `setupCount`. Only when
+  exactly one sensor needs setup and it was not opened this session does `setupOpens` emit it, a
+  one-shot event My devices collects while it is on screen. `claimAutoOpen` caps these automatic
+  opens at one per foreground session across all sensors. With two or more, My devices shows one
+  count chip that opens Find, and never opens the wizard by itself.
+- `TabNavigator.finishSetup` acts only while the My devices root is on top. An automatic open always
+  lands on Find with the sensor offered (`SetupKey.offer`), added or not, so nothing connects until
+  the user taps it. A tap on "Finish setup" resumes an added sensor at Location. Any wizard run for a
+  sensor spends its open (`opened`).
+- Leaving the foreground calls `endSession`, which forgets the page 1 reads, the opens and the cap,
+  and skips any advert heard before it. A scan result kept from the last session cannot open the
+  wizard, and firmware without bit 6 asks again only after a fresh page 1 read. Everything stays in
+  memory.
+- The watch sends nothing. Pairing stays the user's tap on Find, and every save stays an explicit
+  SET_CONFIG from the wizard or Device settings.
 
 ## Historical decisions (v1, mirrored into the firmware contract 2026-09-16)
 
