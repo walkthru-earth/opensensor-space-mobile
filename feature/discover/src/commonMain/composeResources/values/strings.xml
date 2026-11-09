@@ -145,7 +145,10 @@
     <string name="discover_ago_just_now">just now</string>
     <string name="discover_ago_minutes">%1$d min ago</string>
     <string name="discover_ago_hours">%1$d h ago</string>
-    <string name="discover_ago_days">%1$d d ago</string>
+    <plurals name="discover_ago_days">
+        <item quantity="one">%1$d d ago</item>
+        <item quantity="other">%1$d d ago</item>
+    </plurals>
     <!-- The Real label while the network fails and the last read data is shown, as in "OpenAQ, cached 2 h ago". -->
     <string name="discover_real_cached">OpenAQ, cached %1$s</string>
     <!-- On a public area that folds in a sensor the user shares. -->

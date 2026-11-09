@@ -217,7 +217,7 @@ class DiscoverStrings internal constructor(
         AgeStep.JUST_NOW -> stringResource(Res.string.discover_ago_just_now)
         AgeStep.MINUTES -> stringResource(Res.string.discover_ago_minutes, n.toInt())
         AgeStep.HOURS -> stringResource(Res.string.discover_ago_hours, n.toInt())
-        AgeStep.DAYS -> stringResource(Res.string.discover_ago_days, n.toInt())
+        AgeStep.DAYS -> pluralStringResource(Res.plurals.discover_ago_days, n.toInt(), n.toInt())
     }
 
     /** The Real label while the kept data is on screen, as in "OpenAQ, cached 2 h ago". */
