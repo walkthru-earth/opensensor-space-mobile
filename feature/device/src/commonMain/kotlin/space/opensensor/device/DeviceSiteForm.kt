@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -32,6 +33,8 @@ import space.opensensor.device.resources.site_failed
 import space.opensensor.device.resources.site_name
 import space.opensensor.device.resources.site_not_confirmed
 import space.opensensor.device.resources.site_provider
+import space.opensensor.device.resources.site_read_failed
+import space.opensensor.device.resources.site_retry
 import space.opensensor.device.resources.site_save
 import space.opensensor.device.resources.site_saved
 import space.opensensor.device.resources.site_url
@@ -62,18 +65,32 @@ fun DeviceSiteForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction) ->
         if (showSave) {
             PillButton(stringResource(Res.string.site_save), onClick = { onAction(DeviceConfigAction.SaveSite) }, enabled = state.canSaveSite)
         }
-        site.result?.let { result ->
-            Text(
+        when (val result = site.result) {
+            null -> Unit
+            DeviceSiteResult.READ_FAILED -> SiteReadFailed(state, onAction)
+            else -> Text(
                 stringResource(
                     when (result) {
                         DeviceSiteResult.SAVED -> Res.string.site_saved
-                        DeviceSiteResult.FAILED -> Res.string.site_failed
                         DeviceSiteResult.NOT_CONFIRMED -> Res.string.site_not_confirmed
+                        else -> Res.string.site_failed
                     }
                 ),
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
+    }
+}
+
+/**
+ * Pages 5 and 6 could not be read. Says so and offers a new read of those two pages only, which
+ * sends nothing to the board. The wizard and the settings card show the same.
+ */
+@Composable
+internal fun SiteReadFailed(state: DeviceConfigUiState, onAction: (DeviceConfigAction) -> Unit) {
+    Text(stringResource(Res.string.site_read_failed), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    TextButton(enabled = state.ready && state.isV2 && !state.site.working, onClick = { onAction(DeviceConfigAction.RetrySite) }) {
+        Text(stringResource(Res.string.site_retry))
     }
 }
 

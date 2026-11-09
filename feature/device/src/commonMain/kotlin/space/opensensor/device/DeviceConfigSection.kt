@@ -119,6 +119,9 @@ sealed interface DeviceConfigAction {
 
     /** Sends the changed site values in their own `SET_CONFIG`, then reads pages 5 and 6 back. */
     data object SaveSite : DeviceConfigAction
+
+    /** Reads the owner site again after a failed read. */
+    data object RetrySite : DeviceConfigAction
     data object Refresh : DeviceConfigAction
     data class SavePairing(val choice: PairingChoice) : DeviceConfigAction
     data object RequestReboot : DeviceConfigAction
@@ -150,6 +153,7 @@ fun DeviceConfigController.onAction(action: DeviceConfigAction): Boolean {
         DeviceConfigAction.ClearLocation -> clearLocation()
         is DeviceConfigAction.SiteValue -> editSite(action.field, action.value)
         DeviceConfigAction.SaveSite -> saveSite()
+        DeviceConfigAction.RetrySite -> retrySite()
         DeviceConfigAction.Refresh -> refresh()
         is DeviceConfigAction.SavePairing -> savePairing(action.choice)
         DeviceConfigAction.RequestReboot -> requestReboot()

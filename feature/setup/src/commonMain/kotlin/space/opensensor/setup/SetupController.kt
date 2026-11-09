@@ -74,6 +74,8 @@ data class SetupUiState(
     val located: Boolean = false,
     /** Whether the sensor has the owner site keys. Null until it answered, false leaves Site out. */
     val siteSupported: Boolean? = null,
+    /** Next on Site is saving the site. Skip waits for it, so the save and a skip never race. */
+    val siteSaving: Boolean = false,
     val askClose: Boolean = false,
     val closed: Boolean = false,
 ) {
@@ -231,9 +233,29 @@ class SetupController(
         }
     }
 
-    /** Skips a skippable page without writing anything. */
+    /**
+     * Next on Site with changed values. Runs [save], the explicit site write, and moves on only when
+     * it reports the board confirmed every value. A refusal or an unconfirmed readback stays on Site
+     * with its reason. When Back left Site while the save ran, its result never moves the wizard.
+     */
+    fun saveSiteThenNext(save: suspend () -> Boolean) {
+        val s = _state.value
+        if (s.page != SetupStep.Site || s.siteSaving) return
+        _state.update { it.copy(siteSaving = true) }
+        scope.launch {
+            val saved = try {
+                save()
+            } finally {
+                _state.update { it.copy(siteSaving = false) }
+            }
+            if (saved && _state.value.page == SetupStep.Site) advance()
+        }
+    }
+
+    /** Skips a skippable page without writing anything. Ignored while a site save runs. */
     fun skip() {
-        if (_state.value.page.skippable) advance()
+        val s = _state.value
+        if (s.page.skippable && !s.siteSaving) advance()
     }
 
     private fun advance() {

@@ -1,5 +1,6 @@
 package space.opensensor.setup
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -346,6 +347,45 @@ class SetupControllerTest {
         assertEquals(SetupStep.Site, c.state.value.page)
         c.back()
         assertEquals(SetupFlows.LOCATION, c.state.value.page)
+    }
+
+    @Test
+    fun aSiteSaveMovesOnOnlyWhenTheBoardConfirmedIt() = runTest(UnconfinedTestDispatcher()) {
+        val c = pastLocation(FakePort())
+        var saves = 0
+        c.saveSiteThenNext {
+            saves++
+            false
+        }
+        assertEquals(SetupStep.Site, c.state.value.page, "a refused or unconfirmed save stays on Site")
+        assertFalse(c.state.value.siteSaving)
+        c.saveSiteThenNext {
+            saves++
+            true
+        }
+        assertEquals(SetupFlows.WIFI, c.state.value.page)
+        assertEquals(2, saves)
+    }
+
+    @Test
+    fun skipWaitsForASiteSaveAndBackDropsItsResult() = runTest(UnconfinedTestDispatcher()) {
+        val c = pastLocation(FakePort())
+        val result = CompletableDeferred<Boolean>()
+        c.saveSiteThenNext { result.await() }
+        assertTrue(c.state.value.siteSaving)
+        c.skip()
+        assertEquals(SetupStep.Site, c.state.value.page, "Skip cannot race the save")
+        var second = false
+        c.saveSiteThenNext {
+            second = true
+            true
+        }
+        assertFalse(second, "one save at a time")
+        c.back()
+        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        result.complete(true)
+        assertFalse(c.state.value.siteSaving)
+        assertEquals(SetupFlows.LOCATION, c.state.value.page, "a save that ends after Back never moves the wizard")
     }
 
     @Test

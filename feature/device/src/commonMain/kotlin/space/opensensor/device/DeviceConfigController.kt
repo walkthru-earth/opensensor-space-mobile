@@ -1,7 +1,10 @@
 package space.opensensor.device
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -15,9 +18,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import space.opensensor.data.WifiScanState
 import space.opensensor.data.protocol.ConfigField
 import space.opensensor.data.protocol.ConfigFields
@@ -91,8 +96,8 @@ class DeviceConfigController(
     private val site = MutableStateFlow(DeviceSiteState())
 
     /**
-     * A site write failed, maybe with `ERROR` 12 `nvs`. The firmware asks the phone to read pages 0,
-     * 1, 5 and 6 again after the next `SET_CONFIG` that succeeds.
+     * A site write failed, maybe with `ERROR` 12 `nvs`. The next site save that succeeds then reads
+     * pages 0 and 1 again too. Pages 5 and 6 are read back by every site save.
      */
     private var rereadAfterFailure = false
 
@@ -163,28 +168,45 @@ class DeviceConfigController(
         }
     }
 
+    /** Reads pages 5 and 6 again, from the site's Retry. Nothing is sent to the board. */
+    fun retrySite() {
+        if (now.ready && now.isV2) scope.launch { refreshSite() }
+    }
+
     /**
-     * Reads pages 5 and 6. The draft follows the board, so a refresh drops unsaved typing. A read
-     * that meets a busy link, such as a config read still holding it, is tried [SITE_READ_TRIES]
-     * times in all before it counts as failed.
+     * Runs [read], and when it fails tries again up to [READ_TRIES] times in all. Before each new try
+     * it waits a moment and then until the link is free, because a Refresh starts the page 0 read
+     * first and that read holds the link (Android answers "link busy" until it ends).
      */
+    private suspend fun <T> readWhenFree(read: suspend () -> T): T {
+        var tries = 1
+        while (true) {
+            try {
+                return read()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (tries >= READ_TRIES) throw e
+                tries++
+                delay(READ_RETRY_MS)
+                withTimeoutOrNull(BUSY_WAIT_MS) { source.snapshot.first { !it.busy } }
+            }
+        }
+    }
+
+    /** Reads pages 5 and 6. The draft follows the board, so a refresh drops unsaved typing. */
     private suspend fun refreshSite() {
         if (site.value.working) return
         site.value = site.value.copy(working = true, result = null)
-        repeat(SITE_READ_TRIES) { attempt ->
-            try {
-                val stored = source.readSite()
-                site.value = if (stored == null) DeviceSiteState(supported = false) else DeviceSiteState(supported = true, stored = stored, draft = stored)
-                return
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                if (attempt < SITE_READ_TRIES - 1) delay(SITE_READ_RETRY_MS)
-            }
+        site.value = try {
+            val stored = readWhenFree { source.readSite() }
+            if (stored == null) DeviceSiteState(supported = false) else DeviceSiteState(supported = true, stored = stored, draft = stored)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Not unsupported. The fields stay as they were, Save stays off, and the form offers Retry.
+            site.value.copy(working = false, result = DeviceSiteResult.READ_FAILED)
         }
-        // Unknown, not unsupported. The fields stay as they were, Save stays off, and the card
-        // offers Refresh.
-        site.value = site.value.copy(working = false, result = DeviceSiteResult.FAILED)
     }
 
     /** Drafts one site value. Only [saveSite] sends anything. */
@@ -199,17 +221,27 @@ class DeviceConfigController(
      * `SET_CONFIG` of their own, then compares the pages 5 and 6 readback with what was sent.
      */
     fun saveSite() {
+        startSiteSave()
+    }
+
+    /**
+     * [saveSite] for the setup wizard's Next, which moves on only when this save ends [DeviceSiteResult.SAVED].
+     * Null when nothing was sent, because the link, a sync or the draft does not allow a save now.
+     */
+    suspend fun saveSiteAndWait(): DeviceSiteResult? = startSiteSave()?.await()
+
+    private fun startSiteSave(): Deferred<DeviceSiteResult>? {
         val current = site.value
-        if (!now.canEdit || now.snapshot.syncRunning || !current.canSave) return
+        if (!now.canEdit || now.snapshot.syncRunning || !current.canSave) return null
         val changes = current.changes
         val patch = try {
             ConfigPatch.build { site(changes) }
         } catch (_: ConfigValidationException) {
             site.value = current.copy(result = DeviceSiteResult.FAILED)
-            return
+            return CompletableDeferred(DeviceSiteResult.FAILED)
         }
         site.value = current.copy(working = true, result = null)
-        scope.launch {
+        return scope.async {
             try {
                 val confirmed = source.writeSite(patch)
                 val matches = confirmed != null && changes.all { (field, value) -> confirmed[field].orEmpty() == value }
@@ -221,13 +253,15 @@ class DeviceConfigController(
                 if (rereadAfterFailure) {
                     rereadAfterFailure = false
                     source.refreshConfig()
-                    refreshLocation()
+                    scope.launch { refreshLocation() }
                 }
+                if (matches) DeviceSiteResult.SAVED else DeviceSiteResult.NOT_CONFIRMED
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
                 rereadAfterFailure = true
                 site.value = current.copy(working = false, result = DeviceSiteResult.FAILED)
+                DeviceSiteResult.FAILED
             }
         }
     }
@@ -236,7 +270,7 @@ class DeviceConfigController(
         if (location.value.working) return
         location.value = location.value.copy(working = true, result = null)
         try {
-            val config = source.readLocation()
+            val config = readWhenFree { source.readLocation() }
             location.value = if (config == null) {
                 DeviceLocationState(supported = false)
             } else {
@@ -453,6 +487,7 @@ class DeviceConfigController(
     }
 }
 
-/** Site reads in all when the link is busy, and the pause between them. */
-private const val SITE_READ_TRIES = 3
-private const val SITE_READ_RETRY_MS = 400L
+/** Page reads in all when one fails, the pause before each new try, and the longest wait for a free link. */
+private const val READ_TRIES = 3
+private const val READ_RETRY_MS = 400L
+private const val BUSY_WAIT_MS = 10_000L

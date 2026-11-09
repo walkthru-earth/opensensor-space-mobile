@@ -4,7 +4,8 @@ import space.opensensor.model.SiteField
 import space.opensensor.model.SiteProblem
 import space.opensensor.model.ThingSite
 
-enum class DeviceSiteResult { SAVED, FAILED, NOT_CONFIRMED }
+/** The end of a site read or save. [READ_FAILED] is a read of pages 5 and 6, the rest end a save. */
+enum class DeviceSiteResult { SAVED, FAILED, NOT_CONFIRMED, READ_FAILED }
 
 /**
  * The owner site of the sensor (firmware #148). [stored] is the board's last answer from pages 5 and

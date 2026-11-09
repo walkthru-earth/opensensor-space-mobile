@@ -32,9 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -162,7 +160,7 @@ fun SetupScreen(
                 },
             )
         },
-        bottomBar = { SetupNav(s, configState, controller, onConfigAction) },
+        bottomBar = { SetupNav(s, configState, controller, saveSite = { config?.saveSiteAndWait() == DeviceSiteResult.SAVED }) },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         LazyColumn(
@@ -316,45 +314,15 @@ private fun DoneCard(s: SetupUiState, onOpenSensor: (String) -> Unit) {
 }
 
 /**
- * Back, Skip and Next. On Site with changed values Next is the explicit save: it sends the site keys
- * in their own `SET_CONFIG` and moves on once the board's pages 5 and 6 confirm them. A refusal or an
- * unconfirmed readback stays on the page with its reason. Skip moves on and sends nothing.
+ * Back, Skip and Next. On Site with changed values Next is the explicit save ([saveSite]). The setup
+ * controller sends the site keys in their own `SET_CONFIG` and moves on once the board's pages 5 and
+ * 6 confirm them. Skip moves on and sends nothing, and is off while a save runs.
  */
 @Composable
-private fun SetupNav(s: SetupUiState, config: DeviceConfigUiState?, controller: SetupController, onConfigAction: (DeviceConfigAction) -> Unit) {
+private fun SetupNav(s: SetupUiState, config: DeviceConfigUiState?, controller: SetupController, saveSite: suspend () -> Boolean) {
     if (s.page == SetupStep.Find) return
     val site = config?.site
     val savesSite = s.page == SetupStep.Site && site?.dirty == true
-    // Set by Next on Site, cleared once the save ends. Only a confirmed save moves on. A result is
-    // read only after this save showed working, so an earlier attempt's result never counts.
-    var advanceOnSave by remember { mutableStateOf(false) }
-    var sawWorking by remember { mutableStateOf(false) }
-    LaunchedEffect(advanceOnSave, site?.working, site?.result, s.page) {
-        if (!advanceOnSave) return@LaunchedEffect
-        if (s.page != SetupStep.Site || site == null) {
-            // Back left the page while the save ran. Its result never moves the wizard.
-            advanceOnSave = false
-            sawWorking = false
-            return@LaunchedEffect
-        }
-        if (site.working) {
-            sawWorking = true
-            return@LaunchedEffect
-        }
-        if (!sawWorking) return@LaunchedEffect
-        when (site.result) {
-            null -> Unit
-            DeviceSiteResult.SAVED -> {
-                advanceOnSave = false
-                sawWorking = false
-                controller.next()
-            }
-            DeviceSiteResult.FAILED, DeviceSiteResult.NOT_CONFIRMED -> {
-                advanceOnSave = false
-                sawWorking = false
-            }
-        }
-    }
     Row(
         Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -365,15 +333,16 @@ private fun SetupNav(s: SetupUiState, config: DeviceConfigUiState?, controller: 
         }
         Spacer(Modifier.weight(1f))
         if (s.page.skippable) {
-            TextButton(onClick = controller::skip, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(Res.string.setup_skip)) }
+            TextButton(onClick = controller::skip, enabled = !s.siteSaving && site?.working != true, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(Res.string.setup_skip))
+            }
         }
-        val busy = config?.location?.working == true || site?.working == true || config?.snapshot?.busy == true
+        val busy = s.siteSaving || config?.location?.working == true || site?.working == true || config?.snapshot?.busy == true
         PillButton(
             stringResource(if (s.page == SetupStep.Done) Res.string.setup_close else Res.string.setup_next),
             onClick = {
                 if (savesSite) {
-                    advanceOnSave = true
-                    onConfigAction(DeviceConfigAction.SaveSite)
+                    controller.saveSiteThenNext(saveSite)
                 } else {
                     controller.next()
                 }

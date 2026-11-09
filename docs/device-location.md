@@ -77,16 +77,20 @@ because it clears the key.
   byte, means the board has no site keys. The fields then stay hidden and the card keeps its
   "Location" title. They are never shown empty. Once page 5 answered, a page 6 error or a page 6
   without `owner` is a failed read, not an empty description. A read that fails, such as one
-  that meets a busy link, is tried three times in all. If it still fails the card says the site
-  could not be read and offers Refresh.
+  that meets the page 0 read of a Refresh still holding the link, is tried three times in all,
+  each new try after the link is free. The area read (page 1) does the same. If the site read
+  still fails, the card and the setup Site page say so and offer Try again, which reads pages 5
+  and 6 only. Skip stays on in the wizard.
 - Write. Only the Save site button in Device settings, or Next on the setup Site page, sends.
   Typing sends nothing. Save sends only the values that differ from the board's last answer.
   An emptied value goes as `key=` and clears it, a value that stays empty is not sent. The site
   keys go in a `SET_CONFIG` of their own, and `ConfigPatch.Builder.build` refuses a patch that
   mixes them with any other key, so a site refusal can never cost a location or name write.
   Pages 5 and 6 are read back after the write, and the app says saved only when they match.
-- A refused write says so under the card. After a failed site write the next successful one reads
-  pages 0 and 1 again too, as the firmware asks after an `nvs` error.
+- A refused or unconfirmed write says so under the fields, and the draft stays for another Save
+  or Next. After a failed site write, the next site save that succeeds reads pages 0 and 1 again
+  too. In the wizard Next moves on only when the save is confirmed, and Skip is off while it runs
+  (`SetupController.saveSiteThenNext`).
 - The board never logs owner values, and only `deployment_id` reaches the Parquet files, so a
   change splits the current file. Owner values are not secrets. The Debug frame list redacts
   every `SET_CONFIG`, and a CONFIG reply shows them as the board sent them.

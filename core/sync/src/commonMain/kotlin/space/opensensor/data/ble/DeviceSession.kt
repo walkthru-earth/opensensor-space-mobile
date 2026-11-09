@@ -454,7 +454,8 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
         val parsed = try {
             DeviceConfig.parse(frame.json)
         } catch (e: Exception) {
-            throw ProtocolViolationException("CONFIG JSON did not parse: ${e.message}")
+            // The parser's own message can quote page 5 owner values, so only its type is kept.
+            throw ProtocolViolationException("CONFIG JSON did not parse (${e::class.simpleName})")
         }
         return ConfigSnapshot(parsed, frame.rebootRequired, frame.json, nowEpochMs())
     }
