@@ -6,7 +6,7 @@ package space.opensensor.model
  * `<board>/<dict>.json` per board and the `index.json` that maps each `dict` to its file and `desc`, so
  * a new digest is a folder copy and a fixture refresh with no code change. Only the current digest of
  * each board is bundled. An unknown digest resolves only through a served template, and then renders
- * with a profile [AppProfile.derive]d from it.
+ * with a profile [AppProfile.derive]d from it. Every lookup goes through [TemplateIndex.resolve].
  */
 object BundledCatalog {
     private const val TEMPLATES = "templates/"
@@ -23,7 +23,9 @@ object BundledCatalog {
     /** Every bundled app profile. */
     val profiles: List<AppProfile> = BundledFiles.files.filterKeys { it.startsWith(PROFILES) }.values.map { AppProfile.parse(it) }
 
-    private val bundledIndex = TemplateIndex(templates)
+    init {
+        require(templates.map { it.dict }.toSet().size == templates.size) { "two bundled templates share a dict" }
+    }
 
     /**
      * The templates [files] lists in [TEMPLATE_INDEX]. Each file parses with the index `desc` and must
@@ -51,12 +53,12 @@ object BundledCatalog {
     internal fun byDict(profiles: List<AppProfile>): Map<String, AppProfile> =
         profiles.associateBy { it.dict }.also { require(it.size == profiles.size) { "two bundled profiles share a dict" } }
 
-    /** A [TemplateIndex] over the bundled templates and any [served] ones. */
-    fun index(served: Iterable<BoardTemplate> = emptyList()): TemplateIndex =
-        if (served.none()) bundledIndex else TemplateIndex(templates, served)
+    /** The template for [dict] and [desc] among [served] and then the bundled ones, by [TemplateIndex.resolve]. */
+    fun resolve(dict: String?, desc: String?, served: List<BoardTemplate> = emptyList()): BoardTemplate? =
+        TemplateIndex.resolve(dict, desc, served, templates)
 
-    /** The bundled template for [dict], whether or not the caller has a [desc]. */
-    fun template(dict: String, desc: String? = null): BoardTemplate? = bundledIndex.resolve(dict, desc)
+    /** The bundled template for [dict], or for [desc] when the caller has one, by [TemplateIndex.resolve]. */
+    fun template(dict: String, desc: String? = null): BoardTemplate? = resolve(dict, desc)
 
     /** The bundled template whose exact bytes hash to [desc], or null when none does. */
     fun templateByDesc(desc: String): BoardTemplate? = templates.firstOrNull { it.key.desc == desc }
@@ -75,14 +77,14 @@ object BundledCatalog {
         uuid: String,
         dict: String,
         desc: String? = null,
-        served: Iterable<BoardTemplate> = emptyList(),
+        served: List<BoardTemplate> = emptyList(),
         collection: ThingCollection? = null,
         deviceId: Long? = null,
         h3Cell: String? = null,
         runtimeSampleIntervalS: Double? = null,
         profile: AppProfile? = BundledCatalog.profile(dict),
     ): Thing? {
-        val template = index(served).resolve(dict, desc) ?: return null
+        val template = resolve(dict, desc, served) ?: return null
         return Thing.join(uuid, template, profile, collection, deviceId, h3Cell, runtimeSampleIntervalS)
     }
 }

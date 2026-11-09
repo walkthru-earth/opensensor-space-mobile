@@ -114,41 +114,47 @@ class BoardTemplateTest {
     }
 
     @Test
-    fun templateIndexResolvesByDescThenDict() {
-        val bundled = BoardTemplate.parse(CORES3_TEMPLATE)
+    fun templateIndexResolvesAnExactDescServedFirst() {
+        val bundled = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
         val served = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
-        val index = TemplateIndex(bundled = listOf(bundled), served = listOf(served))
-        assertSame(served, index.resolve(CORES3_DICT, DESC_A))
-        // An unknown desc falls back to the bundled template of the same dictionary.
-        assertSame(bundled, index.resolve(CORES3_DICT, DESC_B))
-        assertSame(bundled, index.resolve(CORES3_DICT))
-        assertNull(index.resolve(OTHER_DICT, DESC_A))
-        // A served template is never the dict fallback.
-        assertNull(TemplateIndex(bundled = emptyList(), served = listOf(served)).resolve(CORES3_DICT, DESC_B))
+        assertSame(served, TemplateIndex.resolve(CORES3_DICT, DESC_A, served = listOf(served), bundled = listOf(bundled)))
+        assertSame(bundled, TemplateIndex.resolve(CORES3_DICT, DESC_A, served = emptyList(), bundled = listOf(bundled)))
+        // A file footer may carry a desc without a dict.
+        assertSame(bundled, TemplateIndex.resolve(null, DESC_A, served = emptyList(), bundled = listOf(bundled)))
+    }
+
+    @Test
+    fun templateIndexNeverStandsInForAnUnknownDesc() {
+        val bundled = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
+        val served = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
+        // Same dict, another desc. Its units or ranges may differ, so nothing resolves and a caller can fetch it.
+        assertNull(TemplateIndex.resolve(CORES3_DICT, DESC_B, served = listOf(served), bundled = listOf(bundled)))
+        assertNull(TemplateIndex.resolve(CORES3_DICT, DESC_B.take(TemplateKey.DESC_PREFIX_HEX), served = listOf(served), bundled = listOf(bundled)))
+        // A desc match whose dict differs from the one asked for is not used.
+        assertNull(TemplateIndex.resolve(OTHER_DICT, DESC_A, served = listOf(served), bundled = listOf(bundled)))
+    }
+
+    @Test
+    fun templateIndexFallsBackToTheDictOnlyWithoutADesc() {
+        val bundled = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
+        val older = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_B)
+        val newer = BoardTemplate.parse(CORES3_TEMPLATE, desc = "2".repeat(64))
+        assertSame(newer, TemplateIndex.resolve(CORES3_DICT, null, served = listOf(older, newer), bundled = listOf(bundled)))
+        assertSame(bundled, TemplateIndex.resolve(CORES3_DICT, null, served = emptyList(), bundled = listOf(bundled)))
+        assertNull(TemplateIndex.resolve(OTHER_DICT, null, served = listOf(newer), bundled = listOf(bundled)))
+        assertNull(TemplateIndex.resolve(null, null, served = listOf(newer), bundled = listOf(bundled)))
     }
 
     @Test
     fun templateIndexResolvesTheDevicePrefix() {
         val served = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
-        val index = TemplateIndex(bundled = emptyList(), served = listOf(served))
-        assertSame(served, index.resolve(CORES3_DICT, DESC_A.take(16)))
-        assertSame(served, index.resolve(CORES3_DICT, DESC_A.take(16).uppercase()))
-        assertNull(index.resolve(CORES3_DICT, DESC_B.take(16)))
+        fun resolve(desc: String) = TemplateIndex.resolve(CORES3_DICT, desc, served = listOf(served), bundled = emptyList())
+        assertSame(served, resolve(DESC_A.take(16)))
+        assertSame(served, resolve(DESC_A.take(16).uppercase()))
+        assertNull(resolve(DESC_B.take(16)))
         // A prefix shorter than 16 hex never matches.
-        assertNull(index.byDesc(DESC_A.take(15)))
-        assertNull(index.byDesc(""))
-    }
-
-    @Test
-    fun bundledTemplateWithADescIsStillTheDictFallback() {
-        val bundled = BoardTemplate.parse(CORES3_TEMPLATE, desc = DESC_A)
-        val index = TemplateIndex(bundled = listOf(bundled))
-        assertSame(bundled, index.resolve(CORES3_DICT, DESC_A))
-        assertSame(bundled, index.resolve(CORES3_DICT, DESC_B))
-        assertSame(bundled, index.resolve(CORES3_DICT))
-        assertFailsWith<IllegalArgumentException> {
-            TemplateIndex(bundled = listOf(bundled, BoardTemplate.parse(CORES3_TEMPLATE)))
-        }
+        assertNull(resolve(DESC_A.take(15)))
+        assertNull(resolve(""))
     }
 
     @Test

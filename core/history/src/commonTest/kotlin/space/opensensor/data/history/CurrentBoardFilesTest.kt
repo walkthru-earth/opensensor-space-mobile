@@ -324,9 +324,11 @@ class CurrentBoardFilesTest {
     }
 
     @Test
-    fun aFileWithAnUnknownTemplateDigestIsReadByItsDict() {
-        // A template the app does not bundle, such as a newer firmware desc, falls back to the dict.
-        assertBucketsMatchTheRows(buckets(boardFile(coreS3Template, footer = opensensorFooter(coreS3Template, desc = "ab".repeat(32), thing = thing))), 10_000)
+    fun aFileWithAnUnknownTemplateDigestKeepsItsRowsWithoutMetrics() {
+        // A desc neither bundled nor served, such as a newer firmware's, never falls back to its dict (#259).
+        val got = buckets(boardFile(coreS3Template, footer = opensensorFooter(coreS3Template, desc = "ab".repeat(32), thing = thing)))
+        assertTrue(got.isNotEmpty())
+        assertTrue(got.all { it.metrics.isEmpty() }, got.toString())
     }
 
     @Test

@@ -205,10 +205,10 @@ class OpenSensorFooterTest {
         val waveshareDesc = waveshareTemplate.key.desc!!
         assertSame(coreS3Template, resolve(dict = null, desc = desc))
         assertSame(coreS3Template, resolve(dict, desc))
-        // An unknown template digest, such as a newer firmware desc, falls back to the dict.
-        assertSame(coreS3Template, resolve(dict, "ab".repeat(32)))
-        // A template digest whose dict disagrees with the footer is not trusted, the dict decides.
-        assertSame(coreS3Template, resolve(dict, waveshareDesc))
+        // An unknown template digest, such as a newer firmware desc, never falls back to the dict (#259).
+        assertNull(resolve(dict, "ab".repeat(32)))
+        // A template digest whose dict disagrees with the footer is not used.
+        assertNull(resolve(dict, waveshareDesc))
         assertNull(resolve("cd".repeat(32), null))
         assertNull(resolve(null, null))
     }

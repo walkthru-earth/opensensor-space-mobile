@@ -22,7 +22,8 @@ and `SensorCollections` for one controller per device, which every native sync e
 runs through ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
 `model/` owns what a thing measures as data. `BoardTemplate` (parsed from the stac-opensensor
 v0.1.0 board template, keyed by `TemplateKey` of `dict` and an optional `desc`), `TemplateIndex`
-(resolves by `desc` first, then the bundled template keyed by `dict`), `Datastream` (one column or
+(the one resolver LIVE and History share, the exact `desc` with a matching `dict`, served before
+bundled, and by `dict` only when no `desc` is given, so an unknown `desc` resolves to nothing), `Datastream` (one column or
 one phone-derived stream with its own id and `sourceColumns`, referencing a board-neutral
 `ObservedProperty` and a `Sensor` of procedure and board), `AppProfile` (app owned, keyed by `dict`,
 derived from the template when none is bundled), `ThingCollection`, `Scale`, `ValidityGate`, and
@@ -90,7 +91,7 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   and the profile (`Metrics.of`), plus the derived metrics of each
   `DerivedMetricProvider` (`AirFamily` for corrected PM2.5), and reads each file by the template of its
   `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by
-  `template.sha256` first and then `dictionary.sha256`, a served template before a bundled one.
+  `TemplateIndex.resolve`, the same rule LIVE uses (#259).
   LIVE shows only for a dict with a reviewed profile. The old unprefixed footer
   keys are not read. A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading` or `GenericMetricHero`), never `Air*`.

@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
+import space.opensensor.model.TemplateIndex
 
 /**
  * What one file's `opensensor` footer says about how to read it. [template] is the board template its
@@ -27,8 +28,9 @@ data class FileTemplate(val template: BoardTemplate?, val sampleIntervalMs: Long
  */
 fun interface FileTemplates {
     /**
-     * The template whose exact bytes hash to [desc] (footer `template.sha256`), else the one for [dict]
-     * (footer `dictionary.sha256`), or null when neither resolves. Either is null when the footer has none.
+     * The template whose exact bytes hash to [desc] (footer `template.sha256`), or null when none is known.
+     * Only a footer without a desc resolves by [dict] (footer `dictionary.sha256`). The rule is
+     * [TemplateIndex.resolve], the same one LIVE uses.
      */
     fun template(dict: String?, desc: String?): BoardTemplate?
 
@@ -77,39 +79,29 @@ fun interface FileTemplates {
         private val UNCHANGING: StateFlow<List<BoardTemplate>> = MutableStateFlow(emptyList())
 
         /**
-         * The bundled templates, by template digest first and then by dict. A desc match whose dict
-         * differs from the footer's is not used. A file of another dictionary keeps its rows and has no metrics.
+         * The bundled templates, by [TemplateIndex.resolve]. A file no bundled template resolves keeps its
+         * rows and has no metrics.
          */
-        val BUNDLED: FileTemplates = FileTemplates { dict, desc ->
-            val byDesc = desc?.let { BundledCatalog.templateByDesc(it) }?.takeIf { dict == null || it.dict == dict }
-            byDesc ?: dict?.let { BundledCatalog.template(it) }
-        }
+        val BUNDLED: FileTemplates = FileTemplates { dict, desc -> BundledCatalog.resolve(dict, desc) }
 
         /** [over] the app's [ServedTemplates.shared]. */
         val SERVED: FileTemplates = over(ServedTemplates.shared)
 
         /**
          * The templates in [served], as boards served them over `GET_DESCRIPTOR` (#191), then the bundled
-         * ones, both by template digest first and then by dict. [served] is read at each call, so a file
-         * synced after its board served a template binds its metrics even when no bundled template has
-         * its dict. A desc match whose dict differs from the footer's is not used. Its [changes] are
-         * [served]'s, so a template a board serves or the cache loads derives History again.
+         * ones, by [TemplateIndex.resolve]. [served] is read at each call, so a file synced before its
+         * board served the template its desc names binds its metrics at the next derive. Its [changes]
+         * are [served]'s, so a template a board serves or the cache loads derives History again.
          */
         fun over(served: ServedTemplates): FileTemplates = object : FileTemplates {
             override val changes: StateFlow<List<BoardTemplate>> get() = served.all
 
-            override fun template(dict: String?, desc: String?): BoardTemplate? = resolve(served.all.value, dict, desc)
+            override fun template(dict: String?, desc: String?): BoardTemplate? = BundledCatalog.resolve(dict, desc, served.all.value)
 
-            override fun at(held: List<BoardTemplate>): FileTemplates = FileTemplates { dict, desc -> resolve(held, dict, desc) }
+            override fun at(held: List<BoardTemplate>): FileTemplates = FileTemplates { dict, desc -> BundledCatalog.resolve(dict, desc, held) }
 
             override fun pinned(held: List<BoardTemplate>): Set<String> =
                 (held + BundledCatalog.templates).mapNotNullTo(HashSet()) { t -> t.key.desc?.let { ArchiveRecord.pin(it, t.dict) } }
-        }
-
-        private fun resolve(held: List<BoardTemplate>, dict: String?, desc: String?): BoardTemplate? {
-            val byDesc = desc?.let { d -> held.firstOrNull { it.key.desc == d } ?: BundledCatalog.templateByDesc(d) }
-                ?.takeIf { dict == null || it.dict == dict }
-            return byDesc ?: dict?.let { d -> held.lastOrNull { it.dict == d } ?: BundledCatalog.template(d) }
         }
     }
 }

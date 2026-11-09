@@ -41,12 +41,14 @@ fun localDayStarts(zone: TimeZone, periodMs: Long = 60_000): Flow<Long> = flow {
  * particles takes the EPA corrected PM2.5 and falls back to raw, both resolved from its template.
  * The atmospheric pick is always raw, also on a template without humidity where it has no corrected
  * view, so it keeps its "PM2.5 raw" label and PM format. Any other thing takes the metric of
- * its first visible primary column, so a soil board averages its soil reading. Empty when the thing
- * is unknown or shows no primary.
+ * its first visible primary column, so a soil board averages its soil reading. Each metric is the one
+ * the hourly tiers hold for the thing's template ([Metrics.tiered]), so a template that stores a column
+ * in another unit or rollup drops it rather than label buckets built under another spec. Empty when
+ * the thing is unknown or shows no primary.
  */
 fun todayMetrics(capabilities: DeviceCapabilities): List<MetricSpec> {
     val thing = capabilities.thing ?: return emptyList()
-    val specs = Metrics.of(thing.template, thing.profile)
+    val specs = Metrics.of(thing.template, thing.profile).mapNotNull { Metrics.tiered(it, thing.template) }
     if (AirFamily.PARTICLES in capabilities) {
         val pm = listOf(AirFamily.PM25_CORRECTED_ID, AirFamily.PM25_ATMOSPHERIC).mapNotNull { id -> specs.firstOrNull { it.id == id } }
             .map { if (it.id == AirFamily.PM25_ATMOSPHERIC && it.basis == null) it.copy(basis = Basis.RAW) else it }
