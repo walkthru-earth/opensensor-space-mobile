@@ -628,9 +628,26 @@ class DeviceConfigControllerTest {
     fun aPage6FailureAfterPage5IsAnErrorNotUnsupported() = runTest {
         val source = FakeSource().apply { siteError = IllegalStateException("page 6 ERROR 1") }
         val c = controller(source)
+        advanceTimeBy(1_000)
         assertEquals(null, c.state.value.site.supported)
         assertEquals(DeviceSiteResult.FAILED, c.state.value.site.result)
         assertFalse(c.state.value.site.canSave)
+        assertEquals(3, source.siteReads, "a failed read is tried three times in all")
+    }
+
+    @Test
+    fun aSiteReadThatMeetsABusyLinkIsTriedAgain() = runTest {
+        val source = FakeSource().apply {
+            siteAnswer = roof
+            siteError = IllegalStateException("link busy")
+        }
+        val c = controller(source)
+        assertEquals(null, c.state.value.site.result, "no failure while tries remain")
+        source.siteError = null
+        advanceTimeBy(1_000)
+        assertEquals(true, c.state.value.site.supported)
+        assertEquals(roof, c.state.value.site.draft)
+        assertEquals(2, source.siteReads)
     }
 
     @Test

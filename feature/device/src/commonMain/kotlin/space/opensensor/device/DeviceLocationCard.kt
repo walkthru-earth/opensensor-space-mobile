@@ -47,6 +47,7 @@ import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.PillButton
 import space.opensensor.device.resources.Res
 import space.opensensor.device.resources.action_cancel
+import space.opensensor.device.resources.device_refresh
 import space.opensensor.device.resources.location_area_detail
 import space.opensensor.device.resources.location_area_km2
 import space.opensensor.device.resources.location_area_m2
@@ -75,6 +76,7 @@ import space.opensensor.device.resources.location_unset
 import space.opensensor.device.resources.location_unsupported
 import space.opensensor.device.resources.location_use_phone
 import space.opensensor.device.resources.site_info
+import space.opensensor.device.resources.site_read_failed
 import space.opensensor.device.resources.site_title
 import space.opensensor.map.CellFocus
 import space.opensensor.map.CellPicker
@@ -95,6 +97,13 @@ internal fun DeviceLocationCard(state: DeviceConfigUiState, onAction: (DeviceCon
             Spacer(Modifier.height(16.dp))
             CardHeader(siteTitle, info = InfoContent(siteTitle, stringResource(Res.string.site_info)))
             DeviceSiteForm(state, onAction, showSave = true)
+        } else if (state.site.supported == null && state.site.result == DeviceSiteResult.FAILED) {
+            // Page 5 or 6 could not be read, so support is still unknown. Say so and offer a new read.
+            Spacer(Modifier.height(16.dp))
+            Text(stringResource(Res.string.site_read_failed), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            TextButton(enabled = state.ready && state.isV2, onClick = { onAction(DeviceConfigAction.Refresh) }) {
+                Text(stringResource(Res.string.device_refresh))
+            }
         }
     }
 }

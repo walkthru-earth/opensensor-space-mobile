@@ -216,6 +216,7 @@
     <string name="site_deployment">Deployment ID</string>
     <string name="site_save">Save site</string>
     <string name="site_saved">Site confirmed on device</string>
+    <string name="site_read_failed">Site details could not be read.</string>
     <string name="site_failed">Site setup failed. Reconnect and refresh to retry.</string>
     <string name="site_not_confirmed">Site was not confirmed. Refresh before retrying.</string>
     <string name="site_error_too_long">Too long. The limit is %1$d bytes.</string>

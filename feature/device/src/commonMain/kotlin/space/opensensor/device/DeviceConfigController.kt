@@ -163,19 +163,28 @@ class DeviceConfigController(
         }
     }
 
-    /** Reads pages 5 and 6. The draft follows the board, so a refresh drops unsaved typing. */
+    /**
+     * Reads pages 5 and 6. The draft follows the board, so a refresh drops unsaved typing. A read
+     * that meets a busy link, such as a config read still holding it, is tried [SITE_READ_TRIES]
+     * times in all before it counts as failed.
+     */
     private suspend fun refreshSite() {
         if (site.value.working) return
         site.value = site.value.copy(working = true, result = null)
-        try {
-            val stored = source.readSite()
-            site.value = if (stored == null) DeviceSiteState(supported = false) else DeviceSiteState(supported = true, stored = stored, draft = stored)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // Unknown, not unsupported. The fields stay as they were and Save stays off.
-            site.value = site.value.copy(working = false, result = DeviceSiteResult.FAILED)
+        repeat(SITE_READ_TRIES) { attempt ->
+            try {
+                val stored = source.readSite()
+                site.value = if (stored == null) DeviceSiteState(supported = false) else DeviceSiteState(supported = true, stored = stored, draft = stored)
+                return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                if (attempt < SITE_READ_TRIES - 1) delay(SITE_READ_RETRY_MS)
+            }
         }
+        // Unknown, not unsupported. The fields stay as they were, Save stays off, and the card
+        // offers Refresh.
+        site.value = site.value.copy(working = false, result = DeviceSiteResult.FAILED)
     }
 
     /** Drafts one site value. Only [saveSite] sends anything. */
@@ -443,3 +452,7 @@ class DeviceConfigController(
         const val SUPPORTED_MODEL = "PMS5003T"
     }
 }
+
+/** Site reads in all when the link is busy, and the pause between them. */
+private const val SITE_READ_TRIES = 3
+private const val SITE_READ_RETRY_MS = 400L

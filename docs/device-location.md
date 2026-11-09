@@ -76,7 +76,9 @@ because it clears the key.
   (`siteOf`). Page 5 `ERROR` 1, or a page 5 without `owner` from firmware that ignores the page
   byte, means the board has no site keys. The fields then stay hidden and the card keeps its
   "Location" title. They are never shown empty. Once page 5 answered, a page 6 error or a page 6
-  without `owner` is a failed read, not an empty description.
+  without `owner` is a failed read, not an empty description. A read that fails, such as one
+  that meets a busy link, is tried three times in all. If it still fails the card says the site
+  could not be read and offers Refresh.
 - Write. Only the Save site button in Device settings, or Next on the setup Site page, sends.
   Typing sends nothing. Save sends only the values that differ from the board's last answer.
   An emptied value goes as `key=` and clears it, a value that stays empty is not sent. The site

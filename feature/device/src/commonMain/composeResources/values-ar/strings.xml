@@ -220,6 +220,7 @@
     <string name="site_deployment">معرّف النشر</string>
     <string name="site_save">حفظ بيانات الموقع</string>
     <string name="site_saved">تم تأكيد بيانات الموقع على الجهاز</string>
+    <string name="site_read_failed">تعذّرت قراءة بيانات الموقع.</string>
     <string name="site_failed">تعذّر حفظ بيانات الموقع. أعد الاتصال والتحديث للمحاولة مجددًا.</string>
     <string name="site_not_confirmed">لم يتم تأكيد بيانات الموقع. حدّث قبل المحاولة مجددًا.</string>
     <string name="site_error_too_long">طويل جدًا. الحد الأقصى %1$d بايت.</string>
