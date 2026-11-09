@@ -30,6 +30,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /** [OpenAqAggregatesFeed] over a fake [HttpRangeEngine] serving the fixture and its manifest. No network. */
@@ -446,9 +447,12 @@ class OpenAqAggregatesFeedTest {
         down = true
         clock.ms += OpenAqAggregatesFeed.MANIFEST_TTL_MS
         assertEquals(FeedSnapshot(partition, cachedAtEpochMs = readAt), feed.snapshot())
-        // Back online, the next read after the short retry window is live again.
+        // Back online, the cached answer stands for the 30 s retry window and the next read is live again.
         down = false
-        clock.ms += OpenAqAggregatesFeed.OFFLINE_RETRY_MS
+        val failedAt = clock.ms
+        clock.ms = failedAt + 30.seconds.inWholeMilliseconds - 1
+        assertEquals(FeedSnapshot(partition, cachedAtEpochMs = readAt), feed.snapshot())
+        clock.ms = failedAt + 30.seconds.inWholeMilliseconds
         assertEquals(FeedSnapshot(partition), feed.snapshot())
     }
 

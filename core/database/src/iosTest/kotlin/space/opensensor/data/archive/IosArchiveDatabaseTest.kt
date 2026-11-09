@@ -14,6 +14,7 @@ import platform.Foundation.create
 import platform.Foundation.writeToFile
 import space.opensensor.archive.ArchiveKey
 import space.opensensor.archive.ArchiveLayout
+import space.opensensor.archive.ArchiveRecord
 import space.opensensor.archive.IosArchiveStore
 import space.opensensor.archive.PrunedFile
 import space.opensensor.data.local.database.AppDatabase
@@ -112,6 +113,22 @@ class IosArchiveDatabaseTest {
             close()
         }
         assertTrue(fm.fileExistsAtPath("$dir/${IosArchiveDatabase.IMPORT_MARKER}"))
+    }
+
+    @Test
+    fun theUploadedThingsComeFromTheDatabaseFile() = runTest {
+        val record = ArchiveRecord(thing, name, bytes.size.toLong(), ParquetVerify.crc32(bytes), "a".repeat(64), 1_000L, "dev")
+        IosArchiveDatabase(store, dir).apply {
+            index.put(record)
+            index.put(record.copy(thing = "other", name = name.replace(thing, "other"), uploadedAtEpochMs = null))
+            assertEquals(emptySet(), index.observeUploadedThings().first())
+            index.put(record.copy(uploadedAtEpochMs = 2_000L))
+            close()
+        }
+        IosArchiveDatabase(store, dir).apply {
+            assertEquals(setOf(thing), index.observeUploadedThings().first())
+            close()
+        }
     }
 
     @Test
