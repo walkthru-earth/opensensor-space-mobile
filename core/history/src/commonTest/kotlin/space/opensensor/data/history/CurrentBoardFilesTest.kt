@@ -318,9 +318,13 @@ class CurrentBoardFilesTest {
     }
 
     @Test
-    fun aFileIsReadByItsTemplateDigestWithoutADict() {
-        val footer = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = waveshareTemplate.key.desc, intervalMs = 10_000, thing = thing))
-        assertBucketsMatchTheRows(buckets(boardFile(waveshareTemplate, footer = footer)), 10_000)
+    fun aFooterWithoutADictionaryHasNoFooter() {
+        // footer.json requires dictionary.sha256, so a template digest alone binds no template.
+        val json = opensensorFooterJson(waveshareTemplate.dict, waveshareTemplate.key.desc, 10_000, thing = thing)
+            .replace(Regex(""""dictionary":\{[^}]*\},"""), "")
+        val got = buckets(boardFile(waveshareTemplate, footer = mapOf(OpenSensorFooter.KEY to json)))
+        assertTrue(got.isNotEmpty())
+        assertTrue(got.all { it.metrics.isEmpty() && it.sampleIntervalMs == 0L }, got.toString())
     }
 
     @Test

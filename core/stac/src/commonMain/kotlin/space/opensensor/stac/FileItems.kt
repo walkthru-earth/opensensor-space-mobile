@@ -44,6 +44,13 @@ sealed interface FileItemResult {
     /** A footer built without a mobility. A parsed footer always has one. */
     data object NoMobility : NoItem
 
+    /**
+     * The footer `file.purpose` is [purpose], not `telemetry`, such as a `codec-comparison-duplicate-rows`
+     * benchmark copy that repeats rows of a telemetry file. Only telemetry is published. Null when a
+     * built footer has none.
+     */
+    data class NotTelemetry(val purpose: String?) : NoItem
+
     /** The file holds no rows. */
     data object NoRows : NoItem
 
@@ -118,6 +125,9 @@ object FileItems {
     const val ANON_SIZE = 0.01
 
     const val H3_CELL_COLUMN = "h3_cell_id"
+
+    /** The footer `file.purpose` of the only files that get an Item. */
+    const val TELEMETRY = "telemetry"
     const val PARQUET_MEDIA_TYPE = "application/vnd.apache.parquet"
     const val FIXED_WARNING = "The geometry is the H3 cell chosen by the owner, not the device position."
     const val MOVING_WARNING = "The geometry is the H3 cells the device visited, not its track."
@@ -152,6 +162,7 @@ object FileItems {
         if (footer == null) return FileItemResult.NoThingId
         val thing = footer.thingId?.takeIf { UUID.matches(it) } ?: return FileItemResult.NoThingId
         val mobility = footer.mobility ?: return FileItemResult.NoMobility
+        if (footer.purpose != TELEMETRY) return FileItemResult.NotTelemetry(footer.purpose)
         val file = ParquetFile.open(reader, fileName)
         val rows = file.numRows.toInt()
         if (rows == 0) return FileItemResult.NoRows

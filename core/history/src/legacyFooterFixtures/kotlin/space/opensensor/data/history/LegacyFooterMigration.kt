@@ -36,9 +36,6 @@ fun migrateLegacyFooter(bytes: ByteArray): ByteArray {
     return bytes.copyOfRange(0, footerStart) + newFooter + newFooter.size.leBytes() + MAGIC
 }
 
-/** The digest a fixture gets for a dict or template its old footer did not name. */
-const val UNKNOWN_DIGEST = "0000000000000000000000000000000000000000000000000000000000000000"
-
 private val MAGIC = "PAR1".encodeToByteArray()
 
 private fun ByteArray.endsWithMagic() = (0 until 4).all { this[size - 4 + it] == MAGIC[it] }

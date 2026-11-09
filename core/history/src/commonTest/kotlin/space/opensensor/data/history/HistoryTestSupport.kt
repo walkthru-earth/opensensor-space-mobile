@@ -115,7 +115,7 @@ val waveshareTemplate: space.opensensor.model.BoardTemplate = checkNotNull(space
 val CoreS3Files: FileTemplates = FileTemplates { _, _ -> coreS3Template }
 
 /** The `opensensor` footer entry of a file written under [template], with its dict, its desc and [intervalMs]. */
-fun opensensorFooter(template: space.opensensor.model.BoardTemplate, intervalMs: Long? = 10_000, desc: String? = template.key.desc, thing: String = "thing-a"): Map<String, String> =
+fun opensensorFooter(template: space.opensensor.model.BoardTemplate, intervalMs: Long = 10_000, desc: String? = template.key.desc, thing: String = "thing-a"): Map<String, String> =
     mapOf(OpenSensorFooter.KEY to opensensorFooterJson(template.dict, desc, intervalMs, thing = thing))
 
 /** A footer naming the bundled CoreS3 template and a 10 s cadence, as a current CoreS3 file carries. */
@@ -124,12 +124,17 @@ fun coreS3Footer(extra: Map<String, String> = emptyMap(), thing: String = "thing
 /**
  * [bytes] rewritten with a firmware footer naming [dict], the bundled CoreS3 one by default, template digest [desc] and a
  * 10 s cadence. The device fixtures predate them, and a derived day file without a dict gives way to the raw
- * files. The thing and purpose of the file's own footer are kept.
+ * files. The thing and purpose of the file's own footer are kept, and [edit] may rewrite the footer JSON.
  */
-fun withCoreS3Dict(bytes: ByteArray, desc: String? = coreS3Template.key.desc, dict: String = coreS3Template.dict): ByteArray = ParquetFile.wrap(bytes).use { file ->
+fun withCoreS3Dict(
+    bytes: ByteArray,
+    desc: String = coreS3Template.key.desc!!,
+    dict: String = coreS3Template.dict,
+    edit: (String) -> String = { it },
+): ByteArray = ParquetFile.wrap(bytes).use { file ->
     val sink = MemorySink()
     val own = file.metadata.footer
-    val json = opensensorFooterJson(dict, desc, 10_000, thing = own?.thingId ?: "thing-a", purpose = own?.purpose)
+    val json = edit(opensensorFooterJson(dict, desc, 10_000, thing = own?.thingId ?: "thing-a", purpose = own?.purpose ?: "telemetry"))
     val w = ParquetWriter(
         sink,
         file.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) },

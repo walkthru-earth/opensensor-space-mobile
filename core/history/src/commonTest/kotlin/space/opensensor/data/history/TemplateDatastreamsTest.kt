@@ -81,8 +81,8 @@ class TemplateDatastreamsTest {
     )
     private val soilFiles = FileTemplates { dict, _ -> soil.takeIf { it.dict == dict } }
 
-    /** An `opensensor` footer naming [dict] and [intervalMs], with no template digest. */
-    private fun footer(dict: String, intervalMs: Long? = null): Map<String, String> =
+    /** An `opensensor` footer naming [dict] and [intervalMs] and a template digest no template carries. 0 is no cadence. */
+    private fun footer(dict: String, intervalMs: Long = 0): Map<String, String> =
         mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict, desc = null, intervalMs = intervalMs, board = "soil-probe", schema = "soil-v1", thing = thing))
     private val metrics = Metrics.of(soil)
     private fun metric(id: String) = metrics.single { it.id == id }
@@ -184,9 +184,9 @@ class TemplateDatastreamsTest {
         assertEquals(30_000L, b.sampleIntervalMs)
         assertEquals(120L, b.expectedRows)
         assertEquals(7f / 120f, b.coverage(metric("soil_moisture_percent")), 1e-6f)
-        // Without a footer interval the template default holds, and with neither nothing is assumed.
-        assertEquals(300_000L, soilFiles.of(footer(soil.dict)).sampleIntervalMs)
+        // A footer interval that is not positive leaves the template default, and with neither nothing is assumed.
         assertEquals(300_000L, soilFiles.of(footer(soil.dict, 0)).sampleIntervalMs)
+        assertEquals(300_000L, soilFiles.of(footer(soil.dict, -1)).sampleIntervalMs)
         assertEquals(0L, soilFiles.of(emptyMap()).sampleIntervalMs)
         val unknown = hour(soilFiles, soilFile(footer("cd".repeat(32))))
         assertEquals(0L, unknown.expectedRows)

@@ -1,5 +1,11 @@
 package space.opensensor.data.history
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import space.opensensor.family.air.AirFamily
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -23,20 +29,31 @@ class OpenSensorFooterTest {
 
     @Test
     fun aFullFooterGivesOnlyTheFieldsTheAppReads() {
-        assertEquals(
-            OpenSensorFooter(10_000, dict, desc, thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED, purpose = "telemetry", rotationIntervalS = 3600),
-            parse(opensensorFooterJson(dict, desc, 10_000, thing = "thing-a")),
-        )
+        assertEquals(thingA, parse(opensensorFooterJson(dict, desc, 10_000, thing = "thing-a")))
     }
+
+    /** The full footer [opensensorFooterJson] writes, as a JSON object to edit. */
+    private fun full(): JsonObject = Json.parseToJsonElement(opensensorFooterJson(dict, desc, 10_000)).jsonObject
+
+    /** [this] footer with [field] of object [obj] set to [value], or left out when [value] is null. */
+    private fun JsonObject.with(obj: String, field: String, value: JsonElement?): String {
+        val parent = getValue(obj).jsonObject
+        val changed = JsonObject(if (value == null) parent - field else parent + (field to value))
+        return JsonObject(this + (obj to changed)).toString()
+    }
+
+    /** [this] footer with top level member [key] set to [value], or left out when [value] is null. */
+    private fun JsonObject.with(key: String, value: JsonElement?): String =
+        JsonObject(if (value == null) this - key else this + (key to value)).toString()
+
+    private val thingA = OpenSensorFooter(10_000, dict, desc, thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED, purpose = "telemetry", rotationIntervalS = 3600)
 
     @Test
     fun theRotationWindowIsOneTheProfileAllows() {
-        fun window(value: String) = parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"file":{"rotation_interval_s":$value}}""")
+        fun window(value: String) = parse(full().with("file", "rotation_interval_s", Json.parseToJsonElement(value)))
         for (s in listOf(600L, 900L, 1800L, 3600L)) assertEquals(s, window("$s")?.rotationIntervalS)
-        assertEquals(null, window("700")?.rotationIntervalS)
-        assertEquals(null, window("0")?.rotationIntervalS)
-        // A window of the wrong kind leaves the field null and keeps the rest of the footer.
-        for (bad in listOf("\"900\"", "900.5", "true", "{}", "[900]")) {
+        // A window of another value or kind leaves the field null and keeps the rest of the footer.
+        for (bad in listOf("700", "0", "\"900\"", "900.5", "true", "{}", "[900]")) {
             val footer = window(bad)
             assertEquals(bad, "thing-a", footer?.thingId)
             assertEquals(bad, null, footer?.rotationIntervalS)
@@ -45,39 +62,65 @@ class OpenSensorFooterTest {
 
     @Test
     fun theSpecExampleParses() {
-        // stac-opensensor 4408c4e footers/cores3-telemetry-v5.json, compacted.
-        val example = """{"version":"0.1.0","thing":{"id":"thing-3f2b9c1e","device_id":"441bf6e26b40","board":"m5stack-cores3","deployment_id":"unknown","mobility":"fixed"},""" +
-            """"firmware":{"version":"6.14.0","schema":"cores3-telemetry-v5","boot_id":"0f3a"},""" +
-            """"dictionary":{"sha256":"e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b","version":"cores3-telemetry-v6"},""" +
-            """"template":{"href":"https://raw.githubusercontent.com/walkthru-earth/stac-opensensor/main/templates/cores3-telemetry-v5.json","sha256":"fb4230b3eb6e8eac881c719f900c8bd9c7e4bbd6ad247520a27368ec9d9a7218"},""" +
-            """"acquisition":{"sample_interval_ms":10000,"time_semantics":"sample instant, UTC","config_id":"default","calibration_id":"unknown"},""" +
-            """"file":{"rotation_interval_s":3600,"row_groups":4,"row_group_rows_max":90,"compression":"zstd","purpose":"telemetry"}}"""
-        assertEquals(
-            OpenSensorFooter(
-                10_000,
-                "e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b",
-                "fb4230b3eb6e8eac881c719f900c8bd9c7e4bbd6ad247520a27368ec9d9a7218",
-                thingId = "thing-3f2b9c1e",
-                mobility = OpenSensorFooter.Mobility.FIXED,
-                purpose = "telemetry",
-                rotationIntervalS = 3600,
-            ),
-            parse(example),
+        // stac-opensensor v0.1.0 (83787768) footers/m5stack-cores3.json, compacted, with the pinned
+        // opensensor-space-firmware raw URLs a CoreS3 board writes. Its long free text members are cut short.
+        val example = """{"version":"0.1.0","thing":{"id":"3f2b9c1e-6a7d-4e58-9b1c-2d4f6a8e0c13","device_id":"441bf6e26b40","board":"m5stack-cores3","deployment_id":"unknown","mobility":"fixed"},""" +
+            """"firmware":{"version":"idf-cores3-parquet-v6.23","schema":"cores3-telemetry-v6","boot_id":"0f3a9c2e5b7d41e8a6c3f0b2d9e4a713"},""" +
+            """"dictionary":{"sha256":"3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9","version":"cores3-telemetry-v7",""" +
+            """"uri":"https://raw.githubusercontent.com/walkthru-earth/opensensor-space-firmware/093f2b8e45cd2b9e24e1324ad9fa2e6e20ad1d47/firmware/esp-idf-cores3/bringup/telemetry_fields.inc"},""" +
+            """"template":{"href":"https://raw.githubusercontent.com/walkthru-earth/opensensor-space-firmware/bb618f32a8a9bfe6a633a22ad5e99d319d55d46b/docs/shared/templates/m5stack-cores3/3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9.json",""" +
+            """"sha256":"4dd6c4b1ef19187ed2c011ab86018e43be0f28edc3af63a0f6a27b70ff203ef3"},""" +
+            """"acquisition":{"sample_interval_ms":10000,"time_semantics":"event_time_utc_us estimates snapshot start","config_id":"cores3-acquisition-v3","calibration_id":"unknown"},""" +
+            """"file":{"rotation_interval_s":900,"row_groups":1,"row_group_rows_max":90,"compression":"LZ4_RAW","purpose":"telemetry"}}"""
+        val footer = OpenSensorFooter(
+            10_000,
+            "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9",
+            "4dd6c4b1ef19187ed2c011ab86018e43be0f28edc3af63a0f6a27b70ff203ef3",
+            thingId = "3f2b9c1e-6a7d-4e58-9b1c-2d4f6a8e0c13",
+            mobility = OpenSensorFooter.Mobility.FIXED,
+            purpose = "telemetry",
+            rotationIntervalS = 900,
         )
+        assertEquals(footer, parse(example))
+        assertSame(coreS3Template, FileTemplates.BUNDLED.of(footer).template)
     }
 
     @Test
     fun mobilityIsFixedOrMoving() {
         assertEquals(OpenSensorFooter.Mobility.MOVING, parse(opensensorFooterJson(dict, desc, 10_000, mobility = "moving"))?.mobility)
-        assertEquals(null, parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"drifting"}}"""))
-        assertEquals(null, parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":1}}"""))
+        assertNull(parse(full().with("thing", "mobility", JsonPrimitive("drifting"))))
+        assertNull(parse(full().with("thing", "mobility", JsonPrimitive(1))))
+    }
+
+    @Test
+    fun everyMemberTheFooterSchemaRequiresIsRequired() {
+        assertEquals(thingA, parse(full().toString()))
+        assertNull(parse(full().with("version", null)))
+        for ((obj, fields) in OpenSensorFooter.REQUIRED) {
+            assertNull(parse(full().with(obj, null)), obj)
+            assertNull(parse(full().with(obj, JsonNull)), obj)
+            assertNull(parse(full().with(obj, JsonPrimitive("x"))), obj)
+            for (field in fields) {
+                assertNull(parse(full().with(obj, field, null)), "$obj.$field")
+                assertNull(parse(full().with(obj, field, JsonNull)), "$obj.$field null")
+            }
+        }
+        // The same members as stac-opensensor v0.1.0 json-schema/footer.json. FooterSchemaTest checks it there.
+        assertEquals(
+            mapOf(
+                "thing" to listOf("id", "device_id", "board", "mobility"),
+                "firmware" to listOf("version", "schema", "boot_id"),
+                "dictionary" to listOf("sha256"),
+                "template" to listOf("href", "sha256"),
+                "acquisition" to listOf("sample_interval_ms", "time_semantics"),
+                "file" to listOf("rotation_interval_s", "row_groups", "row_group_rows_max", "compression", "purpose"),
+            ),
+            OpenSensorFooter.REQUIRED,
+        )
     }
 
     @Test
     fun aFooterWithoutAThingIsNotTrusted() {
-        assertNull(parse("""{"version":"0.1.0","dictionary":{"sha256":"$dict"}}"""))
-        assertNull(parse("""{"version":"0.1.0","thing":{"mobility":"fixed"}}"""))
-        assertNull(parse("""{"version":"0.1.0","thing":{"id":"thing-a"}}"""))
         // An old footer that names a station and no thing, the shape firmware wrote before the Thing rename.
         val station = stationFooterJson(dict, desc)
         assertNull(parse(station))
@@ -88,7 +131,7 @@ class OpenSensorFooterTest {
     @Test
     fun aGeoKeyBesideOpensensorIsIgnored() {
         val geo = """{"version":"2.0.0","primary_column":"geometry","columns":{"geometry":{"encoding":"WKB","geometry_types":["Point"],"bbox":[31.2,30.0,31.3,30.1]}}}"""
-        assertEquals(OpenSensorFooter(dictionarySha256 = dict, thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), OpenSensorFooter.of(mapOf("geo" to geo, OpenSensorFooter.KEY to """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"}}""")))
+        assertEquals(thingA, OpenSensorFooter.of(mapOf("geo" to geo, OpenSensorFooter.KEY to full().toString())))
     }
 
     @Test
@@ -101,18 +144,42 @@ class OpenSensorFooterTest {
     }
 
     @Test
-    fun aMinorVersionAndUnknownFieldsAreRead() {
-        assertEquals(OpenSensorFooter(dictionarySha256 = dict, thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), parse("""{"version":"0.2.7","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"},"extra":[1,2]}"""))
+    fun anyPatchOfVersion01AndUnknownMembersAreRead() {
+        for (version in listOf("0.1.0", "0.1.7", "0.1.12")) {
+            assertEquals(version, thingA, parse(full().with("version", JsonPrimitive(version))))
+        }
+        assertEquals(thingA, parse(full().with("extra", Json.parseToJsonElement("[1,2]"))))
+        assertEquals(thingA, parse(full().with("file", "extra", JsonPrimitive("x"))))
     }
 
     @Test
-    fun leftOutFieldsAreNull() {
-        // Firmware members the app does not read are ignored, whatever their value.
-        assertEquals(OpenSensorFooter(thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"firmware":{"boot_id":null,"schema":["v5"]}}"""))
-        assertEquals(OpenSensorFooter(thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"}}"""))
-        assertEquals(OpenSensorFooter(thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"acquisition":{"time_semantics":"x"},"dictionary":{"version":"v"}}"""))
+    fun anotherMajorOrMinorVersionIsRefused() {
+        // While the contract is 0.x a minor bump breaks readers, so only 0.1 with any patch is read.
+        for (version in listOf("0.2.0", "0.0.9", "0.10.0", "1.1.0", "10.1.0", "0.1", "0.1.0-rc.1", "v0.1.0", " 0.1.0", "")) {
+            assertNull(parse(full().with("version", JsonPrimitive(version))), version)
+        }
+        assertNull(parse(full().with("version", JsonPrimitive(0.1))))
+    }
+
+    @Test
+    fun optionalMembersAndUnreadValuesAreIgnored() {
+        // Members footer.json does not require may be left out.
+        var footer = full()
+        val optional = listOf(
+            "thing" to "deployment_id",
+            "dictionary" to "version",
+            "dictionary" to "uri",
+            "acquisition" to "config_id",
+            "acquisition" to "config",
+            "acquisition" to "calibration_id",
+        )
+        for ((obj, field) in optional) footer = Json.parseToJsonElement(footer.with(obj, field, null)).jsonObject
+        assertEquals(thingA, parse(footer.toString()))
+        // A required member the app does not read is only checked for presence, whatever its value.
+        assertEquals(thingA, parse(full().with("firmware", "schema", Json.parseToJsonElement("""["v5"]"""))))
+        assertEquals(thingA, parse(full().with("template", "href", JsonPrimitive(7))))
         // A non-positive interval is unknown, so the template default applies.
-        assertEquals(OpenSensorFooter(thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED), parse("""{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"acquisition":{"sample_interval_ms":0}}"""))
+        assertEquals(thingA.copy(sampleIntervalMs = null), parse(full().with("acquisition", "sample_interval_ms", JsonPrimitive(0))))
     }
 
     @Test
@@ -123,23 +190,19 @@ class OpenSensorFooterTest {
             "{",
             "[]",
             "\"0.1.0\"",
-            """{"thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"}}""",
-            """{"version":0.1,"thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"}}""",
-            """{"version":"1.0.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"}}""",
-            """{"version":"10.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"$dict"}}""",
-            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"${dict.uppercase()}"}}""",
-            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"${dict.drop(1)}"}}""",
-            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":{"sha256":"1220$dict"}}""",
-            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"template":{"sha256":"${"g".repeat(64)}"}}""",
-            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"template":{"sha256":null}}""",
-            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"dictionary":"$dict"}""",
-            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"acquisition":{"sample_interval_ms":"10000"}}""",
-            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"acquisition":{"sample_interval_ms":10000.5}}""",
-            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"acquisition":10000}""",
-            """{"version":"0.1.0","thing":{"id":7,"mobility":"fixed"}}""",
-            """{"version":"0.1.0","thing":{"id":"","mobility":"fixed"}}""",
-            """{"version":"0.1.0","thing":"thing-a"}""",
-            """{"version":"0.1.0","thing":{"id":"thing-a","mobility":"fixed"},"file":{"purpose":true}}""",
+            full().with("dictionary", "sha256", JsonPrimitive(dict.uppercase())),
+            full().with("dictionary", "sha256", JsonPrimitive(dict.drop(1))),
+            full().with("dictionary", "sha256", JsonPrimitive("1220$dict")),
+            full().with("template", "sha256", JsonPrimitive("g".repeat(64))),
+            full().with("dictionary", JsonPrimitive(dict)),
+            full().with("acquisition", "sample_interval_ms", JsonPrimitive("10000")),
+            full().with("acquisition", "sample_interval_ms", JsonPrimitive(10000.5)),
+            full().with("acquisition", JsonPrimitive(10000)),
+            full().with("thing", "id", JsonPrimitive(7)),
+            full().with("thing", "id", JsonPrimitive("")),
+            full().with("thing", JsonPrimitive("thing-a")),
+            full().with("file", "purpose", JsonPrimitive(true)),
+            full().with("file", "purpose", JsonPrimitive("")),
         )
         for (json in bad) assertNull(parse(json), json)
     }
@@ -198,18 +261,24 @@ class OpenSensorFooterTest {
         assertNull(AppDay.parse("not json"))
     }
 
-    private fun resolve(dict: String?, desc: String?) = FileTemplates.BUNDLED.of(mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict, desc, 10_000))).template
+    private fun resolve(dict: String?, desc: String?) = FileTemplates.BUNDLED.template(dict, desc)
+
+    private fun resolveFooter(dict: String, desc: String) = FileTemplates.BUNDLED.of(mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict, desc, 10_000))).template
 
     @Test
     fun theBundledTemplatesResolveByTemplateDigestAndByDictOnlyWithoutOne() {
         val waveshareDesc = waveshareTemplate.key.desc!!
+        assertSame(coreS3Template, resolveFooter(dict, desc))
         assertSame(coreS3Template, resolve(dict = null, desc = desc))
         assertSame(coreS3Template, resolve(dict, desc))
         // An unknown template digest, such as a newer firmware desc, never falls back to the dict (#259).
         assertNull(resolve(dict, "ab".repeat(32)))
+        assertNull(resolveFooter(dict, "ab".repeat(32)))
         // A template digest whose dict disagrees with the footer is not used.
         assertNull(resolve(dict, waveshareDesc))
+        assertNull(resolveFooter(dict, waveshareDesc))
         assertNull(resolve("cd".repeat(32), null))
+        assertNull(resolveFooter("cd".repeat(32), "ab".repeat(32)))
         assertNull(resolve(null, null))
     }
 }
