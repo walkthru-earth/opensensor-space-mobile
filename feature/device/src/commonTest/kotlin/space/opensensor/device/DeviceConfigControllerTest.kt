@@ -25,6 +25,9 @@ import space.opensensor.data.protocol.LocationConfig
 import space.opensensor.data.protocol.PairMode
 import space.opensensor.data.protocol.SensorConfig
 import space.opensensor.data.protocol.WifiConfig
+import space.opensensor.model.SiteField
+import space.opensensor.model.SiteProblem
+import space.opensensor.model.ThingSite
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -82,6 +85,33 @@ private class FakeSource(
         return locationAnswer
     }
     val recorded = mutableListOf<String>()
+
+    /** Pages 5 and 6 as the board answers them. Null is firmware without site keys. */
+    var siteAnswer: ThingSite? = null
+    var siteError: Exception? = null
+    var siteWriteError: Exception? = null
+    var siteReads = 0
+
+    /** The next this many site reads meet a link still held by another read, as Android answers. */
+    var siteBusyReads = 0
+    val sitePatches = mutableListOf<ConfigPatch>()
+
+    override suspend fun readSite(): ThingSite? {
+        siteReads++
+        if (siteBusyReads > 0) {
+            siteBusyReads--
+            throw IllegalStateException("link busy")
+        }
+        siteError?.let { throw it }
+        return siteAnswer
+    }
+
+    override suspend fun writeSite(patch: ConfigPatch): ThingSite? {
+        sitePatches += patch
+        wire += patch.encode()
+        siteWriteError?.let { throw it }
+        return siteAnswer
+    }
 
     override fun refreshConfig() {
         calls += "refresh"
@@ -584,5 +614,203 @@ class DeviceConfigControllerTest {
         source.snapshot.value = source.snapshot.value.copy(syncRunning = true)
         c.saveLocation()
         assertEquals(emptyList(), source.wire)
+    }
+
+    // ------------------------------------------------------------------ owner site (#272)
+
+    private val roof = ThingSite(title = "Roof", provider = "", url = "", description = "", deploymentId = "accra-1")
+
+    @Test
+    fun siteFieldsShowOnlyWhenPage5AnswersAndAreHiddenOnError1() = runTest {
+        val supported = FakeSource().apply { siteAnswer = roof }
+        val c = controller(supported)
+        assertEquals(true, c.state.value.site.supported)
+        assertEquals(roof, c.state.value.site.draft)
+        assertEquals(1, supported.siteReads, "read once when the link turns ready")
+        val legacy = FakeSource()
+        assertEquals(false, controller(legacy).state.value.site.supported, "page 5 ERROR 1 hides the fields")
+    }
+
+    @Test
+    fun aPage6FailureAfterPage5IsAnErrorNotUnsupported() = runTest {
+        val source = FakeSource().apply { siteError = IllegalStateException("page 6 ERROR 1") }
+        val c = controller(source)
+        advanceTimeBy(1_000)
+        assertEquals(null, c.state.value.site.supported)
+        assertEquals(DeviceSiteResult.READ_FAILED, c.state.value.site.result)
+        assertFalse(c.state.value.site.canSave)
+        assertEquals(3, source.siteReads, "a failed read is tried three times in all")
+    }
+
+    @Test
+    fun retryReadsTheSiteAgainAndSendsNothing() = runTest {
+        val source = FakeSource().apply { siteError = IllegalStateException("page 6 ERROR 1") }
+        val c = controller(source)
+        advanceTimeBy(1_000)
+        assertEquals(DeviceSiteResult.READ_FAILED, c.state.value.site.result)
+        source.calls.clear()
+        source.siteError = null
+        source.siteAnswer = roof
+        c.onAction(DeviceConfigAction.RetrySite)
+        assertEquals(true, c.state.value.site.supported)
+        assertEquals(null, c.state.value.site.result)
+        assertEquals(4, source.siteReads)
+        assertEquals(emptyList(), source.calls, "Retry reads pages 5 and 6 only")
+        assertEquals(emptyList(), source.wire)
+    }
+
+    @Test
+    fun aRefreshWhoseSiteReadMeetsTheConfigReadStillShowsTheSite() = runTest {
+        val source = FakeSource().apply { siteAnswer = roof }
+        val c = controller(source)
+        assertEquals(true, c.state.value.site.supported)
+        assertEquals(1, source.siteReads)
+        source.siteBusyReads = 1
+        source.snapshot.value = source.snapshot.value.copy(busy = true)
+        c.refresh()
+        assertEquals(listOf("refresh"), source.calls)
+        assertEquals(2, source.siteReads, "the first read met the page 0 read")
+        advanceTimeBy(1_000)
+        assertEquals(2, source.siteReads, "the next read waits for the link")
+        assertEquals(null, c.state.value.site.result)
+        source.snapshot.value = source.snapshot.value.copy(busy = false)
+        assertEquals(3, source.siteReads)
+        assertEquals(true, c.state.value.site.supported)
+        assertEquals(roof, c.state.value.site.draft)
+        assertEquals(null, c.state.value.site.result, "no read failure from the race")
+    }
+
+    @Test
+    fun aSiteReadThatMeetsABusyLinkIsTriedAgain() = runTest {
+        val source = FakeSource().apply {
+            siteAnswer = roof
+            siteError = IllegalStateException("link busy")
+        }
+        val c = controller(source)
+        assertEquals(null, c.state.value.site.result, "no failure while tries remain")
+        source.siteError = null
+        advanceTimeBy(1_000)
+        assertEquals(true, c.state.value.site.supported)
+        assertEquals(roof, c.state.value.site.draft)
+        assertEquals(2, source.siteReads)
+    }
+
+    @Test
+    fun typingNeverWritesOnlySaveDoes() = runTest {
+        val source = FakeSource().apply { siteAnswer = roof }
+        val c = controller(source)
+        c.onAction(DeviceConfigAction.SiteValue(SiteField.TITLE, "School roof"))
+        c.onAction(DeviceConfigAction.SiteValue(SiteField.URL, "https://opensensor.space"))
+        assertEquals(emptyList(), source.wire, "a draft sends nothing")
+        assertTrue(c.state.value.site.dirty)
+        source.siteAnswer = roof.copy(title = "School roof", url = "https://opensensor.space")
+        c.onAction(DeviceConfigAction.SaveSite)
+        assertEquals(listOf("owner.title=School roof\nowner.url=https://opensensor.space\n"), source.wire)
+        assertEquals(DeviceSiteResult.SAVED, c.state.value.site.result)
+        assertFalse(c.state.value.site.dirty)
+    }
+
+    @Test
+    fun anEmptiedValueIsSentAndAnUnchangedEmptyOneIsNot() = runTest {
+        val source = FakeSource().apply { siteAnswer = roof }
+        val c = controller(source)
+        c.editSite(SiteField.DEPLOYMENT_ID, "")
+        c.editSite(SiteField.PROVIDER, "")
+        source.siteAnswer = roof.copy(deploymentId = "")
+        c.saveSite()
+        assertEquals(listOf("thing.deployment_id=\n"), source.wire)
+        assertTrue(source.sitePatches.single().isSite, "site keys go in their own SET_CONFIG")
+        assertEquals(listOf(ConfigFields.THING_DEPLOYMENT_ID), source.sitePatches.single().keys)
+    }
+
+    @Test
+    fun anInvalidOrUnchangedDraftSendsNothing() = runTest {
+        val source = FakeSource().apply { siteAnswer = roof }
+        val c = controller(source)
+        c.saveSite()
+        assertEquals(emptyList(), source.wire, "nothing changed")
+        c.editSite(SiteField.URL, "http://opensensor.space")
+        assertEquals(mapOf(SiteField.URL to SiteProblem.SCHEME), c.state.value.site.problems)
+        assertFalse(c.state.value.canSaveSite)
+        c.saveSite()
+        c.editSite(SiteField.URL, "https://opensensor.space")
+        c.editSite(SiteField.DEPLOYMENT_ID, "unknown")
+        c.saveSite()
+        assertEquals(emptyList(), source.wire)
+    }
+
+    @Test
+    fun siteSaveNeedsAnEditableIdleLinkAndASupportedBoard() = runTest {
+        val legacy = FakeSource()
+        val unsupported = controller(legacy)
+        unsupported.editSite(SiteField.TITLE, "Roof")
+        assertEquals(ThingSite(), unsupported.state.value.site.draft, "a board without site keys takes no typing")
+        unsupported.saveSite()
+        assertEquals(emptyList(), legacy.wire)
+
+        val source = FakeSource().apply { siteAnswer = roof }
+        val c = controller(source)
+        c.editSite(SiteField.TITLE, "School")
+        source.snapshot.value = source.snapshot.value.copy(syncRunning = true)
+        c.saveSite()
+        assertEquals(emptyList(), source.wire, "not during a sync")
+        source.snapshot.value = source.snapshot.value.copy(syncRunning = false, busy = true)
+        assertTrue(c.state.value.site.canSave, "the draft alone would allow a save")
+        c.saveSite()
+        assertEquals(emptyList(), source.sitePatches, "not while the link runs another command")
+        source.snapshot.value = source.snapshot.value.copy(busy = false, connection = ConnectionState.Disconnected)
+        c.saveSite()
+        assertEquals(emptyList(), source.wire, "not without a link")
+    }
+
+    @Test
+    fun saveAndWaitReportsHowTheSaveEnded() = runTest {
+        val source = FakeSource().apply { siteAnswer = roof }
+        val c = controller(source)
+        assertEquals(null, c.saveSiteAndWait(), "nothing changed, nothing sent")
+        c.editSite(SiteField.TITLE, "School")
+        assertEquals(DeviceSiteResult.NOT_CONFIRMED, c.saveSiteAndWait())
+        source.siteWriteError = IllegalStateException("ERROR 12 nvs")
+        assertEquals(DeviceSiteResult.FAILED, c.saveSiteAndWait())
+        source.siteWriteError = null
+        source.siteAnswer = roof.copy(title = "School")
+        assertEquals(DeviceSiteResult.SAVED, c.saveSiteAndWait())
+        assertEquals(3, source.sitePatches.size)
+    }
+
+    @Test
+    fun aReadbackThatDiffersOrIsMissingIsNotConfirmed() = runTest {
+        val source = FakeSource().apply { siteAnswer = roof }
+        val c = controller(source)
+        c.editSite(SiteField.TITLE, "School")
+        source.siteAnswer = roof
+        c.saveSite()
+        assertEquals(DeviceSiteResult.NOT_CONFIRMED, c.state.value.site.result)
+        assertEquals("School", c.state.value.site.draft.title, "the draft is kept to try again")
+        source.siteAnswer = null
+        c.saveSite()
+        assertEquals(DeviceSiteResult.NOT_CONFIRMED, c.state.value.site.result)
+    }
+
+    @Test
+    fun aRefusedSiteWriteFailsAndTheNextSuccessReadsEveryPageAgain() = runTest {
+        val source = FakeSource().apply { siteAnswer = roof }
+        val c = controller(source)
+        source.calls.clear()
+        c.editSite(SiteField.TITLE, "School")
+        source.siteWriteError = IllegalStateException("ERROR 12 nvs")
+        c.saveSite()
+        assertEquals(DeviceSiteResult.FAILED, c.state.value.site.result)
+        assertEquals("School", c.state.value.site.draft.title)
+        assertEquals(emptyList(), source.calls, "no re-read yet")
+        source.siteWriteError = null
+        source.siteAnswer = roof.copy(title = "School")
+        c.saveSite()
+        assertEquals(DeviceSiteResult.SAVED, c.state.value.site.result)
+        assertEquals(listOf("refresh"), source.calls, "page 0 is read again after the next success")
+        c.editSite(SiteField.TITLE, "Roof")
+        source.siteAnswer = roof
+        c.saveSite()
+        assertEquals(listOf("refresh"), source.calls, "only once")
     }
 }

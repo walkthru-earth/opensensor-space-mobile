@@ -72,6 +72,10 @@ data class SetupUiState(
     val nickname: String = "",
     /** The Thing holds a saved location that satisfies the required Location page. */
     val located: Boolean = false,
+    /** Whether the sensor has the owner site keys. Null until it answered, false leaves Site out. */
+    val siteSupported: Boolean? = null,
+    /** Next on Site is saving the site. Skip waits for it, so the save and a skip never race. */
+    val siteSaving: Boolean = false,
     val askClose: Boolean = false,
     val closed: Boolean = false,
 ) {
@@ -79,6 +83,9 @@ data class SetupUiState(
 
     /** Next is on unless this is a required page whose fact is not saved yet. */
     val canAdvance: Boolean get() = nicknameValid && (!page.required || satisfied(page))
+
+    /** Whether [step] is walked. Site is left out once the sensor says it has no site keys. */
+    fun shows(step: SetupStep): Boolean = step != SetupStep.Site || siteSupported != false
 
     fun satisfied(step: SetupStep): Boolean = when (step) {
         is SetupStep.Location -> located
@@ -198,6 +205,15 @@ class SetupController(
         _state.update { it.copy(located = located) }
     }
 
+    /**
+     * Whether the sensor has the owner site keys, from the site form's read of page 5. When it has
+     * none while Site shows, the wizard moves on, as if Site were never in the list.
+     */
+    fun onSiteSupport(supported: Boolean?) {
+        _state.update { it.copy(siteSupported = supported) }
+        if (supported == false && _state.value.page == SetupStep.Site) advance()
+    }
+
     /** The next page. On Name it saves the nickname first, a blank one shows the advertised name. */
     fun next() {
         val s = _state.value
@@ -217,14 +233,34 @@ class SetupController(
         }
     }
 
-    /** Skips a skippable page without writing anything. */
+    /**
+     * Next on Site with changed values. Runs [save], the explicit site write, and moves on only when
+     * it reports the board confirmed every value. A refusal or an unconfirmed readback stays on Site
+     * with its reason. When Back left Site while the save ran, its result never moves the wizard.
+     */
+    fun saveSiteThenNext(save: suspend () -> Boolean) {
+        val s = _state.value
+        if (s.page != SetupStep.Site || s.siteSaving) return
+        _state.update { it.copy(siteSaving = true) }
+        scope.launch {
+            val saved = try {
+                save()
+            } finally {
+                _state.update { it.copy(siteSaving = false) }
+            }
+            if (saved && _state.value.page == SetupStep.Site) advance()
+        }
+    }
+
+    /** Skips a skippable page without writing anything. Ignored while a site save runs. */
     fun skip() {
-        if (_state.value.page.skippable) advance()
+        val s = _state.value
+        if (s.page.skippable && !s.siteSaving) advance()
     }
 
     private fun advance() {
         val s = _state.value
-        val next = pages.getOrNull(pages.indexOf(s.page) + 1) ?: return
+        val next = pages.drop(pages.indexOf(s.page) + 1).firstOrNull(s::shows) ?: return
         if (next == SetupStep.Done && pages.any { it.required && !s.satisfied(it) }) return
         _state.update { it.copy(page = next) }
         if (next == SetupStep.Done) s.selected?.let { scope.launch { port.setPending(it.id, false) } }
@@ -237,7 +273,7 @@ class SetupController(
         when {
             s.page == SetupStep.Done -> finish()
             at <= 0 || (s.page == SetupStep.Name && s.paired) -> requestClose()
-            else -> _state.update { it.copy(page = pages[at - 1]) }
+            else -> pages.take(at).lastOrNull(s::shows)?.let { page -> _state.update { it.copy(page = page) } }
         }
     }
 

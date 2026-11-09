@@ -39,6 +39,7 @@ import space.opensensor.link.LinkSession
 import space.opensensor.link.LinkState
 import space.opensensor.link.LinkTimeoutException
 import space.opensensor.link.ScriptedLinkDriver
+import space.opensensor.model.ThingSite
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -424,6 +425,62 @@ class DeviceSessionTest {
         assertContentEquals(Request.GetLocation.encode(), p.bodies.single())
         p.reply = { op, _ -> if (op == Opcode.GET_CONFIG) emit(Frame.Config(0, "{}")) }
         assertNull(session.getLocation())
+    }
+
+    // ------------------------------------------------------------------ owner site (#272)
+
+    /** Answers GET_CONFIG by page byte, from [pages]. A page with no entry is not answered. */
+    private fun Peer.answerPages(pages: Map<Int, Frame>) {
+        reply = { op, body -> if (op == Opcode.GET_CONFIG) pages[body[1].toInt()]?.let { emit(it) } }
+    }
+
+    @Test
+    fun siteReadsPage5ThenPage6AndMergesThem() = runTest {
+        val p = peer()
+        p.answerPages(
+            mapOf(
+                5 to Frame.Config(0, """{"owner":{"title":"Roof","provider":"","url":"https://opensensor.space"},"thing":{"deployment_id":"accra-1"}}"""),
+                6 to Frame.Config(0, """{"owner":{"description":"School"}}"""),
+            ),
+        )
+        assertEquals(ThingSite("Roof", "", "https://opensensor.space", "School", "accra-1"), p.view().getSite())
+        assertEquals(listOf(listOf(Opcode.GET_CONFIG.toByte(), 5), listOf(Opcode.GET_CONFIG.toByte(), 6)), p.bodies.map { it.toList() })
+    }
+
+    @Test
+    fun sitePage5Error1MeansNoSiteKeysAndPage6IsNotAsked() = runTest {
+        for (error in listOf(ProtocolError.MALFORMED_REQUEST, ProtocolError.UNKNOWN_OPCODE)) {
+            val p = peer()
+            p.answerPages(mapOf(5 to Frame.Error(Opcode.GET_CONFIG, error.code, "")))
+            assertNull(p.view().getSite(), "$error")
+            assertEquals(1, p.bodies.size, "$error")
+        }
+    }
+
+    @Test
+    fun sitePage5WithoutOwnerIsLegacyFirmwareAndNeverAnEmptySite() = runTest {
+        val p = peer()
+        // Legacy firmware ignores the page byte and answers page 0.
+        p.answerPages(mapOf(5 to Frame.Config(0, """{"ble":{"pair":"random"}}""")))
+        assertNull(p.view().getSite())
+        assertEquals(1, p.bodies.size)
+    }
+
+    @Test
+    fun sitePage5OtherErrorsAreThrownNotHidden() = runTest {
+        val p = peer()
+        p.answerPages(mapOf(5 to Frame.Error(Opcode.GET_CONFIG, ProtocolError.BUSY.code, "")))
+        assertFailsWith<DeviceErrorException> { p.view().getSite() }
+    }
+
+    @Test
+    fun sitePage6UnsupportedAfterPage5AnsweredIsAnError() = runTest {
+        val p = peer()
+        val page5 = Frame.Config(0, """{"owner":{"title":"Roof","provider":"","url":""},"thing":{"deployment_id":""}}""")
+        p.answerPages(mapOf(5 to page5, 6 to Frame.Error(Opcode.GET_CONFIG, ProtocolError.MALFORMED_REQUEST.code, "")))
+        assertFailsWith<DeviceErrorException> { p.view().getSite() }
+        p.answerPages(mapOf(5 to page5, 6 to Frame.Config(0, """{"ble":{"pair":"random"}}""")))
+        assertFailsWith<ProtocolViolationException> { p.view().getSite() }
     }
 
     // ------------------------------------------------------------------ clock

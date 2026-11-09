@@ -228,6 +228,24 @@ sealed interface Request {
         override fun encode(): ByteArray = byteArrayOf(opcode.toByte(), 1)
     }
 
+    /** One `GET_CONFIG` page by number, the opcode and its page byte. */
+    data class GetConfigPage(val page: Int) : Request {
+        init {
+            require(page in 0..0xFF) { "config page is one byte" }
+        }
+
+        override val opcode: Int = Opcode.GET_CONFIG
+        override fun encode(): ByteArray = byteArrayOf(opcode.toByte(), page.toByte())
+
+        companion object {
+            /** `owner.title`, `owner.provider`, `owner.url` and `thing.deployment_id` (firmware #148). */
+            const val SITE = 5
+
+            /** `owner.description` (firmware #148). */
+            const val SITE_DESCRIPTION = 6
+        }
+    }
+
     /** `key=value` lines, utf8, `\n`-separated. Build the text with [ConfigPatch]. */
     data class SetConfig(val patch: ConfigPatch) : Request {
         override val opcode: Int = Opcode.SET_CONFIG

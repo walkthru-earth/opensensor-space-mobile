@@ -44,6 +44,7 @@ import space.opensensor.device.resources.bonds_forget_button
 import space.opensensor.device.resources.config_problem_line_break
 import space.opensensor.device.resources.config_problem_pin
 import space.opensensor.device.resources.config_problem_psk_long
+import space.opensensor.device.resources.config_problem_site
 import space.opensensor.device.resources.config_problem_ssid_empty
 import space.opensensor.device.resources.config_problem_ssid_long
 import space.opensensor.device.resources.device_back
@@ -58,6 +59,7 @@ import space.opensensor.device.resources.msg_config_rejected_location
 import space.opensensor.device.resources.msg_config_rejected_other
 import space.opensensor.device.resources.msg_config_rejected_pairing
 import space.opensensor.device.resources.msg_config_rejected_sensor
+import space.opensensor.device.resources.msg_config_rejected_site
 import space.opensensor.device.resources.msg_config_rejected_wifi
 import space.opensensor.device.resources.msg_failed_get_config
 import space.opensensor.device.resources.msg_failed_get_token
@@ -97,6 +99,7 @@ import space.opensensor.device.resources.reboot_title
 import space.opensensor.device.resources.rotate_button
 import space.opensensor.device.resources.rotate_confirm
 import space.opensensor.device.resources.rotate_title
+import space.opensensor.model.SiteField
 import space.opensensor.permissions.RuntimeAccess
 
 /**
@@ -110,6 +113,15 @@ sealed interface DeviceConfigAction {
     data class LocationCell(val cell: String, val resolution: Int) : DeviceConfigAction
     data object SaveLocation : DeviceConfigAction
     data object ClearLocation : DeviceConfigAction
+
+    /** Drafts one owner site value. Nothing is sent until [SaveSite]. */
+    data class SiteValue(val field: SiteField, val value: String) : DeviceConfigAction
+
+    /** Sends the changed site values in their own `SET_CONFIG`, then reads pages 5 and 6 back. */
+    data object SaveSite : DeviceConfigAction
+
+    /** Reads the owner site again after a failed read. */
+    data object RetrySite : DeviceConfigAction
     data object Refresh : DeviceConfigAction
     data class SavePairing(val choice: PairingChoice) : DeviceConfigAction
     data object RequestReboot : DeviceConfigAction
@@ -139,6 +151,9 @@ fun DeviceConfigController.onAction(action: DeviceConfigAction): Boolean {
         is DeviceConfigAction.LocationCell -> acceptLocationCell(action.cell, action.resolution)
         DeviceConfigAction.SaveLocation -> saveLocation()
         DeviceConfigAction.ClearLocation -> clearLocation()
+        is DeviceConfigAction.SiteValue -> editSite(action.field, action.value)
+        DeviceConfigAction.SaveSite -> saveSite()
+        DeviceConfigAction.RetrySite -> retrySite()
         DeviceConfigAction.Refresh -> refresh()
         is DeviceConfigAction.SavePairing -> savePairing(action.choice)
         DeviceConfigAction.RequestReboot -> requestReboot()
@@ -279,6 +294,7 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
             ConfigProblem.PSK_TOO_LONG -> Res.string.config_problem_psk_long
             ConfigProblem.STICKER_FORMAT -> Res.string.msg_sticker_invalid
             ConfigProblem.LINE_BREAK -> Res.string.config_problem_line_break
+            ConfigProblem.SITE_VALUE -> Res.string.config_problem_site
         },
     )
     DeviceConfigNotice.StickerInvalid -> getString(Res.string.msg_sticker_invalid)
@@ -308,6 +324,7 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
             ConfigGroup.WIFI -> Res.string.msg_config_rejected_wifi
             ConfigGroup.LAN -> Res.string.msg_config_rejected_lan
             ConfigGroup.LOCATION -> Res.string.msg_config_rejected_location
+            ConfigGroup.SITE -> Res.string.msg_config_rejected_site
             ConfigGroup.SENSOR -> Res.string.msg_config_rejected_sensor
             ConfigGroup.OTHER -> Res.string.msg_config_rejected_other
         },

@@ -1,5 +1,7 @@
 package space.opensensor.data.protocol
 
+import space.opensensor.model.SiteField
+
 /** The value shape of one `SET_CONFIG` key. */
 sealed interface FieldType {
     /** UTF-8 text of [minBytes] to [maxBytes] bytes on one line. */
@@ -28,7 +30,7 @@ sealed interface FieldType {
 }
 
 /** The settings card a key belongs to, so a refusal names the card instead of the wire key. */
-enum class ConfigGroup { PAIRING, WIFI, LAN, LOCATION, SENSOR, OTHER }
+enum class ConfigGroup { PAIRING, WIFI, LAN, LOCATION, SITE, SENSOR, OTHER }
 
 /** When the firmware applies a key. */
 enum class Applies { IMMEDIATELY, NEXT_SAMPLE, NEXT_BOOT, ONCE }
@@ -91,6 +93,26 @@ object ConfigFields {
     const val SENSOR_MODEL = "sensor.model"
     const val SENSOR_SERIAL = "sensor.serial"
     const val SENSOR_BATCH_CANDIDATE = "sensor.batch_candidate"
+    const val OWNER_TITLE = "owner.title"
+    const val OWNER_PROVIDER = "owner.provider"
+    const val OWNER_URL = "owner.url"
+    const val OWNER_DESCRIPTION = "owner.description"
+    const val THING_DEPLOYMENT_ID = "thing.deployment_id"
+
+    /** The wire key of each owner site value. */
+    fun siteKey(field: SiteField): String = when (field) {
+        SiteField.TITLE -> OWNER_TITLE
+        SiteField.PROVIDER -> OWNER_PROVIDER
+        SiteField.URL -> OWNER_URL
+        SiteField.DESCRIPTION -> OWNER_DESCRIPTION
+        SiteField.DEPLOYMENT_ID -> THING_DEPLOYMENT_ID
+    }
+
+    /**
+     * The owner site keys. The firmware keeps them in their own record, so the phone sends them in
+     * their own `SET_CONFIG`, never with another key ([ConfigPatch.Builder.build] refuses a mix).
+     */
+    val SITE_KEYS: Set<String> = SiteField.entries.map(::siteKey).toSet()
 
     val ALL: List<ConfigField> = listOf(
         ConfigField(BLE_PAIR, FieldType.Choice(PairMode.entries.map { it.wire }), Applies.NEXT_BOOT, confirm = Confirm.When(PairMode.NONE.wire)),
@@ -110,6 +132,12 @@ object ConfigFields {
         ConfigField(SENSOR_MODEL, FieldType.Text(1, 32), Applies.IMMEDIATELY),
         ConfigField(SENSOR_SERIAL, FieldType.Text(1, 32), Applies.IMMEDIATELY),
         ConfigField(SENSOR_BATCH_CANDIDATE, FieldType.Toggle, Applies.IMMEDIATELY),
+        // Empty clears each one. SiteRules holds the character rules.
+        ConfigField(OWNER_TITLE, FieldType.Text(0, SiteField.TITLE.maxBytes), Applies.IMMEDIATELY),
+        ConfigField(OWNER_PROVIDER, FieldType.Text(0, SiteField.PROVIDER.maxBytes), Applies.IMMEDIATELY),
+        ConfigField(OWNER_URL, FieldType.Text(0, SiteField.URL.maxBytes), Applies.IMMEDIATELY),
+        ConfigField(OWNER_DESCRIPTION, FieldType.Text(0, SiteField.DESCRIPTION.maxBytes), Applies.IMMEDIATELY),
+        ConfigField(THING_DEPLOYMENT_ID, FieldType.Text(0, SiteField.DEPLOYMENT_ID.maxBytes), Applies.NEXT_SAMPLE),
     )
 
     private val byKey: Map<String, ConfigField> = ALL.associateBy { it.key }
@@ -117,13 +145,17 @@ object ConfigFields {
     fun of(key: String): ConfigField? = byKey[key]
 
     /** The card [key] is set from, by its prefix. A key the app does not know is [ConfigGroup.OTHER]. */
-    fun groupOf(key: String): ConfigGroup = when (key.substringBefore('.', missingDelimiterValue = "")) {
-        "ble" -> ConfigGroup.PAIRING
-        "wifi" -> ConfigGroup.WIFI
-        "lan" -> ConfigGroup.LAN
-        "location", "thing" -> ConfigGroup.LOCATION
-        "sensor" -> ConfigGroup.SENSOR
-        else -> ConfigGroup.OTHER
+    fun groupOf(key: String): ConfigGroup = if (key in SITE_KEYS) {
+        ConfigGroup.SITE
+    } else {
+        when (key.substringBefore('.', missingDelimiterValue = "")) {
+            "ble" -> ConfigGroup.PAIRING
+            "wifi" -> ConfigGroup.WIFI
+            "lan" -> ConfigGroup.LAN
+            "location", "thing" -> ConfigGroup.LOCATION
+            "sensor" -> ConfigGroup.SENSOR
+            else -> ConfigGroup.OTHER
+        }
     }
 
     /** Keys whose values are secrets under the app floor alone. */

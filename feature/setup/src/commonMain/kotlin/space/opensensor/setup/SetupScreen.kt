@@ -60,8 +60,11 @@ import space.opensensor.device.DeviceConfigController
 import space.opensensor.device.DeviceConfigEffects
 import space.opensensor.device.DeviceConfigUiState
 import space.opensensor.device.DeviceLocationForm
+import space.opensensor.device.DeviceSiteForm
+import space.opensensor.device.DeviceSiteResult
 import space.opensensor.device.ReconnectOverBluetooth
 import space.opensensor.device.WifiCard
+import space.opensensor.device.canSaveSite
 import space.opensensor.permissions.RuntimeAccess
 import space.opensensor.setup.resources.Res
 import space.opensensor.setup.resources.setup_added
@@ -90,6 +93,7 @@ import space.opensensor.setup.resources.setup_name_too_long
 import space.opensensor.setup.resources.setup_next
 import space.opensensor.setup.resources.setup_pairing
 import space.opensensor.setup.resources.setup_retry
+import space.opensensor.setup.resources.setup_site_title
 import space.opensensor.setup.resources.setup_skip
 import space.opensensor.setup.resources.setup_stay
 import space.opensensor.setup.resources.setup_title
@@ -128,6 +132,9 @@ fun SetupScreen(
     // Only the board's confirmed answer counts, never an unsaved draft.
     val located = configState?.location?.saved == true
     LaunchedEffect(located) { controller.onLocated(located) }
+    // Page 5's answer. A board without site keys leaves the Site page out.
+    val siteSupported = configState?.site?.supported
+    LaunchedEffect(siteSupported) { controller.onSiteSupport(siteSupported) }
     if (s.askClose) {
         AlertDialog(
             onDismissRequest = controller::dismissClose,
@@ -153,7 +160,7 @@ fun SetupScreen(
                 },
             )
         },
-        bottomBar = { SetupNav(s, configState, controller) },
+        bottomBar = { SetupNav(s, configState, controller, saveSite = { config?.saveSiteAndWait() == DeviceSiteResult.SAVED }) },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         LazyColumn(
@@ -168,6 +175,7 @@ fun SetupScreen(
                     configItem(configState) { state -> DeviceLocationForm(state, onConfigAction) }
                     if (page.required && !s.located) item(key = "location-needed") { InfoNote(stringResource(Res.string.setup_location_needed)) }
                 }
+                SetupStep.Site -> configItem(configState) { state -> DeviceSiteForm(state, onConfigAction, showSave = false) }
                 is SetupStep.Fields -> configItem(configState) { state -> WifiForm(state, onConfigAction) }
                 SetupStep.Done -> item(key = "done") { DoneCard(s, onOpenSensor) }
                 is SetupStep.Permission, SetupStep.Pair -> Unit
@@ -180,6 +188,7 @@ private fun pageTitle(page: SetupStep): StringResource = when (page) {
     SetupStep.Find -> Res.string.setup_title
     SetupStep.Name -> Res.string.setup_name_title
     is SetupStep.Location -> Res.string.setup_location_title
+    SetupStep.Site -> Res.string.setup_site_title
     is SetupStep.Fields -> Res.string.setup_wifi_title
     SetupStep.Done -> Res.string.setup_done_title
     is SetupStep.Permission, SetupStep.Pair -> Res.string.setup_title
@@ -304,9 +313,16 @@ private fun DoneCard(s: SetupUiState, onOpenSensor: (String) -> Unit) {
     }
 }
 
+/**
+ * Back, Skip and Next. On Site with changed values Next is the explicit save ([saveSite]). The setup
+ * controller sends the site keys in their own `SET_CONFIG` and moves on once the board's pages 5 and
+ * 6 confirm them. Skip moves on and sends nothing, and is off while a save runs.
+ */
 @Composable
-private fun SetupNav(s: SetupUiState, config: DeviceConfigUiState?, controller: SetupController) {
+private fun SetupNav(s: SetupUiState, config: DeviceConfigUiState?, controller: SetupController, saveSite: suspend () -> Boolean) {
     if (s.page == SetupStep.Find) return
+    val site = config?.site
+    val savesSite = s.page == SetupStep.Site && site?.dirty == true
     Row(
         Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -317,13 +333,21 @@ private fun SetupNav(s: SetupUiState, config: DeviceConfigUiState?, controller: 
         }
         Spacer(Modifier.weight(1f))
         if (s.page.skippable) {
-            TextButton(onClick = controller::skip, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(Res.string.setup_skip)) }
+            TextButton(onClick = controller::skip, enabled = !s.siteSaving && site?.working != true, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(Res.string.setup_skip))
+            }
         }
-        val busy = config?.location?.working == true || config?.snapshot?.busy == true
+        val busy = s.siteSaving || config?.location?.working == true || site?.working == true || config?.snapshot?.busy == true
         PillButton(
             stringResource(if (s.page == SetupStep.Done) Res.string.setup_close else Res.string.setup_next),
-            onClick = controller::next,
-            enabled = s.canAdvance && !busy,
+            onClick = {
+                if (savesSite) {
+                    controller.saveSiteThenNext(saveSite)
+                } else {
+                    controller.next()
+                }
+            },
+            enabled = s.canAdvance && !busy && (!savesSite || config?.canSaveSite == true),
         )
     }
 }

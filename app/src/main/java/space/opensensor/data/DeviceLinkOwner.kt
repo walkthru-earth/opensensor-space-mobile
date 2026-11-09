@@ -1583,6 +1583,27 @@ class DeviceLinkOwner @Inject constructor(
         } finally { endCommand() }
     }
 
+    /** The owner site from pages 5 and 6, or null when the board has no site keys. */
+    suspend fun readSite(): space.opensensor.model.ThingSite? {
+        val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
+        if (!tryBeginCommand()) throw IllegalStateException("link busy")
+        try { return session.getSite() } finally { endCommand() }
+    }
+
+    /**
+     * Sends the owner site [patch] in its own `SET_CONFIG` and reads pages 5 and 6 back. Only the
+     * user's Save calls this. The values are never logged.
+     */
+    suspend fun writeSite(patch: ConfigPatch): space.opensensor.model.ThingSite? {
+        require(patch.isSite) { "only owner site keys" }
+        val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
+        if (!tryBeginCommand()) throw IllegalStateException("link busy")
+        try {
+            _config.value = session.setConfig(patch)
+            return session.getSite()
+        } finally { endCommand() }
+    }
+
     /** Keeps the connected Thing's Discover pin in step with the location [page] it returned. */
     private suspend fun recordPlace(page: space.opensensor.data.protocol.DeviceConfig?): space.opensensor.data.protocol.LocationConfig? {
         val thing = _info.value?.thing

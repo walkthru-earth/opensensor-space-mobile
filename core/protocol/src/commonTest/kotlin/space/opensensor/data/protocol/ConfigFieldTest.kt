@@ -1,5 +1,6 @@
 package space.opensensor.data.protocol
 
+import space.opensensor.model.SiteField
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -13,6 +14,7 @@ class ConfigFieldTest {
         addAll(ConfigPatch.build { wifiOn(true).wifiSsid("home").wifiPsk("").lanOn(true).rotateToken() }.keys)
         addAll(ConfigPatch.build { location("", "").thingMobility(ThingMobility.FIXED) }.keys)
         addAll(ConfigPatch.build { sensorIdentity("Acme", "X1", "X1-0042", batchCandidate = false) }.keys)
+        addAll(ConfigPatch.build { site(SiteField.entries.associateWith { "" }) }.keys)
     }
 
     @Test
@@ -40,6 +42,11 @@ class ConfigFieldTest {
             "sensor.model" to ConfigGroup.SENSOR,
             "sensor.serial" to ConfigGroup.SENSOR,
             "sensor.batch_candidate" to ConfigGroup.SENSOR,
+            "owner.title" to ConfigGroup.SITE,
+            "owner.provider" to ConfigGroup.SITE,
+            "owner.url" to ConfigGroup.SITE,
+            "owner.description" to ConfigGroup.SITE,
+            "thing.deployment_id" to ConfigGroup.SITE,
         )
         assertEquals(expected.keys, ConfigFields.ALL.map { it.key }.toSet())
         expected.forEach { (key, group) -> assertEquals(group, ConfigFields.groupOf(key), key) }
@@ -48,6 +55,7 @@ class ConfigFieldTest {
     @Test
     fun `a key the app does not know is other`() {
         assertEquals(ConfigGroup.LOCATION, ConfigFields.groupOf("thing.mobility"))
+        assertEquals(ConfigGroup.OTHER, ConfigFields.groupOf("owner.other"))
         assertEquals(ConfigGroup.OTHER, ConfigFields.groupOf("debug.level"))
         assertEquals(ConfigGroup.OTHER, ConfigFields.groupOf("wifi"))
         assertEquals(ConfigGroup.OTHER, ConfigFields.groupOf(""))

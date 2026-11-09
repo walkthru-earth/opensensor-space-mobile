@@ -51,6 +51,52 @@ is declared by the owner, not inferred from the cell or used as NTP residency
 proof. Exact GPS, cell-center coordinates and administrative country are different
 things. See the firmware-owned [time/location contract](../../opensensor-space-firmware/docs/shared/time-and-location.md).
 
+## Site
+
+The owner site describes where and by whom a Thing is deployed (firmware #148, mobile #272). It
+holds five optional values. Device settings show them under the area as one "Location and site"
+card, and the setup wizard asks for them on its Site page after Location. The info text says
+plainly that these values are public when the owner shares the sensor's data, and asks a home
+owner not to type a home address.
+
+| Field | Key | Cap (UTF-8 bytes) | Rule |
+| --- | --- | --- | --- |
+| Name | `owner.title` | 64 | text |
+| Organisation | `owner.provider` | 64 | text |
+| Link | `owner.url` | 96 | `https://`, then an ASCII letter or digit, no `@` before the first `/`, `?` or `#`, only the RFC 3986 characters |
+| Description | `owner.description` | 160 | text |
+| Deployment ID | `thing.deployment_id` | 32 | `a` to `z`, `0` to `9` and inner `-`, never `unknown` |
+
+Text refuses C0 controls, DEL, C1 controls and invalid UTF-8, and keeps quotes, backslashes and
+other Unicode. A link also refuses spaces, quotes, backslashes and non-ASCII. These are the
+firmware `check_owner_value` rules, mirrored in `SiteRules` (`core/model`). The phone checks
+each value before it sends anything and shows the reason under the field. Empty always passes,
+because it clears the key.
+
+- Read. GET_CONFIG page 5 answers `{"owner":{"title","provider","url"},"thing":{"deployment_id"}}`
+  and page 6 `{"owner":{"description"}}`. `DeviceSession.getSite` reads both and merges them
+  (`siteOf`). Page 5 `ERROR` 1, or a page 5 without `owner` from firmware that ignores the page
+  byte, means the board has no site keys. The fields then stay hidden and the card keeps its
+  "Location" title. They are never shown empty. Once page 5 answered, a page 6 error or a page 6
+  without `owner` is a failed read, not an empty description. A read that fails, such as one
+  that meets the page 0 read of a Refresh still holding the link, is tried three times in all,
+  each new try after the link is free. The area read (page 1) does the same. If the site read
+  still fails, the card and the setup Site page say so and offer Try again, which reads pages 5
+  and 6 only. Skip stays on in the wizard.
+- Write. Only the Save site button in Device settings, or Next on the setup Site page, sends.
+  Typing sends nothing. Save sends only the values that differ from the board's last answer.
+  An emptied value goes as `key=` and clears it, a value that stays empty is not sent. The site
+  keys go in a `SET_CONFIG` of their own, and `ConfigPatch.Builder.build` refuses a patch that
+  mixes them with any other key, so a site refusal can never cost a location or name write.
+  Pages 5 and 6 are read back after the write, and the app says saved only when they match.
+- A refused or unconfirmed write says so under the fields, and the draft stays for another Save
+  or Next. After a failed site write, the next site save that succeeds reads pages 0 and 1 again
+  too. In the wizard Next moves on only when the save is confirmed, and Skip is off while it runs
+  (`SetupController.saveSiteThenNext`).
+- The board never logs owner values, and only `deployment_id` reaches the Parquet files, so a
+  change splits the current file. Owner values are not secrets. The Debug frame list redacts
+  every `SET_CONFIG`, and a CONFIG reply shows them as the board sent them.
+
 ## Code boundaries
 
 - `core/protocol` owns the typed page model, page selector and cell-only patch.
@@ -59,7 +105,11 @@ things. See the firmware-owned [time/location contract](../../opensensor-space-f
   is absent (no receiver) and when it is empty (no fresh fix). `gnssCellText` keeps that difference.
   `thing.mobility` (`fixed` or `moving`) has a `ConfigFields` row and
   `ConfigPatch.Builder.thingMobility`. Nothing sends it yet. `thing.setup` reads as
-  `ThingConfig.needsSetup`.
+  `ThingConfig.needsSetup`. `Request.GetConfigPage` asks for page 5 or 6, `OwnerConfig` and
+  `ThingConfig.deploymentId` parse them, and `ConfigPatch.Builder.site` checks each site value.
+  `ConfigFields.SITE_KEYS` are the site keys and `ConfigGroup.SITE` names their card.
+- `core/model` `ThingSite`, `SiteField` and `SiteRules` hold the site values, their caps and the
+  firmware character rules.
 - `core/model` `H3Cell` checks a cell index and its hex form in pure Kotlin. `core/publicfeed`
   `H3Grid.gridDisk` lists a cell and its rings on the platform binding.
 - `core/sync` `ThingSetupPolicy.needsSetup` is the one rule for a Thing that still needs setup.
@@ -73,7 +123,8 @@ things. See the firmware-owned [time/location contract](../../opensensor-space-f
   carries the Settings network switch from each app root.
 - `feature/device` owns shared draft/readback behavior and permission-triggered UI.
   `DeviceLocationForm` is the card of Device settings and of the setup Location page, and opens the
-  picker full screen.
+  picker full screen. `DeviceSiteForm` is the site part of that card and the setup Site page.
+  `DeviceConfigController` keeps the site draft (`DeviceSiteState`) beside the location draft.
 - Its Android and iOS source sets own the temporary OS fix, cancellation and H3
   conversion. Android repository and iOS bridge retain their existing command guards.
 - `DeviceCapabilities` reads LIVE through the thing of the `info.dict` digest, from the

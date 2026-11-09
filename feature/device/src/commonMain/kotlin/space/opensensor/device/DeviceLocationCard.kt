@@ -2,9 +2,11 @@ package space.opensensor.device
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -66,11 +68,14 @@ import space.opensensor.device.resources.location_precision_info
 import space.opensensor.device.resources.location_save
 import space.opensensor.device.resources.location_saved
 import space.opensensor.device.resources.location_set
+import space.opensensor.device.resources.location_site_title
 import space.opensensor.device.resources.location_stop
 import space.opensensor.device.resources.location_title
 import space.opensensor.device.resources.location_unset
 import space.opensensor.device.resources.location_unsupported
 import space.opensensor.device.resources.location_use_phone
+import space.opensensor.device.resources.site_info
+import space.opensensor.device.resources.site_title
 import space.opensensor.map.CellFocus
 import space.opensensor.map.CellPicker
 import space.opensensor.map.PickerLocateButton
@@ -79,10 +84,22 @@ import space.opensensor.permissions.AccessDialogs
 
 @Composable
 internal fun DeviceLocationCard(state: DeviceConfigUiState, onAction: (DeviceConfigAction) -> Unit) {
-    val title = stringResource(Res.string.location_title)
+    val siteShown = state.site.supported == true
+    val title = stringResource(if (siteShown) Res.string.location_site_title else Res.string.location_title)
     BrandCard {
         CardHeader(title, info = InfoContent(title, stringResource(Res.string.location_info)))
         DeviceLocationForm(state, onAction)
+        // A board without the owner site keys answers page 5 with an error. Its fields stay hidden.
+        if (siteShown) {
+            val siteTitle = stringResource(Res.string.site_title)
+            Spacer(Modifier.height(16.dp))
+            CardHeader(siteTitle, info = InfoContent(siteTitle, stringResource(Res.string.site_info)))
+            DeviceSiteForm(state, onAction, showSave = true)
+        } else if (state.site.supported == null && state.site.result == DeviceSiteResult.READ_FAILED) {
+            // Page 5 or 6 could not be read, so support is still unknown. Say so and offer a new read.
+            Spacer(Modifier.height(16.dp))
+            SiteReadFailed(state, onAction)
+        }
     }
 }
 

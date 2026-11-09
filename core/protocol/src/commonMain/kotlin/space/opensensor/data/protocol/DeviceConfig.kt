@@ -3,6 +3,9 @@ package space.opensensor.data.protocol
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import space.opensensor.model.H3Cell
+import space.opensensor.model.SiteField
+import space.opensensor.model.SiteRules
+import space.opensensor.model.ThingSite
 
 /**
  * The `CONFIG` JSON (protocol v2, "Device configuration"). Every field is nullable and every
@@ -24,6 +27,8 @@ data class DeviceConfig(
     val sensor: SensorConfig? = null,
     val location: LocationConfig? = null,
     val thing: ThingConfig? = null,
+    /** GET_CONFIG page 5 (`title`, `provider`, `url`) or page 6 (`description`). */
+    val owner: OwnerConfig? = null,
 ) {
     companion object {
         fun parse(text: String): DeviceConfig = WireJson.decodeFromString(serializer(), text)
@@ -53,7 +58,7 @@ data class LocationConfig(
     val gnssCell: String? get() = gnssCellText?.takeIf { H3Cell.isCellHex(it, H3Cell.RESOLUTION) }
 }
 
-/** GET_CONFIG page 1 `thing` object. */
+/** GET_CONFIG page 1 `thing` object, and on page 5 the `deployment_id` alone. */
 @Serializable
 data class ThingConfig(
     val mobility: String? = null,
@@ -62,12 +67,26 @@ data class ThingConfig(
      * CoreS3 `v6.24` and Waveshare `v2.18` send it (firmware #147). Older firmware leaves it out.
      */
     val setup: Int? = null,
+    /** `thing.deployment_id` from page 5. Empty while unset. */
+    @SerialName("deployment_id") val deploymentId: String? = null,
 ) {
     val thingMobility: ThingMobility? get() = ThingMobility.fromWire(mobility)
 
     /** [setup] as the board's answer, or null when the page has no `setup`. */
     val needsSetup: Boolean? get() = setup?.let { it != 0 }
 }
+
+/**
+ * The `owner` object of GET_CONFIG page 5 (`title`, `provider`, `url`) and page 6 (`description`),
+ * firmware #148. Empty means unset. A page without this object comes from firmware without site keys.
+ */
+@Serializable
+data class OwnerConfig(
+    val title: String? = null,
+    val provider: String? = null,
+    val url: String? = null,
+    val description: String? = null,
+)
 
 /** `thing.mobility`, whether a Thing stays in one H3 cell or moves. The firmware default is [FIXED]. */
 enum class ThingMobility(val wire: String) {
@@ -157,7 +176,19 @@ data class LanConfig(
 }
 
 /** Which local check a [ConfigPatch] value failed. Apps map it to their own copy. */
-enum class ConfigProblem { PIN_FORMAT, SSID_EMPTY, SSID_TOO_LONG, PSK_TOO_LONG, STICKER_FORMAT, LINE_BREAK }
+enum class ConfigProblem { PIN_FORMAT, SSID_EMPTY, SSID_TOO_LONG, PSK_TOO_LONG, STICKER_FORMAT, LINE_BREAK, SITE_VALUE }
+
+/**
+ * GET_CONFIG pages 5 and 6 as one [ThingSite]. Page 5 gives `owner.title`, `owner.provider`,
+ * `owner.url` and `thing.deployment_id`, page 6 `owner.description`. A key a page left out stays null.
+ */
+fun siteOf(page5: DeviceConfig, page6: DeviceConfig): ThingSite = ThingSite(
+    title = page5.owner?.title,
+    provider = page5.owner?.provider,
+    url = page5.owner?.url,
+    description = page6.owner?.description,
+    deploymentId = page5.thing?.deploymentId,
+)
 
 /** [message] is technical (for logs and tests) and never contains the rejected value. */
 class ConfigValidationException(val problem: ConfigProblem, message: String) : IllegalArgumentException(message)
@@ -181,6 +212,9 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
      * is encrypted without MITM protection and is lab only per the firmware docs.
      */
     val carriesSecret: Boolean get() = lines.any { it.first in SECRET_KEYS }
+
+    /** Whether this patch holds owner site keys, and so nothing else. */
+    val isSite: Boolean get() = lines.isNotEmpty() && lines.all { it.first in ConfigFields.SITE_KEYS }
 
     /** The wire text. Each line ends in `\n`; the firmware skips empty lines. */
     fun encode(): String = buildString {
@@ -259,7 +293,33 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
             return add(ConfigFields.SENSOR_BATCH_CANDIDATE, if (batchCandidate) "1" else "0")
         }
 
-        fun build(): ConfigPatch = ConfigPatch(lines.toList())
+        /**
+         * One owner site value, checked with [SiteRules]. Empty clears it on the board. The site keys
+         * go in a patch of their own, see [build].
+         */
+        fun site(field: SiteField, value: String): Builder {
+            val problem = SiteRules.check(field, value)
+            val key = ConfigFields.siteKey(field)
+            if (problem != null) throw ConfigValidationException(ConfigProblem.SITE_VALUE, "$key refused: $problem")
+            return add(key, value)
+        }
+
+        /** Every value of [changes], the fields [ThingSite.changesFrom] found. */
+        fun site(changes: Map<SiteField, String>): Builder {
+            for ((field, value) in changes) site(field, value)
+            return this
+        }
+
+        /**
+         * The patch. A patch that mixes owner site keys with any other key is refused, because old
+         * firmware refuses the whole request on an unknown key and the firmware keeps the site in its
+         * own record. A site write must never cost a location or a name write.
+         */
+        fun build(): ConfigPatch {
+            val site = lines.count { it.first in ConfigFields.SITE_KEYS }
+            check(site == 0 || site == lines.size) { "owner site keys go in their own SET_CONFIG" }
+            return ConfigPatch(lines.toList())
+        }
 
         private fun add(key: String, value: String): Builder {
             lines.removeAll { it.first == key }

@@ -1,7 +1,10 @@
 package space.opensensor.device
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -15,9 +18,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import space.opensensor.data.WifiScanState
 import space.opensensor.data.protocol.ConfigField
 import space.opensensor.data.protocol.ConfigFields
@@ -28,6 +33,7 @@ import space.opensensor.data.protocol.WifiState
 import space.opensensor.family.air.SensorLabel
 import space.opensensor.family.air.sensorIdentity
 import space.opensensor.model.H3Cell
+import space.opensensor.model.SiteField
 import space.opensensor.settings.DetailLevel
 
 /** A question the Device section asks before it changes the device. Only one is open at a time. */
@@ -87,9 +93,16 @@ class DeviceConfigController(
     readOnReady: Boolean = false,
 ) {
     private val location = MutableStateFlow(DeviceLocationState())
+    private val site = MutableStateFlow(DeviceSiteState())
 
-    val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel, location) { snapshot, level, loc ->
-        DeviceConfigUiState(snapshot, level, loc)
+    /**
+     * A site write failed, maybe with `ERROR` 12 `nvs`. The next site save that succeeds then reads
+     * pages 0 and 1 again too. Pages 5 and 6 are read back by every site save.
+     */
+    private var rereadAfterFailure = false
+
+    val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel, location, site) { snapshot, level, loc, owner ->
+        DeviceConfigUiState(snapshot, level, loc, owner)
     }.stateIn(scope, SharingStarted.Eagerly, DeviceConfigUiState(source.snapshot.value))
 
     private val _dialog = MutableStateFlow<DeviceConfigDialog?>(null)
@@ -108,7 +121,11 @@ class DeviceConfigController(
             source.snapshot.map { DeviceConfigUiState(it).let { s -> s.ready && s.isV2 } }
                 .distinctUntilChanged().collectLatest { ready ->
                     location.value = DeviceLocationState()
-                    if (ready) refreshLocation()
+                    site.value = DeviceSiteState()
+                    if (ready) {
+                        refreshLocation()
+                        refreshSite()
+                    }
                 }
         }
         if (readOnReady) {
@@ -144,7 +161,108 @@ class DeviceConfigController(
     fun refresh() {
         if (now.ready && now.isV2) {
             source.refreshConfig()
-            scope.launch { refreshLocation() }
+            scope.launch {
+                refreshLocation()
+                refreshSite()
+            }
+        }
+    }
+
+    /** Reads pages 5 and 6 again, from the site's Retry. Nothing is sent to the board. */
+    fun retrySite() {
+        if (now.ready && now.isV2) scope.launch { refreshSite() }
+    }
+
+    /**
+     * Runs [read], and when it fails tries again up to [READ_TRIES] times in all. Before each new try
+     * it waits a moment and then until the link is free, because a Refresh starts the page 0 read
+     * first and that read holds the link (Android answers "link busy" until it ends).
+     */
+    private suspend fun <T> readWhenFree(read: suspend () -> T): T {
+        var tries = 1
+        while (true) {
+            try {
+                return read()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (tries >= READ_TRIES) throw e
+                tries++
+                delay(READ_RETRY_MS)
+                withTimeoutOrNull(BUSY_WAIT_MS) { source.snapshot.first { !it.busy } }
+            }
+        }
+    }
+
+    /** Reads pages 5 and 6. The draft follows the board, so a refresh drops unsaved typing. */
+    private suspend fun refreshSite() {
+        if (site.value.working) return
+        site.value = site.value.copy(working = true, result = null)
+        site.value = try {
+            val stored = readWhenFree { source.readSite() }
+            if (stored == null) DeviceSiteState(supported = false) else DeviceSiteState(supported = true, stored = stored, draft = stored)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Not unsupported. The fields stay as they were, Save stays off, and the form offers Retry.
+            site.value.copy(working = false, result = DeviceSiteResult.READ_FAILED)
+        }
+    }
+
+    /** Drafts one site value. Only [saveSite] sends anything. */
+    fun editSite(field: SiteField, value: String) {
+        val current = site.value
+        if (current.supported != true || current.working) return
+        site.value = current.copy(draft = current.draft.with(field, value), result = null)
+    }
+
+    /**
+     * The user's Save. Sends only the changed site values, checked with the firmware rules, in a
+     * `SET_CONFIG` of their own, then compares the pages 5 and 6 readback with what was sent.
+     */
+    fun saveSite() {
+        startSiteSave()
+    }
+
+    /**
+     * [saveSite] for the setup wizard's Next, which moves on only when this save ends [DeviceSiteResult.SAVED].
+     * Null when nothing was sent, because the link, a sync or the draft does not allow a save now.
+     */
+    suspend fun saveSiteAndWait(): DeviceSiteResult? = startSiteSave()?.await()
+
+    private fun startSiteSave(): Deferred<DeviceSiteResult>? {
+        val current = site.value
+        if (!now.canEdit || now.snapshot.syncRunning || !current.canSave) return null
+        val changes = current.changes
+        val patch = try {
+            ConfigPatch.build { site(changes) }
+        } catch (_: ConfigValidationException) {
+            site.value = current.copy(result = DeviceSiteResult.FAILED)
+            return CompletableDeferred(DeviceSiteResult.FAILED)
+        }
+        site.value = current.copy(working = true, result = null)
+        return scope.async {
+            try {
+                val confirmed = source.writeSite(patch)
+                val matches = confirmed != null && changes.all { (field, value) -> confirmed[field].orEmpty() == value }
+                site.value = when {
+                    confirmed == null -> current.copy(working = false, result = DeviceSiteResult.NOT_CONFIRMED)
+                    matches -> DeviceSiteState(supported = true, stored = confirmed, draft = confirmed, result = DeviceSiteResult.SAVED)
+                    else -> current.copy(working = false, stored = confirmed, result = DeviceSiteResult.NOT_CONFIRMED)
+                }
+                if (rereadAfterFailure) {
+                    rereadAfterFailure = false
+                    source.refreshConfig()
+                    scope.launch { refreshLocation() }
+                }
+                if (matches) DeviceSiteResult.SAVED else DeviceSiteResult.NOT_CONFIRMED
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                rereadAfterFailure = true
+                site.value = current.copy(working = false, result = DeviceSiteResult.FAILED)
+                DeviceSiteResult.FAILED
+            }
         }
     }
 
@@ -152,7 +270,7 @@ class DeviceConfigController(
         if (location.value.working) return
         location.value = location.value.copy(working = true, result = null)
         try {
-            val config = source.readLocation()
+            val config = readWhenFree { source.readLocation() }
             location.value = if (config == null) {
                 DeviceLocationState(supported = false)
             } else {
@@ -368,3 +486,8 @@ class DeviceConfigController(
         const val SUPPORTED_MODEL = "PMS5003T"
     }
 }
+
+/** Page reads in all when one fails, the pause before each new try, and the longest wait for a free link. */
+private const val READ_TRIES = 3
+private const val READ_RETRY_MS = 400L
+private const val BUSY_WAIT_MS = 10_000L
