@@ -51,20 +51,41 @@ object LatestReadings {
 
     /**
      * [latest] of one [thing] from [tiers], reading the 15 minute buckets of the candidates over the
-     * thing's last two days, so a phone that builds tiers on demand decodes only those days.
+     * thing's last two days, so a phone that builds tiers on demand decodes only those days. When those
+     * days hold no candidate reading, as when the main metric fails its gate while other columns still
+     * record, the day tier finds the newest older day with one and its quarters are read instead.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe(tiers: HistoryTiers, thing: String, metrics: List<MetricSpec> = Metrics.all): Flow<LatestReading?> =
         combine(tiers.observeMetricsWithData(thing), tiers.observeDays(thing)) { ids, span ->
-            LatestDays.candidatesOf(metrics.filter { it.id in ids }) to span.lastDayS
-        }.distinctUntilChanged().flatMapLatest { (candidates, lastDayS) ->
-            if (candidates.isEmpty() || lastDayS == null) {
+            LatestDays.candidatesOf(metrics.filter { it.id in ids }) to span
+        }.distinctUntilChanged().flatMapLatest { (candidates, span) ->
+            val lastDayS = span.lastDayS
+            val firstDayS = span.firstDayS ?: lastDayS
+            if (candidates.isEmpty() || lastDayS == null || firstDayS == null) {
                 flowOf(null)
             } else {
                 val from = lastDayS - DAY_S
-                combine(candidates.map { m -> tiers.observe(thing, m.id, Resolution.MIN15, from, lastDayS + DAY_S).map { m.id to it } }) { pairs ->
-                    latest(pairs.toMap(), candidates)
+                quarters(tiers, thing, candidates, from, lastDayS + DAY_S).flatMapLatest { recent ->
+                    if (recent != null || firstDayS >= from) {
+                        flowOf(recent)
+                    } else {
+                        newestDay(tiers, thing, candidates, firstDayS, from).flatMapLatest { dayS ->
+                            if (dayS == null) flowOf(null) else quarters(tiers, thing, candidates, dayS, dayS + DAY_S)
+                        }
+                    }
                 }
             }
+        }.distinctUntilChanged()
+
+    private fun quarters(tiers: HistoryTiers, thing: String, candidates: List<MetricSpec>, fromS: Long, toS: Long): Flow<LatestReading?> =
+        combine(candidates.map { m -> tiers.observe(thing, m.id, Resolution.MIN15, fromS, toS).map { m.id to it } }) { pairs ->
+            latest(pairs.toMap(), candidates)
+        }
+
+    /** The start of the newest day in [fromS, toS) where a candidate has a shown day bucket, or null. */
+    private fun newestDay(tiers: HistoryTiers, thing: String, candidates: List<MetricSpec>, fromS: Long, toS: Long): Flow<Long?> =
+        combine(candidates.map { m -> tiers.observe(thing, m.id, Resolution.DAY, fromS, toS).map { m.id to it } }) { pairs ->
+            LatestDays.latest(pairs.toMap(), candidates) { 0.0 }?.startEpochS
         }.distinctUntilChanged()
 }

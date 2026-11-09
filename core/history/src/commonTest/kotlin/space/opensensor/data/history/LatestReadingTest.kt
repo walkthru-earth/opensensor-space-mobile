@@ -61,6 +61,29 @@ class LatestReadingTest {
     }
 
     @Test
+    fun `with no reading in the last two days the newest older day with one is read`() = runTest {
+        val day = 86_400L
+        val tiers = object : HistoryTiers {
+            val asked = mutableListOf<Triple<String, Resolution, Pair<Long, Long>>>()
+            override fun observe(thing: String, metricId: String, tier: Resolution, fromS: Long, toS: Long): Flow<List<TierBucket>> {
+                asked += Triple(metricId, tier, fromS to toS)
+                // PM2.5 failed its gate after day 6. Only its day 6 is valid.
+                val rows = when (tier) {
+                    Resolution.DAY -> listOf(quarter(4 * day, 9f), quarter(6 * day, 7f))
+                    else -> listOf(quarter(6 * day + 900, 7f), quarter(9 * day, 5f, valid = 0))
+                }
+                return flowOf(if (metricId == raw) rows.filter { it.startEpochS in fromS until toS } else emptyList())
+            }
+            override fun observeDays(thing: String) = flowOf(DaySpan(7, 4 * day, 10 * day))
+            override fun observeMetricsWithData(thing: String) = flowOf(setOf(raw, AirMetrics.HUMIDITY.id))
+        }
+        val out = LatestReadings.observe(tiers, "t").first()
+        assertEquals(raw to 6 * day + 1_800, out?.let { it.metric.id to it.endEpochS })
+        assertEquals(Triple(raw, Resolution.DAY, 4 * day to 9 * day), tiers.asked.first { it.second == Resolution.DAY })
+        assertEquals(Triple(raw, Resolution.MIN15, 6 * day to 7 * day), tiers.asked.last())
+    }
+
+    @Test
     fun `a thing with no days has no reading`() = runTest {
         val tiers = object : HistoryTiers {
             override fun observe(thing: String, metricId: String, tier: Resolution, fromS: Long, toS: Long): Flow<List<TierBucket>> = flowOf(emptyList())

@@ -487,7 +487,8 @@ the count only.
 
 Each row of "Your sensors" carries the Thing's newest local reading under its name, the main metric
 with its label, value and unit as the profile formats it (`LatestReadings`, from the 15 minute
-tiers of its last two days). Beside it the row says Live, an ink dot and bold ink word, while the
+tiers of its last two days, or of the newest older day the day tier finds with a reading when those
+two have none). Beside it the row says Live, an ink dot and bold ink word, while the
 phone holds a link to that Thing over Bluetooth or LAN. Otherwise it says how old the reading is,
 "just now", "12 min ago", "3 h ago" or "2 d ago", ticking once a minute. A Thing with no reading
 says neither. Both phones join the readings, the links and the uploads in one shared flow
