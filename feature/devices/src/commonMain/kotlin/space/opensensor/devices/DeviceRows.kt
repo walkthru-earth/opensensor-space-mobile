@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.intl.Locale
@@ -204,7 +205,10 @@ internal fun SetupChip(text: String, onClick: () -> Unit) {
         shape = FloatingControl.SmallShape,
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(top = 8.dp).touchTarget(minWidth = 0.dp),
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .touchTarget(minWidth = 0.dp)
+            .semantics { role = Role.Button },
     ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
