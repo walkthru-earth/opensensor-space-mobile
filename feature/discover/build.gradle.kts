@@ -15,6 +15,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":core:publicfeed"))
+            // The own pins show the newest local reading (LatestReadings) from the host's tiers.
+            api(project(":core:history"))
             // DiscoverScreen takes the resolved UnitSystem from its host.
             api(project(":core:units"))
             // DiscoverScreen takes the host's DetailLevel (Simple speaks in moods).

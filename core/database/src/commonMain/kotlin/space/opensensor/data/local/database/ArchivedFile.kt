@@ -146,6 +146,10 @@ interface ArchivedFileDao {
     )
     fun observeThingGlances(): Flow<List<ThingArchiveGlance>>
 
+    /** The things with at least one file that went up to the cloud, for Discover's "Includes your sensor" (#273). */
+    @Query("SELECT DISTINCT thing FROM archived_file WHERE uploadedAtEpochMs IS NOT NULL")
+    fun observeUploadedThings(): Flow<List<String>>
+
     /** True while any file waits for its first index pass, without reading the rows. */
     @Query("SELECT EXISTS(SELECT 1 FROM archived_file WHERE indexedAtEpochMs IS NULL)")
     fun observeAnyNeverIndexed(): Flow<Boolean>

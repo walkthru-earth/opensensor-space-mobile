@@ -157,6 +157,12 @@ like every index write. The marker is not part of the day
 signature, so marking rebuilds no day. `CloudCatchUpHistoryTest` proves on the JVM and iOS that a
 skipped file adds no record and leaves the tier buckets and their row counts unchanged.
 
+A Thing with at least one marked file counts as shared. `ArchiveIndex.observeUploadedThings` answers
+those Things, and Discover reads it to decide whether a public cell may say "Includes your sensor"
+([devices-and-discovery.md](devices-and-discovery.md#your-own-sensors-on-the-map-226)). The own pins
+read `LatestReadings` from the 15 minute tiers, never a public value, and nothing subtracts an own
+value from a public aggregate.
+
 ## Metric registry
 
 **A new sensor is a template, not code.** Every metric is a `MetricSpec` built from one board

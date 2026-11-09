@@ -140,4 +140,20 @@
     <string name="discover_own_heading">Your sensors</string>
     <string name="discover_own_unnamed">Sensor</string>
     <string name="discover_own_show">Show %1$s on the map</string>
+    <!-- Own sensors on the map (#273). Their newest reading on this phone, Live while linked. -->
+    <string name="discover_live">Live</string>
+    <string name="discover_ago_just_now">just now</string>
+    <string name="discover_ago_minutes">%1$d min ago</string>
+    <string name="discover_ago_hours">%1$d h ago</string>
+    <string name="discover_ago_days">%1$d d ago</string>
+    <!-- The Real label while the network fails and the last read data is shown, as in "OpenAQ, cached 2 h ago". -->
+    <string name="discover_real_cached">OpenAQ, cached %1$s</string>
+    <!-- On a public area that folds in a sensor the user shares. -->
+    <string name="discover_includes_own">Includes your sensor</string>
+    <!-- The sources lines of the info sheets, each with its date. -->
+    <string name="discover_sources_own">Your sensors, from this phone, newest %1$s</string>
+    <string name="discover_sources_own_none">Your sensors, from this phone, no readings yet</string>
+    <string name="discover_sources_public">Public sensors, OpenAQ, data to %1$s</string>
+    <string name="discover_sources_public_cached">Public sensors, OpenAQ, data to %1$s, cached %2$s</string>
+    <string name="discover_sources_sample">Sample, bundled with the app, data to %1$s</string>
 </resources>

@@ -148,7 +148,8 @@ and `FileChecksum` in `:core:model` is the one reader and writer of the `file:ch
 `(thing, sha256)` index answers `ArchiveIndex.withSha256` and `sameFile`. `uploadedAtEpochMs` is null
 until an upload status listing proves the file is in the cloud with the same bytes. Then
 `ArchiveIndex.markUploaded` sets it with one guarded `UPDATE`, which never marks a record with other
-bytes and keeps the first mark. No screen reads it yet.
+bytes and keeps the first mark. `ArchiveIndex.observeUploadedThings` answers the Things with a marked
+file, which Discover reads for "Includes your sensor".
 `list_cursor` keeps where each station's incremental `LIST_SINCE` left off, through `RoomListCursors`
 behind the `ListCursors` port in `:core:sync` ([sync-engine](sync-engine.md#incremental-listing)). A
 lost row only costs one whole listing. Forgetting a station keeps its row, and the next run still

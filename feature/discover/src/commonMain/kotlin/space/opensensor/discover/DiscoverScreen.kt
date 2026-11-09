@@ -99,6 +99,7 @@ import space.opensensor.designsystem.Peacock
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockIcon
 import space.opensensor.designsystem.listSeparator
+import space.opensensor.designsystem.metricLabel
 import space.opensensor.designsystem.moodLine
 import space.opensensor.designsystem.moodWord
 import space.opensensor.designsystem.notAvailableText
@@ -120,6 +121,7 @@ import space.opensensor.map.moveCamera
 import space.opensensor.map.rememberMapStyle
 import space.opensensor.map.rememberNearMe
 import space.opensensor.map.rememberPlaceIndex
+import space.opensensor.model.AppProfile
 import space.opensensor.model.HealthScale
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.CellScale
@@ -188,6 +190,16 @@ private fun DiscoverContent(
     infoButton: @Composable (InfoText, Modifier) -> Unit,
 ) {
     val state by controller.state.collectAsState()
+    // A minute clock, so the age of an own reading and of the kept public data moves on.
+    val now by produceState(nowEpochMillis()) {
+        while (true) {
+            delay(60_000)
+            value = nowEpochMillis()
+        }
+    }
+    // Every info sheet of the toggle and the legend ends with where the map's data comes from (#273).
+    val sources = sourceLines(state, strings, now)
+    val sourcedInfo: @Composable (InfoText, Modifier) -> Unit = { info, m -> infoButton(info.copy(body = info.body + sources), m) }
     val paper = MaterialTheme.colorScheme.surfaceContainerLow
     val ink = MaterialTheme.colorScheme.onSurface
     val styleJson = rememberMapStyle(networkAllowed, paper)
@@ -253,7 +265,7 @@ private fun DiscoverContent(
                 highlight = highlight,
                 clearSignal = clearSignal,
                 onHighlight = { highlight = it },
-                now = nowEpochMillis(),
+                now = now,
             )
         },
     ) {
@@ -316,7 +328,8 @@ private fun DiscoverContent(
                 TopControls(
                     state = state,
                     strings = strings,
-                    infoButton = infoButton,
+                    now = now,
+                    infoButton = sourcedInfo,
                     onAddSensor = { controller.dismissFirstRun(); onAddSensor() },
                     onPlace = { place ->
                         scope.launch { mapState.moveCamera(Position(longitude = place.lng, latitude = place.lat), PLACE_ZOOM, reduceMotion) }
@@ -347,7 +360,7 @@ private fun DiscoverContent(
                         Box(Modifier.weight(1f)) {
                             if (property != null && scale != null) {
                                 // Simple shows mood words for the WHO scale. Any other property keeps its steps or gradient.
-                                if (simple && scale.who != null) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton, state.daily)
+                                if (simple && scale.who != null) SimpleLegend(property, strings, sourcedInfo) else Legend(property, scale, state.window, strings, sourcedInfo, state.daily)
                             }
                         }
                         Column(Modifier.padding(end = 8.dp).width(FloatingControl.Size), verticalArrangement = Arrangement.spacedBy(MinTouchSpacing)) {
@@ -384,6 +397,7 @@ internal fun SheetHandle(open: Boolean, strings: DiscoverStrings, onToggle: () -
 private fun TopControls(
     state: DiscoverUiState,
     strings: DiscoverStrings,
+    now: Long,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
     onAddSensor: () -> Unit,
     onPlace: (Place) -> Unit,
@@ -474,27 +488,34 @@ private fun TopControls(
             }
         }
         if (state.available) {
-            Row(Modifier.align(Alignment.End).padding(end = FloatingControl.Margin)) { SourceToggle(state, strings, infoButton, onSource) }
+            Row(Modifier.align(Alignment.End).padding(end = FloatingControl.Margin)) { SourceToggle(state, strings, now, infoButton, onSource) }
         }
     }
 }
 
 /**
- * The Sample and Real toggle. Real reads OpenAQ and is labelled with the day its data runs to.
- * While public sensors is off it is disabled and shows Sample. Only the chosen half takes the
- * brand blue. The info button explains the feed on screen.
+ * The Sample and Real toggle. Real reads OpenAQ and is labelled with the day its data runs to, or,
+ * while the network fails and the kept copy is on screen, with the age of that copy. While public
+ * sensors is off it is disabled and shows Sample. Only the chosen half takes the brand blue. The
+ * info button explains the feed on screen and lists the sources.
  */
 @Composable
 private fun SourceToggle(
     state: DiscoverUiState,
     strings: DiscoverStrings,
+    now: Long,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
     onSource: (DiscoverSource) -> Unit,
 ) {
     val real = state.source == DiscoverSource.OPENAQ
     val enabled = state.sourceEnabled
     val date = state.dataDate
-    val realLabel = if (real && date != null) strings.realDataTo(date) else strings.sourceReal
+    val cachedAt = state.cachedAtEpochMs
+    val realLabel = when {
+        real && cachedAt != null -> strings.realCached(ageText(strings, now - cachedAt))
+        real && date != null -> strings.realDataTo(date)
+        else -> strings.sourceReal
+    }
     FloatingSurface(shape = FloatingControl.SmallShape) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = FloatingControl.Inset)) {
             // On a narrow phone the longer Real label ends in an ellipsis, the info button keeps its place.
@@ -704,7 +725,7 @@ private fun SheetContent(
             SheetBody.FIRST_RUN -> FirstRunCard(strings, state.isSample, onAddSensor, onExplore)
             SheetBody.IN_VIEW -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
         }
-        if (body.listsOwn) OwnList(state.own, strings, onPickOwn)
+        if (body.listsOwn) OwnList(state.own, state.ownStatus, now, strings, onPickOwn)
     }
 }
 
@@ -870,27 +891,78 @@ private fun InView(
 
 /**
  * The user's own fixed Things, the list alternative to their pins for TalkBack and VoiceOver (#226).
- * Each row names the Thing and a tap moves the map to its cell. Nothing shows without own Things.
+ * Each row names the Thing, its newest reading on this phone and Live or the reading's age (#273),
+ * read as one item. A tap moves the map to its cell. Nothing shows without own Things.
  */
 @Composable
-private fun OwnList(own: List<OwnPin>, strings: DiscoverStrings, onPick: (OwnPin) -> Unit) {
+private fun OwnList(own: List<OwnPin>, status: Map<String, OwnStatus>, now: Long, strings: DiscoverStrings, onPick: (OwnPin) -> Unit) {
     if (own.isEmpty()) return
     val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val units = LocalDiscoverUnits.current
     Spacer(Modifier.height(16.dp))
     Text(strings.ownHeading, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
     own.forEach { pin ->
         val name = pin.thing.name.ifBlank { strings.ownUnnamed }
         val label = strings.ownShow(name)
+        val thingStatus = status[pin.thing.key]
+        val reading = thingStatus?.reading?.let { r ->
+            "${metricLabel(r.metric)}  ${units.format(r.mean.toDouble(), r.metric.unit, r.displayStep, AppProfile.decimalsOf(r.displayStep))} ${units.unit(r.metric.unit)}"
+        }
+        val freshness = ownFreshness(thingStatus, now)
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClickLabel = label) { onPick(pin) }.padding(vertical = 10.dp),
+            Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .clickable(role = Role.Button, onClickLabel = label) { onPick(pin) }
+                .semantics(mergeDescendants = true) {}
+                .padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The pin as the map draws it, a light dot ringed in ink.
             Box(Modifier.size(14.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerLow).border(3.dp, ink, CircleShape))
             Spacer(Modifier.width(12.dp))
-            Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.bodyLarge)
+                if (reading != null) Text(reading, style = MaterialTheme.typography.bodyMedium, color = muted)
+            }
+            when (freshness) {
+                // Live in ink with a solid dot, never the brand blue, which marks a selection.
+                OwnFreshness.Live -> Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(ink))
+                    Spacer(Modifier.width(6.dp))
+                    FitText(strings.live, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = ink)
+                }
+                is OwnFreshness.Ago -> FitText(
+                    strings.age(freshness.step, freshness.count),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = muted,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+                OwnFreshness.None -> Unit
+            }
         }
     }
+}
+
+/** The age of [ageMs] in words, as in "12 min ago". */
+@Composable
+private fun ageText(strings: DiscoverStrings, ageMs: Long): String {
+    val (step, count) = ageOf(ageMs)
+    return strings.age(step, count)
+}
+
+/**
+ * The sources lines the toggle and legend info sheets end with. The user's sensors, from this phone,
+ * while any own pin is on the map, then the feed on screen with its data day, and for the public
+ * feed the age of the kept copy while the network fails.
+ */
+@Composable
+private fun sourceLines(state: DiscoverUiState, strings: DiscoverStrings, now: Long): List<String> {
+    val own = if (state.own.isEmpty()) null else strings.sourcesOwn(state.newestOwnReadingS()?.let { localDay(it * 1000) })
+    val feed = when {
+        state.isSample -> state.newestUpdateEpochMs?.let { strings.sourcesSample(utcDay(it)) }
+        else -> state.dataDate?.let { day -> strings.sourcesPublic(day, state.cachedAtEpochMs?.let { ageText(strings, now - it) }) }
+    }
+    return listOfNotNull(own, feed)
 }
 
 /**
@@ -1006,7 +1078,11 @@ private fun CellDetail(
         } else {
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }
-        val parts = listOfNotNull(strings.sensors(row.devices), freshness(strings, state.cellFreshness(row, reference)))
+        val parts = listOfNotNull(
+            strings.sensors(row.devices),
+            freshness(strings, state.cellFreshness(row, reference)),
+            strings.includesOwn.takeIf { state.includesOwn(row) },
+        )
         Text(spokenList(parts, listSeparator()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (property != null && headline != null) {
             percentBelow(state.rows.mapNotNull { it.mean(property.id) }, headline)?.let {
@@ -1115,7 +1191,11 @@ private fun SimpleCellDetail(
         // Sensors, freshness and the other values come from the 24 hour row, like the headline.
         val facts = state.simpleCellFacts()
         val updated = facts.updatedEpochMs
-        val parts = listOfNotNull(facts.devices?.let { strings.sensors(it) }, freshness(strings, freshnessOf(updated, reference, state.dailyAsOf)))
+        val parts = listOfNotNull(
+            facts.devices?.let { strings.sensors(it) },
+            freshness(strings, freshnessOf(updated, reference, state.dailyAsOf)),
+            strings.includesOwn.takeIf { state.includesOwn(state.selected) },
+        )
         if (parts.isNotEmpty()) Text(spokenList(parts, listSeparator()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val others = facts.others
         if (others.isNotEmpty()) {

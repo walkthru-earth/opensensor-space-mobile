@@ -158,4 +158,20 @@
     <string name="discover_own_heading">مستشعراتك</string>
     <string name="discover_own_unnamed">مستشعر</string>
     <string name="discover_own_show">عرض %1$s على الخريطة</string>
+    <!-- Own sensors on the map (#273). Their newest reading on this phone, Live while linked. -->
+    <string name="discover_live">مباشر</string>
+    <string name="discover_ago_just_now">الآن</string>
+    <string name="discover_ago_minutes">قبل %1$d د</string>
+    <string name="discover_ago_hours">قبل %1$d س</string>
+    <string name="discover_ago_days">قبل %1$d يوم</string>
+    <!-- The Real label while the network fails and the last read data is shown, as in "OpenAQ, cached 2 h ago". -->
+    <string name="discover_real_cached">OpenAQ، محفوظة %1$s</string>
+    <!-- On a public area that folds in a sensor the user shares. -->
+    <string name="discover_includes_own">تشمل مستشعرك</string>
+    <!-- The sources lines of the info sheets, each with its date. -->
+    <string name="discover_sources_own">مستشعراتك، من هذا الهاتف، أحدث قراءة %1$s</string>
+    <string name="discover_sources_own_none">مستشعراتك، من هذا الهاتف، لا قراءات بعد</string>
+    <string name="discover_sources_public">مستشعرات عامة، OpenAQ، بيانات حتى %1$s</string>
+    <string name="discover_sources_public_cached">مستشعرات عامة، OpenAQ، بيانات حتى %1$s، محفوظة %2$s</string>
+    <string name="discover_sources_sample">تجريبية، مضمّنة في التطبيق، بيانات حتى %1$s</string>
 </resources>

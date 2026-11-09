@@ -12,10 +12,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import okhttp3.OkHttpClient
+import space.opensensor.archive.ArchiveIndex
+import space.opensensor.data.DeviceConnectionManager
+import space.opensensor.data.ble.ConnectionState
+import space.opensensor.data.history.HistoryRepository
 import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.settings.AppSettings
 import space.opensensor.data.settings.DetailLevel
@@ -28,6 +34,7 @@ import space.opensensor.discover.DiscoverScreen
 import space.opensensor.discover.OwnThing
 import space.opensensor.discover.bundledSampleFeed
 import space.opensensor.discover.knownOwnThings
+import space.opensensor.discover.observeOwnStatus
 import space.opensensor.net.BlockCache
 import space.opensensor.net.OkHttpRangeEngine
 import space.opensensor.publicfeed.OpenAqAggregatesFeed
@@ -45,6 +52,9 @@ class DiscoverViewModel @Inject constructor(
     blocks: BlockCache,
     places: ThingPlaces,
     known: KnownDeviceDao,
+    history: HistoryRepository,
+    connections: DeviceConnectionManager,
+    index: ArchiveIndex,
 ) : ViewModel() {
     val controller = DiscoverController(
         scope = viewModelScope,
@@ -70,6 +80,16 @@ class DiscoverViewModel @Inject constructor(
             knownOwnThings(saved.map { OwnThing(it.thing, "", it.cell, it.updatedEpochMs) }, names)
         }
             .onEach(controller::showOwnThings)
+            .launchIn(viewModelScope)
+        // Each own Thing's newest reading from this phone's history, Live while a BLE or LAN link
+        // is ready, and whether a file of it went up (#273). Read from the phone only.
+        val linked = combine(connections.snapshots, known.observeAll()) { snapshots, devices ->
+            val ready = snapshots.filter { it.connection is ConnectionState.Ready }.mapTo(mutableSetOf()) { it.address }
+            devices.filter { it.address in ready }.mapNotNullTo(mutableSetOf()) { it.thing }
+        }.distinctUntilChanged()
+        val things = places.observeAll().map { saved -> saved.mapTo(mutableSetOf()) { it.thing } }
+        observeOwnStatus(history.tiers, things, linked, index.observeUploadedThings())
+            .onEach(controller::showOwnStatus)
             .launchIn(viewModelScope)
     }
 

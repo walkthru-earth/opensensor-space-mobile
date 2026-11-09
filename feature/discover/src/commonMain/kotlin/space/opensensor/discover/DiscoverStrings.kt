@@ -10,6 +10,10 @@ import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.preferredLanguage
 import space.opensensor.discover.resources.Res
 import space.opensensor.discover.resources.discover_add_sensor
+import space.opensensor.discover.resources.discover_ago_days
+import space.opensensor.discover.resources.discover_ago_hours
+import space.opensensor.discover.resources.discover_ago_just_now
+import space.opensensor.discover.resources.discover_ago_minutes
 import space.opensensor.discover.resources.discover_all_measurements
 import space.opensensor.discover.resources.discover_area_count
 import space.opensensor.discover.resources.discover_areas_in_view
@@ -23,6 +27,8 @@ import space.opensensor.discover.resources.discover_day_month
 import space.opensensor.discover.resources.discover_explore
 import space.opensensor.discover.resources.discover_first_run
 import space.opensensor.discover.resources.discover_higher_than
+import space.opensensor.discover.resources.discover_includes_own
+import space.opensensor.discover.resources.discover_live
 import space.opensensor.discover.resources.discover_load_failed
 import space.opensensor.discover.resources.discover_loading
 import space.opensensor.discover.resources.discover_map_info1
@@ -49,6 +55,7 @@ import space.opensensor.discover.resources.discover_own_unnamed
 import space.opensensor.discover.resources.discover_range_summary
 import space.opensensor.discover.resources.discover_range_to
 import space.opensensor.discover.resources.discover_read_failed
+import space.opensensor.discover.resources.discover_real_cached
 import space.opensensor.discover.resources.discover_real_data_to
 import space.opensensor.discover.resources.discover_real_info
 import space.opensensor.discover.resources.discover_real_title
@@ -68,6 +75,11 @@ import space.opensensor.discover.resources.discover_source_label
 import space.opensensor.discover.resources.discover_source_off
 import space.opensensor.discover.resources.discover_source_real
 import space.opensensor.discover.resources.discover_source_sample
+import space.opensensor.discover.resources.discover_sources_own
+import space.opensensor.discover.resources.discover_sources_own_none
+import space.opensensor.discover.resources.discover_sources_public
+import space.opensensor.discover.resources.discover_sources_public_cached
+import space.opensensor.discover.resources.discover_sources_sample
 import space.opensensor.discover.resources.discover_spread_peak
 import space.opensensor.discover.resources.discover_spread_summary
 import space.opensensor.discover.resources.discover_stale
@@ -194,7 +206,41 @@ class DiscoverStrings internal constructor(
     val ownHeading: String,
     /** An own Thing with no name. */
     val ownUnnamed: String,
+    /** An own Thing the phone is linked to now. */
+    val live: String,
+    /** On a public area that folds in a sensor the user shares. */
+    val includesOwn: String,
 ) {
+    /** "12 min ago", the age of an own reading or of the kept public data. */
+    @Composable
+    internal fun age(step: AgeStep, n: Long): String = when (step) {
+        AgeStep.JUST_NOW -> stringResource(Res.string.discover_ago_just_now)
+        AgeStep.MINUTES -> stringResource(Res.string.discover_ago_minutes, n.toInt())
+        AgeStep.HOURS -> stringResource(Res.string.discover_ago_hours, n.toInt())
+        AgeStep.DAYS -> stringResource(Res.string.discover_ago_days, n.toInt())
+    }
+
+    /** The Real label while the kept data is on screen, as in "OpenAQ, cached 2 h ago". */
+    @Composable
+    fun realCached(age: String): String = stringResource(Res.string.discover_real_cached, age)
+
+    /** The sources line of the own sensors, with the day of their newest reading on this phone. */
+    @Composable
+    fun sourcesOwn(newest: LocalDate?): String =
+        if (newest == null) stringResource(Res.string.discover_sources_own_none) else stringResource(Res.string.discover_sources_own, dayMonth(newest))
+
+    /** The sources line of the public feed, with its data day and, when kept, the age of the copy. */
+    @Composable
+    fun sourcesPublic(dataTo: LocalDate, cachedAge: String?): String = if (cachedAge == null) {
+        stringResource(Res.string.discover_sources_public, dayMonth(dataTo))
+    } else {
+        stringResource(Res.string.discover_sources_public_cached, dayMonth(dataTo), cachedAge)
+    }
+
+    /** The sources line of the bundled sample, with the day its data runs to. */
+    @Composable
+    fun sourcesSample(dataTo: LocalDate): String = stringResource(Res.string.discover_sources_sample, dayMonth(dataTo))
+
     /** Spoken on an own Thing row. A tap moves the map to it. */
     @Composable
     fun ownShow(name: String): String = stringResource(Res.string.discover_own_show, name)
@@ -279,6 +325,8 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     clearFilter = stringResource(Res.string.discover_clear_filter),
     ownHeading = stringResource(Res.string.discover_own_heading),
     ownUnnamed = stringResource(Res.string.discover_own_unnamed),
+    live = stringResource(Res.string.discover_live),
+    includesOwn = stringResource(Res.string.discover_includes_own),
     searchPlaces = stringResource(Res.string.discover_search_places),
     addSensor = stringResource(Res.string.discover_add_sensor),
     more = stringResource(Res.string.discover_more),

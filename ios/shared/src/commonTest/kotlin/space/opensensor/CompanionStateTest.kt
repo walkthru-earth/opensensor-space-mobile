@@ -148,6 +148,18 @@ class CompanionStateTest {
         assertFalse("a" in state.lanReadings)
     }
 
+    @Test fun linkedThingsAreTheBluetoothAndLanLinksThatAreUp() {
+        val state = CompanionState()
+        assertEquals(emptySet(), state.linkedThings())
+        state.connectionStarted("device")
+        assertTrue(state.receiveInfo("{\"proto\":3,\"thing\":\"thing-ble\",\"dev\":\"112233445566\",\"dict\":\"$dict\"}"))
+        lanConnected(state, "kitchen", thing = "thing-a")
+        assertEquals(setOf("thing-ble", "thing-a"), state.linkedThings())
+        state.lanSessionChanged("kitchen", false, false, "disconnected", 0, 0, 0)
+        state.bluetoothChanged(false, "Bluetooth is off")
+        assertEquals(emptySet(), state.linkedThings())
+    }
+
     @Test fun lanTodaySnapshotBelongsOnlyToConnectedThingAndClearsOnClose() {
         val state = CompanionState()
         lanConnected(state, "kitchen", thing = "thing-a")

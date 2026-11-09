@@ -10,7 +10,9 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
+import space.opensensor.data.history.LatestReading
 import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.family.air.WhoStep
 import space.opensensor.map.CameraRest
 import space.opensensor.publicfeed.CellRow
@@ -20,6 +22,7 @@ import space.opensensor.publicfeed.CellsTable
 import space.opensensor.publicfeed.DiscoverCollection
 import space.opensensor.publicfeed.FeedPartition
 import space.opensensor.publicfeed.FeedProperty
+import space.opensensor.publicfeed.FeedSnapshot
 import space.opensensor.publicfeed.FeedWindow
 import space.opensensor.publicfeed.GeoBounds
 import space.opensensor.publicfeed.H3Grid
@@ -62,6 +65,7 @@ class DiscoverControllerTest {
         private val updatedMs: Long = 1_000L,
         /** When set, PM2.5 is dated by its own older day, as a folded daily cell does. */
         private val pmUpdatedMs: Long? = null,
+        override val foldsSharedSensors: Boolean = false,
     ) : PublicFeed {
         override val available = true
 
@@ -92,6 +96,11 @@ class DiscoverControllerTest {
             if (latestFails) throw IllegalStateException("manifest failed")
             return partition
         }
+
+        /** When set, [snapshot] answers a kept index read at this time, as a feed offline does. */
+        var cachedAt: Long? = null
+
+        override suspend fun snapshot() = FeedSnapshot(latest(), cachedAt)
 
         /** When set, the only resolution this feed lists, so every zoom snaps to it. */
         var listedRes: Int? = null
@@ -896,5 +905,91 @@ class DiscoverControllerTest {
         settle()
         assertEquals(listOf("A", "B"), c.state.value.own.map { it.thing.name })
         assertEquals(2, Regex("\"Point\"").findAll(c.state.value.ownGeoJson).count())
+    }
+
+    @Test
+    fun aKeptIndexOnAColdOfflineStartShowsItsCellsAsCachedWithItsTime() = runTest {
+        val live = liveFeed().apply { cachedAt = 400L }
+        val c = controller(FakeFeed(), live)
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        val s = c.state.value
+        assertEquals(400L, s.cachedAtEpochMs)
+        assertEquals(LocalDate(2026, 10, 8), s.dataDate)
+        assertEquals(setOf(cellA, cellB), s.rows.map { it.h3 }.toSet(), "the kept cells are on screen")
+        // The network is back. The next load reads it live and the label leaves cached.
+        live.cachedAt = null
+        pan(c)
+        settle()
+        assertNull(c.state.value.cachedAtEpochMs)
+        // A failed read with nothing kept leaves the label as it was, never cached.
+        live.latestFails = true
+        pan(c)
+        settle()
+        assertNull(c.state.value.cachedAtEpochMs)
+        // The sample is never cached.
+        live.cachedAt = 400L
+        live.latestFails = false
+        c.onSourceSettings(DiscoverSource.SAMPLE, publicSensors = true)
+        settle()
+        assertNull(c.state.value.cachedAtEpochMs)
+    }
+
+    private fun status(endS: Long = 900L, shared: Boolean = false, live: Boolean = false) =
+        OwnStatus(LatestReading(endS, 12f, AirMetrics.PM25, 1.0), live = live, shared = shared)
+
+    @Test
+    fun ownStatusNeverChangesThePublicCells() = runTest {
+        val c = controller(FakeFeed(foldsSharedSensors = true))
+        c.showOwnThings(listOf(ownThing()))
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        val before = c.state.value
+        c.showOwnStatus(mapOf(ownUuid to status(shared = true, live = true)))
+        settle()
+        val after = c.state.value
+        assertEquals(before.rows, after.rows, "no own value is added to or taken from a public row")
+        assertEquals(before.selected, after.selected)
+        assertEquals(before.selectedWindows, after.selectedWindows)
+        assertEquals(before.geoJson, after.geoJson)
+        assertEquals(before.ownGeoJson, after.ownGeoJson)
+        assertEquals(30.0, after.selectedSummary(pm25)?.value)
+    }
+
+    @Test
+    fun includesYourSensorShowsOnlyOnceTheSensorSharesIntoAFeedThatFoldsIt() = runTest {
+        // A feed that folds in shared sensors. The own Thing stands in cell A.
+        val folds = controller(FakeFeed(foldsSharedSensors = true))
+        folds.showOwnThings(listOf(ownThing()))
+        settle()
+        val rowA = folds.state.value.rows.first { it.h3 == cellA }
+        val rowB = folds.state.value.rows.first { it.h3 == cellB }
+        // No upload yet, hidden.
+        assertFalse(folds.state.value.includesOwn(rowA))
+        folds.showOwnStatus(mapOf(ownUuid to status(shared = false, live = true)))
+        assertFalse(folds.state.value.includesOwn(rowA), "a live link is not a share")
+        // A file went up, shown on its cell only.
+        folds.showOwnStatus(mapOf(ownUuid to status(shared = true)))
+        assertTrue(folds.state.value.includesOwn(rowA))
+        assertFalse(folds.state.value.includesOwn(rowB))
+        assertFalse(folds.state.value.includesOwn(null))
+        // OpenAQ never folds in shared sensors, so it stays hidden even after an upload.
+        val openAq = controller(FakeFeed())
+        openAq.showOwnThings(listOf(ownThing()))
+        openAq.showOwnStatus(mapOf(ownUuid to status(shared = true)))
+        settle()
+        assertFalse(openAq.state.value.includesOwn(openAq.state.value.rows.first { it.h3 == cellA }))
+    }
+
+    @Test
+    fun anOwnThingInsideACoarserPublicCellCountsForIt() = runTest {
+        val c = controller(FakeFeed(foldsSharedSensors = true))
+        // A res 8 own cell under cell A, a res 5 public cell.
+        val child = H3Index.fromHex("8828347001fffff")
+        assertEquals(cellA, H3Index.parent(child, 5))
+        c.showOwnThings(listOf(ownThing(child)))
+        c.showOwnStatus(mapOf(ownUuid to status(shared = true)))
+        settle()
+        assertTrue(c.state.value.includesOwn(c.state.value.rows.first { it.h3 == cellA }))
     }
 }
