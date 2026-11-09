@@ -15,6 +15,8 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
 
+private const val PARQUET = "application/vnd.apache.parquet"
+
 class DiscoverCollectionTest {
     init {
         AirFamily.install()
@@ -39,6 +41,100 @@ class DiscoverCollectionTest {
         assertEquals(WhoGuidelines.URL, c.scale("pm25")?.source)
         assertNull(c.title("co2"))
         assertNull(c.scale("co2"))
+    }
+
+    @Test
+    fun theOlderKeyFormReadsTheSameCellsAsTheLiveOne() {
+        val live = fixtureBytes(OpenAqFixture.STAC_COLLECTION).decodeToString()
+        val older = live.replace("\"cells_r5\":", "\"h3_res=5\":")
+        check(older != live) { "the fixture changed shape" }
+        assertEquals(DiscoverCollection.parse(live, root).cells, DiscoverCollection.parse(older, root).cells)
+    }
+
+    @Test
+    fun theLiveAssetLayoutListsEveryCellsResolutionAndNothingElse() {
+        val cells = (1..9).joinToString(",") { """"cells_r$it":{"href":"./cells/h3_res=$it/data.parquet","type":"$PARQUET","roles":["data"]}""" }
+        val others = """
+            "annual":{"href":"./annual.parquet","type":"$PARQUET","roles":["data"]},
+            "daily":{"href":"./daily.parquet","type":"$PARQUET","roles":["data"]},
+            "hourly":{"href":"./hourly.parquet","type":"$PARQUET","roles":["data"]},
+            "manifest":{"href":"./manifest.json","type":"application/json","roles":["metadata"]},
+            "stations":{"href":"./stations.parquet","type":"$PARQUET","roles":["data","geoparquet"]}
+        """.trimIndent()
+        val c = DiscoverCollection.parse(collection("$others,$cells"), root)
+        assertEquals((1..9).associateWith { "$root/cells/h3_res=$it/data.parquet" }, c.cells)
+        assertEquals(5, c.resolutionNear(5))
+        // Res 1, 8 and 9 are listed but the map draws 2 to 7 only.
+        assertEquals(ViewportCover.MAX_RES, c.resolutionNear(9))
+        assertEquals(ViewportCover.MIN_RES, c.resolutionNear(1))
+    }
+
+    @Test
+    fun anyOtherKeyFallsBackToTheHrefSegmentOfAParquetAsset() {
+        val c = DiscoverCollection.parse(
+            collection(
+                """
+                "r4":{"href":"./cells/h3_res=4/data.parquet","type":"$PARQUET"},
+                "r5":{"href":"./cells/h3_res=5/data.parquet?v=2#x","type":"$PARQUET"},
+                "preview":{"href":"./cells/h3_res=6/preview.png","type":"image/png"},
+                "untyped":{"href":"./cells/h3_res=7/data.parquet"},
+                "daily":{"href":"./daily.parquet","type":"$PARQUET"},
+                "nested":{"href":"./h3_res=3/cells/h3_res=3/data.parquet","type":"$PARQUET"}
+                """.trimIndent(),
+            ),
+            root,
+        )
+        assertEquals(mapOf(4 to "$root/cells/h3_res=4/data.parquet", 5 to "$root/cells/h3_res=5/data.parquet?v=2#x"), c.cells)
+    }
+
+    @Test
+    fun anUnknownKeyABadResolutionOrAConflictingHrefIsDroppedAlone() {
+        val bad = listOf(
+            "cells", "cells_r", "cells_rx", "cells_r5a", "cells_r-1", "cells_r+5", "cells_r05", "cells_r16", "cells_r100",
+            "h3_res=", "h3_res=x", "h3_res=16", "h3_res= 5", "CELLS_R5", "thumbnail",
+        )
+        for (key in bad) {
+            val c = DiscoverCollection.parse(collection(""""$key":{"href":"./cells/r.parquet","type":"$PARQUET"},${assets(3)}"""), root)
+            assertEquals(mapOf(3 to "$root/cells/h3_res=3/data.parquet"), c.cells, key)
+        }
+        val c = DiscoverCollection.parse(
+            collection(
+                """
+                "cells_r5":{"href":"./cells/h3_res=6/data.parquet"},
+                "h3_res=4":{"href":"./cells/h3_res=x/data.parquet"},
+                "cells_r2":{"href":"./cells/h3_res=2/h3_res=2/data.parquet"},
+                "r16":{"href":"./cells/h3_res=16/data.parquet","type":"$PARQUET"},
+                "r0":{"href":"./cells/h3_res=0/data.parquet","type":"$PARQUET"},
+                "cells_r15":{"href":"./cells/h3_res=15/data.parquet"},
+                "cells_r7":{"href":"https://example.test/mirror/r7.parquet"}
+                """.trimIndent(),
+            ),
+            root,
+        )
+        assertEquals(
+            mapOf(0 to "$root/cells/h3_res=0/data.parquet", 15 to "$root/cells/h3_res=15/data.parquet", 7 to "https://example.test/mirror/r7.parquet"),
+            c.cells,
+        )
+    }
+
+    @Test
+    fun aResolutionListedTwiceIsAmbiguousAndDropped() {
+        val c = DiscoverCollection.parse(
+            collection(
+                """
+                "cells_r5":{"href":"./cells/h3_res=5/data.parquet"},
+                "h3_res=5":{"href":"./cells/h3_res=5/other.parquet"},
+                "cells_r6":{"href":"./cells/h3_res=6/data.parquet"},
+                "copy":{"href":"./copy/h3_res=6/data.parquet","type":"$PARQUET"},
+                "cells_r4":{"href":"./cells/h3_res=4/data.parquet"},
+                "h3_res=4":{"href":"../escape/h3_res=4/data.parquet"},
+                "cells_r7":{"href":"./cells/h3_res=7/data.parquet"}
+                """.trimIndent(),
+            ),
+            root,
+        )
+        // An unsafe second listing still makes its resolution ambiguous, so 4 is dropped too.
+        assertEquals(mapOf(7 to "$root/cells/h3_res=7/data.parquet"), c.cells)
     }
 
     @Test

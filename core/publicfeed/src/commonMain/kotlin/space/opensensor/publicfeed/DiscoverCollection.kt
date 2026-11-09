@@ -5,6 +5,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
+import space.opensensor.model.H3Cell
 import space.opensensor.model.Scale
 import space.opensensor.model.ThingCollection
 import kotlin.concurrent.Volatile
@@ -12,7 +13,8 @@ import kotlin.math.abs
 
 /**
  * The discover Collection, `discover/collection.json` (docs/devices-and-discovery.md). A STAC
- * Collection of H3 aggregates with one asset per `h3_res`. Its `item_assets.data.table:columns` name
+ * Collection of H3 aggregates with one cells asset per resolution ([cellsResolution]). Its
+ * `item_assets.data.table:columns` name
  * `<id>__n`, `__mean`, `__min` and `__max` per property. The `__mean` column carries the property's
  * `title` and, when one applies, its `opensensor:scale`, a key of `opensensor:scales`.
  *
@@ -75,7 +77,13 @@ class DiscoverCollection private constructor(
          */
         const val DEFAULT_RES: Int = 8
 
-        private const val ASSET_PREFIX = "h3_res="
+        /** The key forms of a cells asset. `cells_r<n>` is the live feed's, `h3_res=<n>` the older one. */
+        private val CELLS_KEYS = listOf("cells_r", "h3_res=")
+
+        /** The Hive path segment `h3_res=<n>` in a cells asset's href. */
+        private const val HREF_SEGMENT = "h3_res="
+
+        private const val PARQUET = "application/vnd.apache.parquet"
 
         private fun mean(propertyId: String) = "${propertyId}__mean"
 
@@ -83,7 +91,8 @@ class DiscoverCollection private constructor(
          * Parses [json], resolving relative asset hrefs against [root], the folder of the file. An
          * absolute href is kept only when it is https on the same host as an https [root], so a
          * Collection cannot send the app to another host, to cleartext or to a local address. Any
-         * other asset, and one whose key is not `h3_res=<n>`, is dropped alone. A scale in
+         * other asset, one that is not a cells asset ([cellsResolution]) and each asset of a
+         * resolution listed more than once are dropped alone. A scale in
          * `opensensor:scales` that does not parse, or that [StepScale.of] refuses, is dropped alone,
          * so its property falls back to the neutral ramp and the rest of the Collection stands.
          *
@@ -98,17 +107,37 @@ class DiscoverCollection private constructor(
             }
             val base = root.trimEnd('/')
             val end = dto.extent?.temporal?.interval?.firstOrNull()?.getOrNull(1)
+            val listed = dto.assets.mapNotNull { (key, asset) -> cellsResolution(key, asset.href, asset.mediaType)?.let { it to asset.href } }
+            val times = listed.groupingBy { it.first }.eachCount()
             return DiscoverCollection(
                 stac = stac,
                 asOf = end?.let { LocalDate.parse(it.take(ISO_DATE_LENGTH)) },
                 generation = dto.updated,
-                cells = dto.assets.mapNotNull { (key, asset) ->
-                    val res = key.removePrefix(ASSET_PREFIX).takeIf { key.startsWith(ASSET_PREFIX) }?.toIntOrNull()
-                    val url = resolve(base, asset.href)
-                    if (res == null || url == null) null else res to url
-                }.toMap(),
+                cells = listed.filter { times[it.first] == 1 }.mapNotNull { (res, href) -> resolve(base, href)?.let { res to it } }.toMap(),
             )
         }
+
+        /**
+         * The H3 resolution of a cells asset, or null when the asset is not one. The key names it,
+         * `cells_r<n>` or `h3_res=<n>`, and a key in either form whose `<n>` is not a resolution
+         * drops the asset. Any other key falls back to the one `h3_res=<n>` path segment of the href,
+         * and only for a Parquet asset, so `annual`, `daily`, `hourly`, `stations` and `manifest`
+         * are never cells. When the href names a resolution too it must be the key's, or the asset
+         * is ambiguous and dropped. `<n>` is plain decimal, 0 to [H3Cell.MAX_RES], with no sign and
+         * no leading zero. stac-opensensor#6 has not fixed the key yet, so both forms are read.
+         */
+        private fun cellsResolution(key: String, href: String, mediaType: String?): Int? {
+            val segments = href.substringBefore('?').substringBefore('#').split('/').filter { it.startsWith(HREF_SEGMENT) }
+            val fromHref = segments.singleOrNull()?.let { resolutionOf(it.removePrefix(HREF_SEGMENT)) }
+            val form = CELLS_KEYS.firstOrNull { key.startsWith(it) } ?: return fromHref.takeIf { mediaType == PARQUET }
+            val fromKey = resolutionOf(key.removePrefix(form)) ?: return null
+            return fromKey.takeIf { segments.isEmpty() || fromHref == fromKey }
+        }
+
+        private fun resolutionOf(digits: String): Int? = digits
+            .takeIf { it.length in 1..2 && it.all { c -> c in '0'..'9' } && (it.length == 1 || it[0] != '0') }
+            ?.toInt()
+            ?.takeIf { it <= H3Cell.MAX_RES }
 
         /**
          * [json] without the scales that do not parse on their own or that [StepScale.of] refuses (too
