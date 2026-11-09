@@ -19,7 +19,8 @@ flowchart LR
   Today <--> Device["DeviceKey"]
   Today -. Developer .-> Debug["DebugKey"]
   Files -. Detailed .-> Metrics["FileMetricsKey(thing, name)"]
-  Discover -. Add your sensor .-> Setup["SetupKey(resume)<br/>Add sensor wizard"]
+  Discover -. Add your sensor .-> Setup["SetupKey(resume, pick, offer)<br/>Add sensor wizard"]
+  Scan -. a sensor asks for setup .-> Setup
   Setup --> Today
 ```
 
@@ -52,6 +53,16 @@ device, and nothing is asked at launch.
   "Leave setup?" first, and old firmware fails on Find with the update message. A sensor under Nearby
   on My devices that this phone has not added opens the wizard with it picked, never Today, so setup
   always comes first on both platforms.
+- My devices opens the wizard by itself when exactly one sensor asks for setup (#272), at most once
+  per foreground session. The shared `ThingSetupWatch` in `:core:sync` applies `ThingSetupPolicy` to
+  the advert flags of the foreground Bluetooth scan (bit 6) and, for firmware without the flag, to
+  the last page 1 the phone read from that sensor. The automatic open lands on Find with the sensor
+  offered at the top, and nothing connects until the user taps it. Backing out spends the open, and
+  the row keeps a compact "Finish setup" chip (added) or a "needs setup" tag (not added). A tap on
+  "Finish setup" resumes an added sensor at Location. When two or more sensors ask, My devices shows
+  one "N sensors need setup" chip that opens Find, and never opens the wizard by itself. Leaving the
+  foreground ends the session (Android `MainActivity.onStop`, iOS `sceneDidEnterBackground`). The
+  watch only reads, so it sends nothing to the sensor.
 - Each thing action has one home. Today holds Smart Sync, its Stop, Reconnect or Disconnect in the
   header, Forget in the header menu, and Debug at Developer. Files holds the archive list and Sync all. Device holds the sensor
   settings, Wi-Fi access, paired phones and Auto-sync. Every thing page reads one

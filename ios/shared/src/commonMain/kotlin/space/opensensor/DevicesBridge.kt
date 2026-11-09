@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.data.DeviceContinuityPolicy
 import space.opensensor.data.history.LatestDay
+import space.opensensor.data.sync.ThingSetupWatch
 import space.opensensor.devices.ActiveLink
 import space.opensensor.devices.ArchiveGlance
 import space.opensensor.devices.CollectAllPlan
@@ -246,6 +247,12 @@ class DevicesBridge internal constructor(
     private val forgottenCollectIds = HashSet<String>()
 
     internal val known: StateFlow<List<KnownRecord>> get() = records.asStateFlow()
+
+    /** Which sensors ask for setup this foreground session, as on Android (#272). */
+    internal val setup = ThingSetupWatch()
+
+    /** The app left the foreground, so the wizard may open by itself again for a sensor heard next time. */
+    fun endSetupSession() = setup.endSession(now())
 
     /** The setup wizard's Find looks for sensors over Bluetooth only, the same as Android. */
     internal fun startFind() = findScan()
@@ -490,7 +497,7 @@ class DevicesBridge internal constructor(
     }
 
     private val radio = object : DeviceRadio {
-        override val nearby = snapshotFlow { state.devices.map { NearbySensor(it.id, it.name, it.rssi) } }
+        override val nearby = snapshotFlow { state.devices.map { NearbySensor(it.id, it.name, it.rssi, advertFlags = it.advertFlags, seenMs = it.seenMs) } }
         override val scanning = snapshotFlow { state.scanning || state.lanScanning }
         override val scanProblem = snapshotFlow {
             when {
@@ -514,5 +521,5 @@ class DevicesBridge internal constructor(
 
     /** A controller for one My devices entry, cleared with its scope. */
     internal fun controller(scope: CoroutineScope): DevicesController =
-        DevicesController(scope, store, radio, IosKnown.withDays(archive.map(IosKnown::glance), latestDay), collectPort)
+        DevicesController(scope, store, radio, IosKnown.withDays(archive.map(IosKnown::glance), latestDay), collectPort, setup = setup)
 }

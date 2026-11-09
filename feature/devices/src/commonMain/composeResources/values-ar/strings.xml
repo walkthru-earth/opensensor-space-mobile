@@ -15,6 +15,16 @@
     <string name="scan_tag_known">معروف</string>
     <string name="scan_tag_on_lan">على Wi-Fi</string>
     <string name="scan_tag_on_lan_no_token">على Wi-Fi، بلا رمز وصول</string>
+    <string name="scan_tag_setup">يحتاج إعدادًا</string>
+    <string name="scan_finish_setup">أكمل الإعداد</string>
+    <plurals name="scan_setup_many">
+        <item quantity="zero">%1$d مستشعر يحتاج إعدادًا</item>
+        <item quantity="one">%1$d مستشعر يحتاج إعدادًا</item>
+        <item quantity="two">مستشعران يحتاجان إعدادًا</item>
+        <item quantity="few">%1$d مستشعرات تحتاج إعدادًا</item>
+        <item quantity="many">%1$d مستشعرًا تحتاج إعدادًا</item>
+        <item quantity="other">%1$d مستشعر يحتاج إعدادًا</item>
+    </plurals>
     <plurals name="scan_collecting">
         <item quantity="zero">جارٍ جمع %1$d من %2$d ملف</item>
         <item quantity="one">جارٍ جمع %1$d من %2$d ملف</item>

@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.intl.Locale
@@ -32,6 +33,7 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.history.LatestDay
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
@@ -40,6 +42,7 @@ import space.opensensor.designsystem.StatusDot
 import space.opensensor.designsystem.TickingText
 import space.opensensor.designsystem.moodWord
 import space.opensensor.designsystem.pm25Label
+import space.opensensor.designsystem.touchTarget
 import space.opensensor.devices.resources.Res
 import space.opensensor.devices.resources.ago_days
 import space.opensensor.devices.resources.ago_hours
@@ -69,6 +72,7 @@ import space.opensensor.devices.resources.scan_archive_day_plain
 import space.opensensor.devices.resources.scan_background
 import space.opensensor.devices.resources.scan_collecting
 import space.opensensor.devices.resources.scan_files
+import space.opensensor.devices.resources.scan_finish_setup
 import space.opensensor.devices.resources.scan_no_clock
 import space.opensensor.devices.resources.scan_seen
 import space.opensensor.devices.resources.scan_synced
@@ -76,6 +80,7 @@ import space.opensensor.devices.resources.scan_tag_known
 import space.opensensor.devices.resources.scan_tag_on_lan
 import space.opensensor.devices.resources.scan_tag_on_lan_no_token
 import space.opensensor.devices.resources.scan_tag_paired
+import space.opensensor.devices.resources.scan_tag_setup
 import space.opensensor.devices.resources.scan_unnamed
 import space.opensensor.family.air.WhoStep
 import space.opensensor.family.air.stepOf
@@ -121,8 +126,12 @@ internal fun ActiveRow(link: ActiveLink, onClick: () -> Unit) {
     }
 }
 
+/**
+ * A nearby row. A known sensor that asks for setup shows the compact [SetupChip], [onSetup]. A new
+ * one shows a tag, as its own tap already opens the wizard.
+ */
 @Composable
-internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) {
+internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, onSetup: () -> Unit = {}) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -140,8 +149,10 @@ internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) 
                     if (row.bonded) Tag(stringResource(Res.string.scan_tag_paired))
                     if (row.known) Tag(stringResource(Res.string.scan_tag_known))
                     row.wifi?.let { Tag(wifiTagText(it, level)) }
+                    if (row.needsSetup && !row.known) Tag(stringResource(Res.string.scan_tag_setup))
                 }
                 ArchiveLine(row.archive, level)
+                if (row.needsSetup && row.known) SetupChip(stringResource(Res.string.scan_finish_setup), onSetup)
             }
             Spacer(Modifier.width(12.dp))
             row.rssi?.let { SignalBars(it, showDbm = level.developer) }
@@ -150,8 +161,9 @@ internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) 
     }
 }
 
+/** A known row. When the sensor asks for setup it shows the compact [SetupChip], [onSetup]. */
 @Composable
-internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) {
+internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, onSetup: () -> Unit = {}) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -173,10 +185,38 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit) {
                 }
                 if (level.developer && row.archive == null) row.thing?.let { Mono(it.take(8)) }
                 ArchiveLine(row.archive, level)
+                if (row.needsSetup) SetupChip(stringResource(Res.string.scan_finish_setup), onSetup)
             }
             // Opens the sensor's page, where Forget lives.
             Icon(AppIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f))
             Spacer(Modifier.width(12.dp))
+        }
+    }
+}
+
+/**
+ * A compact neutral control for setup (#272). Finish setup on a known row that asks for it, the
+ * resume entry once the wizard opened this session, and the count prompt when several ask.
+ */
+@Composable
+internal fun SetupChip(text: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = FloatingControl.SmallShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .touchTarget(minWidth = 0.dp)
+            .semantics { role = Role.Button },
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(AppIcons.ChevronRight, contentDescription = null)
+            FitText(text, style = MaterialTheme.typography.labelLarge)
         }
     }
 }

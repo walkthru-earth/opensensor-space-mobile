@@ -46,6 +46,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.AppIcons
@@ -78,6 +80,7 @@ import space.opensensor.devices.resources.scan_local_network_denied
 import space.opensensor.devices.resources.scan_nearby
 import space.opensensor.devices.resources.scan_none_nearby_body
 import space.opensensor.devices.resources.scan_none_nearby_title
+import space.opensensor.devices.resources.scan_setup_many
 import space.opensensor.devices.resources.scan_unnamed
 import space.opensensor.devices.resources.scan_welcome_body
 import space.opensensor.devices.resources.scan_welcome_title
@@ -102,6 +105,7 @@ data class DevicesPlatform(
  * Bluetooth is asked for only from a tap on Scan or Collect from all. Opening a sensor never asks,
  * see [openThing]. Once it is allowed and the radio is on, the screen scans while it is visible
  * and stops when it leaves. [units] shows the archive day means in the owner's unit system.
+ * [setupOpens] is the controller's one shot automatic setup open (#272).
  */
 @Composable
 fun MyDevicesScreen(
@@ -115,6 +119,7 @@ fun MyDevicesScreen(
     onScanTap: (() -> Unit)? = null,
     onOpenLocalNetworkSettings: (() -> Unit)? = null,
     units: UnitFormatter = UnitFormatter.Metric,
+    setupOpens: Flow<SetupRequest> = emptyFlow(),
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var explicitScan by remember { mutableStateOf(false) }
@@ -125,6 +130,10 @@ fun MyDevicesScreen(
         if (bluetooth.ready) onAction(DevicesAction.StartScan)
         onStopOrDispose { onAction(DevicesAction.StopScan) }
     }
+
+    // The wizard opens by itself at most once per foreground session (#272), and only while this
+    // screen collects. Each request is a one shot event, so a recomposition cannot send it twice.
+    LaunchedEffect(setupOpens) { setupOpens.collect { onAction(DevicesAction.FinishSetup(it)) } }
 
     fun open(id: String, name: String?) = openThing(id, name, bluetooth, onAction)
 
@@ -230,6 +239,15 @@ fun MyDevicesScreen(
                     }
                 }
 
+                if (state.setupCount >= 2) {
+                    item(key = "setup-many") {
+                        SetupChip(
+                            pluralStringResource(Res.plurals.scan_setup_many, state.setupCount, state.setupCount),
+                            onClick = { onAction(DevicesAction.SetupMany) },
+                        )
+                    }
+                }
+
                 if (list.nearby.isEmpty()) {
                     // The peacock guides the empty moments, a first run or nothing nearby.
                     item(key = "guide") {
@@ -247,6 +265,7 @@ fun MyDevicesScreen(
                         row = row,
                         level = level,
                         onClick = { openNearby(row, bluetooth, onAction) },
+                        onSetup = { onAction(DevicesAction.FinishSetup(SetupRequest(row.id, row.name, known = true))) },
                     )
                 }
 
@@ -260,6 +279,7 @@ fun MyDevicesScreen(
                             row = row,
                             level = level,
                             onClick = { open(row.id, row.name) },
+                            onSetup = { onAction(DevicesAction.FinishSetup(SetupRequest(row.id, row.name, known = true))) },
                         )
                     }
                 }

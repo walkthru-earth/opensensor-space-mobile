@@ -63,7 +63,9 @@ things. See the firmware-owned [time/location contract](../../opensensor-space-f
 - `core/model` `H3Cell` checks a cell index and its hex form in pure Kotlin. `core/publicfeed`
   `H3Grid.gridDisk` lists a cell and its rings on the platform binding.
 - `core/sync` `ThingSetupPolicy.needsSetup` is the one rule for a Thing that still needs setup.
-  See [sync-engine.md](sync-engine.md#thing-setup).
+  `ThingSetupWatch` applies it to the foreground scan and to each page 1 read, and My devices opens
+  the setup wizard from it. It reads only the cell, never a fix. See
+  [sync-engine.md](sync-engine.md#thing-setup).
 - `core/sync` reuses the existing serialized request and config-chunk parser.
 - `ui/map` `CellPicker` draws the cells, takes the tap and emits only the cell id. `CellPickerGrid`
   holds its grid maths apart from Compose. `PlaceSearchField` searches the bundled GeoNames

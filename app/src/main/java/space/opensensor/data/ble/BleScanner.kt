@@ -19,15 +19,20 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import space.opensensor.data.protocol.Advertisement
 import space.opensensor.data.protocol.DeviceUuids
 
-/** One advertiser seen during a scan. */
+/**
+ * One advertiser seen during a scan. [advertFlags] is the flags byte of its service data under the
+ * opensensor service, null when the advert carried none or an unknown version (#272).
+ */
 data class ScannedDevice(
     val address: String,
     val name: String?,
     val rssi: Int,
     val bonded: Boolean,
     val lastSeenEpochMs: Long,
+    val advertFlags: Int? = null,
 )
 
 /**
@@ -80,6 +85,7 @@ object BleScanner {
             emit(Event.Failed(BLUETOOTH_OFF, "Bluetooth is off"))
             return@flow
         }
+        val serviceUuid = ParcelUuid(DeviceUuids.SERVICE)
         val events = planned(plan, ScanStartBudget.shared, SystemClock::elapsedRealtime) { send ->
             val callback = object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult) = emit(result)
@@ -98,12 +104,13 @@ object BleScanner {
                                 rssi = r.rssi,
                                 bonded = dev.bondState == BluetoothDevice.BOND_BONDED,
                                 lastSeenEpochMs = System.currentTimeMillis(),
+                                advertFlags = advertFlags(r.scanRecord?.getServiceData(serviceUuid)),
                             )
                         )
                     )
                 }
             }
-            val filters = listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(DeviceUuids.SERVICE)).build())
+            val filters = listOf(ScanFilter.Builder().setServiceUuid(serviceUuid).build())
             object : ScanRadio {
                 override fun start(mode: ScanMode) {
                     val settings = ScanSettings.Builder()
@@ -123,6 +130,12 @@ object BleScanner {
         }
         emitAll(events)
     }
+
+    /**
+     * The advert flags byte from the service data under the opensensor service (#272), bit 6 asks for
+     * setup. Null when there is no service data, an unknown version or a short payload.
+     */
+    internal fun advertFlags(serviceData: ByteArray?): Int? = Advertisement.decode(serviceData)?.flags
 
     /**
      * Runs [plan] over the radio that [open] registers. [open] gets the sink for its callback.

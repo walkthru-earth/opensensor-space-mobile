@@ -44,6 +44,7 @@ import space.opensensor.device.LanAccess
 import space.opensensor.devices.DevicesAction
 import space.opensensor.devices.DevicesPlatform
 import space.opensensor.devices.MyDevicesScreen
+import space.opensensor.devices.SetupRequest
 import space.opensensor.devices.bluetoothAccessTexts
 import space.opensensor.discover.DiscoverController
 import space.opensensor.discover.DiscoverScreen
@@ -238,6 +239,8 @@ internal fun AppRoot(
                             onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
                             onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
                             onAdd = { id, name -> nav.openSetup(pick = id, pickName = name) },
+                            onSetup = { nav.finishSetup(it.id, it.name, it.known, it.auto) },
+                            onSetupMany = { nav.openSetup() },
                         ) { id, connect ->
                             val peripheral = when {
                                 IosKnown.isPeripheral(id) -> id
@@ -277,7 +280,7 @@ internal fun AppRoot(
                     }
                     entry<SetupKey> { key ->
                         val pick = key.pick?.let { SetupCandidate(it, key.pickName, added = false) }
-                        SetupEntry(key.resume, pick, devices, configLinks, requestBluetooth, openSensor, onClose = { nav.popIfTop { it == key } }) { id ->
+                        SetupEntry(key.resume, pick, key.offer, devices, configLinks, requestBluetooth, openSensor, onClose = { nav.popIfTop { it == key } }) { id ->
                             nav.popIfTop { it == key }
                             nav.push(TodayKey(id))
                         }
@@ -426,6 +429,8 @@ private fun MyDevicesEntry(
     onFiles: () -> Unit,
     onHistory: () -> Unit,
     onAdd: (id: String, name: String?) -> Unit,
+    onSetup: (SetupRequest) -> Unit,
+    onSetupMany: () -> Unit,
     onOpen: (id: String, connect: Boolean) -> Unit,
 ) {
     val controller = viewModel { DevicesHolder(bridge) }.controller
@@ -438,6 +443,7 @@ private fun MyDevicesEntry(
         units = remember(units) { UnitFormatter(units) },
         bluetooth = access,
         platform = IosDevices,
+        setupOpens = controller.setupOpens,
         onOpenLocalNetworkSettings = openSettings,
         // Only a tap browses the local network, so iOS asks for access when the user scans.
         onScanTap = bridge::scanTapped,
@@ -445,6 +451,11 @@ private fun MyDevicesEntry(
             when (action) {
                 is DevicesAction.Open -> onOpen(action.id, action.connect)
                 is DevicesAction.Add -> onAdd(action.id, action.name)
+                is DevicesAction.FinishSetup -> {
+                    controller.onAction(action)
+                    onSetup(action.request)
+                }
+                DevicesAction.SetupMany -> onSetupMany()
                 else -> controller.onAction(action)
             }
         },

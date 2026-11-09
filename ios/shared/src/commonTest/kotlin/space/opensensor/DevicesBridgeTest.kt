@@ -1,5 +1,6 @@
 package space.opensensor
 
+import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -13,10 +14,13 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.data.history.LatestDay
+import space.opensensor.data.protocol.Advertisement
 import space.opensensor.devices.ActiveLink
 import space.opensensor.devices.ArchiveGlance
+import space.opensensor.devices.DevicesAction
 import space.opensensor.devices.KnownSensor
 import space.opensensor.devices.LinkPhase
+import space.opensensor.devices.SetupRequest
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.strings.UiText
@@ -81,6 +85,33 @@ class DevicesBridgeTest {
         assertEquals(listOf("bluetooth", "stop"), scans, "setup Find never runs the browse that may ask for local network")
         bridge.scanTapped()
         assertEquals("tap", scans.last(), "only a Scan tap on My devices browses")
+    }
+
+    @Test fun aSensorAskingForSetupOpensTheWizardOncePerForegroundSession() = runTest {
+        var heard = 5L
+        val state = CompanionState().apply {
+            clock = { heard }
+            deviceFound(b, "OS-b", -50, advertFlags = Advertisement.FLAG_SETUP)
+        }
+        // The list waits for the archive index, so this one emits an empty index.
+        val bridge = DevicesBridge(state, flowOf(emptyList()), MemoryStorage(), { 6 }, {}, {}, {}, {}, { _, _ -> }, { _, _ -> })
+        val controller = bridge.controller(backgroundScope)
+        val opens = mutableListOf<SetupRequest>()
+        backgroundScope.launch { controller.setupOpens.collect { opens += it } }
+        val asking = controller.state.first { s -> s.list.nearby.any { it.needsSetup } }
+        assertEquals(1, asking.setupCount)
+        runCurrent()
+        assertEquals(listOf(SetupRequest(b, "OS-b", known = false, auto = true)), opens)
+        bridge.endSetupSession()
+        // An advert from the last session claims nothing, so the row loses its flag and nothing opens.
+        val cleared = controller.state.first { s -> s.list.nearby.none { it.needsSetup } }
+        assertEquals(0, cleared.setupCount)
+        heard = 7
+        state.deviceFound(b, "OS-b", -50, advertFlags = Advertisement.FLAG_SETUP)
+        Snapshot.sendApplyNotifications()
+        controller.state.first { s -> s.list.nearby.any { it.needsSetup } }
+        runCurrent()
+        assertEquals(2, opens.size, "the next session opens once it hears the sensor again")
     }
 
     @Test fun mergeListsRecordsAndCredentialsOncePerPeripheral() {

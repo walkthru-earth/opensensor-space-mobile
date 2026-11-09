@@ -268,10 +268,15 @@ internal class IosDeviceConfigSource(
         } finally { working.value = false }
     }
 
-    /** Keeps this sensor's Discover pin in step with the location [page] it returned. */
+    /**
+     * Keeps this sensor's Discover pin in step with the location [page] it returned, and tells the
+     * setup watch what page 1 says now (#272).
+     */
     private suspend fun recordPlace(page: DeviceConfig?): space.opensensor.data.protocol.LocationConfig? {
         val thing = devices.thingFor(address)
-        if (page != null && !thing.isNullOrBlank()) places.recordFrom(thing, page, now())
+        val read = now()
+        if (page != null && !thing.isNullOrBlank()) places.recordFrom(thing, page, read)
+        if (page != null) devices.setup.pageRead(address, page, read)
         return page?.location
     }
 

@@ -52,6 +52,8 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, develop
         ScanScreen(
             onConnected = { address -> nav.push(TodayKey(address)) },
             onAdd = { address, name -> nav.openSetup(pick = address, pickName = name) },
+            onSetup = { request -> nav.finishSetup(request.id, request.name, request.known, request.auto) },
+            onSetupMany = { nav.openSetup() },
         )
     }
     entry<SettingsKey> {
@@ -107,6 +109,7 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, develop
             resume = key.resume,
             pick = key.pick,
             pickName = key.pickName,
+            offer = key.offer,
             onClose = { nav.popIfTop { it is SetupKey } },
             onOpenSensor = { address -> nav.popIfTop { it is SetupKey }; nav.push(TodayKey(address)) },
         )

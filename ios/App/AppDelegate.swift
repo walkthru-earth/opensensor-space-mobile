@@ -523,6 +523,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         services.bluetooth.suspend()
         services.lan.enterBackground()
         services.autoSync.enteredBackground()
+        // The next foreground session may open the setup wizard by itself again (#272).
+        services.devices.endSetupSession()
     }
     func sceneDidBecomeActive(_ scene: UIScene) {
         guard let services else { return }

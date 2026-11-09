@@ -2,8 +2,14 @@ package space.opensensor.devices
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import space.opensensor.data.protocol.Advertisement
+import space.opensensor.data.protocol.DeviceConfig
+import space.opensensor.data.sync.ThingSetupWatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -87,5 +93,117 @@ class DevicesControllerTest {
         assertTrue(controller.state.value.collecting)
         controller.onAction(DevicesAction.CollectAll)
         assertEquals(1, collect.calls)
+    }
+
+    private val setupFlag = Advertisement.FLAG_SETUP
+
+    private fun TestScope.opens(controller: DevicesController): MutableList<SetupRequest> =
+        mutableListOf<SetupRequest>().also { list -> backgroundScope.launch { controller.setupOpens.toList(list) } }
+
+    @Test
+    fun oneSensorAskingForSetupOpensTheWizardOnceAsAnOffer() = runTest(UnconfinedTestDispatcher()) {
+        val radio = FakeRadio()
+        val watch = ThingSetupWatch()
+        val controller = DevicesController(backgroundScope, FakeStore(emptyList()), radio, MutableStateFlow(emptyMap()), FakeCollect(), watch)
+        val opens = opens(controller)
+        assertTrue(opens.isEmpty())
+
+        radio.nearby.value = listOf(NearbySensor("X", "Fresh", -50, advertFlags = setupFlag, seenMs = 5))
+        assertEquals(listOf(SetupRequest("X", "Fresh", known = false, auto = true)), opens)
+        assertEquals(1, controller.state.value.setupCount)
+        assertTrue(controller.state.value.list.nearby.single().needsSetup, "the row keeps its tag after a back out")
+
+        // A fresh advert, or the screen collecting again, does not open it twice.
+        radio.nearby.value = listOf(NearbySensor("X", "Fresh", -48, advertFlags = setupFlag, seenMs = 9))
+        val again = opens(controller)
+        assertEquals(1, opens.size)
+        assertTrue(again.isEmpty())
+    }
+
+    @Test
+    fun aKnownSensorIsOfferedByItselfAndOpensAgainInTheNextSession() = runTest(UnconfinedTestDispatcher()) {
+        val radio = FakeRadio()
+        val watch = ThingSetupWatch()
+        val controller = DevicesController(backgroundScope, FakeStore(listOf(a)), radio, MutableStateFlow(emptyMap()), FakeCollect(), watch)
+        val opens = opens(controller)
+        radio.nearby.value = listOf(NearbySensor("a", null, -50, advertFlags = setupFlag, seenMs = 5))
+        val request = SetupRequest("A", "Kitchen", known = true, auto = true)
+        assertEquals(listOf(request), opens)
+
+        watch.endSession(4)
+        assertEquals(listOf(request, request), opens, "the next session opens it again")
+        watch.endSession(5)
+        assertEquals(2, opens.size, "an advert from before the session end does not open it")
+        assertEquals(0, controller.state.value.setupCount)
+    }
+
+    @Test
+    fun aTapOnFinishSetupSpendsThatSensorOnly() = runTest(UnconfinedTestDispatcher()) {
+        val radio = FakeRadio()
+        val watch = ThingSetupWatch()
+        val controller = DevicesController(backgroundScope, FakeStore(listOf(a)), radio, MutableStateFlow(emptyMap()), FakeCollect(), watch)
+        controller.onAction(DevicesAction.FinishSetup(SetupRequest("A", "Kitchen", known = true)))
+        val opens = opens(controller)
+        radio.nearby.value = listOf(NearbySensor("A", null, -50, advertFlags = setupFlag, seenMs = 5))
+        assertTrue(opens.isEmpty(), "the wizard already ran for it this session")
+        radio.nearby.value = listOf(NearbySensor("X", "Fresh", -50, advertFlags = setupFlag, seenMs = 6))
+        assertEquals(listOf(SetupRequest("X", "Fresh", known = false, auto = true)), opens)
+    }
+
+    @Test
+    fun severalSensorsAskingShowACountAndNeverOpenTheWizard() = runTest(UnconfinedTestDispatcher()) {
+        val radio = FakeRadio()
+        val watch = ThingSetupWatch()
+        val controller = DevicesController(backgroundScope, FakeStore(emptyList()), radio, MutableStateFlow(emptyMap()), FakeCollect(), watch)
+        val opens = opens(controller)
+        radio.nearby.value = (1..18).map { NearbySensor("S$it", "OS-$it", -50, advertFlags = setupFlag, seenMs = 5) }
+        assertEquals(18, controller.state.value.setupCount)
+        assertTrue(controller.state.value.list.nearby.all { it.needsSetup })
+        assertTrue(opens.isEmpty())
+        controller.onAction(DevicesAction.SetupMany)
+        assertTrue(opens.isEmpty())
+    }
+
+    @Test
+    fun theWizardOpensByItselfOncePerSessionAcrossAllSensors() = runTest(UnconfinedTestDispatcher()) {
+        val radio = FakeRadio()
+        val watch = ThingSetupWatch()
+        val controller = DevicesController(backgroundScope, FakeStore(emptyList()), radio, MutableStateFlow(emptyMap()), FakeCollect(), watch)
+        val opens = opens(controller)
+        radio.nearby.value = listOf(NearbySensor("X", "OS-x", -50, advertFlags = setupFlag, seenMs = 5))
+        assertEquals(1, opens.size)
+
+        // X leaves and Y asks alone. The session already spent its one automatic open.
+        radio.nearby.value = listOf(NearbySensor("Y", "OS-y", -50, advertFlags = setupFlag, seenMs = 6))
+        assertEquals(1, controller.state.value.setupCount)
+        assertEquals(1, opens.size)
+        assertTrue(controller.state.value.list.nearby.single().needsSetup)
+    }
+
+    @Test
+    fun pageOneIsTheFallbackWhenTheAdvertHasNoFlag() = runTest(UnconfinedTestDispatcher()) {
+        val radio = FakeRadio()
+        val watch = ThingSetupWatch()
+        val controller = DevicesController(backgroundScope, FakeStore(listOf(a, b)), radio, MutableStateFlow(emptyMap()), FakeCollect(), watch)
+        val opens = opens(controller)
+        radio.nearby.value = listOf(NearbySensor("A", null, -50, advertFlags = 0, seenMs = 5))
+        assertTrue(opens.isEmpty())
+
+        // Device settings read page 1 of B, out of range now, and it has no cell.
+        watch.pageRead("B", DeviceConfig.parse("""{"location":{"cell":"","resolution":8},"thing":{"mobility":"fixed"}}"""), 6)
+        assertEquals(listOf(SetupRequest("B", "Balcony", known = true, auto = true)), opens)
+        assertTrue(controller.state.value.list.known.single { it.id == "B" }.needsSetup)
+        assertFalse(controller.state.value.list.nearby.single().needsSetup)
+    }
+
+    @Test
+    fun withoutAWatchNothingAsksForSetup() = runTest(UnconfinedTestDispatcher()) {
+        val radio = FakeRadio()
+        val controller = DevicesController(backgroundScope, FakeStore(emptyList()), radio, MutableStateFlow(emptyMap()), FakeCollect())
+        val opens = opens(controller)
+        radio.nearby.value = listOf(NearbySensor("X", null, -50, advertFlags = setupFlag, seenMs = 5))
+        assertTrue(opens.isEmpty())
+        assertEquals(0, controller.state.value.setupCount)
+        assertFalse(controller.state.value.list.nearby.single().needsSetup)
     }
 }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -91,6 +92,7 @@ import space.opensensor.data.sync.FileOutcome
 import space.opensensor.data.sync.SyncEngine
 import space.opensensor.data.sync.ThingPlace
 import space.opensensor.data.sync.ThingPlaces
+import space.opensensor.data.sync.ThingSetupWatch
 import space.opensensor.link.AuthKind
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.FrameSink
@@ -363,6 +365,18 @@ class DeviceFacadeTest {
         h.device.mobility = "moving"
         h.repo.readLocation()
         assertTrue("a moving Thing shows no pin", h.places.all.isEmpty())
+    }
+
+    @Test
+    fun `every page 1 read feeds the setup watch and none happens without a location call`() = harnessTest { h ->
+        val needs = h.setupWatch.needs(flowOf(emptyList()))
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        assertTrue("connecting reads no page 1 for setup", needs.first().isEmpty())
+        h.repo.readLocation()
+        assertEquals(listOf(ADDRESS), needs.first().map { it.id })
+        h.repo.writeLocation(ConfigPatch.build { location("8828308281fffff", "") })
+        assertTrue("the page read back after a save clears the need", needs.first().isEmpty())
     }
 
     @Test
@@ -1495,6 +1509,7 @@ class DeviceFacadeTest {
         val identityClaims = DeviceIdentityClaims()
         val thingEpochs = InMemoryThingEpochDao()
         val places = MemoryThingPlaces()
+        val setupWatch = ThingSetupWatch()
 
         var clockEpochOffset = 0L
         var developer = false
@@ -1553,6 +1568,7 @@ class DeviceFacadeTest {
                 pruned = PrunedFiles.None,
                 boardDescriptors = BoardDescriptors(MemoryBlockStore(), ServedTemplates(), io = dispatcher),
                 places = places,
+                setupWatch = setupWatch,
                 developerLevel = { developer },
             )
             val delegateStore = FileArchiveStore(fileArchive, dispatcher)

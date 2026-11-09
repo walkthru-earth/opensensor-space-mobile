@@ -17,6 +17,8 @@ kotlin {
         commonMain.dependencies {
             api(project(":core:settings"))
             api(project(":core:history"))
+            // ThingSetupWatch, the shared rule for which sensors ask for setup (#272).
+            api(project(":core:sync"))
             api(project(":ui:designsystem"))
             api(project(":ui:permissions"))
             implementation(project(":ui:strings"))

@@ -19,6 +19,7 @@ import space.opensensor.designsystem.AppIcons
 import space.opensensor.devices.DevicesAction
 import space.opensensor.devices.DevicesPlatform
 import space.opensensor.devices.MyDevicesScreen
+import space.opensensor.devices.SetupRequest
 import space.opensensor.ui.components.LocalUnits
 import space.opensensor.ui.permissions.AccessDialogs
 import space.opensensor.ui.permissions.rememberBluetoothAccess
@@ -37,6 +38,8 @@ private val AndroidDevices = DevicesPlatform(collectInBackground = true)
 fun ScanScreen(
     onConnected: (address: String) -> Unit,
     onAdd: (address: String, name: String?) -> Unit,
+    onSetup: (SetupRequest) -> Unit,
+    onSetupMany: () -> Unit,
     viewModel: ScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -54,6 +57,7 @@ fun ScanScreen(
         bluetooth = bluetooth,
         platform = AndroidDevices,
         units = LocalUnits.current,
+        setupOpens = viewModel.setupOpens,
         onScanTap = {
             viewModel.onAction(DevicesAction.StartScan)
             localNetwork.run(
@@ -69,6 +73,12 @@ fun ScanScreen(
                     onConnected(action.id)
                 }
                 is DevicesAction.Add -> onAdd(action.id, action.name)
+                // The controller marks the sensor opened first, then the wizard opens (#272).
+                is DevicesAction.FinishSetup -> {
+                    viewModel.onAction(action)
+                    onSetup(action.request)
+                }
+                DevicesAction.SetupMany -> onSetupMany()
                 DevicesAction.CollectAll -> notificationPermission.ensureThen { viewModel.onAction(action) }
                 else -> viewModel.onAction(action)
             }

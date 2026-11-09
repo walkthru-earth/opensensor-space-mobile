@@ -95,7 +95,13 @@ data class SetupUiState(
  * pending. Nothing about the run is persisted besides the nickname and that flag, so a resumed run
  * ([resumeId]) opens at the first required page, Location for the board, and reconnects silently.
  * A [pick] is a new sensor tapped outside Find, paired at once as if chosen there, so Name still
- * comes first. Done, which clears the flag, is reached only once every required page is satisfied.
+ * comes first. With [offer] the pick is a sensor that asked for setup by itself (#272). It is only
+ * listed first on Find, as pairing stays the owner's tap. Done, which clears the flag, is reached
+ * only once every required page is satisfied.
+ *
+ * [opened] tells the shared setup watch that the wizard ran for a sensor, when it opens on a resume
+ * or an offer, whenever it pairs and again when it closes, so it does not open by itself again this
+ * foreground session. The close counts too, as the session may have ended while the wizard showed.
  */
 class SetupController(
     private val scope: CoroutineScope,
@@ -104,12 +110,15 @@ class SetupController(
     resumeId: String? = null,
     resumeName: String? = null,
     pick: SetupCandidate? = null,
+    offer: Boolean = false,
+    private val opened: (String) -> Unit = {},
 ) {
     private val pages: List<SetupStep> = steps.filter { it.isPage }
     private val _state = MutableStateFlow(SetupUiState(page = pages.first()))
     val state: StateFlow<SetupUiState> = _state.asStateFlow()
     private var linkJob: Job? = null
     private var nearbyJob: Job? = null
+    private val offered: SetupCandidate? = pick?.takeIf { offer }
 
     init {
         if (resumeId != null) {
@@ -118,9 +127,19 @@ class SetupController(
             _state.update { it.copy(page = page, selected = candidate, paired = true) }
             pair(candidate, silent = true)
         } else {
-            nearbyJob = scope.launch { port.nearby.collect { list -> _state.update { it.copy(candidates = list) } } }
-            if (pick != null) pair(pick, silent = false)
+            offered?.let { o ->
+                opened(o.id)
+                _state.update { it.copy(candidates = listOf(o)) }
+            }
+            nearbyJob = scope.launch { port.nearby.collect { list -> _state.update { it.copy(candidates = withOffer(list)) } } }
+            if (pick != null && offered == null) pair(pick, silent = false)
         }
+    }
+
+    /** The offered sensor stays listed first until the scan on Find hears it too. */
+    private fun withOffer(list: List<SetupCandidate>): List<SetupCandidate> {
+        val o = offered ?: return list
+        return if (list.any { it.id.equals(o.id, ignoreCase = true) }) list else listOf(o) + list
     }
 
     /** Starts the scan, after the platform granted the access [steps] binds to Find. */
@@ -138,6 +157,7 @@ class SetupController(
     }
 
     private fun pair(candidate: SetupCandidate, silent: Boolean) {
+        opened(candidate.id)
         port.stopFind()
         _state.update { it.copy(finding = false, selected = candidate, pairing = !silent, failure = null) }
         linkJob?.cancel()
@@ -233,6 +253,7 @@ class SetupController(
 
     /** Leaves the wizard. A paired sensor stays added, with setup pending unless Done was reached. */
     fun finish() {
+        (_state.value.selected ?: offered)?.let { opened(it.id) }
         port.stopFind()
         linkJob?.cancel()
         nearbyJob?.cancel()

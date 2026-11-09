@@ -23,6 +23,7 @@ class AppNavConfigTest {
         FileMetricsKey("thing", "2026-10-09.parquet"),
         SetupKey(),
         SetupKey("AA:BB"),
+        SetupKey(pick = "AA:BB", pickName = "OS-1", offer = true),
     )
 
     @Test

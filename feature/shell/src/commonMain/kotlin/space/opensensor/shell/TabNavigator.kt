@@ -50,9 +50,20 @@ class TabNavigator(
     }
 
     /** The Add sensor wizard over the My devices root, from Discover, or from a new sensor tapped on My devices ([pick]). */
-    fun openSetup(resume: String? = null, pick: String? = null, pickName: String? = null) {
+    fun openSetup(resume: String? = null, pick: String? = null, pickName: String? = null, offer: Boolean = false) {
         toMyDevicesRoot()
-        push(SetupKey(resume, pick, pickName))
+        push(SetupKey(resume, pick, pickName, offer))
+    }
+
+    /**
+     * The wizard for a sensor that asks for setup (#272), by itself ([auto]) or from Finish setup.
+     * It acts only while the My devices root is on top, so a request sent as that screen fades out
+     * cannot replace a wizard already open. An [auto] open only offers the sensor on Find, so nothing
+     * connects before the owner's tap. A tap on Finish setup resumes a [known] sensor at Location.
+     */
+    fun finishSetup(id: String, name: String?, known: Boolean, auto: Boolean = false) {
+        if (tab != TopTab.MY_DEVICES || top != TopTab.MY_DEVICES.root) return
+        if (known && !auto) openSetup(resume = id) else openSetup(pick = id, pickName = name, offer = true)
     }
 
     /** A detail screen on top of the active tab. */

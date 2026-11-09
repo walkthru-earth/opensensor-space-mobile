@@ -4,6 +4,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import space.opensensor.data.sync.ThingSetupWatch
 import space.opensensor.family.air.AirFamily
 import space.opensensor.thing.OpenSensorBoardKind
 import space.opensensor.thing.ThingKind
@@ -25,4 +26,12 @@ object ThingModule {
     @Provides
     @Singleton
     fun provideThingKinds(): ThingKinds = ThingKinds(KINDS).also { AirFamily.install(it.metricProviders) }
+
+    /**
+     * The one watch of which sensors ask for setup (#272). The scan feeds it in My devices, page 1
+     * reads in [space.opensensor.data.DeviceLinkOwner], and MainActivity ends its session in onStop.
+     */
+    @Provides
+    @Singleton
+    fun provideThingSetupWatch(): ThingSetupWatch = ThingSetupWatch()
 }

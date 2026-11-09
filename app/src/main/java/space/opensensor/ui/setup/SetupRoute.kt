@@ -23,11 +23,12 @@ fun SetupRoute(
     resume: String?,
     pick: String?,
     pickName: String?,
+    offer: Boolean,
     onClose: () -> Unit,
     onOpenSensor: (String) -> Unit,
     viewModel: SetupViewModel = hiltViewModel<SetupViewModel, SetupViewModel.Factory>(
-        key = "setup:$resume:$pick",
-        creationCallback = { it.create(resume, pick, pickName) },
+        key = "setup:$resume:$pick:$offer",
+        creationCallback = { it.create(resume, pick, pickName, offer) },
     ),
 ) {
     val controller = viewModel.controller
