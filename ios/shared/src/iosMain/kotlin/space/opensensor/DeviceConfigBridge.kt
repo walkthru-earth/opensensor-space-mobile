@@ -268,6 +268,26 @@ internal class IosDeviceConfigSource(
         } finally { working.value = false }
     }
 
+    override suspend fun readSite(): space.opensensor.model.ThingSite? {
+        if (state.syncBusy) throw IllegalStateException("a sync holds the link")
+        val result = borrow { it.getSite() ?: SITE_UNSUPPORTED } ?: throw IllegalStateException("link busy")
+        return result.takeUnless { it === SITE_UNSUPPORTED }
+    }
+
+    /** The owner site keys in their own `SET_CONFIG`, then pages 5 and 6 read back. Only Save calls this. */
+    override suspend fun writeSite(patch: ConfigPatch): space.opensensor.model.ThingSite? {
+        require(patch.isSite) { "only owner site keys" }
+        if (state.syncBusy || working.value) throw IllegalStateException("link busy")
+        working.value = true
+        try {
+            val result = borrow {
+                config.value = it.setConfig(patch)
+                it.getSite() ?: SITE_UNSUPPORTED
+            } ?: throw IllegalStateException("link busy")
+            return result.takeUnless { it === SITE_UNSUPPORTED }
+        } finally { working.value = false }
+    }
+
     /**
      * Keeps this sensor's Discover pin in step with the location [page] it returned, and tells the
      * setup watch what page 1 says now (#272).
@@ -399,3 +419,6 @@ internal fun shouldReopenAfterRestart(address: String, selectedId: String?, coll
     selectedId.equals(address, ignoreCase = true) || (selectedId == null && !collectAllRunning)
 
 private val LOCATION_UNSUPPORTED = space.opensensor.data.protocol.LocationConfig()
+
+/** Stands for a board without site keys inside [DeviceConfigBridge.borrow], whose null means busy. */
+private val SITE_UNSUPPORTED = space.opensensor.model.ThingSite()

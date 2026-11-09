@@ -31,4 +31,5 @@
     <string name="setup_leave_body">The sensor stays added. Tap Add your sensor again to finish.</string>
     <string name="setup_leave">Leave</string>
     <string name="setup_stay">Stay</string>
+    <string name="setup_site_title">Site</string>
 </resources>

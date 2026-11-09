@@ -204,4 +204,26 @@
     <string name="location_use_phone">Use phone location</string>
     <string name="location_clear">Clear location</string>
     <string name="location_save">Save on device</string>
+    <string name="msg_config_rejected_site">The sensor refused the site details. Nothing was changed.</string>
+    <string name="config_problem_site">A site value is not valid. Check the site fields.</string>
+    <string name="site_title">Site</string>
+    <string name="location_site_title">Location and site</string>
+    <string name="site_info">Optional. The site name, organisation, link and description describe this sensor when you share its data. The deployment ID is written into each data file, and a change starts a new file.</string>
+    <string name="site_name">Site name</string>
+    <string name="site_provider">Organisation</string>
+    <string name="site_url">Link</string>
+    <string name="site_description">Description</string>
+    <string name="site_deployment">Deployment ID</string>
+    <string name="site_save">Save site</string>
+    <string name="site_saved">Site confirmed on device</string>
+    <string name="site_failed">Site setup failed. Reconnect and refresh to retry.</string>
+    <string name="site_not_confirmed">Site was not confirmed. Refresh before retrying.</string>
+    <string name="site_error_too_long">Too long. The limit is %1$d bytes.</string>
+    <string name="site_error_control">Hidden control characters are not allowed.</string>
+    <string name="site_error_encoding">This text has a character that is not valid.</string>
+    <string name="site_error_scheme">Use a secure link that starts with https</string>
+    <string name="site_error_user_info">Remove the @ from the address part of the link.</string>
+    <string name="site_error_url_charset">The link has a character that is not allowed, such as a space or a quote.</string>
+    <string name="site_error_deployment_charset">Use lowercase letters, digits and dashes only.</string>
+    <string name="site_error_deployment_reserved">Start and end with a letter or digit, and do not use unknown.</string>
 </resources>

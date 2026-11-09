@@ -28,6 +28,7 @@ import space.opensensor.data.protocol.WifiState
 import space.opensensor.family.air.SensorLabel
 import space.opensensor.family.air.sensorIdentity
 import space.opensensor.model.H3Cell
+import space.opensensor.model.SiteField
 import space.opensensor.settings.DetailLevel
 
 /** A question the Device section asks before it changes the device. Only one is open at a time. */
@@ -87,9 +88,16 @@ class DeviceConfigController(
     readOnReady: Boolean = false,
 ) {
     private val location = MutableStateFlow(DeviceLocationState())
+    private val site = MutableStateFlow(DeviceSiteState())
 
-    val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel, location) { snapshot, level, loc ->
-        DeviceConfigUiState(snapshot, level, loc)
+    /**
+     * A site write failed, maybe with `ERROR` 12 `nvs`. The firmware asks the phone to read pages 0,
+     * 1, 5 and 6 again after the next `SET_CONFIG` that succeeds.
+     */
+    private var rereadAfterFailure = false
+
+    val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel, location, site) { snapshot, level, loc, owner ->
+        DeviceConfigUiState(snapshot, level, loc, owner)
     }.stateIn(scope, SharingStarted.Eagerly, DeviceConfigUiState(source.snapshot.value))
 
     private val _dialog = MutableStateFlow<DeviceConfigDialog?>(null)
@@ -108,7 +116,11 @@ class DeviceConfigController(
             source.snapshot.map { DeviceConfigUiState(it).let { s -> s.ready && s.isV2 } }
                 .distinctUntilChanged().collectLatest { ready ->
                     location.value = DeviceLocationState()
-                    if (ready) refreshLocation()
+                    site.value = DeviceSiteState()
+                    if (ready) {
+                        refreshLocation()
+                        refreshSite()
+                    }
                 }
         }
         if (readOnReady) {
@@ -144,7 +156,70 @@ class DeviceConfigController(
     fun refresh() {
         if (now.ready && now.isV2) {
             source.refreshConfig()
-            scope.launch { refreshLocation() }
+            scope.launch {
+                refreshLocation()
+                refreshSite()
+            }
+        }
+    }
+
+    /** Reads pages 5 and 6. The draft follows the board, so a refresh drops unsaved typing. */
+    private suspend fun refreshSite() {
+        if (site.value.working) return
+        site.value = site.value.copy(working = true, result = null)
+        try {
+            val stored = source.readSite()
+            site.value = if (stored == null) DeviceSiteState(supported = false) else DeviceSiteState(supported = true, stored = stored, draft = stored)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Unknown, not unsupported. The fields stay as they were and Save stays off.
+            site.value = site.value.copy(working = false, result = DeviceSiteResult.FAILED)
+        }
+    }
+
+    /** Drafts one site value. Only [saveSite] sends anything. */
+    fun editSite(field: SiteField, value: String) {
+        val current = site.value
+        if (current.supported != true || current.working) return
+        site.value = current.copy(draft = current.draft.with(field, value), result = null)
+    }
+
+    /**
+     * The user's Save. Sends only the changed site values, checked with the firmware rules, in a
+     * `SET_CONFIG` of their own, then compares the pages 5 and 6 readback with what was sent.
+     */
+    fun saveSite() {
+        val current = site.value
+        if (!now.canEdit || now.snapshot.syncRunning || !current.canSave) return
+        val changes = current.changes
+        val patch = try {
+            ConfigPatch.build { site(changes) }
+        } catch (_: ConfigValidationException) {
+            site.value = current.copy(result = DeviceSiteResult.FAILED)
+            return
+        }
+        site.value = current.copy(working = true, result = null)
+        scope.launch {
+            try {
+                val confirmed = source.writeSite(patch)
+                val matches = confirmed != null && changes.all { (field, value) -> confirmed[field].orEmpty() == value }
+                site.value = when {
+                    confirmed == null -> current.copy(working = false, result = DeviceSiteResult.NOT_CONFIRMED)
+                    matches -> DeviceSiteState(supported = true, stored = confirmed, draft = confirmed, result = DeviceSiteResult.SAVED)
+                    else -> current.copy(working = false, stored = confirmed, result = DeviceSiteResult.NOT_CONFIRMED)
+                }
+                if (rereadAfterFailure) {
+                    rereadAfterFailure = false
+                    source.refreshConfig()
+                    refreshLocation()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                rereadAfterFailure = true
+                site.value = current.copy(working = false, result = DeviceSiteResult.FAILED)
+            }
         }
     }
 

@@ -107,6 +107,7 @@ fun configRejectedRes(key: String): Int = when (ConfigFields.groupOf(key)) {
     ConfigGroup.WIFI -> R.string.msg_config_rejected_wifi
     ConfigGroup.LAN -> R.string.msg_config_rejected_lan
     ConfigGroup.LOCATION -> R.string.msg_config_rejected_location
+    ConfigGroup.SITE -> R.string.msg_config_rejected_site
     ConfigGroup.SENSOR -> R.string.msg_config_rejected_sensor
     ConfigGroup.OTHER -> R.string.msg_config_rejected_other
 }
@@ -209,4 +210,5 @@ fun ConfigProblem.toStringRes(): Int = when (this) {
     ConfigProblem.PSK_TOO_LONG -> R.string.config_problem_psk_long
     ConfigProblem.STICKER_FORMAT -> R.string.msg_sticker_invalid
     ConfigProblem.LINE_BREAK -> R.string.config_problem_line_break
+    ConfigProblem.SITE_VALUE -> R.string.config_problem_site
 }

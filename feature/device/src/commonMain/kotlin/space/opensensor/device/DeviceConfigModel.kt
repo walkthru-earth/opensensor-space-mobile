@@ -12,6 +12,7 @@ import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.ConfigProblem
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.PairMode
+import space.opensensor.model.ThingSite
 import space.opensensor.settings.DetailLevel
 
 /** The sensor module this phone recorded for the device, for the sticker card. Android only today. */
@@ -52,6 +53,7 @@ data class DeviceConfigUiState(
     val snapshot: DeviceConfigSnapshot = DeviceConfigSnapshot(),
     val level: DetailLevel = DetailLevel.SIMPLE,
     val location: DeviceLocationState = DeviceLocationState(),
+    val site: DeviceSiteState = DeviceSiteState(),
 ) {
     /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
     val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(snapshot.info)
@@ -151,6 +153,18 @@ interface DeviceConfigSource {
 
     /** Save and read back page 1 under the platform command guard. */
     suspend fun writeLocation(patch: ConfigPatch): space.opensensor.data.protocol.LocationConfig? = null
+
+    /**
+     * Pages 5 and 6 merged, or null on firmware without site keys (page 5 `ERROR` 1 or no `owner`).
+     * Throws when page 5 answered and page 6 did not, which is never an empty description.
+     */
+    suspend fun readSite(): ThingSite? = null
+
+    /**
+     * Sends [patch], which holds owner site keys only ([ConfigPatch.isSite]), under the platform
+     * command guard, then reads pages 5 and 6 back. Null when the board no longer reports a site.
+     */
+    suspend fun writeSite(patch: ConfigPatch): ThingSite? = null
 
     /** `GET_CONFIG`. */
     fun refreshConfig()

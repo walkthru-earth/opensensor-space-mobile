@@ -7,7 +7,7 @@ import space.opensensor.thing.OpenSensorBoardKind
 
 /**
  * One step of a Thing kind's setup. First setup walks the kind's list in order, and the Device
- * settings page reuses the same forms for [Location] and [Fields].
+ * settings page reuses the same forms for [Location], [Site] and [Fields].
  *
  * [Permission] and [Pair] are not pages. A [Permission] step binds `PermissionTriggers` to the
  * action of the page after it, so the access is asked for from that tap and never as a wall. [Pair]
@@ -58,6 +58,16 @@ sealed interface SetupStep {
         override val skippable get() = !required
     }
 
+    /**
+     * The owner site, through `DeviceSiteForm`. Optional, so it has Skip. Its keys go in their own
+     * `SET_CONFIG`, only from the page's Next. A board whose page 5 answers `ERROR` 1 has no site
+     * keys, and the wizard leaves this page out.
+     */
+    data object Site : SetupStep {
+        override val id = "site"
+        override val skippable = true
+    }
+
     /** A group of `SET_CONFIG` keys from the `ConfigFields` table, named [id]. */
     data class Fields(override val id: String, val keys: List<String>) : SetupStep {
         override val skippable = true
@@ -78,13 +88,17 @@ object SetupFlows {
     /** The Wi-Fi page of the board, joined over Bluetooth. Wi-Fi sync and its token follow on their own. */
     val WIFI = SetupStep.Fields("wifi", listOf(ConfigFields.WIFI_ON, ConfigFields.WIFI_SSID, ConfigFields.WIFI_PSK))
 
-    /** `FIND → NAME → LOCATION → WIFI → DONE`, with Bluetooth asked for from Find. Setup never asks for local network. */
+    /**
+     * `FIND → NAME → LOCATION → SITE → WIFI → DONE`, with Bluetooth asked for from Find. Setup never
+     * asks for local network.
+     */
     val BOARD: List<SetupStep> = listOf(
         SetupStep.Permission(UserAction.FIND_SENSORS),
         SetupStep.Find,
         SetupStep.Pair,
         SetupStep.Name,
         LOCATION,
+        SetupStep.Site,
         WIFI,
         SetupStep.Done,
     )

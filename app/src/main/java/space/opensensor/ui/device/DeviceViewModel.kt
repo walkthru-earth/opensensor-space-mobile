@@ -259,6 +259,8 @@ class DeviceViewModel @AssistedInject constructor(
         override fun refreshConfig() = repository.refreshConfig()
         override suspend fun readLocation() = repository.readLocation()
         override suspend fun writeLocation(patch: ConfigPatch) = repository.writeLocation(patch)
+        override suspend fun readSite() = repository.readSite()
+        override suspend fun writeSite(patch: ConfigPatch) = repository.writeSite(patch)
 
         override fun applyConfig(patch: ConfigPatch, change: DeviceConfigChange) = repository.applyConfig(
             patch,

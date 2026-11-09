@@ -208,4 +208,26 @@
     <string name="location_use_phone">استخدام موقع الهاتف</string>
     <string name="location_clear">مسح الموقع</string>
     <string name="location_save">الحفظ على الجهاز</string>
+    <string name="msg_config_rejected_site">رفض المستشعر بيانات الموقع. لم يتغيّر شيء.</string>
+    <string name="config_problem_site">إحدى قيم بيانات الموقع غير صالحة. راجع الحقول.</string>
+    <string name="site_title">بيانات الموقع</string>
+    <string name="location_site_title">الموقع وبياناته</string>
+    <string name="site_info">اختياري. يصف اسم الموقع والجهة والرابط والوصف هذا المستشعر عند مشاركة بياناته. يُكتب معرّف النشر في كل ملف بيانات، وتغييره يبدأ ملفًا جديدًا.</string>
+    <string name="site_name">اسم الموقع</string>
+    <string name="site_provider">الجهة</string>
+    <string name="site_url">الرابط</string>
+    <string name="site_description">الوصف</string>
+    <string name="site_deployment">معرّف النشر</string>
+    <string name="site_save">حفظ بيانات الموقع</string>
+    <string name="site_saved">تم تأكيد بيانات الموقع على الجهاز</string>
+    <string name="site_failed">تعذّر حفظ بيانات الموقع. أعد الاتصال والتحديث للمحاولة مجددًا.</string>
+    <string name="site_not_confirmed">لم يتم تأكيد بيانات الموقع. حدّث قبل المحاولة مجددًا.</string>
+    <string name="site_error_too_long">طويل جدًا. الحد الأقصى %1$d بايت.</string>
+    <string name="site_error_control">لا يُسمح بأحرف التحكم المخفية.</string>
+    <string name="site_error_encoding">يحتوي هذا النص على حرف غير صالح.</string>
+    <string name="site_error_scheme">استخدم رابطًا آمنًا يبدأ بـ https</string>
+    <string name="site_error_user_info">احذف علامة @ من جزء العنوان في الرابط.</string>
+    <string name="site_error_url_charset">يحتوي الرابط على حرف غير مسموح، مثل مسافة أو علامة اقتباس.</string>
+    <string name="site_error_deployment_charset">استخدم أحرفًا لاتينية صغيرة وأرقامًا وشرطات فقط.</string>
+    <string name="site_error_deployment_reserved">ابدأ وانتهِ بحرف أو رقم، ولا تستخدم unknown.</string>
 </resources>

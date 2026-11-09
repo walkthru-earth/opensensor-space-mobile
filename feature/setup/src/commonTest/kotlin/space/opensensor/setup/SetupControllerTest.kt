@@ -51,11 +51,11 @@ class SetupControllerTest {
     }
 
     @Test
-    fun boardPagesRunFindNameLocationWifiDone() {
+    fun boardPagesRunFindNameLocationSiteWifiDone() {
         val pages = SetupFlows.BOARD.filter { it.isPage }
-        assertEquals(listOf("find", "name", "location", "wifi", "done"), pages.map { it.id })
+        assertEquals(listOf("find", "name", "location", "site", "wifi", "done"), pages.map { it.id })
         assertEquals(SetupFlows.BOARD, SetupFlows.of(OpenSensorBoardKind.id))
-        assertEquals(listOf(SetupFlows.WIFI), pages.filter { it.skippable })
+        assertEquals(listOf(SetupStep.Site, SetupFlows.WIFI), pages.filter { it.skippable })
         assertEquals(listOf<SetupStep>(SetupFlows.LOCATION), pages.filter { it.required })
     }
 
@@ -147,6 +147,8 @@ class SetupControllerTest {
         c.next()
         c.onLocated(true)
         c.next()
+        assertEquals(SetupStep.Site, c.state.value.page)
+        c.skip()
         assertEquals(SetupFlows.WIFI, c.state.value.page)
         c.skip()
         assertEquals(SetupStep.Done, c.state.value.page)
@@ -164,6 +166,8 @@ class SetupControllerTest {
         c.next()
         c.onLocated(true)
         c.next()
+        assertEquals(SetupStep.Site, c.state.value.page)
+        c.skip()
         assertEquals(SetupFlows.WIFI, c.state.value.page)
         // The board's cell went away after Location, so Wi-Fi Skip must not reach Done.
         c.onLocated(false)
@@ -316,5 +320,72 @@ class SetupControllerTest {
         c.next()
         assertNull(port.nicknames["AA"])
         assertEquals("OS-1", c.state.value.displayName)
+    }
+
+    // ------------------------------------------------------------------ site (#272)
+
+    /** Paired, Location saved, and on the page after it. */
+    private fun TestScope.pastLocation(port: FakePort): SetupController {
+        val c = paired(port)
+        c.next()
+        c.onLocated(true)
+        c.next()
+        return c
+    }
+
+    @Test
+    fun siteFollowsLocationAndSkipMovesOnToWifi() = runTest(UnconfinedTestDispatcher()) {
+        val port = FakePort()
+        val c = pastLocation(port)
+        assertEquals(SetupStep.Site, c.state.value.page)
+        assertFalse(SetupStep.Site.required)
+        assertTrue(c.state.value.canAdvance, "Site is optional")
+        c.skip()
+        assertEquals(SetupFlows.WIFI, c.state.value.page)
+        c.back()
+        assertEquals(SetupStep.Site, c.state.value.page)
+        c.back()
+        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+    }
+
+    @Test
+    fun siteNextWithoutAnEditMovesOn() = runTest(UnconfinedTestDispatcher()) {
+        val c = pastLocation(FakePort())
+        c.onSiteSupport(true)
+        c.next()
+        assertEquals(SetupFlows.WIFI, c.state.value.page)
+    }
+
+    @Test
+    fun aBoardWithoutSiteKeysLeavesSiteOutBothWays() = runTest(UnconfinedTestDispatcher()) {
+        val port = FakePort()
+        val c = paired(port)
+        c.onSiteSupport(false)
+        c.next()
+        c.onLocated(true)
+        c.next()
+        assertEquals(SetupFlows.WIFI, c.state.value.page, "Next on Location skips the hidden Site")
+        c.back()
+        assertEquals(SetupFlows.LOCATION, c.state.value.page, "Back on Wi-Fi skips it too")
+    }
+
+    @Test
+    fun learningOnSiteThatTheBoardHasNoSiteKeysMovesOn() = runTest(UnconfinedTestDispatcher()) {
+        val c = pastLocation(FakePort())
+        c.onSiteSupport(null)
+        assertEquals(SetupStep.Site, c.state.value.page, "unknown keeps Site")
+        c.onSiteSupport(false)
+        assertEquals(SetupFlows.WIFI, c.state.value.page)
+    }
+
+    @Test
+    fun siteSkipNeverReachesDoneWithoutALocation() = runTest(UnconfinedTestDispatcher()) {
+        val port = FakePort()
+        val c = pastLocation(port)
+        c.onLocated(false)
+        c.skip()
+        c.skip()
+        assertEquals(SetupFlows.WIFI, c.state.value.page)
+        assertEquals(setOf("AA"), port.pending)
     }
 }

@@ -22,6 +22,7 @@ import space.opensensor.data.protocol.LiveSample
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ProtocolError
 import space.opensensor.data.protocol.Request
+import space.opensensor.data.protocol.siteOf
 import space.opensensor.data.sync.AdaptiveReadWindow
 import space.opensensor.data.sync.ClockSyncAction
 import space.opensensor.data.sync.SmartSyncPolicy
@@ -400,6 +401,26 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
         config(Request.GetLocation, "GET_CONFIG location").config
     } catch (e: DeviceErrorException) {
         if (e.protocolError == ProtocolError.MALFORMED_REQUEST || e.protocolError == ProtocolError.UNKNOWN_OPCODE) null else throw e
+    }
+
+    /**
+     * The owner site from `GET_CONFIG` pages 5 and 6, merged ([siteOf]), or null when the board has
+     * no site keys. Page 5 answering `ERROR` 1 (or an unknown opcode), or answering without an `owner`
+     * object as legacy firmware that ignores the page byte does, means no site keys. That is never an
+     * empty site. Once page 5 answered, page 6 must answer too: its `ERROR` is thrown and a page 6
+     * without `owner` is a [ProtocolViolationException], never an empty description.
+     */
+    suspend fun getSite(): space.opensensor.model.ThingSite? {
+        val main = try {
+            config(Request.GetConfigPage(Request.GetConfigPage.SITE), "GET_CONFIG site").config
+        } catch (e: DeviceErrorException) {
+            if (e.protocolError == ProtocolError.MALFORMED_REQUEST || e.protocolError == ProtocolError.UNKNOWN_OPCODE) return null
+            throw e
+        }
+        if (main.owner == null) return null
+        val more = config(Request.GetConfigPage(Request.GetConfigPage.SITE_DESCRIPTION), "GET_CONFIG site description").config
+        if (more.owner == null) throw ProtocolViolationException("GET_CONFIG page 6 has no owner object")
+        return siteOf(main, more)
     }
 
     /**

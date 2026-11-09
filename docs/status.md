@@ -4,6 +4,21 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../opensensor-space-firmware/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-11-09, field setup with a site step (code only)
+
+Host tests and the iOS simulator only. No phone or board run is recorded. Owner decisions of
+2026-11-08 (#272), against firmware #148.
+
+- The wizard runs Find, Name, Location, Site, Wi-Fi and Done. A sensor that asks for setup opens it
+  on Find with the sensor offered first. Location needs a confirmed res 8 cell from the area map.
+  Site is optional, with Skip, and is left out for a board whose page 5 answers `ERROR` 1.
+- Device settings show the same site fields in the "Location and site" card with Save site.
+- Site values go in their own `SET_CONFIG` after the firmware rules pass on the phone, and count
+  as saved only when pages 5 and 6 read back the same
+  ([device-location.md](device-location.md#site)).
+- To check on phones. The Site page and card against a board with firmware #148 and one without,
+  a refused link or deployment ID, Arabic text at the 64 byte cap, and the readback after Save.
+
 ## 2026-11-04, published resolution 8 and relative File Item hrefs (code only)
 
 Host tests and the iOS simulator only. No phone run is recorded. Owner decisions of 2026-11-04 (#255).
