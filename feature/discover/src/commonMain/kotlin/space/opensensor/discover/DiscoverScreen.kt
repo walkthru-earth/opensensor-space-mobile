@@ -907,7 +907,7 @@ private fun OwnList(own: List<OwnPin>, status: Map<String, OwnStatus>, now: Long
         val label = strings.ownShow(name)
         val thingStatus = status[pin.thing.key]
         val reading = thingStatus?.reading?.let { r ->
-            "${metricLabel(r.metric)}  ${units.format(r.mean.toDouble(), r.metric.unit, r.displayStep, AppProfile.decimalsOf(r.displayStep))} ${units.unit(r.metric.unit)}"
+            "${metricLabel(r.metric)} ${units.format(r.mean.toDouble(), r.metric.unit, r.displayStep, AppProfile.decimalsOf(r.displayStep))} ${units.unit(r.metric.unit)}".trimEnd()
         }
         val freshness = ownFreshness(thingStatus, now)
         Row(
