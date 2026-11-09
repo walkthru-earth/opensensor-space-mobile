@@ -42,6 +42,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.maplibre.compose.expressions.dsl.const
 import org.maplibre.compose.interaction.ClickResult
@@ -128,6 +129,14 @@ object CellPickerGrid {
     /** [hex] when it names a cell at [RESOLUTION], otherwise null. The only value a pick emits. */
     fun pickable(hex: String?): String? = hex?.takeIf { H3Cell.isCellHex(it, RESOLUTION) }
 
+    /**
+     * The one way a pick leaves the picker. Calls [onSelect] with [hex] only when [enabled] and
+     * [hex] is [pickable], so a coordinate or another resolution never reaches it.
+     */
+    fun pick(enabled: Boolean, hex: String?, onSelect: (String) -> Unit) {
+        if (enabled) pickable(hex)?.let(onSelect)
+    }
+
     /** The cell a tapped feature names, through [pickable]. Every other property is ignored. */
     fun tapped(properties: JsonObject?): String? = pickable(properties?.get("h3")?.jsonPrimitive?.contentOrNull)
 
@@ -191,11 +200,12 @@ private fun PickerMap(
     networkAllowed: Boolean,
     controls: @Composable ColumnScope.() -> Unit,
 ) {
-    val pick by rememberUpdatedState<(String?) -> Unit> { hex -> if (enabled) CellPickerGrid.pickable(hex)?.let(onSelect) }
+    val pick by rememberUpdatedState<(String?) -> Unit> { hex -> CellPickerGrid.pick(enabled, hex, onSelect) }
     // The cells in view and the one under the centre. Cells only, never the camera position.
     var cells by remember { mutableStateOf<List<Long>>(emptyList()) }
     var centre by remember { mutableStateOf<Long?>(null) }
-    var zoomedIn by remember { mutableStateOf(false) }
+    // Null until the camera first rests, so the zoom hint waits for the real zoom.
+    var zoomedIn by remember { mutableStateOf<Boolean?>(null) }
     // The picker opens on the chosen cell, or fits the phone's time zone region.
     val start = remember { CellPickerGrid.centre(h3, selected) }
     val region = remember { if (start == null) TimeZoneRegions.regionFor(TimeZone.currentSystemDefault().id) else null }
@@ -259,7 +269,7 @@ private fun PickerMap(
             onPlace = { place -> scope.launch { mapState.moveCamera(Position(longitude = place.lng, latitude = place.lat), PLACE_ZOOM, reduce) } },
             modifier = Modifier.align(Alignment.TopStart).padding(FloatingControl.Margin),
         )
-        if (!zoomedIn) {
+        if (zoomedIn == false) {
             FloatingSurface(Modifier.align(Alignment.Center).padding(FloatingControl.Margin), shape = FloatingControl.SmallShape) {
                 Text(
                     stringResource(Res.string.map_pick_zoom_in),
@@ -285,15 +295,7 @@ private fun PickerMap(
 /** The OpenStreetMap credit while the basemap may load, and the map info with every source. */
 @Composable
 private fun MapCredits(networkAllowed: Boolean) {
-    val info = InfoContent(
-        stringResource(Res.string.map_info_title),
-        listOfNotNull(
-            if (networkAllowed) stringResource(Res.string.map_info_osm) else null,
-            if (networkAllowed) stringResource(Res.string.map_info_protomaps) else null,
-            stringResource(Res.string.map_info_geonames),
-            stringResource(Res.string.map_info_grid),
-        ),
-    )
+    val info = InfoContent(stringResource(Res.string.map_info_title), pickerMapInfo(networkAllowed).map { stringResource(it) })
     FloatingSurface(shape = FloatingControl.SmallShape) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = if (networkAllowed) 10.dp else 0.dp)) {
             if (networkAllowed) Text(stringResource(Res.string.map_osm), style = MaterialTheme.typography.labelSmall)
@@ -301,6 +303,17 @@ private fun MapCredits(networkAllowed: Boolean) {
         }
     }
 }
+
+/**
+ * The lines of the picker's map info. The GeoNames credit always shows, since the place search is
+ * bundled. The basemap credits show only when [networkAllowed] lets the basemap load.
+ */
+internal fun pickerMapInfo(networkAllowed: Boolean): List<StringResource> = listOfNotNull(
+    Res.string.map_info_osm.takeIf { networkAllowed },
+    Res.string.map_info_protomaps.takeIf { networkAllowed },
+    Res.string.map_info_geonames,
+    Res.string.map_info_grid,
+)
 
 /**
  * The phone location button for [CellPicker]'s controls. While [busy] a small spinner takes the

@@ -528,6 +528,7 @@ class DeviceConfigControllerTest {
         c.acceptLocationCell("5.5600,-0.2000", 8)
         c.acceptLocationCell("8928308280fffff", 8)
         c.acceptLocationCell("85283083fffffff", 8)
+        c.acceptLocationCell("872830828ffffff", 8)
         c.acceptLocationCell(CELL8, 9)
         assertEquals("", c.state.value.location.draft.cell)
         c.acceptLocationCell(CELL8, 8)

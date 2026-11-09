@@ -46,6 +46,16 @@ class CellPickerGridTest {
     }
 
     @Test
+    fun aPickCallsBackOnlyWhenEnabledWithAResolution8Cell() {
+        val sent = mutableListOf<String>()
+        for (hex in listOf(cell5, "872830828ffffff", cell9, "5.56,-0.20", "", null)) CellPickerGrid.pick(true, hex, sent::add)
+        CellPickerGrid.pick(false, cell8, sent::add)
+        assertEquals(emptyList(), sent, "no other value and nothing while disabled")
+        CellPickerGrid.pick(true, cell8, sent::add)
+        assertEquals(listOf(cell8), sent)
+    }
+
+    @Test
     fun aTapReadsOnlyTheCellProperty() {
         val feature = buildJsonObject {
             put("h3", JsonPrimitive(cell8))

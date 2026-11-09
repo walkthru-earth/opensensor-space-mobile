@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,7 +96,8 @@ internal fun DeviceLocationCard(state: DeviceConfigUiState, onAction: (DeviceCon
 fun DeviceLocationForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction) -> Unit) {
     val loc = state.location
     val draft = loc.draft
-    var open by remember { mutableStateOf(false) }
+    // Survives rotation. Only whether the map is open, never a place or a cell.
+    var open by rememberSaveable { mutableStateOf(false) }
     Column {
         Text(if (draft.cell.isEmpty()) stringResource(Res.string.location_unset) else stringResource(Res.string.location_set))
         // The cell id is for people who read H3. Simple shows the words only.

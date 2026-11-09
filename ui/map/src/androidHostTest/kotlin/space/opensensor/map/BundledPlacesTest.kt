@@ -30,12 +30,24 @@ class BundledPlacesTest {
     }
 
     @Test
-    fun everyPlaceShowsItsGeoNamesNameInBothLanguages() {
+    fun onlyCuratedCitiesHaveArabicNames() {
         // Untagged alternates would label Casablanca with an old district name, أنفا.
         val casablanca = index.search("casablanca").first()
         assertEquals("Casablanca" to "MA", casablanca.name to casablanca.country)
-        assertEquals("Casablanca", casablanca.label(arabic = true))
-        assertTrue(index.places.all { it.ar.isEmpty() }, "no untagged Arabic names")
+        assertEquals("الدار البيضاء", casablanca.label(arabic = true))
+        assertEquals(53, index.places.count { it.ar.isNotEmpty() }, "the curated list of make_places.py")
+        val other = index.search("rabat").first()
+        assertEquals("Rabat", other.label(arabic = true), "an uncurated city keeps its GeoNames name")
+    }
+
+    @Test
+    fun curatedCitiesAreFoundInArabic() {
+        assertEquals("Casablanca", index.search("الدار البيضاء").first().name)
+        assertEquals("Accra", index.search("أكرا").first().name)
+        assertEquals("Cairo", index.search("القاهرة").first().name)
+        assertEquals("Cairo", index.search("قاهر").first().name)
+        assertEquals("Kumasi", index.search("كوماسي").first().name)
+        assertEquals("Tema" to "GH", index.search("تيما").first().let { it.name to it.country })
     }
 
     @Test

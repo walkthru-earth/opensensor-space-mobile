@@ -13,8 +13,8 @@ import space.opensensor.map.resources.Res
 
 /**
  * One bundled place from GeoNames cities15000 (CC BY 4.0, credited in the map info). [ascii] is its
- * ASCII name, empty when the same as [name]. [ar] is an Arabic name, empty in the bundled file until
- * tagged Arabic names are added, so both languages show [name].
+ * ASCII name, empty when the same as [name]. [ar] is its curated Arabic name, set only for the
+ * large cities and main Ghana cities that tools/places/make_places.py lists, empty elsewhere.
  * [country] is the ISO 3166 alpha-2 code. [lat] and [lng] are rounded to about 1 km and only move
  * the camera. Search is local, so typing never leaves the phone.
  */
@@ -48,19 +48,21 @@ class PlaceIndex internal constructor(val places: List<Place>) {
     fun search(query: String, limit: Int = 6): List<Place> {
         val q = fold(query)
         if (q.isEmpty() || limit <= 0) return emptyList()
+        val word = " $q"
         val ranked = List(3) { ArrayList<Place>(limit) }
         for (i in places.indices) {
-            val rank = keys[i].minOfOrNull { rank(it, q) } ?: continue
+            val rank = keys[i].minOfOrNull { rank(it, q, word) } ?: continue
             if (rank < 3 && ranked[rank].size < limit) ranked[rank] += places[i]
             if (ranked[0].size >= limit) break
         }
         return ranked.flatten().take(limit)
     }
 
-    private fun rank(key: String, q: String): Int = when {
+    // [word] is [q] after a space, a match at the start of a later word.
+    private fun rank(key: String, q: String, word: String): Int = when {
         key == q -> 0
         key.startsWith(q) -> 1
-        key.contains(" $q") -> 2
+        key.contains(word) -> 2
         else -> 3
     }
 

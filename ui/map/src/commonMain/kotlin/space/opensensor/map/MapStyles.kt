@@ -21,6 +21,13 @@ object MapStyles {
         return Res.readBytes("files/basemap/$flavour.json").decodeToString()
     }
 
+    /**
+     * The style to draw. With [networkAllowed] off it is [paper] and [basemap] is never called, so
+     * no style or tile URL is read. On it is the basemap, or [paper] when that fails.
+     */
+    suspend fun choose(networkAllowed: Boolean, paper: () -> String, basemap: suspend () -> String): String =
+        if (networkAllowed) catchingNonCancel { basemap() }.getOrNull() ?: paper() else paper()
+
     /** A style with no network sources, one background of [color]. */
     fun paper(color: Color): String =
         "{\"version\":8,\"sources\":{},\"layers\":[{\"id\":\"paper\",\"type\":\"background\",\"paint\":{\"background-color\":\"${hex(color)}\"}}]}"
@@ -39,7 +46,7 @@ object MapStyles {
 fun rememberMapStyle(networkAllowed: Boolean, paper: Color = MaterialTheme.colorScheme.surfaceContainerLow): String? {
     val dark = isSystemInDarkTheme()
     val style by produceState<String?>(null, networkAllowed, dark) {
-        value = if (networkAllowed) catchingNonCancel { MapStyles.basemap(dark) }.getOrNull() ?: MapStyles.paper(paper) else MapStyles.paper(paper)
+        value = MapStyles.choose(networkAllowed, { MapStyles.paper(paper) }) { MapStyles.basemap(dark) }
     }
     return style
 }
