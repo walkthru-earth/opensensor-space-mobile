@@ -286,4 +286,41 @@ class CatchUpPlannerTest {
         val result = catchUp.plan(thing, prefixes, listOf(raw(n, sha = shaA)))
         assertEquals(CatchUpDecision.Skip(SkipReason.REMOVED_BY_USER), result.entries.single().decision)
     }
+
+    @Test
+    fun aRemovedFileListedAtAnotherSizeIsFetched() {
+        val n = name(15, "1000", 0)
+        val removed = listOf(PrunedFile(thing, n, 1000, 1, 5))
+        val bigger = raw(n, bytes = 2000, sha = shaA)
+        assertEquals(CatchUpDecision.Fetch, plan(listOf(bigger), pruned = removed).decision(bigger))
+        val same = raw(n, bytes = 1000, sha = shaA)
+        assertEquals(CatchUpDecision.Skip(SkipReason.REMOVED_BY_USER), plan(listOf(same), pruned = removed).decision(same))
+    }
+
+    @Test
+    fun anArchivedCompactedDayKeepsItsOneFileAgainstAnotherListedName() {
+        val local = archivedCompacted(16)
+        val otherSha = compacted(16, sha = shaC, part = "copy")
+        assertEquals(CatchUpDecision.Conflict(ConflictReason.DAY_HAS_OTHER_FILE, local), plan(listOf(otherSha), local).decision(otherSha))
+        val unchecksummed = compacted(16, part = "copy")
+        assertEquals(CatchUpDecision.Conflict(ConflictReason.DAY_HAS_OTHER_FILE, local), plan(listOf(unchecksummed), local).decision(unchecksummed))
+        val sameBytes = compacted(16, sha = shaB, part = "copy")
+        assertEquals(CatchUpDecision.Skip(SkipReason.SAME_BYTES_OTHER_NAME), plan(listOf(sameBytes), local).decision(sameBytes))
+
+        // The archived name still settles itself beside the other name.
+        val itself = compacted(16, sha = shaB)
+        val both = plan(listOf(itself, otherSha), local)
+        assertEquals(CatchUpDecision.Skip(SkipReason.SAME_FILE), both.decision(itself))
+        assertEquals(CatchUpDecision.Conflict(ConflictReason.DAY_HAS_OTHER_FILE, local), both.decision(otherSha))
+        assertTrue(both.toFetch.isEmpty())
+    }
+
+    @Test
+    fun rawKeysOfAnotherThingNeverMakeADayRaw() {
+        val foreign = raw(name(17, "1000", 0, t = other), sha = shaA)
+        val roll = compacted(17, sha = shaB)
+        val result = plan(listOf(foreign, roll))
+        assertEquals(CatchUpDecision.Skip(SkipReason.OTHER_THING), result.decision(foreign))
+        assertEquals(CatchUpDecision.Fetch, result.decision(roll))
+    }
 }

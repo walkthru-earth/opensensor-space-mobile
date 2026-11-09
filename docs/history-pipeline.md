@@ -133,8 +133,9 @@ nothing. No reader exists yet. Each entry gets one decision.
 | Same name, no checksum on one side, same size | Skip, `SAME_NAME_UNPROVEN`. Never fetched again |
 | Same name, no checksum on one side, other size | Conflict, `OTHER_SIZE` |
 | Archived bytes under another name | Skip, `SAME_BYTES_OTHER_NAME` |
+| Another compacted name on a day whose compacted file is archived | Conflict, `DAY_HAS_OTHER_FILE` |
 | The listing holds it twice | One planned, the first that carries a checksum, the rest `REPEAT_IN_LISTING`. Two different files for one name are both a conflict |
-| Removed by the user in Settings | Skip, `REMOVED_BY_USER` |
+| Removed by the user in Settings, the same name and size | Skip, `REMOVED_BY_USER` |
 | Anything else in this Thing's dated files | Fetch |
 
 Raw and compacted files never mix (bridge decision 13). `CloudPrefixes` names the raw prefix, the
@@ -142,9 +143,11 @@ board's Hive tree, and the compacted prefix of day roll ups in the same `thing=`
 Each UTC day reads one tree. The archive decides first. An archived board file makes it a raw day, and
 an archived file of any other name a compacted day. Otherwise any raw file in the listing makes it a
 raw day. A raw day skips its compacted files (`RAW_COVERS_DAY`) and a compacted day skips its raw files
-(`COMPACTED_COVERS_DAY`), so the archive never holds both trees for one day. A day with no raw file
-fetches its one compacted file, and several compacted files for one day are fetched once only when
-their checksums are known and equal, else they are a conflict.
+(`COMPACTED_COVERS_DAY`), so a catch up never adds the second tree to a day. A later device download
+can still add raw files to a restored compacted day. A day with no raw file fetches its one compacted
+file. Several compacted files for one day in the listing are fetched once only when their checksums
+are known and equal, else they are a conflict. On a day whose compacted file is archived, another
+compacted name is a conflict (`DAY_HAS_OTHER_FILE`) unless it holds the same bytes.
 Keys outside both prefixes, Items, Collections, unsynced files and other Things are skipped.
 
 A fetched file must pass the same size, CRC-32 and `PAR1` checks as a device download before it is

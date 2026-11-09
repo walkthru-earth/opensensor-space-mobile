@@ -63,7 +63,7 @@ enum class SkipReason {
     /** The listing holds this file again, under another key. The first one is planned. */
     REPEAT_IN_LISTING,
 
-    /** The user removed this file from the phone in Settings. */
+    /** The user removed this file from the phone in Settings, the same name at the same size. */
     REMOVED_BY_USER,
 
     /** Raw files cover this UTC day, so its compacted file is never read beside them (decision 13). */
@@ -88,6 +88,9 @@ enum class ConflictReason {
 
     /** The listing holds several different files for one name, or several compacted files for one day. */
     LISTING_DISAGREES,
+
+    /** The archive holds another compacted file for this UTC day. A day keeps one compacted file. */
+    DAY_HAS_OTHER_FILE,
 }
 
 /**
@@ -147,7 +150,9 @@ object CatchUpPlanner {
         val mine = archived.filter { it.thing == thing }
         val byKey = mine.groupBy { matchKey(it.name) }
         val bySha = mine.filter { it.sha256.isNotEmpty() }.groupBy { it.sha256 }
-        val removed = pruned.filter { it.thing == thing }.mapTo(HashSet()) { matchKey(it.name) }
+        // Removed files by name, each with the sizes it was removed at. Another size is another file.
+        val removed = pruned.filter { it.thing == thing }.groupBy({ matchKey(it.name) }, { it.bytes })
+            .mapValues { (_, sizes) -> sizes.toSet() }
 
         // The tree of each UTC day. The archive decides first, then any raw file in the listing. Raw
         // files of a compacted day are settled before the repeat check, so they never stand for a
@@ -155,6 +160,7 @@ object CatchUpPlanner {
         val (archivedRaw, archivedCompacted) = mine.partition { FileIdentity.isBoardFile(it.name) }
         val rawDays = archivedRaw.mapNotNullTo(HashSet()) { dayOf(it.name) }
         val compactedDays = archivedCompacted.mapNotNullTo(HashSet()) { dayOf(it.name) } - rawDays
+        val archivedRollUps = archivedCompacted.groupBy { dayOf(it.name) }
         val located = listing.map { remote ->
             val at = locate(thing, prefixes, remote)
             val covered = at.decision == null && at.kind == CloudFileKind.RAW && at.utcDate in compactedDays
@@ -170,6 +176,12 @@ object CatchUpPlanner {
             val decision = when {
                 at.decision != null -> at.decision
                 at.kind == CloudFileKind.COMPACTED && at.utcDate in rawDays -> skip(SkipReason.RAW_COVERS_DAY)
+                // The archive holds this day's compacted file, so the archive decides, never the listing.
+                at.kind == CloudFileKind.COMPACTED && at.utcDate in compactedDays ->
+                    againstArchive(at, byKey, bySha, removed).let { decision ->
+                        if (decision != CatchUpDecision.Fetch) return@let decision
+                        CatchUpDecision.Conflict(ConflictReason.DAY_HAS_OTHER_FILE, archivedRollUps[at.utcDate]?.firstOrNull())
+                    }
                 at.kind == CloudFileKind.COMPACTED -> oneCompactedPerDay(at, listedCompacted.getValue(at.utcDate))
                     ?: againstArchive(at, byKey, bySha, removed)
                 else -> repeats[index] ?: againstArchive(at, byKey, bySha, removed)
@@ -263,7 +275,7 @@ object CatchUpPlanner {
         at: Located,
         byKey: Map<String, List<ArchiveRecord>>,
         bySha: Map<String, List<ArchiveRecord>>,
-        removed: Set<String>,
+        removed: Map<String, Set<Long>>,
     ): CatchUpDecision {
         val sha = at.remote.sha256
         val local = byKey[at.key].orEmpty()
@@ -281,7 +293,7 @@ object CatchUpPlanner {
             return skip(SkipReason.SAME_NAME_UNPROVEN)
         }
         if (sha != null && bySha[sha] != null) return skip(SkipReason.SAME_BYTES_OTHER_NAME)
-        if (at.key in removed) return skip(SkipReason.REMOVED_BY_USER)
+        if (at.remote.bytes in removed[at.key].orEmpty()) return skip(SkipReason.REMOVED_BY_USER)
         return CatchUpDecision.Fetch
     }
 
