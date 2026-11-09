@@ -22,6 +22,7 @@
     <string name="discover_map_title">بيانات الخريطة</string>
     <string name="discover_map_info1">بيانات الخريطة © المساهمون في OpenStreetMap، بموجب رخصة Open Database License. راجع openstreetmap.org/copyright.</string>
     <string name="discover_map_info2">الخريطة الأساسية من Protomaps.</string>
+    <string name="discover_map_info3">أسماء الأماكن © GeoNames، بموجب رخصة CC BY 4.0. راجع geonames.org.</string>
     <string name="discover_no_areas">لا توجد مناطق مستشعرات هنا بعد</string>
     <string name="discover_not_measured">لا يُقاس هنا</string>
     <string name="discover_stale">لا قيمة جديدة منذ 3 ساعات</string>

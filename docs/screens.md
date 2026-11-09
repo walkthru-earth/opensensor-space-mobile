@@ -46,7 +46,8 @@ device, and nothing is asked at launch.
   with their own back arrow.
 - "Add your sensor" on Discover opens the Add sensor wizard over the My devices root, so closing it
   lands on My devices. A device screen that loses its session returns there too. Settings is reached only from the bottom bar.
-  The wizard's Location page has no Skip. Next waits until the sensor confirms a saved H3 cell, and a
+  The wizard's Location page has no Skip. Its area is picked on the full screen area map, the same
+  one Device settings opens ([device-location.md](device-location.md)). Next waits until the sensor confirms a saved H3 cell, and a
   setup left before Done resumes at Location. After pairing, the close arrow and system back both ask
   "Leave setup?" first, and old firmware fails on Find with the update message. A sensor under Nearby
   on My devices that this phone has not added opens the wizard with it picked, never Today, so setup
@@ -162,7 +163,7 @@ iOS has no Local Network status API (TN3179), so it stays unknown until the brow
 | Local network (`ACCESS_LOCAL_NETWORK`, API 37+; iOS Local Network) | My devices Scan tap, and Allow local network or the Sync over Wi-Fi switch on the Developer card. Setup, the token and background runs never ask. Discovery runs only once held | My devices Scan or an automatic scan with existing Bluetooth access starts `NWBrowser`; Allow local network on the Developer Sync over Wi-Fi card also starts a browse | Bluetooth sync works. The token fetch still runs |
 | Notifications (`POST_NOTIFICATIONS`, API 33+) | Sync now, Sync all, file sync, Collect from all, Auto-sync on, Set up wake when nearby. Asked once per screen | Not requested | The sync runs, its progress notification is hidden |
 | Camera (iOS only, AVFoundation video) | Not requested. Google Code Scanner runs in Play services with no camera permission | Scan on the sensor sticker card in Device settings, straight to the system prompt with no rationale. A later tap after a denial offers Settings. Restricted gets a note only | Typing the sticker always works |
-| Location (`ACCESS_COARSE_LOCATION` only, never fine) | Discover **Near me** only moves the map. Device settings **Use phone location** obtains a one-shot fix and converts it to the selected H3 cell before UI or transport use. **Save on device** sends only that cell and optional declared country. No exact fix is stored or sent | Same explicit taps, When In Use with reduced accuracy | The map opens on the last area or the time zone region |
+| Location (`ACCESS_COARSE_LOCATION` only, never fine) | Discover **Near me** only moves the map. The **Use phone location** button of the area map (setup Location and Device settings) obtains a one-shot fix, converts it to a resolution 8 cell and only moves the map there. A tap on a cell picks it, and **Save** sends only that cell and optional declared country. No exact fix is stored or sent | Same explicit taps, When In Use with reduced accuracy | The map opens on the last area or the time zone region |
 
 ## Design system
 

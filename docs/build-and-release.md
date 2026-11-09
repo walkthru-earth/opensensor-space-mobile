@@ -318,7 +318,7 @@ merged manifest to it ([store-compliance.md](store-compliance.md#per-kind-gates-
 | `RECEIVE_BOOT_COMPLETED` | restart the process after boot so the Wi-Fi-arrival and advertising-flag registrations are re-armed; schedules nothing itself | – |
 
 Only approximate location (`ACCESS_COARSE_LOCATION`), requested when **Near me**
-or Device settings **Use phone location** is tapped. No fine or background
+or the area map's **Use phone location** is tapped. No fine or background
 permission. Device provisioning sends only the selected H3 cell after explicit
 Save, never the phone fix. See [device-location.md](device-location.md). No analytics/crash SDKs, no accounts. `allowBackup` with
 `dataExtractionRules` ([data-model.md](data-model.md#backup)).
@@ -436,6 +436,11 @@ cd opensensor-space-android && rm -rf .git
 ```
 
 `customizer.sh` cannot take a spaced application name. Use one word.
+
+The offline place search ships GeoNames cities15000 (CC BY 4.0) as
+`ui/map/src/commonMain/composeResources/files/places/cities15000.tsv.gz`, 34,208 places in
+523,936 bytes. `uv run tools/places/make_places.py` downloads the dump and writes it again,
+byte for byte the same for the same download. `BundledPlacesTest` keeps it under 700,000 bytes.
 
 ## Uses → affects
 

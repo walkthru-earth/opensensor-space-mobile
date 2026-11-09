@@ -20,4 +20,21 @@
     <string name="map_access_not_now">ليس الآن</string>
     <string name="map_access_open_settings">فتح الإعدادات</string>
     <string name="map_access_cancel">إلغاء</string>
+    <!-- Place search over the bundled GeoNames list. Picking a place only moves the map. -->
+    <string name="map_search_places">ابحث عن أماكن</string>
+    <string name="map_search_clear">مسح البحث</string>
+    <string name="map_no_places">لا توجد أماكن مطابقة</string>
+    <!-- The area picker of setup and Device settings. -->
+    <string name="map_picker_label">خريطة المناطق. اضغط على منطقة لاختيارها</string>
+    <string name="map_pick_zoom_in">كبّر الخريطة لاختيار منطقة</string>
+    <string name="map_pick_middle">اختر المنطقة في المنتصف</string>
+    <string name="map_picker_selected">المنطقة المختارة</string>
+    <string name="map_picker_unavailable">خريطة المناطق غير متاحة على هذا الهاتف</string>
+    <!-- The picker's map credits, in its info sheet. The OpenStreetMap lines show only while the basemap may load. -->
+    <string name="map_osm">© OpenStreetMap</string>
+    <string name="map_info_title">بيانات الخريطة</string>
+    <string name="map_info_osm">بيانات الخريطة © المساهمون في OpenStreetMap، بموجب رخصة Open Database License. راجع openstreetmap.org/copyright.</string>
+    <string name="map_info_protomaps">الخريطة الأساسية من Protomaps.</string>
+    <string name="map_info_geonames">أسماء الأماكن © GeoNames، بموجب رخصة CC BY 4.0. راجع geonames.org.</string>
+    <string name="map_info_grid">كل حدّ مرسوم هو منطقة مساحتها نحو 0.74 كم². تُرسل إلى المستشعر المنطقة التي تختارها فقط.</string>
 </resources>

@@ -29,8 +29,9 @@ flowchart TB
   subgraph ui["Compose Multiplatform, Android and iOS"]
     DS[":ui:designsystem<br/>tokens, theme, fonts, floating controls"]
     PM[":ui:permissions<br/>trigger table, permission policy, settings link"]
-    MP[":ui:map<br/>base map, styles, zoom, tile cache, cell outlines, Near me"]
+    MP[":ui:map<br/>base map, styles, zoom, tile cache, cell outlines, Near me, res 8 CellPicker, offline place search"]
     DI[":feature:discover<br/>public cells, own pins, legend, cell sheet, chart"]
+    DV[":feature:device<br/>Device settings, sensor location on the area map"]
     FS[":feature:settings<br/>Settings screen and controller"]
     SH[":feature:shell<br/>AppKey, TabNavigator, AppShell, bottom bar"]
   end
@@ -47,12 +48,13 @@ flowchart TB
   TH --> SC & HI & PR & MO1
   MP --> PF & DS & PM
   DI --> PF & DS & MP & UN & SE
+  DV --> MP & DS & PM & PF & SY1
   DS --> AQ
   SE --> UN & ST
   FS --> SE & DS
   SH --> DS
-  APP --> AQ & TH & SY1 & ST & HI & PF & UN & DI & MP & DS & SE & FS & PM & SH
-  IS --> AQ & TH & SY1 & AR1 & HI & PR & UN & DI & MP & DS & SE & FS & PM & SH
+  APP --> AQ & TH & SY1 & ST & HI & PF & UN & DI & DV & MP & DS & SE & FS & PM & SH
+  IS --> AQ & TH & SY1 & AR1 & HI & PR & UN & DI & DV & MP & DS & SE & FS & PM & SH
   IOS --> IS
 ```
 

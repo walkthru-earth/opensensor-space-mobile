@@ -36,20 +36,6 @@ class DiscoverFormatTest {
     }
 
     @Test
-    fun searchIsLocalAndIgnoresAccents() {
-        assertEquals("Cairo", Places.search("cai").first().name)
-        assertEquals("São Paulo", Places.search("sao").first().name)
-        assertTrue(Places.search("").isEmpty())
-        assertTrue(Places.search("zzz").isEmpty())
-        // Arabic names match too, without the article, hamza forms or diacritics.
-        assertEquals("Accra", Places.search("أكرا").first().name)
-        assertEquals("Cairo", Places.search("القاهرة").first().name)
-        assertEquals("Cairo", Places.search("قاهر").first().name)
-        assertEquals("Alexandria", Places.search("اسكندرية").first().name)
-        assertEquals("Casablanca", Places.search("البيضاء").first().name)
-    }
-
-    @Test
     fun copyFollowsTheCopyRules() {
         val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File("src/commonMain/composeResources/values/strings.xml"))
         val all = listOf("string", "item").flatMap { tag ->

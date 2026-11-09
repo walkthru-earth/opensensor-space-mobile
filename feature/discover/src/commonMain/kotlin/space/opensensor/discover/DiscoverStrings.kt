@@ -3,6 +3,7 @@ package space.opensensor.discover
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import kotlinx.datetime.LocalDate
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
@@ -26,6 +27,7 @@ import space.opensensor.discover.resources.discover_load_failed
 import space.opensensor.discover.resources.discover_loading
 import space.opensensor.discover.resources.discover_map_info1
 import space.opensensor.discover.resources.discover_map_info2
+import space.opensensor.discover.resources.discover_map_info3
 import space.opensensor.discover.resources.discover_map_label
 import space.opensensor.discover.resources.discover_map_title
 import space.opensensor.discover.resources.discover_max
@@ -258,6 +260,9 @@ class DiscoverStrings internal constructor(
         if (upTo != null) stringResource(Res.string.discover_who_step_spoken, name, upTo, unit) else name
 }
 
+/** The lines of Discover's map info, the basemap credits and the GeoNames credit of the place search. */
+internal val DiscoverMapInfo: List<StringResource> = listOf(Res.string.discover_map_info1, Res.string.discover_map_info2, Res.string.discover_map_info3)
+
 /** Discover's copy in the phone's language, from the shared Compose resources. */
 @Composable
 fun discoverStrings(): DiscoverStrings = DiscoverStrings(
@@ -294,7 +299,7 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     osm = stringResource(Res.string.discover_osm),
     mapInfo = InfoText(
         stringResource(Res.string.discover_map_title),
-        listOf(stringResource(Res.string.discover_map_info1), stringResource(Res.string.discover_map_info2)),
+        DiscoverMapInfo.map { stringResource(it) },
     ),
     noAreas = stringResource(Res.string.discover_no_areas),
     notMeasured = stringResource(Res.string.discover_not_measured),

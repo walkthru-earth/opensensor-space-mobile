@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -60,6 +61,7 @@ import space.opensensor.history.HistoryScreen
 import space.opensensor.history.HistoryTopBar
 import space.opensensor.history.archiveThings
 import space.opensensor.history.historyTitle
+import space.opensensor.map.LocalMapNetwork
 import space.opensensor.net.UrlSessionRangeEngine
 import space.opensensor.permissions.AccessDialogs
 import space.opensensor.permissions.AccessHooks
@@ -219,120 +221,123 @@ internal fun AppRoot(
     val discoverSource = prefs?.discoverSource ?: DiscoverSource.SAMPLE
     val version = remember { appVersion() }
     val leases = remember { PeripheralLeases(closeIdle) }
-    OpenSensorTheme {
-        AppShell(
-            entries = { nav ->
-                entry<DiscoverKey> {
-                    DiscoverEntry(known = devices.known, networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.openSetup() })
-                }
-                entry<ScanKey> {
-                    MyDevicesEntry(
-                        bridge = devices,
-                        level = level,
-                        units = units,
-                        requestBluetooth = requestBluetooth,
-                        onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
-                        onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
-                        onAdd = { id, name -> nav.openSetup(pick = id, pickName = name) },
-                    ) { id, connect ->
-                        val peripheral = when {
-                            IosKnown.isPeripheral(id) -> id
-                            id.startsWith(IosKnown.WIFI_PREFIX) -> devices.peripheralForLan(id.removePrefix(IosKnown.WIFI_PREFIX))
-                            else -> null
-                        }
-                        if (peripheral != null) {
-                            if (connect) openSensor(peripheral) else openLanOnly(peripheral)
-                            nav.push(TodayKey(peripheral))
-                        }
+    // The Settings network switch, read by every map that may fetch a basemap.
+    CompositionLocalProvider(LocalMapNetwork provides showPublic) {
+        OpenSensorTheme {
+            AppShell(
+                entries = { nav ->
+                    entry<DiscoverKey> {
+                        DiscoverEntry(known = devices.known, networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.openSetup() })
                     }
-                }
-                // An enrolled sensor opens the same Today screen over Bluetooth or authenticated Wi-Fi.
-                // A Wi-Fi-only discovery without Bluetooth enrollment cannot open a sensor page.
-                entry<TodayKey> { key ->
-                    if (IosKnown.isPeripheral(key.address)) {
-                        LeasePeripheral(leases, key.address)
-                        TodayEntry(key.address, today, devices, settingsRepository, units, requestBluetooth) { action ->
-                            when (action) {
-                                TodayAction.OpenHistory -> nav.openSection(HistoryKey(key.address))
-                                TodayAction.OpenFiles -> nav.openSection(FilesKey(key.address))
-                                TodayAction.OpenDevice -> nav.push(DeviceKey(key.address))
-                                // Debug borrows the authenticated link for this sensor, whether Wi-Fi or Bluetooth.
-                                TodayAction.OpenDebug -> {
-                                    val lan = today.state.connectedLanForThing(devices.thingFor(key.address))
-                                    val device = lan?.let(today.state.lanInfo::get)?.dev
-                                        ?: today.state.info?.dev?.takeIf { today.state.selectedId == key.address }
-                                    device?.let { nav.openDebug(it, level.developer) }
-                                }
-                                TodayAction.OpenBluetoothSettings -> openAppSettings()
-                                else -> nav.popIfTop { it == key }
+                    entry<ScanKey> {
+                        MyDevicesEntry(
+                            bridge = devices,
+                            level = level,
+                            units = units,
+                            requestBluetooth = requestBluetooth,
+                            onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
+                            onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
+                            onAdd = { id, name -> nav.openSetup(pick = id, pickName = name) },
+                        ) { id, connect ->
+                            val peripheral = when {
+                                IosKnown.isPeripheral(id) -> id
+                                id.startsWith(IosKnown.WIFI_PREFIX) -> devices.peripheralForLan(id.removePrefix(IosKnown.WIFI_PREFIX))
+                                else -> null
+                            }
+                            if (peripheral != null) {
+                                if (connect) openSensor(peripheral) else openLanOnly(peripheral)
+                                nav.push(TodayKey(peripheral))
                             }
                         }
-                    } else {
-                        LaunchedEffect(key) { nav.popIfTop { it == key } }
                     }
-                }
-                entry<SetupKey> { key ->
-                    val pick = key.pick?.let { SetupCandidate(it, key.pickName, added = false) }
-                    SetupEntry(key.resume, pick, devices, configLinks, requestBluetooth, openSensor, onClose = { nav.popIfTop { it == key } }) { id ->
-                        nav.popIfTop { it == key }
-                        nav.push(TodayKey(id))
+                    // An enrolled sensor opens the same Today screen over Bluetooth or authenticated Wi-Fi.
+                    // A Wi-Fi-only discovery without Bluetooth enrollment cannot open a sensor page.
+                    entry<TodayKey> { key ->
+                        if (IosKnown.isPeripheral(key.address)) {
+                            LeasePeripheral(leases, key.address)
+                            TodayEntry(key.address, today, devices, settingsRepository, units, requestBluetooth) { action ->
+                                when (action) {
+                                    TodayAction.OpenHistory -> nav.openSection(HistoryKey(key.address))
+                                    TodayAction.OpenFiles -> nav.openSection(FilesKey(key.address))
+                                    TodayAction.OpenDevice -> nav.push(DeviceKey(key.address))
+                                    // Debug borrows the authenticated link for this sensor, whether Wi-Fi or Bluetooth.
+                                    TodayAction.OpenDebug -> {
+                                        val lan = today.state.connectedLanForThing(devices.thingFor(key.address))
+                                        val device = lan?.let(today.state.lanInfo::get)?.dev
+                                            ?: today.state.info?.dev?.takeIf { today.state.selectedId == key.address }
+                                        device?.let { nav.openDebug(it, level.developer) }
+                                    }
+                                    TodayAction.OpenBluetoothSettings -> openAppSettings()
+                                    else -> nav.popIfTop { it == key }
+                                }
+                            }
+                        } else {
+                            LaunchedEffect(key) { nav.popIfTop { it == key } }
+                        }
                     }
-                }
-                entry<DeviceKey> { key ->
-                    if (IosKnown.isPeripheral(key.address)) {
-                        LeasePeripheral(leases, key.address)
-                        DeviceSettingsEntry(key.address, devices, configLinks, autoSync, requestBluetooth, onBack = { nav.popIfTop { it == key } })
-                    } else {
-                        LaunchedEffect(key) { nav.popIfTop { it == key } }
+                    entry<SetupKey> { key ->
+                        val pick = key.pick?.let { SetupCandidate(it, key.pickName, added = false) }
+                        SetupEntry(key.resume, pick, devices, configLinks, requestBluetooth, openSensor, onClose = { nav.popIfTop { it == key } }) { id ->
+                            nav.popIfTop { it == key }
+                            nav.push(TodayKey(id))
+                        }
                     }
-                }
-                entry<HistoryKey> { key ->
-                    HistoryEntry(address = key.address, devices = devices, units = units, level = level, onBack = { nav.pop() })
-                }
-                entry<FilesKey> { key ->
-                    FilesEntry(
-                        address = key.address,
-                        devices = devices,
-                        actions = filesActions,
-                        level = level,
-                        onBack = { nav.pop() },
-                        onOpenFileMetrics = { thing, name -> nav.push(FileMetricsKey(thing, name)) },
-                    )
-                }
-                entry<FileMetricsKey> { key ->
-                    FileMetricsEntry(thing = key.thing, name = key.name, level = level, onBack = { nav.pop() })
-                }
-                entry<DebugKey> { key ->
-                    val controller = viewModel(key = "debug-${key.address}") { DebugHolder(key.address, devices.state, openDebugLink) }.controller
-                    DebugScreen(
-                        controller = controller,
-                        address = key.address,
-                        developer = prefs?.detailLevel?.developer,
-                        onBack = { nav.popIfTop { it is DebugKey } },
-                    )
-                }
-                // Smart Sync on Today asks before setting the clock, so the consent shows as on Android.
-                entry<SettingsKey> {
-                    SettingsScreen(
-                        controller = settings,
-                        appVersion = version,
-                        automaticUnits = systemUnits,
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-            bottomBar = { nav ->
-                ShellBottomBar(nav)
-                // A tapped Auto-sync summary opens My devices (#23).
-                val openDevices by devices.openRequested.collectAsState()
-                LaunchedEffect(openDevices) {
-                    if (openDevices) {
-                        nav.toMyDevicesRoot()
-                        devices.openHandled()
+                    entry<DeviceKey> { key ->
+                        if (IosKnown.isPeripheral(key.address)) {
+                            LeasePeripheral(leases, key.address)
+                            DeviceSettingsEntry(key.address, devices, configLinks, autoSync, requestBluetooth, onBack = { nav.popIfTop { it == key } })
+                        } else {
+                            LaunchedEffect(key) { nav.popIfTop { it == key } }
+                        }
                     }
-                }
-            },
-        )
+                    entry<HistoryKey> { key ->
+                        HistoryEntry(address = key.address, devices = devices, units = units, level = level, onBack = { nav.pop() })
+                    }
+                    entry<FilesKey> { key ->
+                        FilesEntry(
+                            address = key.address,
+                            devices = devices,
+                            actions = filesActions,
+                            level = level,
+                            onBack = { nav.pop() },
+                            onOpenFileMetrics = { thing, name -> nav.push(FileMetricsKey(thing, name)) },
+                        )
+                    }
+                    entry<FileMetricsKey> { key ->
+                        FileMetricsEntry(thing = key.thing, name = key.name, level = level, onBack = { nav.pop() })
+                    }
+                    entry<DebugKey> { key ->
+                        val controller = viewModel(key = "debug-${key.address}") { DebugHolder(key.address, devices.state, openDebugLink) }.controller
+                        DebugScreen(
+                            controller = controller,
+                            address = key.address,
+                            developer = prefs?.detailLevel?.developer,
+                            onBack = { nav.popIfTop { it is DebugKey } },
+                        )
+                    }
+                    // Smart Sync on Today asks before setting the clock, so the consent shows as on Android.
+                    entry<SettingsKey> {
+                        SettingsScreen(
+                            controller = settings,
+                            appVersion = version,
+                            automaticUnits = systemUnits,
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+                bottomBar = { nav ->
+                    ShellBottomBar(nav)
+                    // A tapped Auto-sync summary opens My devices (#23).
+                    val openDevices by devices.openRequested.collectAsState()
+                    LaunchedEffect(openDevices) {
+                        if (openDevices) {
+                            nav.toMyDevicesRoot()
+                            devices.openHandled()
+                        }
+                    }
+                },
+            )
+        }
     }
 }
 

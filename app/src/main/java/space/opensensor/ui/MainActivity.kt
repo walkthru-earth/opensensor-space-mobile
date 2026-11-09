@@ -18,6 +18,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import space.opensensor.AppLanguage
 import space.opensensor.data.settings.AppSettings
 import space.opensensor.designsystem.OpenSensorTheme
+import space.opensensor.map.LocalMapNetwork
 import space.opensensor.ui.components.LocalUnits
 import space.opensensor.ui.components.resolveUnits
 import space.opensensor.units.UnitFormatter
@@ -48,7 +49,9 @@ class MainActivity : ComponentActivity() {
             // activity, so Automatic re-resolves with it.
             val choice by settings.unitSystem.collectAsStateWithLifecycle(UnitSystem.AUTO)
             val units = remember(choice) { UnitFormatter(resolveUnits(choice)) }
-            CompositionLocalProvider(LocalUnits provides units) {
+            // The Settings network switch, read by every map that may fetch a basemap.
+            val network by settings.showPublicSensors.collectAsStateWithLifecycle(false)
+            CompositionLocalProvider(LocalUnits provides units, LocalMapNetwork provides network) {
                 OpenSensorTheme {
                     Surface(
                         modifier = Modifier.fillMaxSize(),

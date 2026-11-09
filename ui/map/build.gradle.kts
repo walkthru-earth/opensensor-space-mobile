@@ -1,7 +1,8 @@
 // The shared MapLibre map of both apps (docs/architecture.md). The base map with its camera limits
 // and camera rest callback, the bundled basemap and paper styles, zoom controls, the tile cache, the
-// plain H3 cell outlines and Near me. Callers draw their own sources and layers in the map's content
-// slot. Discover is the first caller, the cell picker of setup and Device settings come next. It
+// plain H3 cell outlines, Near me, the offline place search over bundled GeoNames cities15000 and
+// the resolution 8 CellPicker of setup and Device settings. Callers draw their own sources and
+// layers in the map's content slot. It
 // targets Android directly (not the JVM like :core:*), because maplibre-compose ships a separate
 // Android artifact and its desktop JVM variant needs Java 25.
 // opensensor.kmp.compose-feature sets the Android and iOS targets, Compose and the resources package.

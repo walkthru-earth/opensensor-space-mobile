@@ -418,9 +418,14 @@ The map never asks for location at launch. It opens on the first of these that e
    lands on the right country or metro for most people, and on a continent overview otherwise,
    like Google Maps zooming out to an overview.
 
-Search uses a small built-in list of large cities and the main Ghana cities (Accra, Cape Coast,
-Kumasi, Takoradi, Tamale and Tema), named in English and Arabic (`Places.kt`). Search is local, so
-typing never leaves the phone.
+Search uses the bundled GeoNames cities15000 list, every place of 15,000 people or more, with its
+ASCII names (`PlaceSearch` in `:ui:map`, written by `tools/places/make_places.py`). Only the 53
+curated large and Ghana cities of `CURATED_ARABIC` in that script have Arabic names, shown in Arabic
+and found by them. Every other place shows its GeoNames name in both languages. The untagged
+alternate names of cities15000 mix old and district names (Casablanca would read أنفا), so wider
+Arabic names wait for the tagged `ar` names of alternateNamesV2. It ignores case, accents, Arabic
+hamza forms and the article. Search is local, so typing never
+leaves the phone. The same search sits on the area map of setup and Device settings.
 
 **"Near me" (owner decision 2026-10-08).** A map button that asks for approximate location only
 at the moment it is tapped, because a time-zone guess fails for large zones and store rules
@@ -743,7 +748,7 @@ starts with the target layout from the producer guidance.
 
 - **Attribution.** "© OpenStreetMap" visible on the map at launch, collapsing to an info button,
   linking to openstreetmap.org/copyright (OSMF guidelines, ODbL Produced Work). The Protomaps
-  credit and GeoNames (CC BY 4.0) sit in About, open source licences. Apple 5.2.2 expects
+  credit and GeoNames (CC BY 4.0) sit in the map info. Apple 5.2.2 expects
   permission for third-party content, which the licences give with attribution.
 - **Privacy policy.** Required by both stores for every app, as a public URL in the console and
   inside the app (Settings, About). It names the feed and basemap hosts, says each request
@@ -787,7 +792,7 @@ starts with the target layout from the producer guidance.
 | `:core:thing` | The `ThingKind` contract (`KindId`, `Evidence`, `Recognition`, `DataSource`, `PublishPolicy`), `OpenSensorBoardKind` (recognized by its GATT service, `_ossync._tcp` or its `INFO`, capabilities from `DeviceCapabilities`, `PullSync` with `OptInCcBy` at res 8) and the `ThingKinds` registry, a plain list built by Android `ThingModule` and iOS `launchThingKinds` (#222). `metricProviders` lists the kinds' derived metric providers, which each app hands to `AirFamily.install`. `PublishGate` issues a `PublishTicket` only for a Recording kind with `OptInCcBy` and an opted in Thing (`UploadConsent`, none by default) and builds its Items at the policy's `publishedRes`, asking consent again for each Item (#224). No upload. `PlatformNeedsTable` lists what the app shell and each kind ask of the Android manifest and the iOS bundle, which `ManifestPermissionsTest` and `IosBundleGateTest` hold the files to (#227). `:core:thing:testkit` holds `ThingKindContract` |
 | `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp, `okhttp` in `gradle/libs.versions.toml`, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, used by `OpenAqAggregatesFeed` in both apps |
 | `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
-| `:ui:map` | The shared map of both apps, CMP `commonMain`. `BaseMap` and `rememberBaseMapState` with the zoom limits, no rotation or tilt, the camera rest callback (`CameraRest`), a one time fit and a content slot for the caller's sources and layers. `MapStyles` and `rememberMapStyle` give the bundled basemap styles (Compose resources) or a paper style when public data is off. `ZoomControls`, `MapCache` (the tile cache Settings sizes and clears), `CellOutlines` (plain H3 cell outlines as GeoJSON) and Near me (`rememberNearMe`, `NearMeButton`, `NearMeLayer`, `nearMeTarget`). Its own string catalogue holds the zoom and Near me labels. Depends on `:core:publicfeed`, `:ui:designsystem` and `:ui:permissions` only, so any feature can use it. Targets Android and iOS, not the JVM, for the same reason as Discover |
+| `:ui:map` | The shared map of both apps, CMP `commonMain`. `BaseMap` and `rememberBaseMapState` with the zoom limits, no rotation or tilt, the camera rest callback (`CameraRest`), a one time fit and a content slot for the caller's sources and layers. `MapStyles` and `rememberMapStyle` give the bundled basemap styles (Compose resources) or a paper style when public data is off. `ZoomControls`, `MapCache` (the tile cache Settings sizes and clears), `CellOutlines` (plain H3 cell outlines as GeoJSON) Near me (`rememberNearMe`, `NearMeButton`, `NearMeLayer`, `nearMeTarget`), the offline place search (`PlaceSearch`, `PlaceSearchField`) and the resolution 8 area picker of setup and Device settings (`CellPicker`, `CellPickerGrid`). Its own string catalogue holds the zoom, Near me, search and picker labels and the map credits. Depends on `:core:publicfeed`, `:ui:designsystem` and `:ui:permissions` only, so any feature can use it. `:feature:discover` and `:feature:device` use it. Targets Android and iOS, not the JVM, for the same reason as Discover |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`) on `:ui:map`, `DiscoverController` state holder, the public cell layers and legend, the own Things layer (`OwnThingGeoJson`, `knownOwnThings`), `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
 | `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, one row group per file sorted by `h3_index`, 16-row pages with page indexes, about 270 KB for 18 files, made-up cells around Berlin, Cairo, Lisbon, Nairobi, New York, Jakarta and Accra). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2. The sample is committed under `feature/discover/src/commonMain/composeResources/files/`, the styles under `ui/map/src/commonMain/composeResources/files/basemap/` |
 
@@ -802,11 +807,11 @@ cells at `round(zoom * 0.8)` clamped to 2..7, and redraws one GeoJSON source aft
 rest. Chips rank properties by visible cells (three, then More), a vertical time slider on the left
 snaps between Last hour, 24 hours and 7 days, the legend shows the steps of the scale the feed publishes, WHO 2021 for PM2.5 and PM10 (host tests and builds only) and the 5th to 95th percentile of the cells in view on a viridis
 ramp, and the sheet peeks with the first-run card or the area count and opens on a cell tap with
-a spread chart of the chosen property and a range row per other property. Search moves the map over a small built-in city list. The basemap is
+a spread chart of the chosen property and a range row per other property. Search moves the map over the bundled GeoNames list. The basemap is
 the Protomaps OpenStreetMap PMTiles build on source.coop (`pmtiles://` rendered on the Android
 emulator and the iOS simulator), "© OpenStreetMap" shows at launch and collapses to an info button.
 "Show public sensors" in Settings (both apps) swaps in a plain background style, so no request
-leaves the phone. Not built yet. Near me, the GeoNames place list, the offline map download (TODO),
+leaves the phone. Not built yet. The offline map download (TODO),
 the half sheet height, stale outline dashes, the device list and device page, the live feed on screen, the
 peacock on the first-run card and recolouring the basemap to the sensing palette. The basemap
 still points at the Protomaps build on source.coop, not at our own extract. HTTP range reads use

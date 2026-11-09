@@ -520,6 +520,26 @@ class DeviceConfigControllerTest {
     }
 
     @Test
+    fun onlyAPickedResolution8CellReachesTheWire() = runTest {
+        val source = FakeSource()
+        source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "")
+        val c = controller(source)
+        // A coordinate, a finer or coarser cell, or another resolution is never drafted.
+        c.acceptLocationCell("5.5600,-0.2000", 8)
+        c.acceptLocationCell("8928308280fffff", 8)
+        c.acceptLocationCell("85283083fffffff", 8)
+        c.acceptLocationCell("872830828ffffff", 8)
+        c.acceptLocationCell(CELL8, 9)
+        assertEquals("", c.state.value.location.draft.cell)
+        c.acceptLocationCell(CELL8, 8)
+        assertEquals(CELL8, c.state.value.location.draft.cell)
+        c.selectLocationCountry("gh")
+        assertEquals(emptyList(), source.wire, "a pick alone sends nothing")
+        c.saveLocation()
+        assertEquals(listOf("location.cell=$CELL8\nlocation.resolution=8\nlocation.country=GH\n"), source.wire)
+    }
+
+    @Test
     fun onlyAConfirmedValidCellCountsAsSaved() = runTest {
         val source = FakeSource()
         source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "GH")
