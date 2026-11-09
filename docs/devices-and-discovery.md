@@ -419,8 +419,10 @@ The map never asks for location at launch. It opens on the first of these that e
    like Google Maps zooming out to an overview.
 
 Search uses the bundled GeoNames cities15000 list, every place of 15,000 people or more, with its
-ASCII and Arabic names (`PlaceSearch` in `:ui:map`, written by `tools/places/make_places.py`).
-It ignores case, accents, Arabic hamza forms and the article. Search is local, so typing never
+ASCII names (`PlaceSearch` in `:ui:map`, written by `tools/places/make_places.py`). Both languages
+show the GeoNames name. The untagged alternate names of cities15000 mix old and district names
+(Casablanca would read أنفا), so Arabic names wait for the tagged `ar` names of alternateNamesV2.
+It ignores case and accents. Search is local, so typing never
 leaves the phone. The same search sits on the area map of setup and Device settings.
 
 **"Near me" (owner decision 2026-10-08).** A map button that asks for approximate location only

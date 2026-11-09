@@ -19,8 +19,9 @@ One UTF-8 line per place, tab separated, sorted by population from largest (ties
     name  ascii  arabic  country  lat  lon  population
 
 - `name` is the GeoNames name. `ascii` is its ASCII name, empty when it equals `name`.
-- `arabic` is the first alternate name written only in Arabic letters, empty when there is none.
-  Names with Persian or Urdu letters are skipped, so the Arabic search reads Arabic.
+- `arabic` is empty for every place, so both locales show `name`. The untagged alternate names of
+  cities15000 mix old, district and colloquial names (Casablanca would read أنفا), so they are not
+  used. Tagged Arabic names from alternateNamesV2 can fill this column later.
 - `country` is the ISO 3166 alpha-2 code.
 - `lat` and `lon` are rounded to 2 decimals, about 1 km, enough to centre the map on a city.
 - `population` is the GeoNames population rounded to 2 significant digits. The line order keeps
@@ -33,7 +34,6 @@ from __future__ import annotations
 
 import gzip
 import io
-import re
 import sys
 import urllib.request
 import zipfile
@@ -41,10 +41,6 @@ from pathlib import Path
 
 SOURCE = "https://download.geonames.org/export/dump/cities15000.zip"
 OUT = Path(__file__).resolve().parents[2] / "ui/map/src/commonMain/composeResources/files/places/cities15000.tsv.gz"
-
-# Arabic letters, hamza forms and the article. No Persian, Urdu or other extended letters.
-ARABIC = re.compile(r"^[ء-غف-ي ]+$")
-
 
 def read_zip(arg: str | None) -> bytes:
     if arg:
@@ -74,16 +70,15 @@ def main() -> None:
         f = line.split("\t")
         if len(f) < 15:
             continue
-        geoname_id, name, ascii_name, alternates = int(f[0]), clean(f[1]), clean(f[2]), f[3]
+        geoname_id, name, ascii_name = int(f[0]), clean(f[1]), clean(f[2])
         lat, lon, country, population = float(f[4]), float(f[5]), f[8].strip(), int(f[14] or 0)
         if not name or len(country) != 2:
             continue
-        arabic = next((a for a in (clean(x) for x in alternates.split(",")) if a and ARABIC.match(a)), "")
-        rows.append((population, geoname_id, name, "" if ascii_name == name else ascii_name, arabic, country, lat, lon))
+        rows.append((population, geoname_id, name, "" if ascii_name == name else ascii_name, country, lat, lon))
     rows.sort(key=lambda r: (-r[0], r[1]))
     out = io.StringIO()
-    for population, _, name, ascii_name, arabic, country, lat, lon in rows:
-        out.write(f"{name}\t{ascii_name}\t{arabic}\t{country}\t{lat:.2f}\t{lon:.2f}\t{two_digits(population)}\n")
+    for population, _, name, ascii_name, country, lat, lon in rows:
+        out.write(f"{name}\t{ascii_name}\t\t{country}\t{lat:.2f}\t{lon:.2f}\t{two_digits(population)}\n")
     data = out.getvalue().encode("utf-8")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     buf = io.BytesIO()

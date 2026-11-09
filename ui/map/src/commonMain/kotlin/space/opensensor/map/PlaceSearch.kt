@@ -13,7 +13,8 @@ import space.opensensor.map.resources.Res
 
 /**
  * One bundled place from GeoNames cities15000 (CC BY 4.0, credited in the map info). [ascii] is its
- * ASCII name, empty when the same as [name]. [ar] is its Arabic name, empty when GeoNames has none.
+ * ASCII name, empty when the same as [name]. [ar] is an Arabic name, empty in the bundled file until
+ * tagged Arabic names are added, so both languages show [name].
  * [country] is the ISO 3166 alpha-2 code. [lat] and [lng] are rounded to about 1 km and only move
  * the camera. Search is local, so typing never leaves the phone.
  */

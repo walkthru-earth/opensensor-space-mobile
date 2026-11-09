@@ -439,7 +439,7 @@ cd opensensor-space-android && rm -rf .git
 
 The offline place search ships GeoNames cities15000 (CC BY 4.0) as
 `ui/map/src/commonMain/composeResources/files/places/cities15000.tsv.gz`, 34,208 places in
-599,838 bytes. `uv run tools/places/make_places.py` downloads the dump and writes it again,
+523,297 bytes. `uv run tools/places/make_places.py` downloads the dump and writes it again,
 byte for byte the same for the same download. `BundledPlacesTest` keeps it under 700,000 bytes.
 
 ## Uses → affects

@@ -23,14 +23,19 @@ class BundledPlacesTest {
     }
 
     @Test
-    fun citiesAreFoundInEnglishAndArabic() {
+    fun citiesAreFoundByName() {
         assertEquals("Cairo" to "EG", index.search("cai").first().let { it.name to it.country })
         assertEquals("São Paulo", index.search("sao").first().name)
         assertEquals("Accra" to "GH", index.search("accra").first().let { it.name to it.country })
-        assertEquals("Accra", index.search("أكرا").first().name)
-        assertEquals("Cairo", index.search("القاهرة").first().name)
-        assertEquals("Cairo", index.search("قاهر").first().name)
-        assertEquals("Riyadh", index.search("الرياض").first().name)
+    }
+
+    @Test
+    fun everyPlaceShowsItsGeoNamesNameInBothLanguages() {
+        // Untagged alternates would label Casablanca with an old district name, أنفا.
+        val casablanca = index.search("casablanca").first()
+        assertEquals("Casablanca" to "MA", casablanca.name to casablanca.country)
+        assertEquals("Casablanca", casablanca.label(arabic = true))
+        assertTrue(index.places.all { it.ar.isEmpty() }, "no untagged Arabic names")
     }
 
     @Test
@@ -39,6 +44,5 @@ class BundledPlacesTest {
             val hit = index.search(city).firstOrNull { it.country == "GH" }
             assertEquals(city, hit?.name, "search for $city")
         }
-        assertEquals("Kumasi", index.search("كوماسي").firstOrNull()?.name)
     }
 }
