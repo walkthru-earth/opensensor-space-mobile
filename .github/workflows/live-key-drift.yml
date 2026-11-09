@@ -42,14 +42,18 @@ jobs:
     name: Live Discover Collection lists cells the app reads
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      FEED_ROOT: https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Self test the checker
+        run: python3 -I tools/check_discover_collection.py --self-test
       - name: Fetch the live Collection
         run: >-
           curl --fail --silent --show-error --location --proto '=https' --max-time 60
           --output "$RUNNER_TEMP/collection.json"
-          https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/collection.json
+          "${FEED_ROOT}collection.json"
       - name: Check its cells assets
-        run: python3 -I tools/check_discover_collection.py "$RUNNER_TEMP/collection.json"
+        run: python3 -I tools/check_discover_collection.py "$RUNNER_TEMP/collection.json" "$FEED_ROOT"
