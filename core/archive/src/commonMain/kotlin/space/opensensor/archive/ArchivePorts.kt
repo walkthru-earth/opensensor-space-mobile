@@ -133,6 +133,38 @@ interface ArchiveIndex {
 
     suspend fun things(): List<String>
 
+    /**
+     * The records of [thing] whose bytes hash to [sha256], under any name, for the "same file" check
+     * of [FileIdentity]. The default reads the thing's records. The Room adapter asks the
+     * `(thing, sha256)` index.
+     */
+    suspend fun withSha256(thing: String, sha256: String): List<ArchiveRecord> =
+        observeThing(thing).first().filter { it.sha256 == sha256 }
+
+    /** The record that is [identity], the same Thing, File Item id and SHA-256, or null. */
+    suspend fun sameFile(identity: FileIdentity): ArchiveRecord? =
+        withSha256(identity.thing, identity.sha256).firstOrNull { it.identity == identity }
+
+    /**
+     * Marks the record that is [identity] as uploaded at [atEpochMs], from an upload status listing,
+     * and returns whether a record changed. A record with other bytes is never marked, and the first
+     * mark stays. The default reads then updates. The Room adapter writes one guarded `UPDATE`.
+     */
+    suspend fun markUploaded(identity: FileIdentity, atEpochMs: Long): Boolean {
+        val record = sameFile(identity) ?: return false
+        if (record.isUploaded) return false
+        var marked = false
+        update(record.key) { current ->
+            if (current.identity == identity && !current.isUploaded) {
+                marked = true
+                current.copy(uploadedAtEpochMs = atEpochMs)
+            } else {
+                current
+            }
+        }
+        return marked
+    }
+
     companion object {
         /**
          * Per thing, the latest real or estimated end among its indexed telemetry files that have a

@@ -41,8 +41,19 @@ data class ArchiveRecord(
     /** The footer `dictionary.sha256` and `template.sha256`, index columns. History resolves the file's template from them at each derive. */
     val dictionarySha256: String? = null,
     val templateSha256: String? = null,
+    /**
+     * When an upload status listing first showed this file in the cloud with the same File Item id and
+     * checksum, else null. A catch up then skips the cloud copy instead of downloading it again (#273).
+     */
+    val uploadedAtEpochMs: Long? = null,
 ) {
     val key: ArchiveKey get() = ArchiveKey(thing, name)
+
+    /** The [FileIdentity] of this copy, null for an older receipt that holds no SHA-256. */
+    val identity: FileIdentity? get() = FileIdentity.of(thing, name, sha256)
+
+    /** A cloud copy of this file is known. */
+    val isUploaded: Boolean get() = uploadedAtEpochMs != null
 
     /** Indexed without error, the one test of whether a record's index columns can be read. */
     val isIndexed: Boolean get() = indexedAtEpochMs != null && indexError == null

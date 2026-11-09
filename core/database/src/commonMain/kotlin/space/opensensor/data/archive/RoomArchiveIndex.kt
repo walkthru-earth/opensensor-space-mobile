@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.map
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveKey
 import space.opensensor.archive.ArchiveRecord
+import space.opensensor.archive.FileIdentity
 import space.opensensor.data.local.database.ArchivedFileDao
 
 /** The shared [ArchiveIndex] over the `archived_file` table, on both phones. Queries and ordering are the DAO's. */
@@ -42,4 +43,13 @@ class RoomArchiveIndex(private val dao: ArchivedFileDao) : ArchiveIndex {
     override suspend fun indexedForThing(thing: String): List<ArchiveRecord> = dao.indexedForThing(thing).map { it.toRecord() }
 
     override suspend fun things(): List<String> = dao.things()
+
+    /** On the `(thing, sha256)` index. */
+    override suspend fun withSha256(thing: String, sha256: String): List<ArchiveRecord> = dao.withSha256(thing, sha256).map { it.toRecord() }
+
+    /** One guarded `UPDATE`, so a row replaced with other bytes in between is never marked. */
+    override suspend fun markUploaded(identity: FileIdentity, atEpochMs: Long): Boolean {
+        val record = sameFile(identity) ?: return false
+        return dao.markUploaded(record.thing, record.name, identity.sha256, atEpochMs) > 0
+    }
 }

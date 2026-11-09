@@ -243,6 +243,12 @@ class ConcurrentArchiveTest {
         override fun observeForThing(thing: String): Flow<List<ArchivedFile>> = flowOf(snapshot().filter { it.thing == thing })
         override suspend fun forThing(thing: String) = snapshot().filter { it.thing == thing }
         override suspend fun get(thing: String, name: String) = rows[thing to name]
+        override suspend fun withSha256(thing: String, sha256: String) = rows.values.filter { it.thing == thing && it.sha256 == sha256 }.sortedBy { it.name }
+        override suspend fun markUploaded(thing: String, name: String, sha256: String, atEpochMs: Long): Int {
+            val row = get(thing, name)?.takeIf { it.sha256 == sha256 && it.uploadedAtEpochMs == null } ?: return 0
+            upsert(row.copy(uploadedAtEpochMs = atEpochMs))
+            return 1
+        }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override fun observeTotalBytes(): Flow<Long> = flowOf(snapshot().sumOf { it.bytes })
         override suspend fun unindexed(limit: Int) = snapshot().filter { !it.isIndexed }.take(limit)

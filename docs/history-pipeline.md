@@ -110,6 +110,53 @@ Room schema 5 (`Migration4To5`) added the two footer digests and reopens every r
 error, and the one time iOS receipt import reads every receipt as never indexed, since neither knew
 the digests. Until the back-fill reaches it, such a row awaits its index.
 
+## File identity and cloud catch up (#273)
+
+A file is the same file wherever it sits, on the card, in the phone archive or in the cloud, when its
+Thing id, its File Item id and its SHA-256 match. `FileIdentity` (`:core:archive`) holds the three, and
+`ArchiveRecord.identity` gives it for a record whose `sha256` is known. The File Item id is the file
+name without folders or `.parquet`, as `FileItems.build` sets it. It names one file only for a board
+file, `data_HHMM_<boot>_...` (`FileIdentity.isBoardFile`). Any other file, such as a compacted
+`day.parquet`, repeats its bare name across days, so the planner matches it by its full Hive name. `FileChecksum` (`:core:model`) is the
+one parser and writer of the `file:checksum` multihash, `1220` then 64 hex characters, used by the
+File Item writer, the Collection parser and the planner below.
+
+`CatchUpPlanner` (`:core:sync`, pure) plans a restore or a catch up of one owned Thing from a remote
+listing, each object's key, size and `file:checksum` when the reader has it. `CloudCatchUp` runs it
+over the `ArchiveIndex` and the removed files of the archive's `DeviceCoordinator`, and downloads
+nothing. No reader exists yet. Each entry gets one decision.
+
+| Remote file | Decision |
+| --- | --- |
+| Same file as an archived one, by File Item id for a board file and full name otherwise, with the same checksum | Skip, `SAME_FILE`. Listed in `CatchUpPlan.uploaded` for raw files |
+| Same name, other checksum | Conflict, `OTHER_CHECKSUM`. The archived copy is never overwritten |
+| Same name, no checksum on one side, same size | Skip, `SAME_NAME_UNPROVEN`. Never fetched again |
+| Same name, no checksum on one side, other size | Conflict, `OTHER_SIZE` |
+| Archived bytes under another name | Skip, `SAME_BYTES_OTHER_NAME` |
+| Another compacted name on a day whose compacted file is archived | Conflict, `DAY_HAS_OTHER_FILE` |
+| The listing holds it twice | One planned, the first that carries a checksum, the rest `REPEAT_IN_LISTING`. Two different files for one name are both a conflict |
+| Removed by the user in Settings, the same name and size | Skip, `REMOVED_BY_USER` |
+| Anything else in this Thing's dated files | Fetch |
+
+Raw and compacted files never mix (bridge decision 13). `CloudPrefixes` names the raw prefix, the
+board's Hive tree, and the compacted prefix of day roll ups in the same `thing=` and date folders.
+Each UTC day reads one tree. The archive decides first. An archived board file makes it a raw day, and
+an archived file of any other name a compacted day. Otherwise any raw file in the listing makes it a
+raw day. A raw day skips its compacted files (`RAW_COVERS_DAY`) and a compacted day skips its raw files
+(`COMPACTED_COVERS_DAY`), so a catch up never adds the second tree to a day. A later device download
+can still add raw files to a restored compacted day. A day with no raw file fetches its one compacted
+file. Several compacted files for one day in the listing are fetched once only when their checksums
+are known and equal, else they are a conflict. On a day whose compacted file is archived, another
+compacted name is a conflict (`DAY_HAS_OTHER_FILE`) unless it holds the same bytes.
+Keys outside both prefixes, Items, Collections, unsynced files and other Things are skipped.
+
+A fetched file must pass the same size, CRC-32 and `PAR1` checks as a device download before it is
+archived, and `RowKey` still drops repeated rows of one Thing and time. `CloudCatchUp.markUploaded`
+sets `uploadedAtEpochMs` on each file of `CatchUpPlan.uploaded`, under the coordinator's thing gate
+like every index write. The marker is not part of the day
+signature, so marking rebuilds no day. `CloudCatchUpHistoryTest` proves on the JVM and iOS that a
+skipped file adds no record and leaves the tier buckets and their row counts unchanged.
+
 ## Metric registry
 
 **A new sensor is a template, not code.** Every metric is a `MetricSpec` built from one board
@@ -428,6 +475,7 @@ controller over a fake archive. It runs as the Android host test and on the iOS 
 | `HistoryRepository.observe` | History and Today (local-day fold), `HistoryRepositoryTest` |
 | `:feature:history` (`HistoryController`, charts, strings) | History on both apps, the Files chart by file on Android, `feature/history/src/commonTest` |
 | `ParquetWriter` (in parquet.md) | daily file layout → re-run `tools/validate_parquet_samples.py` |
+| `FileIdentity`, `FileChecksum` or `CatchUpPlanner` | File Item `file:checksum`, Collection parsing, `CatchUpPlannerTest`, `CloudCatchUpHistoryTest` |
 
 ## Incremental history and flow inputs
 

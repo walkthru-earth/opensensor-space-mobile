@@ -20,17 +20,13 @@ internal object ModelJson {
     private val json = Json { ignoreUnknownKeys = true }
 
     private const val TEMPLATE_TYPE = "OpenSensorTemplate"
-    private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
-
-    /** Multihash prefix of a SHA-256 `file:checksum` (code 0x12, length 0x20). */
-    private const val SHA256_MULTIHASH = "1220"
 
     fun parseTemplate(text: String, desc: String?): BoardTemplate {
         val dto = decode<TemplateDto>(text)
         require(dto.type == TEMPLATE_TYPE) { "not a board template, type is ${dto.type}" }
         val firmware = dto.firmware
-        require(SHA256_HEX.matches(firmware.dict)) { "template ${dto.id} has a malformed dict digest" }
-        require(desc == null || SHA256_HEX.matches(desc)) { "template ${dto.id} has a malformed desc digest" }
+        require(FileChecksum.isSha256Hex(firmware.dict)) { "template ${dto.id} has a malformed dict digest" }
+        require(desc == null || FileChecksum.isSha256Hex(desc)) { "template ${dto.id} has a malformed desc digest" }
         val data = dto.itemAssets.data
         return BoardTemplate(
             key = TemplateKey(dict = firmware.dict, desc = desc),
@@ -53,7 +49,7 @@ internal object ModelJson {
      * with its `href` relative to that folder, `desc` and firmware `schema`.
      */
     fun parseTemplateIndex(text: String): List<TemplateIndexEntry> = decode<TemplateIndexDto>(text).templates.map { (dict, e) ->
-        require(SHA256_HEX.matches(dict) && SHA256_HEX.matches(e.desc)) { "index.json entry ${e.href} has a malformed digest" }
+        require(FileChecksum.isSha256Hex(dict) && FileChecksum.isSha256Hex(e.desc)) { "index.json entry ${e.href} has a malformed digest" }
         TemplateIndexEntry(dict = dict, desc = e.desc, href = e.href, schema = e.schema)
     }
 
@@ -70,8 +66,8 @@ internal object ModelJson {
             scales = dto.scales.mapValues { (id, scale) -> scale.toScale(id) },
             columnTitles = columns.mapNotNull { c -> c.title?.let { c.name to it } }.toMap(),
             columnScales = columns.mapNotNull { c -> c.scale?.let { c.name to it } }.toMap(),
-            dict = describedBy.firstOrNull { it.type != JSON_TYPE }?.checksum?.let(::sha256OfMultihash),
-            desc = describedBy.firstOrNull { it.type == JSON_TYPE }?.checksum?.let(::sha256OfMultihash),
+            dict = describedBy.firstOrNull { it.type != JSON_TYPE }?.checksum?.let(FileChecksum::sha256Of),
+            desc = describedBy.firstOrNull { it.type == JSON_TYPE }?.checksum?.let(FileChecksum::sha256Of),
         )
     }
 
@@ -83,7 +79,7 @@ internal object ModelJson {
 
     fun parseProfile(text: String): AppProfile {
         val dto = decode<ProfileDto>(text)
-        require(SHA256_HEX.matches(dto.dict)) { "app profile has a malformed dict digest" }
+        require(FileChecksum.isSha256Hex(dto.dict)) { "app profile has a malformed dict digest" }
         return AppProfile(
             dict = dto.dict,
             family = Family(dto.family),
@@ -96,10 +92,6 @@ internal object ModelJson {
             hidden = dto.hidden.toSet(),
         )
     }
-
-    /** The SHA-256 hex of a multihash `file:checksum`, or null when it is not a SHA-256 multihash. */
-    private fun sha256OfMultihash(checksum: String): String? =
-        checksum.takeIf { it.startsWith(SHA256_MULTIHASH) }?.removePrefix(SHA256_MULTIHASH)?.takeIf { SHA256_HEX.matches(it) }
 
     private inline fun <reified T> decode(text: String): T = try {
         json.decodeFromString<T>(text)
