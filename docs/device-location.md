@@ -55,7 +55,9 @@ things. See the firmware-owned [time/location contract](../../opensensor-space-f
 
 The owner site describes where and by whom a Thing is deployed (firmware #148, mobile #272). It
 holds five optional values. Device settings show them under the area as one "Location and site"
-card, and the setup wizard asks for them on its Site page after Location.
+card, and the setup wizard asks for them on its Site page after Location. The info text says
+plainly that these values are public when the owner shares the sensor's data, and asks a home
+owner not to type a home address.
 
 | Field | Key | Cap (UTF-8 bytes) | Rule |
 | --- | --- | --- | --- |

@@ -208,7 +208,7 @@
     <string name="config_problem_site">A site value is not valid. Check the site fields.</string>
     <string name="site_title">Site</string>
     <string name="location_site_title">Location and site</string>
-    <string name="site_info">Optional. The site name, organisation, link and description describe this sensor when you share its data. The deployment ID is written into each data file, and a change starts a new file.</string>
+    <string name="site_info">Optional. These details are public when you share this sensor's data. Do not type a home address. The deployment ID is written into each data file, and a change starts a new file.</string>
     <string name="site_name">Site name</string>
     <string name="site_provider">Organisation</string>
     <string name="site_url">Link</string>

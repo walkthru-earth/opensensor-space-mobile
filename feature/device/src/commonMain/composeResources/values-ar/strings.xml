@@ -212,7 +212,7 @@
     <string name="config_problem_site">إحدى قيم بيانات الموقع غير صالحة. راجع الحقول.</string>
     <string name="site_title">بيانات الموقع</string>
     <string name="location_site_title">الموقع وبياناته</string>
-    <string name="site_info">اختياري. يصف اسم الموقع والجهة والرابط والوصف هذا المستشعر عند مشاركة بياناته. يُكتب معرّف النشر في كل ملف بيانات، وتغييره يبدأ ملفًا جديدًا.</string>
+    <string name="site_info">اختياري. تصبح هذه التفاصيل عامة عند مشاركة بيانات هذا المستشعر. لا تكتب عنوان منزل. يُكتب معرّف النشر في كل ملف بيانات، وتغييره يبدأ ملفًا جديدًا.</string>
     <string name="site_name">اسم الموقع</string>
     <string name="site_provider">الجهة</string>
     <string name="site_url">الرابط</string>
