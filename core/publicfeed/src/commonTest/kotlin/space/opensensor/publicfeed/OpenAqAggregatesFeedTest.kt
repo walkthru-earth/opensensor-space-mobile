@@ -30,6 +30,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /** [OpenAqAggregatesFeed] over a fake [HttpRangeEngine] serving the fixture and its manifest. No network. */
@@ -403,6 +404,64 @@ class OpenAqAggregatesFeedTest {
         val second = OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks)
         assertEquals(25.0, cairo(second.cells(second.latest()!!, FeedWindow.DAY, 5, ranges = null)))
         assertEquals(listOf("$root/collection.json", "$root/manifest.json"), store.requests.map { it.first })
+    }
+
+    /** An engine where every request fails, as with no network. */
+    private val offline = object : HttpRangeEngine {
+        override suspend fun get(url: String, range: String?, ifRange: String?, ifNoneMatch: String?, limit: BodyLimit): HttpRangeResponse =
+            throw IllegalStateException("offline")
+    }
+
+    @Test
+    fun `a read from the network is not cached and a failure with nothing kept still throws`() = runTest {
+        assertEquals(FeedSnapshot(FeedPartition("2026-10-08", 0, "fixture-0001")), feed.snapshot())
+        val cold = OpenAqAggregatesFeed(offline, root = root, clock = clock, blocks = BlockCache(MemoryBlockStore(), quotaBytes = { 1L shl 30 }))
+        assertFailsWith<IllegalStateException> { cold.snapshot() }
+    }
+
+    @Test
+    fun `a cold offline start serves the kept index as cached and its cells from disk`() = runTest {
+        val blocks = BlockCache(MemoryBlockStore(), quotaBytes = { 1L shl 30 })
+        val first = OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks)
+        val readAt = clock.ms
+        val partition = first.latest()!!
+        val expected = first.cells(partition, FeedWindow.DAY, 5, ranges = null)
+
+        // A restart with no network, hours later.
+        clock.ms += 3 * 60 * 60 * 1000L
+        val cold = OpenAqAggregatesFeed(offline, root = root, clock = clock, blocks = blocks)
+        assertEquals(FeedSnapshot(partition, cachedAtEpochMs = readAt), cold.snapshot())
+        assertEquals(expected.rows, cold.cells(partition, FeedWindow.DAY, 5, ranges = null).rows)
+    }
+
+    @Test
+    fun `a failure after a read serves it as cached and the network is tried again soon`() = runTest {
+        var down = false
+        val flaky = object : HttpRangeEngine {
+            override suspend fun get(url: String, range: String?, ifRange: String?, ifNoneMatch: String?, limit: BodyLimit): HttpRangeResponse =
+                if (down) HttpRangeResponse(500, null, null, null, ByteArray(0)) else store.get(url, range, ifRange, ifNoneMatch, limit)
+        }
+        val feed = OpenAqAggregatesFeed(flaky, root = root, clock = clock)
+        val readAt = clock.ms
+        val partition = feed.latest()
+        down = true
+        clock.ms += OpenAqAggregatesFeed.MANIFEST_TTL_MS
+        assertEquals(FeedSnapshot(partition, cachedAtEpochMs = readAt), feed.snapshot())
+        // Back online, the cached answer stands for the 30 s retry window and the next read is live again.
+        down = false
+        val failedAt = clock.ms
+        clock.ms = failedAt + 30.seconds.inWholeMilliseconds - 1
+        assertEquals(FeedSnapshot(partition, cachedAtEpochMs = readAt), feed.snapshot())
+        clock.ms = failedAt + 30.seconds.inWholeMilliseconds
+        assertEquals(FeedSnapshot(partition), feed.snapshot())
+    }
+
+    @Test
+    fun `the kept index belongs to its root`() = runTest {
+        val blocks = BlockCache(MemoryBlockStore(), quotaBytes = { 1L shl 30 })
+        OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks).latest()
+        val other = OpenAqAggregatesFeed(offline, root = "https://other.test/feed", clock = clock, blocks = blocks)
+        assertFailsWith<IllegalStateException> { other.snapshot() }
     }
 
     private companion object {

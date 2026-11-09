@@ -37,6 +37,9 @@ interface DerivedArchivedFileQueries : ArchivedFileDao {
     override suspend fun anyIndexedNames(descs: List<String>, dicts: List<String>, pinned: List<String>): Boolean =
         observeAll().first().any { it.toRecord().mayResolveAnew(descs.toSet(), dicts.toSet(), pinned.toSet()) }
 
+    override fun observeUploadedThings(): Flow<List<String>> =
+        observeAll().map { rows -> rows.filter { it.uploadedAtEpochMs != null }.map { it.thing }.distinct() }
+
     override fun observeAnyNeverIndexed(): Flow<Boolean> = observeAll().map { rows -> rows.any { it.indexedAtEpochMs == null } }
 
     override fun observeLatestTimed(): Flow<List<ThingTimedEnd>> = observeAll().map { rows ->

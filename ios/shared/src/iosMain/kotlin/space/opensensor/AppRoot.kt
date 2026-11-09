@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -52,6 +53,7 @@ import space.opensensor.discover.OwnThing
 import space.opensensor.discover.UserDefaultsDiscoverPrefs
 import space.opensensor.discover.bundledSampleFeed
 import space.opensensor.discover.knownOwnThings
+import space.opensensor.discover.observeOwnStatus
 import space.opensensor.files.FileMetricsController
 import space.opensensor.files.FileMetricsScreen
 import space.opensensor.files.FilesController
@@ -115,7 +117,7 @@ private val openAqFeed: OpenAqAggregatesFeed by lazy {
  * Holds the Discover controller for the Discover entry, so it survives tab switches and is cleared
  * only when its entry leaves the back stack (the ViewModel entry decorator of the shell).
  */
-private class DiscoverHolder(known: Flow<List<KnownRecord>>) : ViewModel() {
+private class DiscoverHolder(known: Flow<List<KnownRecord>>, linked: Flow<Set<String>>) : ViewModel() {
     val controller = DiscoverController(
         scope = viewModelScope,
         feed = bundledSampleFeed(),
@@ -139,6 +141,12 @@ private class DiscoverHolder(known: Flow<List<KnownRecord>>) : ViewModel() {
             knownOwnThings(saved.map { OwnThing(it.thing, "", it.cell, it.updatedEpochMs) }, names)
         }
             .onEach(controller::showOwnThings)
+            .launchIn(viewModelScope)
+        // Each own Thing's newest reading from this phone's history, Live while a Bluetooth or LAN
+        // link is up, and whether a file of it went up (#273). Read from the phone only.
+        val things = IosArchive.places.observeAll().map { saved -> saved.mapTo(mutableSetOf()) { it.thing } }
+        observeOwnStatus(IosArchive.tiers, things, linked, IosArchive.index.observeUploadedThings())
+            .onEach(controller::showOwnStatus)
             .launchIn(viewModelScope)
     }
 }
@@ -228,7 +236,7 @@ internal fun AppRoot(
             AppShell(
                 entries = { nav ->
                     entry<DiscoverKey> {
-                        DiscoverEntry(known = devices.known, networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.openSetup() })
+                        DiscoverEntry(devices = devices, networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.openSetup() })
                     }
                     entry<ScanKey> {
                         MyDevicesEntry(
@@ -468,8 +476,8 @@ private fun MyDevicesEntry(
 
 /** Discover with its controller kept per entry. The shared screen takes Back, or the edge swipe, while a sheet is open. */
 @Composable
-private fun DiscoverEntry(known: Flow<List<KnownRecord>>, networkAllowed: Boolean, source: DiscoverSource, level: DetailLevel, units: UnitSystem, onAddSensor: () -> Unit) {
-    val controller = viewModel { DiscoverHolder(known) }.controller
+private fun DiscoverEntry(devices: DevicesBridge, networkAllowed: Boolean, source: DiscoverSource, level: DetailLevel, units: UnitSystem, onAddSensor: () -> Unit) {
+    val controller = viewModel { DiscoverHolder(devices.known, snapshotFlow { devices.state.linkedThings() }) }.controller
     DiscoverScreen(
         controller = controller,
         networkAllowed = networkAllowed,

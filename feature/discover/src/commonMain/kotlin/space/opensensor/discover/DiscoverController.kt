@@ -113,6 +113,15 @@ data class DiscoverUiState(
     val own: List<OwnPin> = emptyList(),
     /** The own Things point source. Separate from [geoJson], which never carries them. */
     val ownGeoJson: String = EMPTY_GEOJSON,
+    /** What the phone knows of each own Thing, by Thing UUID. Local only, never part of [rows]. */
+    val ownStatus: Map<String, OwnStatus> = emptyMap(),
+    /**
+     * When the real feed's index on screen was read, set only while the network failed and the
+     * feed answered its kept copy. The toggle then says "cached" with its age. Null when live.
+     */
+    val cachedAtEpochMs: Long? = null,
+    /** True when the feed on screen folds in sensors their owners share ([PublicFeed.foldsSharedSensors]). */
+    val foldsShared: Boolean = false,
 ) {
     companion object {
         const val EMPTY_GEOJSON = "{\"type\":\"FeatureCollection\",\"features\":[]}"
@@ -203,7 +212,7 @@ class DiscoverController(
     /** Persists the toggle's choice. The host's settings flow then reports it back. */
     private val saveSource: suspend (DiscoverSource) -> Unit = {},
 ) {
-    private val _state = MutableStateFlow(DiscoverUiState(available = feed.available && h3.available, isSample = feed.isSample, daily = feed.isDaily, windows = feed.windows))
+    private val _state = MutableStateFlow(DiscoverUiState(available = feed.available && h3.available, isSample = feed.isSample, daily = feed.isDaily, windows = feed.windows, foldsShared = feed.foldsSharedSensors))
     val state: StateFlow<DiscoverUiState> = _state.asStateFlow()
 
     private val rest = MutableStateFlow<CameraRest?>(null)
@@ -265,6 +274,14 @@ class DiscoverController(
      */
     fun showOwnThings(things: List<OwnThing>) {
         ownThings.value = things
+    }
+
+    /**
+     * The host's [OwnStatus] of each own Thing by Thing UUID, on every change (#273). It changes the
+     * sheet's rows only. The pins, their source and the public cells stay as they are.
+     */
+    fun showOwnStatus(status: Map<String, OwnStatus>) {
+        _state.update { if (it.ownStatus == status) it else it.copy(ownStatus = status) }
     }
 
     /** Called on every camera move. The read starts once the camera has rested for 400 ms. */
@@ -329,6 +346,8 @@ class DiscoverController(
                 // Ruling: the last hour moves to the 24 hours on screen only. The saved window stays.
                 window = offered(it.window, windows),
                 dataDate = null,
+                cachedAtEpochMs = null,
+                foldsShared = active.foldsSharedSensors,
                 loadFailed = false,
                 loading = true,
                 ranked = emptyList(),
@@ -408,11 +427,13 @@ class DiscoverController(
         // The sample's partition never changes. The real one is asked again on every load, its
         // manifest is cached by the feed, so a new day is picked up and a failed read is retried.
         if (partition == null || real) {
-            val asked = withContext(io) { catching { source.latest() }.getOrNull() }
+            val asked = withContext(io) { catching { source.snapshot() }.getOrNull() }
             // A switch made while the manifest answered owns the partition now. Never write this
             // feed's partition over it, or the other feed reads files it does not have.
             if (source !== active) return
-            partition = asked ?: partition
+            partition = asked?.partition ?: partition
+            // A kept index read offline says when it was read. A live one clears it.
+            if (asked != null) _state.update { it.copy(cachedAtEpochMs = asked.cachedAtEpochMs) }
         }
         if (source !== active) return
         val p = partition

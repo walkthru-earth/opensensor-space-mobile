@@ -1,6 +1,7 @@
 package space.opensensor.archive
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import space.opensensor.data.history.parquet.ByteReader
@@ -83,6 +84,13 @@ interface ArchiveIndex {
      * default reads every record. An adapter with a grouped query overrides it.
      */
     fun observeLatestTimed(): Flow<Map<String, Long?>> = observeAll().map(::latestTimedEnds)
+
+    /**
+     * The things with at least one [ArchiveRecord.isUploaded] record, the ones whose owner shared
+     * them and whose data went up. The default reads every record. The Room adapter asks one query.
+     */
+    fun observeUploadedThings(): Flow<Set<String>> =
+        observeAll().map { rows -> rows.filter { it.isUploaded }.mapTo(mutableSetOf()) { it.thing } }.distinctUntilChanged()
 
     suspend fun get(key: ArchiveKey): ArchiveRecord?
 

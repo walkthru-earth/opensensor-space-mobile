@@ -34,6 +34,10 @@ import kotlin.time.Clock
  *   day. When the Collection is missing (404 or 403) it GETs `manifest.json` instead and answers
  *   `FeedPartition(date = as_of, hour = 0, generation)`. The answer is kept for [MANIFEST_TTL_MS] by
  *   [clock]. A feed without `as_of` answers null.
+ * - Each index read is kept, in memory and in [blocks] under one `index-` name for the root. When the
+ *   network fails, [snapshot] answers the kept index with the time it was read, so a cold offline
+ *   start finds the cells it read before in [blocks]. That answer stands for [OFFLINE_RETRY_MS] only,
+ *   so the next load tries the network again. With no kept index the failure propagates.
  * - [cells] describes the properties with the Collection's titles and scales, or with
  *   [DiscoverCollection.BUNDLED] for a manifest feed. [resolutionFor] snaps a zoom to the nearest
  *   resolution the Collection lists. One it has no asset for answers an empty table without a request.
@@ -65,7 +69,11 @@ class OpenAqAggregatesFeed(
     private val root = root.trimEnd('/')
     private val reader = ParquetFeedReader(FooterCache(), policy)
     private val mutex = Mutex()
-    private var cached: Pair<Long, FeedPartition?>? = null
+    private var cached: Triple<Long, Long, FeedSnapshot>? = null
+
+    /** The last index read from the network, the offline answer when [blocks] has none. */
+    private var lastGood: StoredIndex? = null
+    private val indexName = "index-" + fnv64Hex(this.root)
 
     /** Guards [daily], [inflight], [generation], [lastManifest], [files] and [layout]. Never held across a network read. */
     private val rowsLock = Mutex()
@@ -94,11 +102,22 @@ class OpenAqAggregatesFeed(
     override val available: Boolean get() = reader.available
     override val windows: List<FeedWindow> get() = WINDOWS
 
-    override suspend fun latest(): FeedPartition? = mutex.withLock {
+    override suspend fun latest(): FeedPartition? = snapshot().partition
+
+    override suspend fun snapshot(): FeedSnapshot = mutex.withLock {
         val now = clock.now().toEpochMilliseconds()
-        cached?.let { (at, partition) -> if (now - at in 0 until MANIFEST_TTL_MS) return@withLock partition }
-        val (partition, collection) = readIndex()
-        cached = now to partition
+        cached?.let { (at, ttl, snapshot) -> if (now - at in 0 until ttl) return@withLock snapshot }
+        var cachedAt: Long? = null
+        val index = try {
+            readIndex(now)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            (keptIndex() ?: throw e).also { cachedAt = it.fetchedAtEpochMs }
+        }
+        val (partition, collection) = parse(index)
+        val snapshot = FeedSnapshot(partition, cachedAt)
+        cached = Triple(now, if (cachedAt == null) MANIFEST_TTL_MS else OFFLINE_RETRY_MS, snapshot)
         if (partition != null) {
             // A new as_of or generation replaces the files whole. Rows of the old one are never served again.
             rowsLock.withLock {
@@ -110,7 +129,16 @@ class OpenAqAggregatesFeed(
                 layout = collection
             }
         }
-        partition
+        snapshot
+    }
+
+    /** The index kept in memory, else the one kept in [blocks] when it still parses. Null when none is kept. */
+    private suspend fun keptIndex(): StoredIndex? {
+        lastGood?.let { return it }
+        val bytes = blocks?.get(indexName) ?: return null
+        return runCatching { FeedPaths.json.decodeFromString<StoredIndex>(bytes.decodeToString()).also { parse(it) } }
+            .getOrNull()
+            ?.also { lastGood = it }
     }
 
     override suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable {
@@ -200,24 +228,39 @@ class OpenAqAggregatesFeed(
     private fun cellsUrl(res: Int, collection: DiscoverCollection?): String? =
         if (collection != null) collection.cells[res] else "$root/cells/h3_res=$res/data.parquet"
 
-    /** The Collection's partition and the Collection, else the manifest's partition when the Collection is missing. */
-    private suspend fun readIndex(): Pair<FeedPartition?, DiscoverCollection?> {
+    /**
+     * The Collection, else the manifest when the Collection is missing, read from the network at [now].
+     * It parses before it is kept, in memory and in [blocks], so a broken body never replaces a good one.
+     */
+    private suspend fun readIndex(now: Long): StoredIndex {
         val url = "$root/${DiscoverCollection.FILE}"
         val response = getIndex(url)
-        if (response.status == 200) {
-            val collection = DiscoverCollection.parse(response.body.decodeToString(), root)
-            return collection.asOf?.let { FeedPartition(it.toString(), 0, collection.generation) } to collection
+        val index = if (response.status == 200) {
+            StoredIndex(COLLECTION, response.body.decodeToString(), now)
+        } else {
+            if (response.status !in MISSING) throw HttpRangeException(response.status, url)
+            StoredIndex(MANIFEST, readManifest(), now)
         }
-        if (response.status !in MISSING) throw HttpRangeException(response.status, url)
-        val manifest = readManifest()
-        return manifest.asOf?.let { FeedPartition(LocalDate.parse(it).toString(), 0, manifest.generation) } to null
+        parse(index)
+        lastGood = index
+        blocks?.put(indexName, FeedPaths.json.encodeToString(StoredIndex.serializer(), index).encodeToByteArray())
+        return index
     }
 
-    private suspend fun readManifest(): Manifest {
+    /** The partition of [index] and its Collection, null for a manifest. */
+    private fun parse(index: StoredIndex): Pair<FeedPartition?, DiscoverCollection?> = if (index.kind == COLLECTION) {
+        val collection = DiscoverCollection.parse(index.body, root)
+        collection.asOf?.let { FeedPartition(it.toString(), 0, collection.generation) } to collection
+    } else {
+        val manifest = FeedPaths.json.decodeFromString<Manifest>(index.body)
+        manifest.asOf?.let { FeedPartition(LocalDate.parse(it).toString(), 0, manifest.generation) } to null
+    }
+
+    private suspend fun readManifest(): String {
         val url = "$root/$MANIFEST"
         val response = getIndex(url)
         if (response.status != 200) throw HttpRangeException(response.status, url)
-        return FeedPaths.json.decodeFromString<Manifest>(response.body.decodeToString())
+        return response.body.decodeToString()
     }
 
     private suspend fun getIndex(url: String) =
@@ -227,6 +270,10 @@ class OpenAqAggregatesFeed(
 
     /** Tells the waiters of a download that its caller was cancelled before it finished. */
     private class Abandoned : RuntimeException("download abandoned")
+
+    /** One index body as read, [kind] being [COLLECTION] or [MANIFEST], and when it was read. */
+    @Serializable
+    internal data class StoredIndex(val kind: String, val body: String, val fetchedAtEpochMs: Long)
 
     @Serializable
     internal data class Manifest(
@@ -240,6 +287,9 @@ class OpenAqAggregatesFeed(
 
         /** How long an answer of [latest] stands before the Collection or manifest is read again. */
         const val MANIFEST_TTL_MS: Long = 5 * 60 * 1000L
+
+        /** How long a kept index answers after a failed read before the network is tried again. */
+        const val OFFLINE_RETRY_MS: Long = 30 * 1000L
 
         /** The Collection and the manifest are a few KB. Anything far larger is neither. */
         const val MANIFEST_MAX_BYTES: Long = 1024L * 1024
@@ -261,5 +311,17 @@ class OpenAqAggregatesFeed(
 
         /** Answers that mean "no Collection here". S3 answers 403 for a missing key without list rights. */
         private val MISSING = setOf(403, 404)
+
+        private const val COLLECTION = "collection"
+
+        /** FNV-1a 64 of [text] in hex, a short stable name part for the kept index of one root. */
+        private fun fnv64Hex(text: String): String {
+            var hash = -0x340d631b7bdddcdbL
+            for (byte in text.encodeToByteArray()) {
+                hash = hash xor (byte.toLong() and 0xff)
+                hash *= 0x100000001b3L
+            }
+            return hash.toULong().toString(16).padStart(16, '0')
+        }
     }
 }

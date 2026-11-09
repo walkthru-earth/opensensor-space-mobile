@@ -33,6 +33,13 @@ enum class FeedWindow(val key: String) {
 data class FeedPartition(val date: String, val hour: Int, val generation: String? = null)
 
 /**
+ * The answer of [PublicFeed.snapshot]. [partition] as [PublicFeed.latest] gives it. [cachedAtEpochMs]
+ * is null when the index was read from the network now, else when the kept copy was read, so the map
+ * says "cached" with its age.
+ */
+data class FeedSnapshot(val partition: FeedPartition?, val cachedAtEpochMs: Long? = null)
+
+/**
  * One property from the dictionary named in the file's key value metadata. [label] is the discover
  * Collection's column title when it has one ([DiscoverCollection.describe]). [scale] is the scale
  * the Collection gives the property, null for the neutral ramp. It is never read from the file.
@@ -143,6 +150,19 @@ interface PublicFeed {
 
     /** The newest complete partition, or null when nothing is published. */
     suspend fun latest(): FeedPartition?
+
+    /**
+     * [latest] with where it came from. A feed that keeps its last index answers it with
+     * [FeedSnapshot.cachedAtEpochMs] when the network fails, so a cold offline start still shows the
+     * last cells it read. Other feeds answer [latest] as read now.
+     */
+    suspend fun snapshot(): FeedSnapshot = FeedSnapshot(latest())
+
+    /**
+     * True only for a feed whose cells fold in the files owners chose to share from this app. A cell
+     * of such a feed can include an own sensor once it uploaded. OpenAQ and the sample never do.
+     */
+    val foldsSharedSensors: Boolean get() = false
 
     suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable
 

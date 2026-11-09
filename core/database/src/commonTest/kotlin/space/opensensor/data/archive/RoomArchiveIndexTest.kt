@@ -157,4 +157,16 @@ class RoomArchiveIndexTest {
         assertEquals(7L, index.get(file.key)!!.uploadedAtEpochMs)
         assertEquals(1, index.observeThing(thing).first().size)
     }
+
+    @Test
+    fun aThingCountsAsUploadedOnlyOnceOneOfItsFilesWentUp() = runTest {
+        val thing = "11111111-2222-3333-4444-555555555555"
+        val other = "66666666-7777-8888-9999-000000000000"
+        val sha = "ab".repeat(32)
+        index.put(ArchiveRecord(thing, "thing=$thing/year=2026/month=10/day=01/data_1000.parquet", 10L, 1L, sha, 5L, "device"))
+        index.put(ArchiveRecord(other, "thing=$other/year=2026/month=10/day=01/data_1000.parquet", 10L, 1L, sha, 5L, "device"))
+        assertEquals(emptySet(), index.observeUploadedThings().first())
+        assertTrue(index.markUploaded(FileIdentity(thing, "data_1000", sha), 7L))
+        assertEquals(setOf(thing), index.observeUploadedThings().first())
+    }
 }

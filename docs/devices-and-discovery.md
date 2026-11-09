@@ -212,7 +212,9 @@ an info button.
 - **Sample and Real (2026-10-12).** A compact two-state toggle top right under the chips, a
   floating control with the brand blue only on the chosen half. Sample is the bundled fixture,
   Real is the OpenAQ aggregates feed, labelled with the day its data runs to in the phone's
-  language, as in "OpenAQ, data to 8 Oct". The choice is saved (`DiscoverSource`) and Real is
+  language, as in "OpenAQ, data to 8 Oct". On a start with no network that still has a kept index,
+  Real shows the cells read before and says "OpenAQ, cached 2 h ago" with the age of that read.
+  The choice is saved (`DiscoverSource`) and Real is
   read only while Show public sensors is on (`effectiveDiscoverSource`). With the switch off the
   toggle is disabled and shows Sample, and screen readers hear how to turn it on. A switch of
   feed clears the rows, the selection and the window reads, then reloads. Real offers 24 hours
@@ -481,7 +483,31 @@ The list alternative for TalkBack and VoiceOver is the sheet. Under the areas in
 run card, a failed load or the unavailable message it lists "Your sensors" by name, each row a
 button that moves the map to that pin. Only a selected area and the property list take its place
 (`everyBodyBesideTheMapPinsListsTheOwnThings`). The cluster badge shows
-the count only. Naming the worst step on it waits until the latest readings join the places.
+the count only.
+
+Each row of "Your sensors" carries the Thing's newest local reading under its name, the main metric
+with its label, value and unit as the profile formats it (`LatestReadings`, from the 15 minute
+tiers of its last two days, or of the newest older day the day tier finds with a reading when those
+two have none). Beside it the row says Live, an ink dot and bold ink word, while the
+phone holds a link to that Thing over Bluetooth or LAN. Otherwise it says how old the reading is,
+"just now", "12 min ago", "3 h ago" or "2 d ago", ticking once a minute. A Thing with no reading
+says neither. Both phones join the readings, the links and the uploads in one shared flow
+(`observeOwnStatus`). Android reads the links from `DeviceConnectionManager` and iOS from
+`CompanionState.linkedThings()`. All of it comes from the phone's own history and link state, so
+it works offline and sends nothing.
+
+Own data never touches a public cell. The controller keeps it apart from the rows, the selection
+and the GeoJSON (`ownStatusNeverChangesThePublicCells`), and no code adds an own value to a public
+mean or takes one from it. A cell sheet says "Includes your sensor" only when the feed on screen
+folds in shared sensors (`PublicFeed.foldsSharedSensors`), an own Thing has uploaded at least one
+file (`ArchiveIndex.observeUploadedThings`) and that Thing's cell lies inside the public cell. The
+check reads the cell ids only. OpenAQ and the sample fold in no shared sensor, so the line stays
+hidden on both today (`includesYourSensorShowsOnlyOnceTheSensorSharesIntoAFeedThatFoldsIt`).
+
+The info button of the Sample and Real toggle and of the legend lists each source on screen with
+its date. "Your sensors, from this phone" with the day of the newest own reading, shown once an own
+pin exists. "Public sensors, OpenAQ" with the day its data runs to, and its cached age when it came
+from the kept index. "Sample, bundled with the app" with the day its data runs to.
 
 ### Privacy rules
 
@@ -551,9 +577,11 @@ misleading. Revisit if public values ever become finer than hourly.
 
 This feature changes the offline-only stance in one narrow way. The app may make anonymous,
 read-only GET requests to the public feed and the basemap. No cookies, accounts, identifiers or
-analytics. A Settings switch, "Show public sensors", turns them off. When it is off or offline,
-Discover shows the last cached snapshot or the bundled sample on the bundled basemap, and
-pairing and sync work exactly as before. `AGENTS.md` records this boundary.
+analytics. A Settings switch, "Show public sensors", turns them off. When it is off, Discover
+shows the bundled sample on the bundled basemap. When the network fails, Real shows the last kept
+index and its cells from the block cache, labelled cached with its age, and with nothing kept it
+shows the failed load with Retry. Own pins, their readings and Live read only the phone. Pairing
+and sync work exactly as before. `AGENTS.md` records this boundary.
 
 ### Public feed contract (proposed)
 
@@ -655,8 +683,12 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
   plus fields the phone ignores. `latest()` answers `FeedPartition(as_of, 0, generation)`. A
   manifest feed, like the bundled sample, gets the PM2.5 and PM10 WHO scales the app ships
   (`DiscoverCollection.BUNDLED`, the same edges, colours and step names as `WhoGuidelines` and
-  the Android step strings, held by tests). Either answer is kept for 5 minutes. A failed read
-  throws and is not cached.
+  the Android step strings, held by tests). Either answer is kept for 5 minutes. Each body that
+  parses is also kept, in memory and in the `BlockCache` under an `index-` name for the root, with
+  the time it was read. When a later read fails, `snapshot()` answers that kept index with
+  `cachedAtEpochMs` set, for 30 seconds before the network is tried again, so a cold offline start
+  still finds its partition and the cell blocks read before. With nothing kept the failure
+  propagates. A broken body never replaces a kept one.
 - `cells/h3_res=<1..9>/data.parquet`, one file per resolution holding every day since 2023,
   written by DuckDB. Verified on 2026-10-12 against `h3_res=3` (250 KB, 3,131 rows, generation
   `007d89a5...`): one row group, SNAPPY, dictionary encoded, min and max statistics, no page
@@ -682,8 +714,9 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
 - The feed offers 24 hours and 7 days only. Last hour answers an empty table without a request.
   Errors propagate, the screen decides what to show. Android builds it over `OkHttpRangeEngine`
   in `DiscoverViewModel`, iOS over `UrlSessionRangeEngine` in `AppRoot`, one per process.
-- `DiscoverController` holds the sample and this feed. Real asks `latest()` on every load (the
-  manifest is cached for 5 minutes) and keeps the last partition when a later ask fails. A cell's
+- `DiscoverController` holds the sample and this feed. Real asks `snapshot()` on every load (the
+  manifest is cached for 5 minutes), keeps the last partition when a later ask fails, and carries
+  the snapshot's `cachedAtEpochMs` into the state for the cached label. A cell's
   other windows are read 24 hours first, so a failing window never delays the headline. A pan
   rereads a failed window without flipping the sheet back to loading. A pan that picks up a new
   partition reads every window of the selected cell again, and a window read of an older partition

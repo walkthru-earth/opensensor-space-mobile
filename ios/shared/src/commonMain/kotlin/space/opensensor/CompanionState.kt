@@ -170,6 +170,12 @@ class CompanionState {
         lanRuns = lanRuns + (name to run.copy(running = false, interrupted = true, finishedAtEpochMs = clock()))
     }
 
+    /** The things the phone holds a ready link to now, the Bluetooth one and every LAN session, for Discover's Live (#273). */
+    internal fun linkedThings(): Set<String> = buildSet {
+        info?.thing?.takeIf { connected }?.let(::add)
+        lanInfo.forEach { (name, lan) -> if (lanSessions[name]?.connected == true) lan.thing?.let(::add) }
+    }
+
     internal fun connectedLanForThing(thing: String?): String? =
         thing?.let { wanted ->
             lanInfo.entries.firstOrNull { (name, info) ->

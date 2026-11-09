@@ -20,6 +20,8 @@ class RoomArchiveIndex(private val dao: ArchivedFileDao) : ArchiveIndex {
     override fun observeLatestTimed(): Flow<Map<String, Long?>> =
         dao.observeLatestTimed().map { rows -> rows.associate { it.thing to it.lastNs } }.distinctUntilChanged()
 
+    override fun observeUploadedThings(): Flow<Set<String>> = dao.observeUploadedThings().map { it.toSet() }.distinctUntilChanged()
+
     override suspend fun get(key: ArchiveKey): ArchiveRecord? = dao.get(key.thing, key.name)?.toRecord()
 
     override suspend fun anyIndexedNames(descs: Set<String>, dicts: Set<String>, pinned: Set<String>): Boolean =
