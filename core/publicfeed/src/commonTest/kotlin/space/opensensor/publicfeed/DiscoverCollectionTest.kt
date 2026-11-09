@@ -222,7 +222,7 @@ class DiscoverCollectionTest {
     private fun assets(vararg res: Int) = res.joinToString(",") { """"h3_res=$it":{"href":"cells/h3_res=$it/data.parquet"}""" }
 
     @Test
-    fun aZoomReadsTheNearestListedResolutionAndFiveBreaksTies() {
+    fun aZoomReadsTheNearestListedResolutionAndEightBreaksTies() {
         val all = DiscoverCollection.parse(collection(assets(3, 5, 7)), root)
         assertEquals(5, all.resolutionNear(5))
         assertEquals(7, all.resolutionNear(7))
