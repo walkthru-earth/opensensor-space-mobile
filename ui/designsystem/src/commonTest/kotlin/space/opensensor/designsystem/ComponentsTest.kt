@@ -6,8 +6,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.test.Test
@@ -85,40 +83,27 @@ class ComponentsTest {
     }
 
     @Test
-    fun displayTypographyNeverShrinksBelowDefaultAndClampsRenderedDpAboveMaxScale() {
-        val defaultDensity = Density(density = 2f, fontScale = 1.0f)
-        val linear200Density = Density(density = 2f, fontScale = 2.0f)
-        // A converter that renders large text smaller than its sp although the font scale is above 1.
-        // No phone ships one (the real Android 14 tables are pinned in DisplayFontScaleTest), but the
-        // clamp promises the 1.0x size whatever the converter does.
-        val shrinking = object : Density {
-            override val density: Float = 2f
-            override val fontScale: Float = 1.3f
-            override fun TextUnit.toDp(): Dp = (value * 0.8f).dp
-            override fun Dp.toSp(): TextUnit = (value / 0.8f).sp
+    fun displayNumeralsFollowThePlatformScaleUpToTheCap() {
+        // Density(density, fontScale) is the platform's own converter, the Android 14 tables on the
+        // Android host and the linear scale on the iOS simulator, so no hand-made converter stands in
+        // for a phone. On iOS 1.5x and up meets the 1.35x cap, the Android tables stay under it.
+        for (scale in listOf(0.85f, 1f, 1.15f, 1.3f, 1.5f, 1.8f, 2f)) {
+            val density = Density(density = 2f, fontScale = scale)
+            val type = brandTypography(FontFamily.SansSerif, FontFamily.Monospace, density)
+            for ((style, base) in listOf(
+                type.displayLarge to DisplaySizes.LARGE,
+                type.displayMedium to DisplaySizes.MEDIUM,
+                type.displaySmall to DisplaySizes.SMALL,
+            )) {
+                val rendered = with(density) { style.fontSize.toDp().value }
+                val converted = with(density) { base.sp.toDp().value }
+                val cap = base * TypographyLimits.MaxDisplayFontScale
+                assertEquals(minOf(converted, cap), rendered, 0.05f, "display $base sp at $scale")
+                if (scale >= 1f) assertTrue(rendered >= base - 0.05f, "display $base sp renders $rendered dp at $scale")
+            }
+            // Body styles keep their sp so the system scale applies in full.
+            assertEquals(14f, type.bodyMedium.fontSize.value, 0.001f)
         }
-
-        val base = brandTypography(FontFamily.SansSerif, FontFamily.Monospace, defaultDensity)
-        val scaledLinear = brandTypography(FontFamily.SansSerif, FontFamily.Monospace, linear200Density)
-        val scaledShrinking = brandTypography(FontFamily.SansSerif, FontFamily.Monospace, shrinking)
-
-        for ((baseStyle, linearStyle, shrinkingStyle) in listOf(
-            Triple(base.displayLarge, scaledLinear.displayLarge, scaledShrinking.displayLarge),
-            Triple(base.displayMedium, scaledLinear.displayMedium, scaledShrinking.displayMedium),
-            Triple(base.displaySmall, scaledLinear.displaySmall, scaledShrinking.displaySmall),
-        )) {
-            val baseDp = with(defaultDensity) { baseStyle.fontSize.toDp().value }
-            val maxDp = baseDp * TypographyLimits.MaxDisplayFontScale
-            val linearDp = with(linear200Density) { linearStyle.fontSize.toDp().value }
-            val shrinkingDp = with(shrinking) { shrinkingStyle.fontSize.toDp().value }
-
-            // Android's Density(density, fontScale) applies the non-linear tables, iOS scales linearly.
-            assertTrue(linearDp >= baseDp - 0.01f && linearDp <= maxDp + 0.05f, "200 percent $linearDp in $baseDp..$maxDp")
-            assertEquals(baseDp, shrinkingDp, 0.05f, "a shrinking converter is held at the 1.0x size")
-        }
-
-        // Body styles keep their uncompensated sp value so the OS 2.0x font scale doubles them in full.
-        assertEquals(base.bodyMedium.fontSize.value, scaledLinear.bodyMedium.fontSize.value, 0.001f)
     }
 
     @Test

@@ -42,27 +42,21 @@ object TypographyLimits {
      * Maximum effective scale multiplier for display numerals (`displayLarge` 84 sp, `displayMedium`
      * 48 sp, `displaySmall` 32 sp). Body, label, title, and headline styles scale all the way to 200
      * percent (`fontScale = 2.0f`), while display numerals cap at 1.35x in converted `dp` so 3-digit
-     * readings fit on 320 dp screens without horizontal clipping and never shrink below their 1.0x
-     * `dp` size under Android 14 non-linear font scaling.
+     * readings fit on 320 dp screens without horizontal clipping. The Android 14 and later non-linear
+     * tables stay under the cap, so it holds linear scales such as iOS's.
      */
     val MaxDisplayFontScale: Float = 1.35f
 }
 
 /**
- * Clamps a display numeral size of [baseSp] using [density]'s actual `sp` to `dp` converter
- * (including Android 14 and later non-linear font scaling) so the rendered `dp` size never drops
- * below [baseSp] dp when `fontScale >= 1f` and never exceeds
- * [TypographyLimits.MaxDisplayFontScale] times [baseSp] dp.
+ * Caps a display numeral of [baseSp] at [TypographyLimits.MaxDisplayFontScale] times [baseSp] dp,
+ * measured through [density]'s own `sp` to `dp` converter (the Android 14 and later non-linear
+ * tables on Android, a linear scale on iOS). Below the cap the numeral follows the system scale.
+ * Both converters only grow text above scale 1.0, so it never renders smaller than its 1.0x `dp`
+ * size there. `DisplayFontScaleTest` pins that against every real Android table.
  */
 fun clampedDisplaySizeSp(baseSp: Float, density: Density): TextUnit = with(density) {
-    val minDp = baseSp.dp
-    val maxDp = (baseSp * TypographyLimits.MaxDisplayFontScale).dp
-    val targetDp = if (fontScale <= 1f) {
-        baseSp.sp.toDp().coerceAtMost(minDp)
-    } else {
-        baseSp.sp.toDp().coerceIn(minDp, maxDp)
-    }
-    targetDp.toSp()
+    baseSp.sp.toDp().coerceAtMost((baseSp * TypographyLimits.MaxDisplayFontScale).dp).toSp()
 }
 
 /** The display numeral sizes at font scale 1.0, in sp (equal to dp there). */
@@ -161,9 +155,8 @@ fun preferredLanguage(): String = Locale.current.language
 /**
  * The type scale. Headings are bold and rounded like the website (`.brand-page h1..h4` are weight
  * 700 with slightly negative tracking). Body text stays at Material sizes for a phone. Display
- * styles carry numbers and use [numbers], clamping their rendered `dp` size through [density] so
- * they never drop below their 1.0x `dp` size and never exceed
- * [TypographyLimits.MaxDisplayFontScale] times that size.
+ * styles carry numbers and use [numbers], capping their rendered `dp` size through [density] at
+ * [TypographyLimits.MaxDisplayFontScale] times their 1.0x size ([clampedDisplaySizeSp]).
  */
 fun brandTypography(text: FontFamily, numbers: FontFamily, density: Density = Density(1f, 1f)): Typography {
     val base = Typography()
