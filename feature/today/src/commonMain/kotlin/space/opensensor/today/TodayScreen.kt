@@ -143,7 +143,10 @@ internal suspend fun noticeText(notice: TodayNotice): String? = when (notice) {
     TodayNotice.Busy -> getString(Res.string.msg_busy)
 }
 
-/** The open confirmation, one at a time. Cancel and Not now send nothing. Titles are headings. */
+/**
+ * The open confirmation, one at a time. Cancel and Not now send nothing. Titles are screen reader
+ * headings, `heading = true` on [BodyText] only sets title line breaking.
+ */
 @Composable
 internal fun TodayDialogs(
     dialog: TodayDialog,
@@ -156,14 +159,20 @@ internal fun TodayDialogs(
         TodayDialog.Flush -> AlertDialog(
             onDismissRequest = onDismiss,
             icon = { Icon(AppIcons.Storage, contentDescription = null) },
-            title = { BodyText(stringResource(Res.string.flush), heading = true) },
+            title = { BodyText(stringResource(Res.string.flush), modifier = Modifier.semantics { heading() }, heading = true) },
             text = { BodyText(stringResource(Res.string.flush_confirm)) },
             confirmButton = { TextButton(onClick = onConfirm) { FitText(stringResource(Res.string.flush_button)) } },
             dismissButton = { TextButton(onClick = onDismiss) { FitText(stringResource(Res.string.action_cancel)) } },
         )
         TodayDialog.Forget -> AlertDialog(
             onDismissRequest = onDismiss,
-            title = { BodyText(stringResource(Res.string.today_forget_title, name ?: stringResource(Res.string.today_forget_unnamed)), heading = true) },
+            title = {
+                BodyText(
+                    stringResource(Res.string.today_forget_title, name ?: stringResource(Res.string.today_forget_unnamed)),
+                    modifier = Modifier.semantics { heading() },
+                    heading = true,
+                )
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     BodyText(stringResource(Res.string.today_forget_body))

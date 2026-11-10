@@ -251,7 +251,9 @@ The rules for a new screen or component.
 1. **Headings.** The page title, each card or section title and each sheet or dialog title carries
    `Modifier.headingSemantics()` (`Modifier.semantics { heading() }`). `SectionCard`, `CardHeader`,
    `MascotGuide` and `InfoSheet` do this already. An eyebrow that titles something passes
-   `Eyebrow(heading = true)`. A label inside a row is not a heading.
+   `Eyebrow(heading = true)`. `BodyText(heading = true)` only sets title line breaking, so a
+   dialog title in `BodyText` also takes the modifier, as the Today Finalize and Forget dialogs do
+   (`TodayHeadingsTest`). A label inside a row is not a heading.
 2. **Roles.** A Material `Button`, `IconButton`, `Switch`, `Checkbox`, `RadioButton` or `Tab` names its
    role itself. A custom tap target passes `role =` to `clickable`, `selectable` or `toggleable`.
    Exclusive choices sit in a `selectableGroup()` and use `selectable(role = Role.RadioButton)` or
