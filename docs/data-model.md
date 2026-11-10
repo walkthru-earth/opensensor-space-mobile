@@ -20,7 +20,7 @@ thing/Hive paths. Partial downloads are not exported. The original archive stays
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
-## Room schema v6 (`opensensor.db`)
+## Room schema v7 (`opensensor.db`)
 
 One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
 keeps the file in its app database directory. iOS keeps it at
@@ -122,9 +122,10 @@ erDiagram
     string config_json "the kind's own settings, {} for a board"
   }
   thing_place {
-    string thing_uuid PK "one row per own fixed Thing"
+    string thing_uuid PK "one row per own Thing"
     string cell "H3 cell in lowercase hex, never a coordinate"
     long updated_epoch_ms "phone time of the location read"
+    boolean moving "cell is the last GNSS cell, empty before a fix"
   }
   known_device ||--o{ archived_file : "thing"
   known_device ||--o{ thing_epoch : "address (logical association, no cascade)"
@@ -162,11 +163,13 @@ source once through `ArchiveCollector`, behind the `ThingSources` port in `:core
 (`RoomThingSources`), and a failed write never stops the run. In code a collection, a keep alive
 lease and the iOS bridges name the Thing they reach by a `ThingId` (`:core:model`), a
 `BleAddress` for a board or a `PhoneInstall` for this phone's own install.
-`thing_place` keeps the H3 cell of each of the user's own fixed Things, keyed by its UUID (#226).
+`thing_place` keeps the H3 cell of each of the user's own Things, keyed by its UUID (#226).
 Discover draws it as a pin and nothing else reads it. A location read or save in Device settings
-writes the row through `ThingPlaces.recordFrom` (`:core:sync`, `RoomThingPlaces`). A Thing that is
-moving, or names no well formed cell, loses its row. It holds the cell only, never the cell centre or
-a fix, and it never leaves the phone. Forget deletes the rows of every Thing the sensor named, the
+writes the row through `ThingPlaces.recordFrom` (`:core:sync`, `RoomThingPlaces`). A fixed Thing
+keeps its configured cell. A moving Thing sets `moving` (schema 7) and keeps its last
+`location.gnss_cell`, or an empty cell before its first fix, never its configured cell (#263). A
+Thing with no mobility, or a fixed one with no well formed cell, loses its row. It holds the cell
+only, never the cell centre or a fix, and it never leaves the phone. Forget deletes the rows of every Thing the sensor named, the
 current one and older epochs, so no cell of a forgotten sensor stays on the phone. The Discover
 host also joins it with `known_device` on Android and the saved records on iOS.
 `pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the
@@ -193,7 +196,9 @@ contract version 1, so no stored Thing is lost on upgrade. Version 4 adds `thing
 to `archived_file` through `Migration4To5`, each with an index for the template change check, and
 reopens every row indexed without an error so the back-fill reads them. Version 6 adds
 `uploadedAtEpochMs` and the `(thing, sha256)` index to `archived_file` through
-`AutoMigration(from = 5, to = 6)`, and every file starts as not uploaded. A schema change adds an
+`AutoMigration(from = 5, to = 6)`, and every file starts as not uploaded. Version 7 adds
+`moving` to `thing_place` through `AutoMigration(from = 6, to = 7)`, and every stored place starts
+as fixed. A schema change adds an
 explicit or auto migration and the next `core/database/schemas/<n>.json`.
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores

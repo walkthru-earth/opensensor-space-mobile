@@ -29,6 +29,7 @@ import space.opensensor.data.protocol.ConfigFields
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.ConfigValidationException
 import space.opensensor.data.protocol.PairMode
+import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.data.protocol.WifiState
 import space.opensensor.family.air.SensorLabel
 import space.opensensor.family.air.sensorIdentity
@@ -270,12 +271,8 @@ class DeviceConfigController(
         if (location.value.working) return
         location.value = location.value.copy(working = true, result = null)
         try {
-            val config = readWhenFree { source.readLocation() }
-            location.value = if (config == null) {
-                DeviceLocationState(supported = false)
-            } else {
-                DeviceLocationState(supported = true, draft = DeviceLocationDraft.from(config), saved = config.hasCell())
-            }
+            val page = readWhenFree { source.readLocation() }
+            location.value = if (page == null) DeviceLocationState(supported = false) else DeviceLocationState.of(page)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -311,14 +308,32 @@ class DeviceConfigController(
         location.value = loc.copy(working = true, result = null)
         scope.launch {
             try {
-                val confirmed = source.writeLocation(patch)
+                val page = source.writeLocation(patch)
+                val confirmed = page?.location
                 val matches = confirmed != null && confirmed.cell.orEmpty() == draft.cell &&
                     confirmed.resolution == draft.resolution && confirmed.country.orEmpty() == draft.country
-                location.value = loc.copy(
-                    working = false,
-                    result = if (matches) DeviceLocationResult.SAVED else DeviceLocationResult.NOT_CONFIRMED,
-                    saved = if (confirmed != null) confirmed.hasCell() else loc.saved,
-                )
+                val result = if (matches) DeviceLocationResult.SAVED else DeviceLocationResult.NOT_CONFIRMED
+                location.value = (page?.let(loc::withPage) ?: loc).copy(working = false, result = result)
+            } catch (e: CancellationException) { throw e } catch (_: Exception) { location.value = loc.copy(working = false, result = DeviceLocationResult.FAILED) }
+        }
+    }
+
+    /**
+     * Sends `thing.mobility` alone, an explicit tap, and reads page 1 back (#263). Only offered when the
+     * board reports the key. A moving Thing takes its cell from its own GNSS receiver, never the phone.
+     */
+    fun saveMobility(mobility: ThingMobility) {
+        val loc = location.value
+        if (!now.canEdit || now.snapshot.syncRunning || loc.supported != true || loc.working) return
+        if (loc.mobility == null || loc.mobility == mobility) return
+        val patch = ConfigPatch.build { thingMobility(mobility) }
+        location.value = loc.copy(working = true, result = null)
+        scope.launch {
+            try {
+                val page = source.writeLocation(patch)
+                val read = page?.let(loc::withPage)
+                val result = if (read?.mobility == mobility) DeviceLocationResult.SAVED else DeviceLocationResult.NOT_CONFIRMED
+                location.value = (read ?: loc).copy(working = false, result = result)
             } catch (e: CancellationException) { throw e } catch (_: Exception) { location.value = loc.copy(working = false, result = DeviceLocationResult.FAILED) }
         }
     }

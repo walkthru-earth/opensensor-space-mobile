@@ -465,7 +465,7 @@ allow it cleanly. Precise location is never requested on either platform.
 
 ### Your own sensors on the map (#226)
 
-Each of the user's own fixed Things shows as a pin at the centre of its saved H3 cell, a paper dot
+Each of the user's own Things shows as a pin at the centre of its saved H3 cell, a paper dot
 ringed in ink. The pins are their own clustered GeoJSON source above the public cells and below the
 Near me puck. Pins closer than 44 dp merge into an ink badge with its count, up to zoom 14. A badge
 tap zooms two steps on it. A pin tap falls through to the public cell under it. Neither takes the
@@ -474,7 +474,12 @@ Thing UUID or name, and the public source never carries an own Thing. A test hol
 (`ownThingsNeverReachThePublicSource`).
 
 The cell comes from `thing_place` on the phone ([data model](data-model.md)), written when Device
-settings reads or saves the location. A moving Thing, or one with no well-formed cell, has no pin. A
+settings reads or saves the location. A Thing with no well-formed cell has no pin. A moving Thing
+stands at the newer of its last GNSS cell and the last GNSS or phone fix in its own rows, never
+the configured cell of its fixed hours. The cells of those fixes in the last 24 hours are outlined
+with an ink fill and line in a track source of their own, under the pins
+and with no Thing UUID (#263, [device location](device-location.md#mobility-and-gnss)). A row with
+no location is no fix, so a moving Thing with no fix has no pin and never a guessed one. A
 forgotten sensor loses its pin, because Forget deletes its cells and the host joins the places with
 the Things the phone still knows. A Thing set up before this build shows once its location is next read. The source is rebuilt
 off the main thread, and only when a Thing, its cell or its last update changes. No request leaves

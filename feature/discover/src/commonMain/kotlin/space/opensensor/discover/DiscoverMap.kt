@@ -47,6 +47,9 @@ import space.opensensor.publicfeed.LatLng
  * (#226). A pin is a [paper] dot ringed in [ink], a cluster an [ink] badge with its count. Neither
  * takes the brand blue, which marks selection only. A tap on a cluster calls [onOwnCluster] with its
  * centre, a tap on a pin falls through to the cell under it.
+ *
+ * [ownTrackGeoJson] outlines the cells a moving own Thing's rows reported (#263), in [ink] under the
+ * pins. It takes no tap, so a tap falls through to the cell under it.
  */
 @Composable
 internal fun rememberDiscoverMapState(
@@ -60,6 +63,7 @@ internal fun rememberDiscoverMapState(
     ownGeoJson: String,
     paper: Color,
     onOwnCluster: (Position) -> Unit,
+    ownTrackGeoJson: String = DiscoverUiState.EMPTY_GEOJSON,
     onCellClick: (String?) -> Unit,
 ): MapState {
     val (center, zoom) = when (start) {
@@ -111,6 +115,19 @@ internal fun rememberDiscoverMapState(
             filter = feature["h3"].asString() eq const(selectedHex ?: "none"),
             color = const(ink),
             width = const(3.dp),
+        )
+        val track = rememberGeoJsonSource(GeoJsonData.JsonString(ownTrackGeoJson))
+        FillLayer(
+            id = "discover-own-track-fill",
+            source = track,
+            color = const(ink),
+            opacity = const(0.12f),
+        )
+        LineLayer(
+            id = "discover-own-track",
+            source = track,
+            color = const(ink),
+            width = const(1.5.dp),
         )
         val own = rememberGeoJsonSource(GeoJsonData.JsonString(ownGeoJson)) {
             cluster = true

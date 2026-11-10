@@ -34,7 +34,9 @@ storage, logged, sent to firmware or reverse-geocoded through a remote service. 
 background updates. Leaving the picker cancels the request.
 After a read or save the phone keeps the readback cell of a fixed Thing in `thing_place`, so
 Discover can show the user's own pin there. It keeps the cell only, never the published centre.
-A moving Thing keeps no cell on the phone, and Forget deletes the cell of every Thing the sensor named.
+A moving Thing keeps its last `location.gnss_cell` there with `moving` set, or an empty cell
+before its first fix, and never its configured cell. Forget deletes the cell of every Thing the
+sensor named.
 Android retains only ACCESS_COARSE_LOCATION. iOS retains When In Use and reduced
 accuracy by default. A small chosen cell cannot improve an approximate OS fix.
 
@@ -43,13 +45,44 @@ Every Thing, fixed or moving, uses H3 resolution 8, about 0.74 km² with an edge
 set, and Detailed adds the cell index. The picker shows the area size (`LocationArea`), and
 Detailed adds the resolution number there.
 `ConfigFields` accepts only `location.resolution=8`, and `ConfigPatch.Builder.location(cell, country)`
-takes only an empty or resolution 8 cell and always sends 8. Firmware still takes 0 to 15 until
-firmware #139. A finer cell read from a board becomes its resolution 8 parent. A coarser one cannot
-be refined, so the app asks for a new pick before Save. Firmware applies the maximum again
+takes only an empty or resolution 8 cell and always sends 8. Firmware refuses any other resolution
+(firmware #139). A finer cell read from older firmware becomes its resolution 8 parent. A coarser
+one cannot be refined, so the app asks for a new pick before Save. Firmware applies the maximum again
 before saving and derives the published center from the retained cell. Country
 is declared by the owner, not inferred from the cell or used as NTP residency
 proof. Exact GPS, cell-center coordinates and administrative country are different
 things. See the firmware-owned [time/location contract](../../opensensor-space-firmware/docs/shared/time-and-location.md).
+
+## Mobility and GNSS
+
+When page 1 reports `thing.mobility`, the location card of Device settings and of the setup
+Location page shows a Fixed or Moving choice with an info icon. Firmware that does not report the
+key never sees the choice, because it refuses a request with an unknown key. A tap sends
+`thing.mobility` alone through the existing `SET_CONFIG` path (`DeviceConfigAction.SetMobility`),
+and the card says saved only when page 1 reads back the same value. Nothing else sends it.
+
+- Fixed is the default. The Thing stands in its chosen cell and every row writes source 1.
+- Moving hides the cell and Choose area. Each row takes the cell of the board's own GNSS fix, or
+  no location at all. The phone never supplies a cell for a moving Thing (`location.phone_cell`,
+  #264, is not used). A board with no receiver (page 1 omits `location.gnss_cell`) says so on
+  the card, because its rows carry no location.
+- Setup may finish once the board stores a cell or reports Moving
+  (`DeviceLocationState.located`). There is no Skip.
+- On a board with a receiver and a fresh fix, the picker offers Use sensor GPS, and with no
+  drafted cell it opens on the `location.gnss_cell`. The tap only drafts that cell and centres it, and Save stays the owner's
+  explicit step.
+- When the draft replaces a stored cell, the picker notes that new rows use the new cell, earlier
+  files keep the old one, and a new file starts. A change of mobility splits the file too.
+
+Discover shows a moving own Thing from its rows, never from a guess (#263). `CellTrackReader`
+(`core/history`) reads the last 24 hours of the Thing's verified files on the phone, one
+`h3_cell_id` and `location_source` per row, into a `CellTrack`. A row with a null cell, a null or 0
+source, or a value that is no H3 cell is a row with no fix and never borrows a neighbour's cell.
+Only GNSS (2) and phone (3) fixes place a moving Thing. Rows from its fixed hours carry the
+configured cell (1), which is never where it is now. Those fixes are outlined with an ink fill and
+line in their own map source with no Thing UUID, and the pin stands at the newer of the stored GNSS
+cell and the last such fix. With neither it shows no pin. The 24 hour window is read again when a
+file is synced and every quarter hour, so old cells leave the map with no new file.
 
 ## Site
 
@@ -104,7 +137,7 @@ because it clears the key.
   `LocationConfig.gnssCell` keeps it only when it is a resolution 8 cell. It is null both when the key
   is absent (no receiver) and when it is empty (no fresh fix). `gnssCellText` keeps that difference.
   `thing.mobility` (`fixed` or `moving`) has a `ConfigFields` row and
-  `ConfigPatch.Builder.thingMobility`. Nothing sends it yet. `thing.setup` reads as
+  `ConfigPatch.Builder.thingMobility`, sent only by the Fixed or Moving tap. `thing.setup` reads as
   `ThingConfig.needsSetup`. `Request.GetConfigPage` asks for page 5 or 6, `OwnerConfig` and
   `ThingConfig.deploymentId` parse them, and `ConfigPatch.Builder.site` checks each site value.
   `ConfigFields.SITE_KEYS` are the site keys and `ConfigGroup.SITE` names their card.

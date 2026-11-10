@@ -19,8 +19,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import space.opensensor.data.ble.ConfigSnapshot
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.protocol.ConfigPatch
+import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LocationConfig
+import space.opensensor.data.protocol.ThingConfig
 import space.opensensor.device.DeviceConfigChange
 import space.opensensor.device.DeviceConfigController
 import space.opensensor.device.DeviceConfigNotice
@@ -32,8 +34,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** A ready proto 3 board whose page 1 answers with [location]. Nothing else is called. */
-private class LocationSource(var location: LocationConfig) : DeviceConfigSource {
+/** A ready proto 3 board whose page 1 answers with [location] and [mobility]. Nothing else is called. */
+private class LocationSource(var location: LocationConfig, var mobility: String? = null) : DeviceConfigSource {
     override val snapshot = MutableStateFlow(
         DeviceConfigSnapshot(
             address = "AA",
@@ -46,7 +48,7 @@ private class LocationSource(var location: LocationConfig) : DeviceConfigSource 
         ),
     )
     override val notices = MutableSharedFlow<DeviceConfigNotice>()
-    override suspend fun readLocation(): LocationConfig = location
+    override suspend fun readLocation(): DeviceConfig = DeviceConfig(location = location, thing = mobility?.let { ThingConfig(mobility = it) })
     override fun refreshConfig() = Unit
     override fun applyConfig(patch: ConfigPatch, change: DeviceConfigChange) = Unit
     override fun reboot() = Unit
@@ -171,5 +173,19 @@ class SetupScreenTest {
         run.config!!.refresh()
         waitForIdle()
         assertTrue(c.state.value.located)
+    }
+
+    @Test
+    fun aMovingThingIsLocatedWithoutACell() = runComposeUiTest {
+        val port = FakePort()
+        val source = LocationSource(LocationConfig(cell = "", resolution = 8, country = ""), mobility = "fixed")
+        val run = show(port, source)
+        val c = run.controller!!
+        waitForIdle()
+        assertFalse(c.state.value.located)
+        source.mobility = "moving"
+        run.config!!.refresh()
+        waitForIdle()
+        assertTrue(c.state.value.located, "a moving Thing takes its cell from its own receiver")
     }
 }

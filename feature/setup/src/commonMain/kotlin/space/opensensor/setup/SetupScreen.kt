@@ -130,7 +130,7 @@ fun SetupScreen(
     if (config != null) DeviceConfigEffects(config, snackbar) { onConfigAction(DeviceConfigAction.ReconnectOverBluetooth) }
     val configState = config?.state?.collectAsState()?.value
     // Only the board's confirmed answer counts, never an unsaved draft.
-    val located = configState?.location?.saved == true
+    val located = configState?.location?.located == true
     LaunchedEffect(located) { controller.onLocated(located) }
     // Page 5's answer. A board without site keys leaves the Site page out.
     val siteSupported = configState?.site?.supported

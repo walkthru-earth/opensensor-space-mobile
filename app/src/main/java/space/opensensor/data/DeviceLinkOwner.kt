@@ -1568,13 +1568,13 @@ class DeviceLinkOwner @Inject constructor(
         }
     }
 
-    suspend fun readLocation(): space.opensensor.data.protocol.LocationConfig? {
+    suspend fun readLocation(): space.opensensor.data.protocol.DeviceConfig? {
         val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
         if (!tryBeginCommand()) throw IllegalStateException("link busy")
         try { return recordPlace(session.getLocationPage()) } finally { endCommand() }
     }
 
-    suspend fun writeLocation(patch: ConfigPatch): space.opensensor.data.protocol.LocationConfig? {
+    suspend fun writeLocation(patch: ConfigPatch): space.opensensor.data.protocol.DeviceConfig? {
         val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
         if (!tryBeginCommand()) throw IllegalStateException("link busy")
         try {
@@ -1605,13 +1605,13 @@ class DeviceLinkOwner @Inject constructor(
     }
 
     /** Keeps the connected Thing's Discover pin in step with the location [page] it returned. */
-    private suspend fun recordPlace(page: space.opensensor.data.protocol.DeviceConfig?): space.opensensor.data.protocol.LocationConfig? {
+    private suspend fun recordPlace(page: space.opensensor.data.protocol.DeviceConfig?): space.opensensor.data.protocol.DeviceConfig? {
         val thing = _info.value?.thing
         val now = clock.nowEpochMs()
         if (page != null && thing != null) places.recordFrom(thing, page, now)
         val id = boundAddress
         if (page != null && id != null) setupWatch.pageRead(id, page, now)
-        return page?.location
+        return page?.takeIf { it.location != null }
     }
 
     fun startWifiScan() {

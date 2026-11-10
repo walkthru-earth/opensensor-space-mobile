@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import space.opensensor.data.protocol.DeviceConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class ThingPlacesTest {
@@ -21,8 +22,22 @@ class ThingPlacesTest {
     }
 
     @Test
-    fun aMovingThingOrAnUnknownMobilityIsNeverPlaced() {
-        assertNull(ThingPlace.of(thing, page("""{"location":{"cell":"$cell"},"thing":{"mobility":"moving"}}"""), 1))
+    fun aMovingThingStandsAtItsFreshGnssCellAndNeverAtItsConfiguredCell() {
+        val gnss = "881f1d4881fffff"
+        assertEquals(
+            ThingPlace(thing, gnss, 1, moving = true),
+            ThingPlace.of(thing, page("""{"location":{"cell":"$cell","gnss_cell":"$gnss"},"thing":{"mobility":"moving"}}"""), 1),
+        )
+        // No fresh fix, or no receiver at all, gives a moving place with no cell. Never a borrowed one.
+        for (location in listOf(""""cell":"$cell","gnss_cell":""""", """"cell":"$cell"""", """"gnss_cell":"not-a-cell"""")) {
+            val place = ThingPlace.of(thing, page("""{"location":{$location},"thing":{"mobility":"moving"}}"""), 1)
+            assertEquals(ThingPlace(thing, "", 1, moving = true), place, location)
+            assertFalse(place!!.placed)
+        }
+    }
+
+    @Test
+    fun anUnknownMobilityIsNeverPlaced() {
         assertNull(ThingPlace.of(thing, page("""{"location":{"cell":"$cell"}}"""), 1))
         assertNull(ThingPlace.of(thing, page("""{"location":{"cell":"$cell"},"thing":{"mobility":"drifting"}}"""), 1))
     }
@@ -46,8 +61,18 @@ class ThingPlacesTest {
         val places = MemoryPlaces()
         places.recordFrom(thing, page("""{"location":{"cell":"$cell"},"thing":{"mobility":"fixed"}}"""), 1)
         assertEquals(listOf(ThingPlace(thing, cell, 1)), places.observeAll().first())
-        // The Thing now moves, so its pin goes.
+        // The Thing now moves with no fix yet, so its configured cell goes.
         places.recordFrom(thing, page("""{"location":{"cell":"$cell"},"thing":{"mobility":"moving"}}"""), 2)
+        assertEquals(listOf(ThingPlace(thing, "", 2, moving = true)), places.observeAll().first())
+        // A fresh GNSS fix places it, and a later read with no fix keeps that last cell.
+        val gnss = "881f1d4881fffff"
+        places.recordFrom(thing, page("""{"location":{"gnss_cell":"$gnss"},"thing":{"mobility":"moving"}}"""), 3)
+        places.recordFrom(thing, page("""{"location":{"gnss_cell":""},"thing":{"mobility":"moving"}}"""), 4)
+        assertEquals(listOf(ThingPlace(thing, gnss, 3, moving = true)), places.observeAll().first())
+        // Fixed again, it stands at its configured cell. A page with no mobility drops it.
+        places.recordFrom(thing, page("""{"location":{"cell":"$cell"},"thing":{"mobility":"fixed"}}"""), 5)
+        assertEquals(listOf(ThingPlace(thing, cell, 5)), places.observeAll().first())
+        places.recordFrom(thing, page("""{"location":{"cell":"$cell"}}"""), 6)
         assertEquals(emptyList(), places.observeAll().first())
     }
 

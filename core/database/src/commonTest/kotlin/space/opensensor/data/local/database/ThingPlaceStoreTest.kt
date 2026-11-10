@@ -27,4 +27,18 @@ class ThingPlaceStoreTest {
             db.close()
         }
     }
+
+    @Test
+    fun aMovingPlaceKeepsItsFlagAndAnEmptyCell() = runTest {
+        val db = inMemoryAppDatabase()
+        try {
+            val places = RoomThingPlaces(db.thingPlaceDao())
+            places.put(ThingPlace("thing-a", "", 4, moving = true))
+            assertEquals(ThingPlace("thing-a", "", 4, moving = true), places.get("thing-a"))
+            places.put(ThingPlace("thing-a", "881f1d4887fffff", 5, moving = true))
+            assertEquals(listOf(ThingPlace("thing-a", "881f1d4887fffff", 5, moving = true)), places.observeAll().first())
+        } finally {
+            db.close()
+        }
+    }
 }
