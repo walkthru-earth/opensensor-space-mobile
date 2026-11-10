@@ -47,7 +47,7 @@ class HistoryViewModel @AssistedInject constructor(
         index = history.index,
         currentThing = knownDeviceDao.observeAll().map { list -> list.firstOrNull { it.address == deviceAddress }?.thing },
         things = epochDao.observeForDevice(deviceAddress).map { epochs -> epochs.map { it.thing } },
-        cellTracks = CellTrackReader(history.store, history.index, Dispatchers.IO),
+        trackWindow = CellTrackReader(history.store, history.index, Dispatchers.IO)::observeWindow,
     )
 
     val transport: StateFlow<TransportKind?> = manager.controller(deviceAddress).activeTransport

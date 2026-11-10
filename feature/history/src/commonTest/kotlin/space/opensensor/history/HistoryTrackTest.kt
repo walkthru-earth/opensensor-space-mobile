@@ -1,5 +1,6 @@
 package space.opensensor.history
 
+import androidx.compose.ui.graphics.Color
 import kotlinx.datetime.TimeZone
 import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.HistoryRange
@@ -104,15 +105,39 @@ class HistoryTrackTest {
     }
 
     @Test
-    fun theReportedColoursReachThreeToOneOnTheCardAndDifferInLightness() {
+    fun theReportedColoursReachThreeToOneOnTheGroundTheStripDrawsAndDifferInLightness() {
         for (scheme in listOf(BrandLightScheme, BrandDarkScheme)) {
-            val card = scheme.surfaceContainerLow
             val colours = TrackColours.of(scheme)
+            assertEquals(scheme.surfaceContainerLow, colours.ground, "the strip draws on the card's own colour")
             for (source in LocationSource.entries) {
-                assertTrue(contrastRatio(colours.of(source), card) >= LARGE_TEXT_CONTRAST, "$source on $card")
+                assertTrue(contrastRatio(colours.of(source), colours.ground) >= LARGE_TEXT_CONTRAST, "$source on ${colours.ground}")
             }
         }
         assertTrue(relativeLuminance(TrackColours.PHONE) - relativeLuminance(TrackColours.GPS) > 0.05)
+    }
+
+    @Test
+    fun theReportedColoursStayClearOfTheBrandBlueAndPurple() {
+        for (colour in listOf(TrackColours.GPS, TrackColours.PHONE)) {
+            val h = hue(colour)
+            assertFalse(h in 200.0..320.0, "hue $h of $colour")
+        }
+    }
+
+    /** The HSV hue of [c] in degrees. */
+    private fun hue(c: Color): Double {
+        val r = c.red.toDouble()
+        val g = c.green.toDouble()
+        val b = c.blue.toDouble()
+        val max = maxOf(r, g, b)
+        val d = max - minOf(r, g, b)
+        if (d == 0.0) return 0.0
+        val h = when (max) {
+            r -> ((g - b) / d).mod(6.0)
+            g -> (b - r) / d + 2
+            else -> (r - g) / d + 4
+        }
+        return h * 60
     }
 
     /** A grid with a small square around each known centre, and nothing for any other cell. */

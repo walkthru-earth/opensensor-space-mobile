@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -60,7 +61,8 @@ fun rememberBaseMapState(
  * the camera settles, [onMoved] on every rest after the first. [onMapClick] runs for a tap that no
  * layer of the caller consumed. Attribution is the caller's, drawn over the map. With [movable]
  * false the camera stays where the caller put it, so a map inside a scrolling list leaves drags to
- * the list.
+ * the list. Such a map has no view of the person's to keep, so it fits [fitOnce] again each time
+ * the area changes ([MapFit.due]).
  */
 @Composable
 fun BaseMap(
@@ -75,13 +77,18 @@ fun BaseMap(
 ) {
     val onRest by rememberUpdatedState(onCameraRest)
     val onMove by rememberUpdatedState(onMoved)
-    // The fit runs once. Kept across a rotation, so a rebuilt map never refits over the user's view.
+    // A map the person moves fits once, kept across a rotation, so a rebuilt map never refits over
+    // their view. A still map fits each new area, so cells that arrive later stay in sight.
     var fitted by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(state, fitOnce) {
+    var fittedTo by remember { mutableStateOf<GeoBounds?>(null) }
+    LaunchedEffect(state, fitOnce, movable) {
         val b = fitOnce
-        if (b != null && !fitted) {
+        if (b != null && MapFit.due(b, movable, fitted, fittedTo)) {
             // A fit cut short by an unready map runs again next time. Cancellation propagates.
-            if (catchingNonCancel { state.fitCameraToBounds(BoundingBox(west = b.west, south = b.south, east = b.east, north = b.north)) }.isSuccess) fitted = true
+            if (catchingNonCancel { state.fitCameraToBounds(BoundingBox(west = b.west, south = b.south, east = b.east, north = b.north)) }.isSuccess) {
+                fitted = true
+                fittedTo = b
+            }
         }
     }
     LaunchedEffect(state) {
@@ -122,4 +129,14 @@ fun BaseMap(
         },
         overlay = {},
     )
+}
+
+/** When [BaseMap] fits its area. */
+object MapFit {
+    /**
+     * True when the camera should fit [target]. A [movable] map fits once, until [fitted]. A still
+     * map fits whenever [target] differs from the area it last fitted, [fittedTo].
+     */
+    fun due(target: GeoBounds, movable: Boolean, fitted: Boolean, fittedTo: GeoBounds?): Boolean =
+        if (movable) !fitted else target != fittedTo
 }

@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.data.history.ArchiveSeriesQuery
-import space.opensensor.data.history.CellTrackReader
+import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.DaySpan
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeries
@@ -72,7 +72,8 @@ data class HistoryUiState(
  *
  * [currentThing] is the thing History opens on (Android, the known device's thing, iOS, the
  * archived thing with the latest reading). [things] are the generations its chips offer.
- * [cellTracks] reads the rows' own cells for [track], and without it History shows no track.
+ * [trackWindow] reads the rows' own cells of one thing between two instants in ns, again on each
+ * new file (`CellTrackReader.observeWindow`), for [track]. Without it History shows no track.
  */
 class HistoryController(
     private val scope: CoroutineScope,
@@ -84,7 +85,7 @@ class HistoryController(
     private val zone: TimeZone = TimeZone.currentSystemDefault(),
     private val clock: Clock = Clock.System,
     tickMs: Long = 60_000,
-    private val cellTracks: CellTrackReader? = null,
+    private val trackWindow: ((thing: String, fromNs: Long, toNs: Long) -> Flow<CellTrack>)? = null,
 ) {
     private val selectedThing = MutableStateFlow<String?>(null)
     private val metric = MutableStateFlow(Metrics.default)
@@ -145,16 +146,16 @@ class HistoryController(
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     val track: StateFlow<HistoryTrack?> = combine(thing, range, toS) { s, r, t ->
-        if (s == null || cellTracks == null || r !in HistoryTrack.RANGES) null else s to HistoryWindow.endingAt(t, r, zone)
+        if (s == null || trackWindow == null || r !in HistoryTrack.RANGES) null else s to HistoryWindow.endingAt(t, r, zone)
     }
         .distinctUntilChanged()
         .flatMapLatest { key ->
-            val reader = cellTracks
-            if (key == null || reader == null) {
+            val read = trackWindow
+            if (key == null || read == null) {
                 flowOf(null)
             } else {
                 val (s, w) = key
-                reader.observeWindow(s, w.fromS * NS_PER_S, w.toS * NS_PER_S)
+                read(s, w.fromS * NS_PER_S, w.toS * NS_PER_S)
                     .map { HistoryTrack.of(s, w, it) }
                     .onStart { emit(null) }
                     // An index that fails to read hides the track. The archive card reports the files.

@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.key
@@ -44,6 +43,7 @@ import org.maplibre.compose.layers.LineLayer
 import org.maplibre.compose.sources.GeoJsonData
 import org.maplibre.compose.sources.rememberGeoJsonSource
 import space.opensensor.data.history.LocationSource
+import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.SectionCard
@@ -70,10 +70,11 @@ import space.opensensor.publicfeed.platformH3Grid
 /**
  * The colours of the track by `location_source` (#263). A picked area takes the neutral muted ink,
  * the two reported sources a teal and an ochre. Neither is the brand blue, which marks selection
- * only, nor purple. Both reach 3:1 on the card in light and dark (`HistoryTrackTest`).
+ * only, nor purple. [ground] is what the strip and the legend draw them on, the card's own colour,
+ * and each reaches 3:1 on it in light and dark (`HistoryTrackTest`). [frame] outlines the strip.
  */
 @Immutable
-internal data class TrackColours(val picked: Color, val gps: Color, val phone: Color) {
+internal data class TrackColours(val picked: Color, val gps: Color, val phone: Color, val ground: Color, val frame: Color) {
     fun of(source: LocationSource): Color = when (source) {
         LocationSource.CONFIGURED -> picked
         LocationSource.GNSS -> gps
@@ -84,7 +85,14 @@ internal data class TrackColours(val picked: Color, val gps: Color, val phone: C
         val GPS = Color(0xFF00806F)
         val PHONE = Color(0xFFB8803A)
 
-        fun of(scheme: ColorScheme) = TrackColours(picked = scheme.onSurfaceVariant, gps = GPS, phone = PHONE)
+        /** [SectionCard] draws on `surfaceContainerLow`, so the strip does too. */
+        fun of(scheme: ColorScheme) = TrackColours(
+            picked = scheme.onSurfaceVariant,
+            gps = GPS,
+            phone = PHONE,
+            ground = scheme.surfaceContainerLow,
+            frame = scheme.outlineVariant,
+        )
     }
 }
 
@@ -129,8 +137,10 @@ private fun TrackMap(track: HistoryTrack, colours: TrackColours, description: St
     val ink = MaterialTheme.colorScheme.onSurface
     Box(Modifier.fillMaxWidth().height(MAP_HEIGHT).clip(RoundedCornerShape(16.dp)).semantics { contentDescription = description }) {
         if (style == null) return@Box
-        // A new span is a new map, so the camera fits its cells once more.
-        key(track.thing, track.window) {
+        // A new span is a new map. Within one, the still map fits its cells again as a sync adds more
+        // (BaseMap). A track across the antimeridian has no bounds to fit, so its map opens again on
+        // the newest cell whenever that cell moves.
+        key(track.thing, track.window, if (shape.bounds == null) shape.centre else null) {
             val state = rememberBaseMapState(style, shape.centre, OPEN_ZOOM) {
                 val cells = rememberGeoJsonSource(GeoJsonData.JsonString(shape.geoJson))
                 FillLayer(id = "history-track-fill", source = cells, color = feature["color"].convertToColor(), opacity = const(0.55f))
@@ -143,13 +153,23 @@ private fun TrackMap(track: HistoryTrack, colours: TrackColours, description: St
     }
 }
 
-/** The span from left to right. A stretch with a fix takes its source colour, one without is outlined. */
+/**
+ * The span from left to right on the card's own colour inside a thin frame. A stretch with a fix
+ * takes its source colour, one without is outlined.
+ */
 @Composable
 private fun TrackStrip(track: HistoryTrack, colours: TrackColours, modifier: Modifier) {
-    val base = MaterialTheme.colorScheme.surfaceContainerHighest
     val outline = MaterialTheme.colorScheme.outline
     Canvas(modifier) {
-        drawRoundRect(base, cornerRadius = CornerRadius(size.height / 2))
+        val edge = 1.dp.toPx()
+        drawRoundRect(colours.ground, cornerRadius = CornerRadius(size.height / 2))
+        drawRoundRect(
+            colours.frame,
+            Offset(edge / 2, edge / 2),
+            Size(size.width - edge, size.height - edge),
+            CornerRadius(size.height / 2),
+            style = Stroke(edge),
+        )
         val minWidth = 2.dp.toPx()
         for (bar in track.bars) {
             val width = maxOf(minWidth, (bar.end - bar.start) * size.width)
@@ -181,7 +201,7 @@ private fun LegendItem(label: String, swatch: () -> Modifier) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(12.dp).then(swatch()))
         Spacer(Modifier.size(6.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium)
+        FitText(label, style = MaterialTheme.typography.labelMedium)
     }
 }
 
