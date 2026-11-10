@@ -17,6 +17,7 @@ import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
+import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.family.air.AirFamily
@@ -132,13 +133,31 @@ class TodayFormatTest {
             todaySoFar(info, observe, TimeZone.UTC, flowOf(1_767_225_600L), served).filterNotNull().collect { seen += it }
         }
         runCurrent()
-        assertEquals(AirMetrics.PM25_CORRECTED, seen.last().metric)
+        // An unknown desc never borrows the bundled template of its dict (#259), so nothing shows yet.
+        assertEquals(emptyList(), seen)
         served.value = listOf(revised)
         runCurrent()
         job.cancel()
         val after = seen.last()
         assertNotEquals(AirMetrics.PM25_CORRECTED, after.metric, "the served template has no particles")
         assertEquals(todayMetrics(DeviceCapabilities.from(info.value, listOf(revised))).first(), after.metric)
+    }
+
+    @Test
+    fun todayMetricsKeepOnlyWhatTheHourlyTiersHoldForTheTemplate() {
+        val bundled = BundledCatalog.template(WAVESHARE.dict!!)!!
+        val desc = "ef".repeat(32)
+        // The board serves a template that stores the raw PM2.5 column in another unit.
+        val other = bundled.copy(
+            key = TemplateKey(bundled.dict, desc),
+            datastreams = bundled.datastreams.map { if (it.name == AirFamily.PM25_ATMOSPHERIC) it.copy(unit = "ug/L") else it },
+        )
+        val info = WAVESHARE.copy(thing = "st-1", desc = desc.take(TemplateKey.DESC_PREFIX_HEX))
+        val metrics = todayMetrics(DeviceCapabilities.from(info, listOf(other)))
+        // The tiers bind each catalog spec to a file with inTemplate, which skips a changed unit, so
+        // no tier holds this column and Today must not label buckets with it.
+        assertEquals(emptyList(), metrics.filter { it.id == AirFamily.PM25_ATMOSPHERIC }, "a column in another unit is not tiered")
+        metrics.forEach { assertEquals(Metrics.tiered(it, other), it, "${it.id} is the spec the tiers aggregate") }
     }
 
     @Test

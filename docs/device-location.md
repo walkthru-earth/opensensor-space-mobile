@@ -127,9 +127,10 @@ because it clears the key.
   `DeviceConfigController` keeps the site draft (`DeviceSiteState`) beside the location draft.
 - Its Android and iOS source sets own the temporary OS fix, cancellation and H3
   conversion. Android repository and iOS bridge retain their existing command guards.
-- `DeviceCapabilities` reads LIVE through the thing of the `info.dict` digest, from the
-  bundled board templates in `core/model/bundled`. Only the current digest of each board is
-  bundled. An older or unknown digest still syncs verified files but has no LIVE view.
+- `DeviceCapabilities` reads LIVE through the thing of the `info.desc` and `info.dict` digests,
+  by `TemplateIndex.resolve`, from the templates boards served and then the bundled ones in
+  `core/model/bundled`. Only the current digest of each board is bundled. An older or unknown
+  digest still syncs verified files but has no LIVE view until its board serves the template.
 
 Cross-platform host and simulator gates verify parsing, old firmware behavior,
 coarsening, late-fix suppression and readback decisions. A phone run beside a

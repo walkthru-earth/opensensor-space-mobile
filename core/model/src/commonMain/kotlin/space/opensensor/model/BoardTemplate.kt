@@ -17,25 +17,29 @@ data class TemplateKey(val dict: String, val desc: String? = null) {
 }
 
 /**
- * Finds the template a device or file names. A [TemplateKey.desc] match among [bundled] and [served]
- * wins, then the bundled template for the same [TemplateKey.dict], whether or not it carries a desc. The
- * desc asked for may be the full 64 hex or the 16 hex prefix a device reports. A served template with
- * another desc is never used as a stand-in, since its units or ranges may differ.
+ * The one rule that finds the template a device or a file names, for LIVE ([BundledCatalog.thing]) and
+ * History (`FileTemplates`) alike (#259). Each template has its own SHA-256, so a desc wins everywhere.
+ *
+ * - With a desc, only a template whose desc it is resolves, a served one before a bundled one. The desc
+ *   is the full 64 hex of a file footer, which matches exactly, or the 16 hex prefix a device reports
+ *   ([TemplateKey.matchesDesc]). A match whose dict differs from the dict asked for is not used. A desc
+ *   no template has resolves to null, never to another template of its dict, whose units or ranges may
+ *   differ, so the caller can fetch the template the desc names.
+ * - Without a desc, the newest served template of the dict resolves, else the bundled one.
  */
-class TemplateIndex(bundled: Iterable<BoardTemplate>, served: Iterable<BoardTemplate> = emptyList()) {
-    private val withDesc: List<BoardTemplate> = (served + bundled).filter { it.key.desc != null }
-    private val bundledByDict: Map<String, BoardTemplate> = bundled.associateBy { it.dict }
-
-    init {
-        require(bundledByDict.size == bundled.count()) { "two bundled templates share a dict" }
+object TemplateIndex {
+    /**
+     * The template for [dict] and [desc] among [served], oldest first, and then [bundled], or null when
+     * none is known. Either key is null when the caller has none.
+     */
+    fun resolve(dict: String?, desc: String?, served: List<BoardTemplate>, bundled: List<BoardTemplate>): BoardTemplate? {
+        if (desc != null) return byDesc(served, dict, desc) ?: byDesc(bundled, dict, desc)
+        if (dict == null) return null
+        return served.lastOrNull { it.dict == dict } ?: bundled.firstOrNull { it.dict == dict }
     }
 
-    /** The template for [dict] and [desc], or null when none is known. */
-    fun resolve(dict: String, desc: String? = null): BoardTemplate? =
-        desc?.let(::byDesc)?.takeIf { it.dict == dict } ?: bundledByDict[dict]
-
-    /** The template whose desc is [desc] or starts with it, null when none is known. */
-    fun byDesc(desc: String): BoardTemplate? = withDesc.firstOrNull { it.key.matchesDesc(desc) }
+    private fun byDesc(templates: List<BoardTemplate>, dict: String?, desc: String): BoardTemplate? =
+        templates.firstOrNull { it.key.matchesDesc(desc) && (dict == null || it.dict == dict) }
 }
 
 /**

@@ -489,8 +489,8 @@ class HistoryOrchestratorTest {
     @Test
     fun aBoardRotatingDescsForAKnownDictDerivesWithinTheCooldown() = runTest {
         val dict = "ee".repeat(32)
-        // Its own desc is never served, so each fresh template of its dict changes what it resolves to.
-        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict, templateSha256 = "11".repeat(32)))
+        // It names no desc, so each fresh template of its dict changes what it resolves to (#259).
+        index.put(ArchiveRecord(thing, "thing=$thing/day/a.parquet", 1, 1, "s", 1, "fake", indexedAtEpochMs = 1, dictionarySha256 = dict))
         val (cache, _) = blocks { }
         val history = orchestrator()
         val served = ServedTemplates()

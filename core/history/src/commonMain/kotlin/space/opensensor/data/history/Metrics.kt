@@ -258,6 +258,19 @@ object Metrics {
     fun byId(id: String): MetricSpec? = catalog.firstOrNull { it.id == id }
 
     /**
+     * [spec] as the tiers hold it for a thing of [template], the [catalog] metric of its id bound to that
+     * template ([MetricSpec.inTemplate]), the spec the tiers aggregate each file of that template with.
+     * Null when [template] stores the column in another unit or rolls it up another way, since its files
+     * then add no buckets under that id. [spec] itself when the catalog has no metric of its id, and the
+     * tiers then hold no buckets for it, so a reader gets an empty series rather than a wrong one. A
+     * reader of the tiers asks through it, so a served template that changes a unit never labels old buckets.
+     */
+    fun tiered(spec: MetricSpec, template: BoardTemplate): MetricSpec? {
+        val kept = byId(spec.id) ?: return spec
+        return kept.inTemplate(template)
+    }
+
+    /**
      * The metric History opens on for [metrics], the first primary stored column, or its corrected
      * view when one exists (#92). The first metric when nothing is primary, null for an empty list.
      */

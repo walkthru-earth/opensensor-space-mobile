@@ -9,12 +9,13 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.datetime.TimeZone
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
+import space.opensensor.data.history.Metrics
+import space.opensensor.data.history.ServedTemplates
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.designsystem.nowEpochMillis
 import space.opensensor.family.air.AirFamily
@@ -23,6 +24,7 @@ import space.opensensor.family.air.LiveQc
 import space.opensensor.family.air.Pm25Basis
 import space.opensensor.family.air.Pm25NowCast
 import space.opensensor.family.air.PmNowCast
+import space.opensensor.model.BoardTemplate
 
 /** The start of the current UTC hour, checked once a minute so a new hour moves the NowCast window. */
 fun utcHourStarts(periodMs: Long = 60_000): Flow<Long> = flow {
@@ -40,17 +42,19 @@ fun utcHourStarts(periodMs: Long = 60_000): Flow<Long> = flow {
  * answer first, so a value never shows under the wrong device. A new hour keeps the last answer
  * until the new window is read, so the hero does not flip to the live value at each hour. Both apps
  * feed it their own [observeHourlyDay] (the shared `HistorySeriesReader`), the window is hour
- * aligned so only whole hourly buckets are read.
+ * aligned so only whole hourly buckets are read. The thing resolves against the [served] templates
+ * as they arrive, so a template the board serves after `INFO` still starts the NowCast. The candidates
+ * come from [nowCastMetrics], so only a metric the hourly tiers hold for that template is read.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 fun pm25NowCast(
     info: Flow<DeviceInfo?>,
     observeHourlyDay: (thing: String, metric: MetricSpec, window: HistoryWindow) -> Flow<HistorySeries>,
     hourStarts: Flow<Long> = utcHourStarts(),
+    served: Flow<List<BoardTemplate>> = ServedTemplates.shared.all,
 ): Flow<Pm25NowCast?> {
-    val things = info.map { device ->
-        val particles = AirFamily.PARTICLES in DeviceCapabilities.from(device)
-        device?.thing to if (particles) listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25) else emptyList()
+    val things = combine(info, served) { device, templates ->
+        device?.thing to nowCastMetrics(DeviceCapabilities.from(device, templates))
     }.distinctUntilChanged()
     return things.flatMapLatest { (thing, metrics) ->
         if (thing == null || metrics.isEmpty()) {
@@ -62,6 +66,18 @@ fun pm25NowCast(
             }
         }
     }
+}
+
+/**
+ * The PM2.5 metrics the NowCast tries for [capabilities], the EPA corrected one first and raw second.
+ * Each is bound to the thing's template with [Metrics.tiered] and dropped when the hourly tiers do
+ * not hold it, so a template without humidity skips the corrected metric and still reads raw. Empty
+ * for a thing without particles.
+ */
+internal fun nowCastMetrics(capabilities: DeviceCapabilities): List<MetricSpec> {
+    val template = capabilities.thing?.template ?: return emptyList()
+    if (AirFamily.PARTICLES !in capabilities) return emptyList()
+    return listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25).mapNotNull { Metrics.tiered(it, template) }
 }
 
 private fun nowCastAt(

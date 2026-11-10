@@ -77,10 +77,14 @@ class BundledCatalogTest {
     @Test
     fun lookupWorksWithAndWithoutADesc() {
         val bundled = assertNotNull(BundledCatalog.template(cores3Dict))
-        assertSame(bundled, BundledCatalog.template(cores3Dict, desc = DESC_B))
+        assertSame(bundled, BundledCatalog.template(cores3Dict, desc = bundled.key.desc))
+        // A desc no bundled template has never falls back to the dict.
+        assertNull(BundledCatalog.template(cores3Dict, desc = DESC_B))
         val served = BoardTemplate.parse(BundledFiles.files.getValue(cores3File), desc = DESC_A)
-        assertSame(served, BundledCatalog.index(served = listOf(served)).resolve(cores3Dict, DESC_A))
-        assertSame(bundled, BundledCatalog.index(served = listOf(served)).resolve(cores3Dict))
+        assertSame(served, BundledCatalog.resolve(cores3Dict, DESC_A, served = listOf(served)))
+        assertSame(bundled, BundledCatalog.resolve(cores3Dict, bundled.key.desc, served = listOf(served)))
+        // Without a desc the newest served template of the dict comes first.
+        assertSame(served, BundledCatalog.resolve(cores3Dict, null, served = listOf(served)))
         assertNull(BundledCatalog.template(unknownDict))
         assertNull(BundledCatalog.profile(unknownDict))
     }
