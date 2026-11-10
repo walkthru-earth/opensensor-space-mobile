@@ -120,6 +120,42 @@ class AirNowFlowsTest {
         assertEquals(28.4, seen.last()?.value, "the served template starts the NowCast in the same session")
     }
 
+    /** A template without humidity drops the corrected candidate and still casts on raw. */
+    @Test
+    fun aTemplateWithoutHumidityCastsOnRawOnly() = runTest {
+        val bundled = BundledCatalog.template(WAVESHARE.dict!!)!!
+        val desc = "cd".repeat(32)
+        val dry = bundled.copy(key = TemplateKey(bundled.dict, desc), datastreams = bundled.datastreams.filterNot { it.name == AirFamily.RELATIVE_HUMIDITY })
+        val asked = mutableListOf<String>()
+        val observe = { _: String, metric: MetricSpec, window: HistoryWindow ->
+            asked += metric.id
+            flowOf(series(metric, window, airNowHours())) as Flow<HistorySeries>
+        }
+        val info = MutableStateFlow<DeviceInfo?>(WAVESHARE.copy(thing = "st-1", desc = desc.take(TemplateKey.DESC_PREFIX_HEX)))
+        val cast = pm25NowCast(info, observe, flowOf(hour), MutableStateFlow(listOf(dry))).filterNotNull().first()
+        assertEquals(Pm25Basis.RAW, cast.basis)
+        assertEquals(listOf(AirFamily.PM25_ATMOSPHERIC), asked.distinct(), "the corrected buckets are never read")
+    }
+
+    /** A template that stores every PM2.5 column in another unit has no tiered candidate, so no NowCast and no reads. */
+    @Test
+    fun aTemplateWithoutTieredPm25HasNoNowCast() = runTest {
+        val bundled = BundledCatalog.template(WAVESHARE.dict!!)!!
+        val desc = "ef".repeat(32)
+        val other = bundled.copy(
+            key = TemplateKey(bundled.dict, desc),
+            datastreams = bundled.datastreams.map { if (it.name.startsWith("pm25")) it.copy(unit = "mg/m3") else it },
+        )
+        val asked = mutableListOf<String>()
+        val observe = { _: String, metric: MetricSpec, window: HistoryWindow ->
+            asked += metric.id
+            flowOf(series(metric, window, airNowHours())) as Flow<HistorySeries>
+        }
+        val info = MutableStateFlow<DeviceInfo?>(WAVESHARE.copy(thing = "st-1", desc = desc.take(TemplateKey.DESC_PREFIX_HEX)))
+        assertNull(pm25NowCast(info, observe, flowOf(hour), MutableStateFlow(listOf(other))).take(1).toList().single())
+        assertEquals(emptyList(), asked)
+    }
+
     @Test
     fun noNowCastWithoutAnAirThing() = runTest {
         val seen = mutableListOf<String>()

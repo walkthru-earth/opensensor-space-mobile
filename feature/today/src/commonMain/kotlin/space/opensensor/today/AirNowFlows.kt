@@ -14,6 +14,7 @@ import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
+import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.ServedTemplates
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.designsystem.nowEpochMillis
@@ -42,7 +43,8 @@ fun utcHourStarts(periodMs: Long = 60_000): Flow<Long> = flow {
  * until the new window is read, so the hero does not flip to the live value at each hour. Both apps
  * feed it their own [observeHourlyDay] (the shared `HistorySeriesReader`), the window is hour
  * aligned so only whole hourly buckets are read. The thing resolves against the [served] templates
- * as they arrive, so a template the board serves after `INFO` still starts the NowCast.
+ * as they arrive, so a template the board serves after `INFO` still starts the NowCast. The candidates
+ * come from [nowCastMetrics], so only a metric the hourly tiers hold for that template is read.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 fun pm25NowCast(
@@ -52,8 +54,7 @@ fun pm25NowCast(
     served: Flow<List<BoardTemplate>> = ServedTemplates.shared.all,
 ): Flow<Pm25NowCast?> {
     val things = combine(info, served) { device, templates ->
-        val particles = AirFamily.PARTICLES in DeviceCapabilities.from(device, templates)
-        device?.thing to if (particles) listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25) else emptyList()
+        device?.thing to nowCastMetrics(DeviceCapabilities.from(device, templates))
     }.distinctUntilChanged()
     return things.flatMapLatest { (thing, metrics) ->
         if (thing == null || metrics.isEmpty()) {
@@ -65,6 +66,18 @@ fun pm25NowCast(
             }
         }
     }
+}
+
+/**
+ * The PM2.5 metrics the NowCast tries for [capabilities], the EPA corrected one first and raw second.
+ * Each is bound to the thing's template with [Metrics.tiered] and dropped when the hourly tiers do
+ * not hold it, so a template without humidity skips the corrected metric and still reads raw. Empty
+ * for a thing without particles.
+ */
+internal fun nowCastMetrics(capabilities: DeviceCapabilities): List<MetricSpec> {
+    val template = capabilities.thing?.template ?: return emptyList()
+    if (AirFamily.PARTICLES !in capabilities) return emptyList()
+    return listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25).mapNotNull { Metrics.tiered(it, template) }
 }
 
 private fun nowCastAt(
