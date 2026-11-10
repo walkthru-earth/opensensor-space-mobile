@@ -95,3 +95,23 @@ kotlin {
         }
     }
 }
+
+// FirmwareTemplatesTest reads the firmware templates from outside the build (#261). They are test
+// inputs, so a cached result never stands in for a run against other firmware bytes. The candidates
+// are the OPENSENSOR_FIRMWARE_DIR checkout and every sibling folder the test looks for, missing ones
+// included, so a checkout that appears or changes reruns the test.
+val firmwareDir = providers.environmentVariable("OPENSENSOR_FIRMWARE_DIR")
+val firmwareTemplates = files(
+    firmwareDir.map { listOf(File(it, "docs/shared/templates")) }.orElse(emptyList()),
+    generateSequence(projectDir) { it.parentFile }.map { File(it, "opensensor-space-firmware/docs/shared/templates") }.toList(),
+)
+
+tasks.withType<Test>().configureEach {
+    inputs.property("firmwareDirSet", firmwareDir.map { true }.orElse(false))
+    inputs.files(firmwareTemplates)
+        .withPropertyName("firmwareTemplates")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir("bundled/templates")
+        .withPropertyName("bundledTemplates")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}

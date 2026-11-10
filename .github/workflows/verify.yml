@@ -3,6 +3,8 @@
 # plus the same pre-commit hooks a developer runs. On Linux `verify` skips iOS. The iOS job runs
 # `verifyIos` (every shared module's simulator tests) and unsigned simulator/device builds.
 # Real BLE, mDNS, permissions and background behavior still need dated phone evidence.
+# The gradle job also checks out opensensor-space-firmware at the pinned commit, so the bundled
+# templates test runs instead of skipping.
 # Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
 name: verify
 
@@ -54,6 +56,26 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # FirmwareTemplatesTest compares core/model/bundled/templates with the firmware templates at the
+      # commit pinned in core/model/bundled/FIRMWARE_COMMIT (#261). OPENSENSOR_FIRMWARE_DIR on the
+      # verify step makes a missing checkout fail the test instead of skipping it.
+      - name: Read the pinned firmware commit
+        id: firmware
+        shell: bash
+        run: |
+          sha="$(tr -d '[:space:]' < core/model/bundled/FIRMWARE_COMMIT)"
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error file=core/model/bundled/FIRMWARE_COMMIT::Expected one full 40 hex commit"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: walkthru-earth/opensensor-space-firmware
+          ref: ${{ steps.firmware.outputs.sha }}
+          path: opensensor-space-firmware
+          persist-credentials: false
+          sparse-checkout: docs/shared/templates
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
       - id: jdk
         uses: ./.github/actions/build-jdk-version
@@ -70,6 +92,8 @@ jobs:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'build-logic/src/**', 'core/*/build.gradle.kts', 'feature/*/build.gradle.kts', 'ui/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
       - run: ./gradlew --no-daemon verify
+        env:
+          OPENSENSOR_FIRMWARE_DIR: ${{ github.workspace }}/opensensor-space-firmware
       - name: Check the APK native ABIs
         run: python3 tools/check_apk_abis.py app/build/outputs/apk/debug/app-debug.apk
       - name: Upload debug APK

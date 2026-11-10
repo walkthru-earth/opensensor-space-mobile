@@ -5,6 +5,8 @@
 # The discover job reads the live Discover Collection on source.coop with the app's asset rules
 # (tools/check_discover_collection.py) and fails when a key or layout change leaves the map
 # without cells (#257).
+# The templates job runs FirmwareTemplatesTest against opensensor-space-firmware main, so a template
+# the app has not bundled yet turns the run red (#261). verify.yml runs it at the pinned commit.
 # Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
 name: live-key-drift
 
@@ -37,6 +39,36 @@ jobs:
           python3 -I tools/check_live_key_drift.py
           opensensor-space-firmware/tools/fixtures/live_keys
           core/protocol/src/commonTest/kotlin/space/opensensor/data/protocol/LiveKeyFixturesTest.kt
+
+  templates:
+    name: Bundled templates equal opensensor-space-firmware main
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: walkthru-earth/opensensor-space-firmware
+          ref: main
+          path: opensensor-space-firmware
+          persist-credentials: false
+          sparse-checkout: docs/shared/templates
+      # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
+      - id: jdk
+        uses: ./.github/actions/build-jdk-version
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ steps.jdk.outputs.version }}
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: true
+      - name: Compare the bundled templates with firmware main
+        run: ./gradlew --no-daemon :core:model:jvmTest --tests space.opensensor.model.FirmwareTemplatesTest
+        env:
+          OPENSENSOR_FIRMWARE_DIR: ${{ github.workspace }}/opensensor-space-firmware
 
   discover:
     name: Live Discover Collection lists cells the app reads

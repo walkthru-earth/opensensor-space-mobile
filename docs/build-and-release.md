@@ -49,6 +49,15 @@ the audits even when `:ui:strings` compiled classes have not changed, so a previ
 cannot hide new untranslated copy or missing semantics. The release workflow runs the same host
 audits through `verify`; release-only APK optimization and signer checks remain additional steps.
 
+`FirmwareTemplatesTest` (`:core:model`) compares `core/model/bundled/templates` with
+opensensor-space-firmware `docs/shared/templates` byte for byte (#261). The `verify.yml` gradle job
+checks the firmware out at the commit in `core/model/bundled/FIRMWARE_COMMIT` and sets
+`OPENSENSOR_FIRMWARE_DIR`. With that variable set, a missing checkout fails the test. Locally the
+test finds an `opensensor-space-firmware` folder beside the repository and skips without one. The
+weekly `live-key-drift.yml` `templates` job runs the same test against firmware `main`, so a
+template the app has not bundled yet turns that run red. The firmware folders are inputs of the
+`:core:model` test task, so a cached result never stands in for other firmware bytes.
+
 GitHub Actions currently does not run because of account billing. The workflow descriptions
 below describe configured jobs, not completed CI. Local gates are the acceptance evidence.
 Mobile CodeRabbit provides summaries only, so use a scoped source review before opening a PR.
