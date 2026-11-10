@@ -86,6 +86,35 @@ class ThingCollectionsTest {
     }
 
     @Test
+    fun aColumnScaleWithoutOwnerScalesLeavesTheKeyOut() {
+        val scaled = ThingOwner.of(ThingSite(provider = "Osu school"), PREFIX, HOST)
+            .copy(columns = mapOf("ambient_temperature_c" to ColumnLabel(scale = "heat")))
+        assertFalse("opensensor:scales" in build(scaled))
+        val scales = buildJsonObject { put("heat", buildJsonObject { put("title", "Heat") }) }
+        assertEquals(scales, build(scaled.copy(scales = scales))["opensensor:scales"])
+    }
+
+    @Test
+    fun providersAreCopiedAsTheOwnerGivesThem() {
+        val given = Json.parseToJsonElement(
+            """[{"name":"Osu school","description":"Runs the roof sensor","roles":["producer","licensor"],"url":"https://example.org/osu"},{"name":"Mirror"}]""",
+        )
+        val owner = ThingOwner.parse("""{"prefix":"$PREFIX","providers":$given}""")
+        assertEquals("Runs the roof sensor", owner.providers.first().description)
+        assertEquals(given, build(owner)["providers"])
+        assertFailsWith<IllegalArgumentException> {
+            ThingOwner.parse("""{"prefix":"$PREFIX","providers":[{"name":"Osu school","email":"a@example.org"}]}""")
+        }
+    }
+
+    @Test
+    fun aTemplateHashThatIsNotSha256HexIsRefused() {
+        val footer = assertNotNull(OpenSensorFooter.parse(json("footers/m5stack-cores3.json").toString()))
+        assertFailsWith<IllegalArgumentException> { CollectionFooter("t", footer.mobility!!, "https://example.org/t.json", "not-hex") }
+        assertNull(CollectionFooter.of(footer.copy(templateSha256 = "zz".repeat(32)), "https://example.org/t.json"))
+    }
+
+    @Test
     fun theLedgerIsTheEarliestStartAndTheUnionOfTheBoxes() {
         fun item(start: String, vararg bbox: Double) = buildJsonObject {
             put("bbox", JsonArray(bbox.map { JsonPrimitive(it) }))

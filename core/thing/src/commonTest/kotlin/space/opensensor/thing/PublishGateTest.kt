@@ -90,6 +90,23 @@ class PublishGateTest {
         assertEquals(PublishCheck.NoSidecar, gate.boardFile(boardTicket(), FILE_NAME, ByteArrayReader(bytes), footer(thing), template, null))
     }
 
+    /** The phone uploads the sidecar bytes as they came, so a key the profile Item lacks must stop them. */
+    @Test
+    fun aBoardSidecarWithAnAddedPropertyIsNotCleared() {
+        val cell = platformH3Grid().latLngToCell(5.6018, -0.1881, 8)
+        val bytes = deviceFile(cell)
+        val board = Json.parseToJsonElement(boardItem(bytes, cell).json).jsonObject
+        val gate = boardGate()
+        val topLevel = JsonObject(board + ("note" to JsonPrimitive("extra")))
+        assertEquals(PublishCheck.SidecarDiffers("$"), gate.boardFile(boardTicket(), FILE_NAME, ByteArrayReader(bytes), footer(thing), template, topLevel.toString()))
+        val properties = board["properties"]!!.jsonObject
+        val nested = JsonObject(board + ("properties" to JsonObject(properties + ("owner:note" to JsonPrimitive("extra")))))
+        assertEquals(
+            PublishCheck.SidecarDiffers("$.properties"),
+            gate.boardFile(boardTicket(), FILE_NAME, ByteArrayReader(bytes), footer(thing), template, nested.toString()),
+        )
+    }
+
     @Test
     fun aFileFinerThanResolution8IsNotPublished() {
         val cell = platformH3Grid().latLngToCell(5.6018, -0.1881, 10)
@@ -127,6 +144,15 @@ class PublishGateTest {
         // The board path refuses a phone ticket, and without the board's sidecar it clears nothing.
         assertEquals(PublishCheck.NotABoard, gate.boardFile(phoneTicket, FILE_NAME, ByteArrayReader(bytes), footer(PHONE.uuid), template, null))
         assertEquals(PublishCheck.NoSidecar, gate.boardFile(boardTicket, FILE_NAME, ByteArrayReader(bytes), footer(thing), template, null))
+    }
+
+    @Test
+    fun aBoardKindTicketForThePhonesOwnThingIsRefusedOnThePhonePath() {
+        val cell = platformH3Grid().latLngToCell(5.6018, -0.1881, 8)
+        val gate = PublishGate(kinds, UploadConsent { it == PHONE.uuid }, PHONE)
+        // The Thing and the footer both name this phone, so only the board kind refuses it.
+        val ticket = assertNotNull(gate.ticket(OpenSensorBoardKind.id, PHONE.uuid))
+        assertEquals(PublishCheck.NotThePhone, gate.phoneFile(ticket, FILE_NAME, ByteArrayReader(deviceFile(cell)), footer(PHONE.uuid), template))
     }
 
     @Test

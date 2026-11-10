@@ -18,7 +18,8 @@ import space.opensensor.model.FileChecksum
 /**
  * What a Thing Collection reads from the newest footer of its Thing. [templateHref] and
  * [templateSha256] are the footer `template.href` and `template.sha256`, the board template the files
- * were written against.
+ * were written against. [templateSha256] must be SHA-256 hex, or the constructor throws
+ * [IllegalArgumentException].
  */
 data class CollectionFooter(
     val thingId: String,
@@ -26,16 +27,20 @@ data class CollectionFooter(
     val templateHref: String,
     val templateSha256: String,
 ) {
+    init {
+        require(FileChecksum.isSha256Hex(templateSha256.lowercase())) { "template.sha256 is not a SHA-256 hex digest" }
+    }
+
     companion object {
         /**
          * The Collection fields of a parsed [footer] whose JSON names [templateHref] as `template.href`,
-         * or null when the footer has no Thing id, mobility or template hash.
+         * or null when the footer has no Thing id, mobility or SHA-256 hex template hash.
          */
         fun of(footer: OpenSensorFooter, templateHref: String): CollectionFooter? = CollectionFooter(
             thingId = footer.thingId ?: return null,
             mobility = footer.mobility ?: return null,
             templateHref = templateHref,
-            templateSha256 = footer.templateSha256 ?: return null,
+            templateSha256 = footer.templateSha256?.takeIf { FileChecksum.isSha256Hex(it.lowercase()) } ?: return null,
         )
     }
 }
@@ -110,7 +115,8 @@ object ThingCollections {
      * The Collection of the Thing the [footer] names, from its board [template] as the template file's
      * JSON, the owner config [owner] and the upload [ledger]. Columns are the template's, in its order,
      * each with the owner's [ColumnLabel]. `opensensor:scales` is listed only when a column names a
-     * scale. Throws [IllegalArgumentException] when [template] lacks a part the Collection copies.
+     * scale and the owner has [ThingOwner.scales], as `buildCollection` drops an undefined value.
+     * Providers are copied as the owner gives them. Throws [IllegalArgumentException] when [template] lacks a part the Collection copies.
      */
     fun build(template: JsonObject, footer: CollectionFooter, owner: ThingOwner, ledger: CollectionLedger): JsonObject {
         val data = requireNotNull((template["item_assets"] as? JsonObject)?.get("data") as? JsonObject) { "template has no item_assets.data" }
@@ -164,7 +170,7 @@ object ThingCollections {
                 }
             }
             put("partition:glob", "s3://${owner.prefix}/thing=${footer.thingId}/year=*/month=*/day=*/*.parquet")
-            if (usesScales) put("opensensor:scales", owner.scales ?: JsonNull)
+            if (usesScales) owner.scales?.let { put("opensensor:scales", it) }
             putJsonObject("item_assets") { put("data", JsonObject(data + ("table:columns" to JsonArray(columns)))) }
             putJsonArray("links") {
                 link("root", CATALOG_HREF, JSON_TYPE)
