@@ -31,7 +31,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 data class TemplateLink(val desc: String, val dict: String?, val href: String) {
     companion object {
-        /** The link of [footer], null when it names no template digest or no href. */
+        /** The link of [footer], null for no footer or an href that is not a non empty string. */
         fun of(footer: OpenSensorFooter?): TemplateLink? {
             val desc = footer?.templateSha256 ?: return null
             val href = footer.templateHref ?: return null
