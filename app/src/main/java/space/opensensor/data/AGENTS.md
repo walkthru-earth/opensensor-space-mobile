@@ -19,7 +19,7 @@ The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads throug
 | Index, derived history, Room | `history/`, `local/security/`, `core/database/` | `docs/history-pipeline.md`, `docs/data-model.md` |
 | Archive files, sync engine bindings | `archive/`, `sync/` | `docs/sync-engine.md`, `docs/data-model.md` |
 | Storage budget and controls | `storage/` | `docs/data-model.md` |
-| Thing kinds registry | `di/ThingModule.kt` | `docs/devices-and-discovery.md`; a plain list, no self registration |
+| Thing kinds registry | `di/ThingModule.kt` | `docs/devices-and-discovery.md`, a plain list with no self registration |
 
 - Serialize GATT operations and session requests. A lost chunk or bad
   `READ_END.next_offset` retries from locally verified bytes; never trust a
@@ -61,5 +61,5 @@ The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads throug
   basemap and a board template by its footer href (`docs/devices-and-discovery.md`). Nothing
   uploads. No other remote call belongs in this layer.
 - Preserve immutable Hive paths and thing epochs. `:core:database` keeps every Room migration
-  from schema 1 to `AppDatabase.version`, and each is validated against the exported schemas in
-  `core/database/schemas/`.
+  from schema 1 to `AppDatabase.version`, with the exported schemas in `core/database/schemas/`.
+  `ThingSourceMigrationTest` and `ThingPlaceMigrationTest` cover the hand written steps.

@@ -25,8 +25,10 @@ area you pick for a sensor is sent only to that sensor.
   use the feature. If you tap Near me on the public map, or Use phone location on a sensor's area
   map, the app asks for your approximate location, uses it on your phone to move the map, and does
   not send or store it. On the area map you then tap an area, and only that area is sent to your
-  sensor when you save. On an iPhone, if you tap Scan on the sensor sticker card, the app asks for
-  the camera to read the barcode on your sensor. No picture is kept.
+  sensor when you save. If you tap Scan on the sensor sticker card, the camera reads the barcode
+  on your sensor. On an iPhone the app asks for the camera first. On Android the scan runs in the
+  Google Play services code scanner, and the app itself has no camera permission. No picture is
+  kept on either phone.
 
 ## Public sensor map (when available)
 

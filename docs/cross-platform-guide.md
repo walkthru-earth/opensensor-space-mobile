@@ -415,7 +415,8 @@ logs and diagnostics. A new field states its level in code, and screenshot tests
 
 Write user-facing text so both platforms say the same thing. Shared screens keep their copy in
 Compose resources, one catalogue per module for both apps
-(`feature/<name>/src/commonMain/composeResources/values/strings.xml`). Copy for iOS only screens and shared screens without a module
+(`feature/<name>/src/commonMain/composeResources/values/strings.xml`, except `:feature:shell`,
+which has none and reads `:ui:strings`). Copy for iOS only screens and shared screens without a module
 of their own lives in `:ui:strings`, and a key Android already has keeps its name and words. State
 code holds a `UiText` (a catalogue key with arguments) and the composable resolves it. Android-only
 screens still use `res/values*/strings.xml`. The `:ui:strings` host tests check every Android and

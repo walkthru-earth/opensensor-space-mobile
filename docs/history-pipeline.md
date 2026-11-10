@@ -27,9 +27,11 @@ flowchart LR
 
 **When it runs:** index at sync time (same upsert as the row), then the shared start order below
 (back-fill in batches of 100, never-indexed rows first, failures retried once per pass),
-`estimateTimes()` at the start of every derive pass, and `deriveStale()` at process start, after every
-interactive sync (`DeviceLinkOwner`, in its `finally`), inside `SyncWorker` when files arrived, and in `DeriveWorker`
-for the days a post-sync pass deferred. Opening Files/History only observes Room. A day costs
+`estimateTimes()` at the start of every derive pass, and `deriveStale()` at process start
+(`OpenSensorApplication`), in `DeriveWorker` for the days a post-sync pass deferred, and from the
+Settings storage controls (`AppStorageControls`). After a sync the pass is
+`historyDeriver.deriveAfterSync(startedMs)`, which `DeviceLinkOwner.collectionFinished` launches in
+the owner scope after the manifest refresh, and which `SyncWorker` calls when files arrived. Opening Files/History only observes Room. A day costs
 milliseconds.
 
 ### Pass order (`HistoryOrchestrator`, `:core:history`)

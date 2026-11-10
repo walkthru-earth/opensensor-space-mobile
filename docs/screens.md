@@ -1,7 +1,7 @@
 # Screens, what the user sees, and which data path feeds it
 
 **Scope:** navigation graph, every destination's behaviour, detail levels, the transport chip.
-**Code:** `feature/shell` (`AppKey.kt`, `TabNavigator.kt`, `AppShell.kt`), `ui/Navigation.kt` (Android entries), `ios/shared/.../AppRoot.kt` (iOS entries), `feature/<screen>/` (shared screens, cards and controllers), `app/.../ui/<screen>/*Route.kt` + `*ViewModel.kt` (Android hosts), `data/settings/AppSettings.kt`.
+**Code:** `feature/shell` (`AppKey.kt`, `TabNavigator.kt`, `AppShell.kt`), `ui/Navigation.kt` (Android entries), `ios/shared/.../AppRoot.kt` (iOS entries), `feature/<screen>/` (shared screens, cards and controllers), `app/.../ui/<screen>/` (Android hosts, `*Route.kt` or `*Screen.kt` with a `*ViewModel.kt`), `data/settings/AppSettings.kt`.
 **Related:** [history-pipeline.md](history-pipeline.md) (what History/Today read), [transports.md](transports.md) (what the Device screen writes), [background-sync.md](background-sync.md) (Auto-sync card, background runs).
 
 ## Navigation (Navigation 3 keys)
@@ -262,9 +262,11 @@ notification permission request.
 ## Route and screen split
 
 A screen is a shared stateless `XScreen(state, onAction)` with its cards and its `XController` in
-`feature/<screen>/`. On Android a stateful `XRoute` in `app/.../ui/<screen>/` hosts it (ViewModel,
+`feature/<screen>/`. On Android a stateful host in `app/.../ui/<screen>/` wraps it (ViewModel,
 one-off events through `CollectEvents` while STARTED, launchers, permissions, confirmation
-dialogs), and on iOS `AppRoot` does. The Android only Auto-sync and device info cards are in
+dialogs), and on iOS `AppRoot` does. Device, Today, Files, Discover and Setup have a `*Route.kt`.
+The other Android hosts are `DebugScreen.kt`, `HistoryScreen.kt`, `SettingsScreen.kt` and
+`ScanScreen.kt`. The Android only Auto-sync and device info cards are in
 `ui/device/cards/`. Previews in
 `ui/device/ScreenPreviews.kt` render light and dark at Simple and Developer from fake state.
 The Wi-Fi `connecting` poll lives in `DeviceViewModel`. Capability questions (sensor sticker,

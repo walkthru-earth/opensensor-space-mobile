@@ -23,8 +23,10 @@ Host scripts and one Gradle module. None of them ships in an app. See
 
 ## Rules
 
-- The Python fixture builders run from the firmware checkout so its pixi environment supplies
-  PyArrow and DuckDB. The header of each script gives the exact command.
+- The `make_*_fixtures.py` builders and `validate_parquet_samples.py` run from the firmware
+  checkout so its pixi environment supplies PyArrow and DuckDB. The `discover-fixture/` Python
+  scripts and `places/make_places.py` run with `uv run` from this repo. The header of each script
+  gives the exact command.
 - A generated fixture is committed with the script that wrote it. Regenerate it with the script,
   never by hand.
 - Only `setup-signing.sh` touches `secrets/`. No other script reads it or `local.properties`.

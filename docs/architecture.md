@@ -170,7 +170,7 @@ flowchart LR
   ROOM --> HIST["data/history/* (Indexer, Deriver, Repository)"]
   HIST --> UI
   WORK["data/background/SyncWorker<br/>run-owned foreground progress"] --> MANAGER
-  DERIVE["data/background/DeriveWorker<br/>derive after a background run"] --> HIST
+  DERIVE["data/background/DeriveWorker<br/>the backfill a post-sync derive deferred, while charging"] --> HIST
   OWNER --> CLAIM["DeviceIdentityClaims<br/>one owner per full hardware ID"]
   COLLECT --> BUDGET["CollectionBudget<br/>two active transfers process-wide"]
 ```

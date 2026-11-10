@@ -97,7 +97,7 @@ A force quit stops everything. Downloaded bytes and index records stay for the n
   engine sets the device clock automatically from phone UTC.
 - **Device settings.** `IosDeviceConfigSource` borrows a short LAN or Bluetooth link per request.
   On the Developer Sync over Wi-Fi card, Get Wi-Fi token and Replace token reuse Save Wi-Fi
-  access, so the token stays in Swift. Below Developer the token is fetched quietly once per
+  access, so the token is stored only in the Keychain and never reaches the UI. Below Developer the token is fetched quietly once per
   Bluetooth connection, as on Android.
   `GET_TOKEN` and rotation need a live bonded Bluetooth link.
 - **Files.** Share one, share all, share zip and save zip stage copies under
