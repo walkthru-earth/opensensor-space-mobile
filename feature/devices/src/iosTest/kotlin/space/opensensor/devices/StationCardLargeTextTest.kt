@@ -94,6 +94,11 @@ class StationCardLargeTextTest {
             if (SemanticsActions.GetTextLayoutResult in config) config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
             layouts.firstOrNull()?.let {
                 val ellipsized = (0 until it.lineCount).any { line -> it.isLineEllipsized(line) }
+                // The width check reads each line's ink, not didOverflowWidth. WordSafeAutoSize lays the paragraph
+                // out at the full slot width while a tag chip's box hugs its text, so that flag calls a whole
+                // "paired" tag cut. Every line has to sit inside the box instead.
+                val inside = (0 until it.lineCount).all { line -> it.getLineLeft(line) >= 0f && it.getLineRight(line) <= it.size.width }
+                assertTrue(inside, "'$text' runs wider than its box")
                 assertTrue(!it.didOverflowHeight && !ellipsized, "'$text' is cut")
             }
             text to bounds
