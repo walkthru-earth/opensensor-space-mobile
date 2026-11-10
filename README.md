@@ -7,10 +7,10 @@ plug in the same way, as data rather than new screens.
 The app does three things.
 
 1. **Discover.** On first open, before you own anything, a map shows public sensor readings
-   near you as H3 hexagon cells, never exact points. Tap a cell to see its devices and the
-   average, minimum and maximum of what they measure. Tap a device to see its readings with
-   range and metric filters. Until the public feed is live on S3 and source.coop, the map
-   shows labelled sample data. See [docs/devices-and-discovery.md](docs/devices-and-discovery.md).
+   near you as H3 hexagon cells, never exact points. Tap a cell to see what its sensors
+   measured. The map reads either the bundled sample, which is labelled as sample data, or the
+   live OpenAQ aggregates on source.coop, chosen by the source switch on the map. See
+   [docs/devices-and-discovery.md](docs/devices-and-discovery.md).
 2. **Collect.** Pair your own devices over Bluetooth LE, then collect their immutable Parquet
    files over BLE or your local Wi-Fi into a verified archive on the phone. A file counts as
    synced only after its size, CRC-32 and `PAR1` checks pass.
@@ -22,11 +22,11 @@ The app does three things.
 connects only to devices found through `_ossync._tcp` mDNS, with a token obtained over bonded
 BLE. The only other network use is anonymous, read-only downloads of the public map feed and
 basemap, and of a board template a file names when the app has none for it. One Settings switch
-turns them off. Sharing a device's own data is off by default and
-is turned on per device, in that device's settings, with confirmation. No accounts, no
-analytics. Approximate foreground location is asked only on the Near me or Use phone
+turns them off. Nothing uploads. Sharing a device's own data is not built. When it lands it stays
+off by default and is turned on per device, in that device's settings, with confirmation. No
+accounts, no analytics. Approximate foreground location is asked only on the Near me or Use phone
 location tap. Device settings can save a privacy-limited H3 area to your sensor,
-starting at resolution 8, with an optional declared country. Exact phone fixes
+at resolution 8, with an optional declared country. Exact phone fixes
 are never saved or sent. See [device location](docs/device-location.md). Public
 data carries H3 cells, never coordinates.
 
@@ -69,30 +69,23 @@ flowchart LR
 | Screens, navigation, detail levels | [`docs/screens.md`](docs/screens.md) |
 | Opcodes, frames, error codes, UUIDs, LAN framing (mirror of the firmware contract) | [`docs/protocol-quickref.md`](docs/protocol-quickref.md) |
 | BLE vs LAN, pairing, the LAN token, reconnect | [`docs/transports.md`](docs/transports.md) |
-| Download, verification, lost windows, resume, archive paths, `REBOOT` audit | [`docs/sync-engine.md`](docs/sync-engine.md) |
+| Download, verification, lost windows, resume, archive paths | [`docs/sync-engine.md`](docs/sync-engine.md) |
 | Auto-sync, WorkManager, foreground notification, WifiLock, triggers (presence / advertising / Wi-Fi) | [`docs/background-sync.md`](docs/background-sync.md) |
-| Room v1, DataStore, files on disk, backup | [`docs/data-model.md`](docs/data-model.md) |
+| Room (`AppDatabase`), DataStore, files on disk, backup | [`docs/data-model.md`](docs/data-model.md) |
 | Index → tiers → derived day → charts; metrics, moods, time estimate | [`docs/history-pipeline.md`](docs/history-pipeline.md) |
 | Own Parquet reader/writer, GeoParquet 2.0, fixtures, oracles | [`docs/parquet.md`](docs/parquet.md) |
 | Stack, build, hooks, CI, signing, fake device | [`docs/build-and-release.md`](docs/build-and-release.md) |
 | Lessons learned, grouped by concern | [`docs/lessons-learned.md`](docs/lessons-learned.md) |
 
-## iOS app and current scope
+## iOS app
 
-The iOS app uses Kotlin Multiplatform for shared protocol and sensor rules, with a
-Compose Multiplatform live-reading screen and native Core Bluetooth and Bonjour adapters.
-The Android app retains its native Compose UI and platform data stack. Both platforms
-can collect over Wi-Fi after each phone saves access through BLE pairing. The shared
-firmware allows three Wi-Fi clients per sensor alongside one BLE connection; both apps
-can sync two sensors concurrently per phone. History/export UI and background collection
-remain Android features while iOS migration continues. Build and qualification
-instructions are in [docs/ios.md](docs/ios.md); local iOS coding
-instructions are in [ios/AGENTS.md](ios/AGENTS.md). On 2026-10-08, the owner confirmed
-live readings, Bonjour discovery, saved Wi-Fi access and collection starting on a
-connected iPhone. Pairing prompts, reading accuracy, stale/background behavior and
-completed-file phone verification still need qualification. The iPhone card now shows
-average KiB/s; [dated transfer evidence](docs/transports.md#investigating-slow-wi-fi-collection-2026-10-08)
-separates measured CoreS3 host throughput from pending phone speed checks.
+The iOS app runs the same shared Compose screens as Android, hosted by `ios/shared`, over the
+shared Kotlin sync engine, Room database and history pipeline. Swift keeps Core Bluetooth,
+sockets and Bonjour, the Keychain, background tasks and the sticker scanner. Both phones collect
+over Wi-Fi with a token each phone fetches over bonded BLE. Build and qualification instructions
+are in [docs/ios.md](docs/ios.md), and local iOS coding instructions are in
+[ios/AGENTS.md](ios/AGENTS.md). What an iPhone run has shown is recorded in
+[docs/status.md](docs/status.md).
 
 ## Build
 
@@ -112,7 +105,7 @@ for simulator framework linking, the Xcode build, and real-iPhone qualification 
 GitHub Actions validates shared Kotlin iOS tests and unsigned simulator Debug/device
 Release builds on Apple Silicon with Xcode 27 and the iOS 27 SDK. Simulator apps and failure reports are retained
 as workflow artifacts; iOS signing and TestFlight setup are documented in
-[`docs/build-and-release.md`](docs/build-and-release.md#github-actions-ios-validation-researched-2026-10-08).
+[`docs/build-and-release.md`](docs/build-and-release.md#github-actions-ios-validation).
 
 Ready-made APKs: every push to `main` refreshes the rolling [`latest`](../../releases/tag/latest)
 pre-release; a `v*` tag publishes a permanent release. Details, signing and the debug fake device:
@@ -122,23 +115,40 @@ Actions. Signed iPhone/TestFlight distribution is not available yet.
 
 ## Layout
 
-```
-core/protocol/   KMP common rules + JVM adapters · contract mirror: UUIDs, frames v1+v2, CONFIG, LAN framing, JSON, PAR1/CRC verify
-core/parquet/    JVM-only · own Parquet reader + writer (GeoParquet 2.0, LZ4/Snappy/GZIP, codec SPI) · test fixtures
-core/history/    KMP sensor-domain rules + JVM file adapters · Metrics registry (moving to core/model), Aggregator → tiers, TimeEstimate, Columns, AirMood, file index
-app/             Android app · data/{ble,lan,sync,background,history,local,settings,export,fake} · ui/{scan,device,history,files,debug,settings}
-ios/shared/      Kotlin Multiplatform presentation state and Compose Multiplatform live screen
-ios/App/         Xcode app · Swift/Core Bluetooth/Bonjour platform adapters
-tools/           fixture generators + PyArrow/DuckDB oracle (run in ../opensensor-space-firmware's pixi env), hooks, signing
-docs/            one file per concern (see the map above)
+The module list is `settings.gradle.kts`. Every `:core`, `:family`, `:ui` and `:feature` module is
+Kotlin Multiplatform. `:core` and `:family:air` target the JVM and iOS, and `:core:database`, `:ui`
+and `:feature` target Android and iOS.
 
-Planned (see the production plan)
-build-logic/        convention plugins for every module
-core/model/         Device, DeviceFamily, Capability, ObservedProperty, Scale, family registry
-core/sync/          one sync engine for both phones behind FrameLink and ArchiveStore ports
-core/designsystem/  opensensor.space tokens, theme and shared components (Compose Multiplatform)
-core/publicfeed/    public discover feed port, sample fixture, later Parquet over HTTP
-feature/discover/   shared map, cell sheet and public device page
+```
+app/              Android app · data/{ble,lan,background,history,archive,storage,settings,local/security,di,fake} · ui/ screen hosts (Routes, ViewModels)
+ios/App/          Xcode app · Swift adapters for Core Bluetooth, sockets, Bonjour, Keychain, background tasks
+ios/shared/       iOS only Kotlin · AppRoot hosts the shared screens, bridges to the Swift adapters
+build-logic/      convention plugins and the verify gates
+
+core/model/       BoardTemplate, Datastream, AppProfile, Thing, H3Cell, bundled templates and profiles
+core/protocol/    contract mirror · UUIDs, frames, CONFIG, LAN framing, JSON, PAR1 and CRC-32 verify
+core/parquet/     own Parquet reader and writer (GeoParquet 2.0, codec SPI) · test fixtures
+core/net/         HTTP range reads and the disk block cache
+core/storage/     storage classes, atomic files, budget, retention
+core/archive/     archive layout, verifier, ArchiveStore and ArchiveIndex ports
+core/sync/        LinkSession, DeviceSession, SyncEngine, CollectionController, clock and token policy
+core/history/     metric registry, file index, tiers, daily Parquet, time estimate
+core/database/    the Room KMP database of both phones
+core/publicfeed/  Discover feed port, sample and OpenAQ feeds, H3
+core/units/       display units
+core/settings/    DataStore preferences, detail level
+core/stac/        STAC File Item and Thing Collection of a synced file
+core/thing/       ThingKind contract, registry, PublishGate · thing/testkit
+family/air/       WHO scales, EPA correction, NowCast, moods, air metrics
+
+ui/designsystem/  opensensor.space tokens, theme and shared components
+ui/strings/       shared copy and the copy lint tests
+ui/permissions/   permission timing and dialogs
+ui/map/           MapLibre basemap, cell picker, place search
+feature/          shared screens · shell, discover, devices, today, history, files, device, setup, settings, debug
+
+tools/            fixture generators with PyArrow and DuckDB oracles (run in ../opensensor-space-firmware's pixi env), hooks, signing, history-benchmark
+docs/             one file per concern (see the map above)
 ```
 
 The Bluetooth protocol is owned by the firmware repo (`../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`);

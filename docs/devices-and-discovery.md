@@ -2,14 +2,14 @@
 
 **Scope:** how the app supports any sensor family (air quality is one of many), and how a new user
 sees public sensor data near them on first open through a privacy-preserving H3 map.
-**Code:** `core/publicfeed/`, `ui/map/`, `feature/discover/`, `tools/discover-fixture/`, `core/model/`. **Related:**
+**Code:** `core/model/`, `core/thing/`, `core/publicfeed/`, `ui/map/`, `feature/discover/`, `tools/discover-fixture/`. **Related:**
 [cross-platform-guide.md](cross-platform-guide.md),
 `../opensensor-space-firmware/docs/shared/table-and-observation-model.md`.
 
 ## Product direction
 
 opensensor.space is a home for many kinds of open hardware: air, weather, water, soil, noise,
-energy. The app must treat a new sensor family as data (a dictionary and a family entry), not as
+energy. The app must treat a new sensor family as data (a board template and an app profile), not as
 new screens. And the app must be useful before someone owns a device. Like the first run of
 Google Home, Eufy or Apple Weather, opening the app shows something real right away. Here that
 means readings from public sensors nearby, shown as hexagon cells, never as exact points.
@@ -18,30 +18,36 @@ means readings from public sensors nearby, shown as hexagon cells, never as exac
 
 ### Model
 
-The model follows the observation model the firmware already chose
-(`table-and-observation-model.md`, SensorThings concepts). The app adopts the same names so the
-phone, the firmware and a future host API agree.
+The model follows the observation model of the firmware (`table-and-observation-model.md`,
+SensorThings concepts) and the stac-opensensor v0.1.0 profile, so the phone, the firmware and a
+host agree on names. The types live in `:core:model` unless the table says otherwise.
 
-| Concept | Meaning in the app | Today |
-| --- | --- | --- |
-| `Device` (Thing) | A thing with a persistent UUID. The MAC address is separate | Thing UUID and known device row |
-| `DeviceFamily` | Hardware plus firmware line, with its transports, capabilities and dictionary | Implied by `cores3-*` schema prefixes |
-| `Capability` | What a device can do (BLE sync, LAN sync, live stream, config, reboot) | Schema prefix checks in screens |
-| `ObservedProperty` | One exact quantity, for example atmospheric PM2.5 or air temperature | `MetricSpec` in `Metrics.kt` |
-| `Datastream` | One property measured by one instrument on one device | Parquet column |
-| `Scale` | Optional interpretation of a value, for example the AQI bands | `AirMood` |
+| Type | Meaning |
+| --- | --- |
+| `BoardTemplate` | What one board measures, parsed from the template the firmware publishes. Keyed by `TemplateKey` (`dict` and an optional `desc`) and resolved by `TemplateIndex`, a template a board served first, then a bundled one |
+| `Datastream` | One column of a template, or one phone-derived stream. It names its `ObservedProperty`, its `Sensor` (procedure and board), unit, aggregate, role, validity gate and settle time |
+| `AppProfile` | The app's presentation choices for one `dict` (primary columns, hero id, labels, display steps and units, scale ids, hidden columns). Bundled, or derived from the template when none is bundled |
+| `Thing` | `Thing.join` of a template, a profile and the Thing Collection. A Thing has a persistent UUID, and the MAC address is separate |
+| `Capability` | An open id of what a connected Thing can do (`LIVE`, `CONFIG`, `SENSOR_IDENTITY`). `DeviceCapabilities` in `:core:history` builds the set from `INFO` and the resolved Thing |
+| `ThingKind` (`:core:thing`) | One kind of Thing. It says how its Things are recognized (`Evidence`), where their data comes from (`DataSource`) and whether it may ever be published (`PublishPolicy`). `OpenSensorBoardKind` is the one kind, and each app lists its kinds in `ThingKinds` |
+| `Scale`, `HealthScale` | An optional interpretation of a value. A `Scale` is parsed from a Collection's `opensensor:scales`. A `HealthScale` is one a family publishes through `DerivedMetricProvider.scales`, such as `WhoGuidelines` in `:family:air` |
+| `DerivedMetricProvider` | The seam a sensor family plugs into. It gives derived metrics, health scales, extra capabilities and a row check for a template |
 
 Rules.
 
-1. **The dictionary comes from the device.** The firmware's versioned measurement dictionary is
-   the source of property identity, unit, procedure and time semantics. The app ships a bundled
-   copy for known schema IDs only as a fallback. The app never invents a unit or a band. The
+1. **The template comes from the device.** The firmware's published board template is the
+   source of property identity, unit, procedure and time semantics. The app bundles a copy of
+   the known templates, takes one a board serves over `GET_DESCRIPTOR`, and can fetch one from a
+   file's footer href (`TemplateHrefs`). Each is used only when its SHA-256 is the expected desc.
+   The app never invents a unit or a band. The
    Settings **Units** choice only relabels a known SI unit for display (`:core:units`, for example
-   °C as °F). The feed, the percentile scale and every statistic stay on the dictionary's unit.
-2. **Unknown is fine.** A column that is not in the dictionary still shows with its raw name and
-   no scale, at Detailed level. It is never hidden, coerced or given a default.
-3. **Scales are optional and scientific.** A `Scale` names its source (for example US EPA AQI or
-   WHO 2021). PM2.5 and PM10 use the WHO 2021 Air Quality Guidelines (`:family:air`,
+   °C as °F). The feed, the percentile scale and every statistic stay on the template's unit.
+2. **Unknown is fine.** A Thing keeps every datastream of its template whatever its role, and a
+   datastream without a profile label shows its template title or column name and no scale. A
+   file whose template nothing resolves keeps its rows and shows no metrics. Nothing is coerced
+   or given a default.
+3. **Scales are optional and scientific.** A scale names its source (for example WHO 2021).
+   PM2.5 and PM10 use the WHO 2021 Air Quality Guidelines (`:family:air`,
    `WhoGuidelines`), six fixed steps from "meets the guideline" through interim targets 4 to 1
    to "above all targets", 24-hour means, in one colour-blind checked palette. A fixed step
    means a colour says the same thing in every place, viewport and window. Properties without
@@ -49,12 +55,13 @@ Rules.
    over the cells in view, and say so. Colour never carries a step alone, its name is shown
    beside the value. Brand colours are never used to judge a value, and WHO colours are used
    only to judge values.
-4. **Capabilities, not schema strings.** A screen asks `device.can(Capability.LanSync)`. Only the
-   family registry reads schema IDs or adverts.
-5. **One family entry per hardware line.** A `DeviceFamily` declares how to recognize the device
-   (advert, manifest or schema ID), its transports, capabilities, dictionary and its headline
-   properties (which one or two values the device card shows). Adding a family needs no change
-   to the sync engine, the screens or the design system.
+4. **Capabilities, not schema strings.** A screen reads `DeviceCapabilities` (`configurable`,
+   `sensorIdentity` and the `Capability` set). Only `ThingKind.recognize` and
+   `DeviceCapabilities` read adverts, `INFO` or the protocol version. No screen checks a schema
+   or dictionary string.
+5. **A new board is a template.** A board line is one template, plus an `AppProfile` when the
+   derived default is not enough. A new source of Things is one `ThingKind`. Neither needs a
+   change to the sync engine, the screens or the design system.
 6. **Keep wire names.** Opcodes, UUIDs and archive
    paths stay. New shared types use generic names (`Reading`, `GenericMetricHero`), never `Air*`.
 
@@ -72,7 +79,8 @@ Rules.
    templates through `index.json`, which gives each its `desc`. `BundledTemplateBytesTest` checks each
    file's SHA-256 against its `index.json` desc and pins the full SHA-256 of every copied json file,
    so update its `pinned` map with the copy. `BundledCatalogTest` checks the profiles. The template
-   links point at fixed aq commits, the app never fetches or trusts them, only the digests.
+   links point at fixed firmware commits. The app trusts only the digests, and follows a link only
+   through `TemplateHrefs`, for a file whose desc nothing on the phone resolves.
    A board whose firmware serves its template over `GET_DESCRIPTOR` works without a bundled one,
    the app fetches and caches it on connect (`BoardDescriptors`). It then renders with a profile
    derived from that template. A synced file whose footer `template.sha256` differs from the cached
@@ -84,59 +92,27 @@ Rules.
 
 ## Part 2. Discover public sensors near you
 
-Reassessed on 2026-10-08 against current primary sources (listed at the end). Every version
-below was checked on that date. Items marked "verify on phone" are not yet proven on hardware.
+Discover reads the bundled sample and the OpenAQ aggregates. The opensensor publisher feed, the
+public device list and device page, per-device sharing and the Offline map download are not
+built. Their rules below are the constraints for when they land. Phone evidence is in
+[status.md](status.md).
 
 ### Decisions at a glance
 
 | # | Decision | Section |
 | --- | --- | --- |
 | 1 | Map first. No sign-in, no onboarding wall, no permission prompt at launch | First screen |
-| 2 | One non-modal bottom sheet with three heights. It never stacks a second sheet | First screen |
+| 2 | One non-modal bottom sheet with a peek and an expanded height. It never stacks a second sheet | First screen |
 | 3 | Public values are hourly means, published at least one hour late. The time slider offers Last hour, 24 hours and 7 days, never "now" | Privacy rules |
 | 4 | The crowd rule of three applies to every published number, not only the device list, with a differencing guard on parents | Privacy rules |
 | 5 | Only outdoor devices can be published. No accounts, no passkeys. Each shared device gets its own anonymous key made on the phone, and its public ID and generated name come from that key, never free text | Privacy rules |
-| 6 | The phone reads the same Parquet files as the website `/indices` explorer, one plain file per H3 resolution, through HTTP range reads and the repo's own portable Parquet reader. No JSON side feed | Feed contract |
-| 7 | `maplibre-compose` 0.20.0 is the renderer. Its pins match ours (Kotlin 2.4.20, CMP 1.12.1) | Map technology |
+| 6 | The phone reads the same Parquet files as the website `/indices` explorer, one plain file per H3 resolution, through HTTP range reads and the repo's own portable Parquet reader. No JSON side feed | Public feed |
+| 7 | `maplibre-compose` is the renderer, pinned as `maplibreCompose` in `gradle/libs.versions.toml` | Map technology |
 | 8 | H3 runs on the phone (files carry no geometry). Viewport cover of at most 1,024 cells, one GeoJSON source, redrawn after 400 ms of camera rest | Map technology |
 | 9 | An online Protomaps PMTiles basemap, an optional "Offline map" download in the app Settings (nothing bundled), and "© OpenStreetMap" always reachable | Map technology, Compliance |
 | 10 | A "Near me" button asks for approximate location only when tapped. Precise location is never requested | Centring |
 | 11 | Shared data is published under CC BY 4.0 and cannot be withdrawn. "Stop sharing" takes effect from the next UTC day | Privacy rules, Compliance |
-| 12 | Hosting is source.coop (Radiant Earth partnership, AWS Open Data). The phone never holds source.coop write credentials | Feed contract, Compliance |
-
-### UX benchmark
-
-What comparable apps do, and what we take from them.
-
-| App | First screen | Detail | Notes |
-| --- | --- | --- | --- |
-| PurpleAir map | Map, no sign-in | Popup with value, recent averages, a multi-sensor chart, status | Metric and averaging live behind a gear. Grey means stale and also "metric not measured". Name search only covers sensors on screen. Web app only |
-| IQAir AirVisual | City cards, location asked early | Thing page with last update time | The map shows only PM2.5 things so values compare like for like |
-| Sensor.Community | Hexagon map, no sign-in | Tap a hex for count, median and one row per sensor with 24 hour and 7 day means | Metric dropdown, collapsible legend per metric, indoor and reference toggles, a visible sensor counter |
-| Apple Weather | Location prompt, then forecast | Air quality map overlay with a compact gradient legend | Overlay switch for temperature, precipitation and air quality |
-| Google Maps AQ layer | Layers, Map details, Air quality | Coloured AQI bubbles, zooms out to an overview | Nested menu, hard to find |
-| Eufy | Login and email verification before anything | n/a | Account wall |
-| Google Home | Get started, Google account, location | n/a | Permission and account up front |
-| Netatmo Weathermap | Map of user things, clustered averages when zoomed out | Thing values | Only outdoor modules are shared, opt in |
-| Ambient Weather | Network map with layer toggles | Thing page | Stale styling undocumented |
-| Windy | Map, layer picker with favourites | Thin colour bar legend, timeline at the bottom | Strong legend and time model |
-| BreezoMeter | Now inside Google Maps Platform | n/a | Consumer app status unclear |
-
-Patterns we copy.
-
-1. Map first with no login (PurpleAir, Sensor.Community), the opposite of Eufy and Google Home.
-2. The active metric and window are always visible on the map, never behind a gear.
-3. A small legend anchored in a corner that expands on tap.
-4. A hex shows one value plus a device count. Tapping it lists the devices (Sensor.Community).
-5. Every cell and device shows when it last updated (IQAir).
-6. Separate styles for "stale" and "this cell does not measure this metric" (PurpleAir uses one grey for both, which is ambiguous).
-7. A non-modal sheet with a grabber and peek, half and full heights, with the map still usable (Material standard bottom sheet, Apple sheet detents).
-8. The device page shows recent averages and a trend, not only a live value.
-9. A count of sensors in view, so an empty area is obviously empty, not broken.
-
-Anti-patterns we avoid. Account or permission walls before any value. Metric pickers hidden in
-menus. Silently hiding cells that lack the chosen metric. Search limited to the viewport. Several
-sheets stacked on top of each other.
+| 12 | Hosting is source.coop (Radiant Earth partnership, AWS Open Data). The phone never holds source.coop write credentials | Public feed, Compliance |
 
 ### First screen at the Simple level
 
@@ -148,7 +124,7 @@ an info button.
   sensor icon. It is the only place on Discover that starts pairing, apart from the first-run card.
 - **Metric chips.** One row. The chips are built from the properties the visible cells actually
   report, ranked by how many visible cells report them, so the row adapts to any sensor family.
-  At most three property chips show, then a "More" chip opens the sheet at full height with every
+  At most three property chips show, then a "More" chip opens the sheet with every
   property grouped by the category the feed dictionary gives it (Air, Weather, Water, Soil, Noise,
   Energy). Choosing one from "More" moves it into the row. The last choice is remembered. Every
   property and category id the app knows is named in the app's language (`DiscoverLabels.kt`),
@@ -183,17 +159,17 @@ an info button.
 - **Legend size.** Both legends are at most 270 dp wide. They take all the width but the one
   48 dp column of zoom and Near me beside them, and the attribution sits on its own line below,
   so it never narrows them.
-- **Legend (Simple, 2026-10-12).** For a WHO scale the floating card shows the six mood
+- **Legend (Simple).** For a WHO scale the floating card shows the six mood
   words with their colours, titled with the property, and no numbers. Its info sheet explains
   the moods without naming the guideline body and points to Detailed in Settings. A property
   without a health scale keeps the gradient legend. The card is one accessibility node that
   reads the title and the six words.
-- **In view at Simple (2026-10-12).** The spread chart becomes a mood strip, one block per mood
+- **In view at Simple.** The spread chart becomes a mood strip, one block per mood
   as wide as its number of areas, no axis, with its mood word under it. Tapping a block filters the map and the list to that
   mood, tapping it again or tapping the map lets go, and changing the property clears it too.
   A property without a health scale shows no chart at Simple. List rows name the mood word.
   The strip is one accessibility node, and its touch targets are 48 dp when tappable.
-- **Cell sheet at Simple (2026-10-12).** Peacock and mood word beside the 24 hour mean, or "n/a"
+- **Cell sheet at Simple.** Peacock and mood word beside the 24 hour mean, or "n/a"
   when that window has no value, one plain line, then a three block mood strip for 7 days, 24
   hours and the last hour, with a visible caption under each block. Selecting a cell reads the
   other windows for that one cell from the same feed the map uses
@@ -203,14 +179,14 @@ an info button.
   with a Retry button, and the next pan or Retry reads it again. A failure never reads as "Not
   measured". Loading and that line are polite live regions. The Real feed sits behind the Show public sensors switch. Then sensors,
   freshness and the other measurements as plain value rows, all from the 24 hour row. A property
-  without a health scale shows only its number. Detailed and Developer are unchanged. The mood
+  without a health scale shows only its number. The mood
   words live only in `:ui:designsystem`.
 - **Cell styles.** Filled with the scale colour, the fixed step colour of the cell mean
-  (`StepScale.colorOf`) for a property with a step scale, the percentile ramp for the rest. A stale cell (no hourly value for 3 hours) is
-  drawn at 40 percent opacity with a dashed outline. A cell that does not measure the chosen
+  (`StepScale.colorOf`) for a property with a step scale, the percentile ramp for the rest. A stale cell (no value for `CellFreshness.STALE_AFTER_MS`, 3 hours) is
+  drawn at 40 percent opacity. A cell that does not measure the chosen
   metric is outline only, no fill. Selected cell has a thick ink outline. Staleness is judged on
   the chosen metric's own date, so a newer reading of another metric never hides it.
-- **Sample and Real (2026-10-12).** A compact two-state toggle top right under the chips, a
+- **Sample and Real.** A compact two-state toggle top right under the chips, a
   floating control with the brand blue only on the chosen half. Sample is the bundled fixture,
   Real is the OpenAQ aggregates feed, labelled with the day its data runs to in the phone's
   language, as in "OpenAQ, data to 8 Oct". On a start with no network that still has a kept index,
@@ -247,17 +223,14 @@ Sheet heights.
 
 | Height | Nothing selected | Cell selected |
 | --- | --- | --- |
-| Peek (about 200 dp) | The spread chart of the chosen metric first, so it stays in sight while the map is explored, then "12 sensor areas in view" and the freshness, or the first-run card | The spread chart with this cell marked, then the headline value, device count and freshness |
-| Half (Material half expanded, Apple medium detent) | The cells in view by value, filtered by the chart's touched or pinned bar | A range row per other metric the cell reports |
-| Full (expanded, large detent) | Same list, scrollable | Metrics plus the device list (crowd rule met) |
+| Peek (`PEEK_HEIGHT`, 200 dp) | The spread chart of the chosen metric first, so it stays in sight while the map is explored, then "12 sensor areas in view" and the freshness, or the first-run card | The spread chart with this cell marked, then the headline value, sensor count and freshness |
+| Expanded | The cells in view by value, filtered by the chart's touched or pinned bar, then "Your sensors" | A range row per other metric the cell reports |
 
-Tapping a cell opens the sheet at half height. Tapping the map outside a cell returns to peek.
+Tapping a cell expands the sheet. Tapping the map outside a cell returns to peek.
 The sheet header is a 48 dp button with a chevron, named Show more or Show less, so one tap opens
 the sheet or returns it to peek without a drag. Back from the full property list of a cell
 returns to that cell. Otherwise Back clears the selection and returns the sheet to peek before it
-leaves the screen. On Android this is a
-`BottomSheetScaffold` standard sheet. On iOS the same Compose sheet is drawn, sized to match
-the medium and large detents.
+leaves the screen. Both apps draw the same Compose `BottomSheetScaffold` standard sheet.
 
 **First open**
 
@@ -283,7 +256,7 @@ the medium and large detents.
 +--------------------------------------+
 ```
 
-**Cell tapped, crowd rule met (3 or more devices)**
+**Cell tapped**
 
 ```
 +--------------------------------------+
@@ -307,15 +280,10 @@ the medium and large detents.
 |--------------------------------------|
 | Temp     °C  [--(==o==)------]  21.5 |
 | Humidity  %  [------(=o===)--]    48 |
-|--------------------------------------|
-| Sensors here                         |
-| (air) Blue Heron 41   12   1 h ago > |
-| (air) Quiet Fern 07   17   1 h ago > |
-| (wx)  Amber Kite 22   21.0 2 h ago > |
 +--------------------------------------+
 ```
 
-Sheet charts (2026-10-09). The feed carries one window of statistics per cell (n, mean, min,
+Sheet charts. The feed carries one window of statistics per cell (n, mean, min,
 max), no hourly history, so the sheet draws no time series. Charts are Canvas in common Compose,
 identical on Android and iOS, and every one carries a spoken summary of its values.
 
@@ -360,52 +328,7 @@ identical on Android and iOS, and every one carries a spoken summary of its valu
   hues are the scale (published steps or viridis), so light and dark both read. Marker moves animate
   for 350 ms.
 
-**Cell tapped, fewer than 3 devices**
-
-The cell itself is never drawn with its own value. The map shows the parent cell instead, so a
-tap lands on the parent. When the user zooms in far enough that the parent is split, the
-lonely child is drawn outline only, and tapping it shows this.
-
-```
-+--------------------------------------+
-| ----                                 |
-| Too few sensors here to show      i  |
-| Nearby area                          |
-| 11 µg/m³  Good                       |
-| 9 sensors  Updated 1 h ago           |
-|          avg     min     max         |
-| PM2.5    11      4       29   µg/m³  |
-| [Show the nearby area]               |
-+--------------------------------------+
-```
-
-**Device page**
-
-```
-+--------------------------------------+
-| <  Blue Heron 41                 i   |
-| Sample data                          |
-| Outdoor air  Updated 1 h ago         |
-|                                      |
-| 12 µg/m³  Good             (hero)    |
-| Area average 14                      |
-|                                      |
-| (PM2.5) (PM10) (Temp) (More)         |
-| (24h) (7d) (30d)   (Avg) (Min) (Max) |
-|   chart, hourly, area average dashed |
-|                                      |
-| Air        PM2.5 12   PM10 18        |
-| Weather    Temp 21.0  Humidity 47    |
-|                                      |
-| About                              > |
-+--------------------------------------+
-```
-
-"About" holds the family, the data licence and the source link. Public device pages show
-hourly values only. An owned device keeps its own full-resolution history from local storage,
-and its settings hold "Share this sensor publicly", off by default.
-
-**Navigation (owner decision 2026-10-08).** One bottom bar for the whole app, Discover, My
+**Navigation.** One bottom bar for the whole app, Discover, My
 devices and Settings, drawn once at the app root on Android and iOS. Discover is always the start
 tab, whether or not a device is paired. A device opens on its Station page, the hub of that sensor.
 Its gear opens Device settings and its More card opens History, Files and, at Developer, Debug. Each
@@ -417,8 +340,8 @@ second bottom bar. Each bottom bar tab keeps its own back stack (`docs/screens.m
 The map never asks for location at launch. It opens on the first of these that exists.
 
 1. The last viewed area (saved camera).
-2. The cell of the user's own published device.
-3. A region from the phone's IANA time zone, using a bundled zone to bounding box table. This
+2. A region from the phone's IANA time zone, using a bundled zone to bounding box table
+   (`TimeZoneRegions`). This
    lands on the right country or metro for most people, and on a continent overview otherwise,
    like Google Maps zooming out to an overview.
 
@@ -431,13 +354,12 @@ Arabic names wait for the tagged `ar` names of alternateNamesV2. It ignores case
 hamza forms and the article. Search is local, so typing never
 leaves the phone. The same search sits on the area map of setup and Device settings.
 
-**"Near me" (owner decision 2026-10-08).** A map button that asks for approximate location only
+**"Near me".** A map button that asks for approximate location only
 at the moment it is tapped, because a time-zone guess fails for large zones and store rules
 allow it cleanly. Precise location is never requested on either platform.
 
 - Android. Declare only `ACCESS_COARSE_LOCATION` (about 3 km², similar to a resolution 7 cell).
-  Foreground only, so no Play location declaration or background disclosure is needed. Checked
-  2026-10-09 against `targetSdk` 37. The Android 17 location button (Jetpack
+  Foreground only, so no Play location declaration or background disclosure is needed. The Android 17 location button (Jetpack
   `androidx.core.locationbutton`) is optional and grants one time precise location, so the
   standard coarse runtime prompt stays.
 - iOS. When In Use with `NSLocationDefaultAccuracyReduced` set to true, so the prompt offers
@@ -445,9 +367,9 @@ allow it cleanly. Precise location is never requested on either platform.
   Review 5.1.1).
 - Use. The fix only moves the camera. It is never stored, never sent and never published, so it
   is not "collected" under either store's privacy rules.
-- Built (2026-10-09, host builds only). A tonal my-location button sits bottom right above the
+- Code. A tonal my-location button sits bottom right above the
   attribution. One shared implementation in `ui/map` `NearMe.kt` uses maplibre-compose
-  location (0.19.0 when built, 0.20.0 now) (`rememberDefaultLocationProvider`, `rememberLocationState` with
+  location (`rememberDefaultLocationProvider`, `rememberLocationState` with
   `LocationAccuracy.Low`, `LocationIndicatorLayer` for the puck). Only the prompt is per platform
   (`NearMe.android.kt` asks for `ACCESS_COARSE_LOCATION` alone, `NearMe.ios.kt` calls
   `requestWhenInUseAuthorization`). No provider exists before the tap. After a grant the camera
@@ -459,8 +381,8 @@ allow it cleanly. Precise location is never requested on either platform.
 
 - Decline. The map stays where it is and search remains. Asking again happens only on the next
   tap, never on launch.
-- The same approximate fix may preselect the cell in the sharing cell picker. The owner still
-  confirms or moves the cell, and the fix itself is not kept.
+- The same approximate fix moves the area map of setup and Device settings (**Use phone
+  location**). The owner still taps the cell, and the fix itself is not kept.
 
 `AGENTS.md` records this boundary.
 
@@ -482,7 +404,7 @@ with an ink fill and line in a track source of their own, under the pins
 and with no Thing UUID (#263, [device location](device-location.md#mobility-and-gnss)). A row with
 no location is no fix, so a moving Thing with no fix has no pin and never a guessed one. A
 forgotten sensor loses its pin, because Forget deletes its cells and the host joins the places with
-the Things the phone still knows. A Thing set up before this build shows once its location is next read. The source is rebuilt
+the Things the phone still knows. A Thing with no stored place shows once its location is next read. The source is rebuilt
 off the main thread, and only when a Thing, its cell or its last update changes. No request leaves
 the phone for it and nothing is published.
 
@@ -520,14 +442,17 @@ from the kept index. "Sample, bundled with the app" with the day its data runs t
 
 Snapping a home to a hexagon does not make its data anonymous. Temperature, humidity, CO2 and
 particle series reveal occupancy, cooking and even how many people are home. The rules below
-treat each public series as personal data until it is aggregated.
+treat each public series as personal data until it is aggregated. Rules 3 to 9 bind the
+opensensor publisher and per-device sharing, which are not built. Nothing uploads today. The
+Real feed on screen is OpenAQ, public licensed stations with one or more per cell
+(`crowd_rule = none` in its metadata).
 
 1. **No points, only cells.** Public data carries an H3 cell, never coordinates. The owner picks
    the cell on the map when opting in, optionally starting from an approximate "Near me" fix.
    Coordinates never leave the phone. No jitter is added to
    cells, since snapping already coarsens the place and noise only helps for points.
-2. **Precision (owner decision 2026-11-04).** Every published Thing, fixed or moving, carries
-   H3 resolution 8. This replaces the earlier resolution 7 cap. The board writes its cells at 8
+2. **Precision.** Every published Thing, fixed or moving, carries
+   H3 resolution 8. The board writes its cells at 8
    and no publisher coarsens them, so a File Item's `grid:code` and the `h3_cell_id` rows of the
    Parquet file beside it name the same cell. A res 8 cell averages about 0.74 km², with an edge
    of about 530 m. That is an area, not an address, but it is not anonymous on its own. Where few
@@ -537,7 +462,7 @@ treat each public series as personal data until it is aggregated.
    not res 8 is not published (`FileItemResult.WrongResolution`), whatever the device was set to.
    Play treats location finer than about 3 km² as precise, so the store forms declare a
    published cell as precise location on Play
-   ([store-compliance.md](store-compliance.md#decisions-for-discover-and-uploads-conservative-defaults-2026-10-08)).
+   ([store-compliance.md](store-compliance.md#decisions-for-discover-and-uploads)).
 3. **Crowd rule for every number.** A cell's aggregate and its device list are published only
    when it holds at least three publishing devices. With fewer, the devices count only toward
    the parent. A parent is published only when the devices it holds outside its published
@@ -550,7 +475,7 @@ treat each public series as personal data until it is aggregated.
 6. **Outdoor only.** A device must be marked outdoor to publish. The indoor or outdoor choice
    defaults to indoor. Indoor devices never appear in public data (Netatmo and
    Sensor.Community do the same).
-7. **Device identity, not user identity (owner decision 2026-10-08).** No accounts, no sign-in
+7. **Device identity, not user identity.** No accounts, no sign-in
    and no passkey at app start. Passkeys need a relying party server and are an account in
    store terms, which brings sign-in screens and in-app account deletion for no gain here.
    Instead, turning sharing on makes a fresh P-256 key pair for that device in the Android
@@ -568,7 +493,7 @@ treat each public series as personal data until it is aggregated.
    confirmation shows the cell picker, the generated name, what is shared (hourly outdoor
    readings and the area), what never is (exact location, IDs, Wi-Fi, PIN, token), and that
    published data is released under CC BY 4.0 and cannot be taken back.
-9. **Stop sharing (owner decision 2026-10-08).** Stored with that device's settings. It takes
+9. **Stop sharing.** Stored with that device's settings. It takes
    effect from the next UTC day, so the current day's hours still publish and nothing after
    it does. Data already published stays public under its licence. Sharing can be turned on
    again at any time with a new identity (rule 7).
@@ -582,8 +507,8 @@ misleading. Revisit if public values ever become finer than hourly.
 
 ### Network boundary
 
-This feature changes the offline-only stance in one narrow way. The app may make anonymous,
-read-only GET requests to the public feed and the basemap. Under the same switch it may also GET a
+Beyond BLE and LAN the app makes only anonymous, read-only GET requests, to the public feed
+and the basemap. Under the same switch it may also GET a
 synced file's board template from its footer `template.href`, only an https link on the firmware
 template host with no redirect, and only when nothing on the phone resolves that template. The
 bytes are kept only when their SHA-256 is the footer desc (`TemplateHrefs`, see
@@ -592,47 +517,41 @@ public sensors", turns them all off. When it is off, Discover
 shows the bundled sample on the bundled basemap. When the network fails, Real shows the last kept
 index and its cells from the block cache, labelled cached with its age, and with nothing kept it
 shows the failed load with Retry. Own pins, their readings and Live read only the phone. Pairing
-and sync work exactly as before. `AGENTS.md` records this boundary.
+and sync never need the network. `AGENTS.md` records this boundary.
 
-### Public feed contract (proposed)
+### Public feed
 
-The feed mirrors the website's `/indices` explorer (`walkthru-earth.github.io`,
-`docs/indices.md` and `docs/parquet-producer-guidance.md`), so one dataset serves the website,
-the phone and anyone with DuckDB. Static files on source.coop (owner decision 2026-10-08, a
-Radiant Earth partnership on AWS Open Data), no server for reading. The publisher (not this
-repo) runs once an hour, applies the privacy rules above, and writes immutable files.
+Discover reads two feeds through the `PublicFeed` port and the repository's own Parquet reader.
+Both carry H3 cells and no geometry, and both mirror the website's `/indices` explorer layout,
+one plain Parquet file per H3 resolution.
 
-**Upload path.** The phone never holds source.coop write credentials. Signed hourly uploads go
-to a small ingest endpoint owned by the publisher, which checks the signature against the
-device's registered public key and keeps raw rows private until the hourly run aggregates them.
-Who builds and runs the publisher and ingest is still open.
+- **Sample.** `BundledSampleFeed` reads the files under
+  `feature/discover/src/commonMain/composeResources/files/discover-sample/v1`, written by
+  `tools/discover-fixture/make_discover_sample.py`. `latest.json` names the partition.
+- **Real.** `OpenAqAggregatesFeed` reads the OpenAQ aggregates on source.coop (below).
+
+The opensensor feed is not built. No publisher, ingest endpoint, device list file or per-device
+series file exists, and the phone has no upload code. When it lands it is static files on
+source.coop with no server for reading, written by a publisher outside this repo that applies
+the privacy rules above, and the phone never holds source.coop write credentials. Uploads are
+signed and go hourly to an ingest endpoint the publisher owns, which checks each signature against
+the device's registered public key and keeps raw rows private until the hourly run aggregates them.
 
 ```
-opensensor/discover/v1/
+discover-sample/v1/
+  latest.json
   cells/window={1h|24h|7d}/date=YYYY-MM-DD/hour=HH/h3_res={r}/data.parquet
-  devices/date=YYYY-MM-DD/hour=HH/h3_res={r}/data.parquet
-  series/month=YYYY-MM/data.parquet
 ```
 
-- **Discovery.** S3 `ListObjectsV2` on the bucket is the manifest, as on the website. The phone
-  follows continuation tokens, picks the newest `date` and `hour` (compared as numbers), and
-  caches the answer for 5 minutes. Downloads go through `data.source.coop`.
-- **Cells file.** One plain Parquet file per resolution, `h3_res` 2 to 7. Columns are
-  `h3_index` (INT64, sorted), `devices` (INT32, always 3 or more), `updated` (TIMESTAMP UTC) and
-  flat metric columns `<property>__n`, `__mean`, `__min`, `__max` (DOUBLE, null when the cell
-  does not measure it). Property IDs, units and families come from the dictionary named in the
+- **Cells file (`FeedPaths.cells`).** One plain Parquet file per resolution, `h3_res` 2 to 7.
+  Columns are `h3_index` (INT64, sorted), `devices` (INT32), `updated` (TIMESTAMP UTC) and
+  flat metric columns `<property>__n` (INT32) and `__mean`, `__min`, `__max` (DOUBLE), null when
+  the cell does not measure it. Property IDs, units and families come from the `dictionary` key of the
   file's key value metadata. No geometry, no nested columns.
-- **Devices file.** Rows `h3_index` (INT64, sorted), `public_id`, `name`, `family` and the
-  latest hourly headline value per property, only for cells that pass the crowd rule.
-- **Series file.** Hourly rows `public_id`, `hour`, then the same flat property columns, sorted
-  by `public_id` then `hour`. A 30 day device chart reads one or two monthly files.
-- **Writer rules for the phone.** SNAPPY (or LZ4_RAW) compression, not ZSTD, because Apple's
-  Compression framework has no zstd and our reader keeps native code out of `:core:*`. PLAIN or
-  RLE_DICTIONARY encodings, no DELTA, no BOOLEAN, no nested types. Min and max statistics on
-  every column. Row groups small enough for pruning (start near 16,384 rows and measure), plus
-  column and offset indexes. The website already reads SNAPPY.
-  The owner plans to republish existing datasets with SNAPPY or LZ4 later. Until then W12
-  builds on the sample feed, which already follows these rules.
+- **What a feed file must be.** SNAPPY or LZ4_RAW compression, not ZSTD, because iOS has no
+  zstd in its system libraries and the reader keeps native code out of `:core:*`. Flat columns
+  in the encodings [parquet.md](parquet.md) lists as accepted. Min and max statistics on every
+  column, and column and offset indexes so pages prune.
 
 Reading on the phone.
 
@@ -645,33 +564,26 @@ Reading on the phone.
    `h3_index` min and max overlap a range, and range reads only `h3_index` and the chosen
    metric's `__mean` column. Rows are then filtered exactly.
 4. A tap is an `h3_index` lookup in the rows already loaded, then one more range read of that
-   row group's `__n`, `__mean`, `__min` and `__max` columns for every property, plus the devices
-   file for the same cell.
+   row group's `__n`, `__mean`, `__min` and `__max` columns for every property.
 
-The reader is the repository's own `:core:parquet`, made portable in W8 (`ByteReader`, common
-LZ4 and Snappy). Issue #62 added `ParquetReader` over a `RangeSource`, an in-memory LRU
-`FooterCache` of footers and page indexes, coalesced range requests (`RangePolicy` `LOCAL`,
-`CELLULAR`, `WIFI`) and pruning of row groups by footer statistics and of pages by the column and
-offset indexes. `:core:net` adds `HttpRangeSource` over OkHttp (`okhttp` in `gradle/libs.versions.toml`) on Android and
+The reader is the repository's own `:core:parquet` ([parquet.md](parquet.md)), `ParquetReader`
+over a `RangeSource`, with an in-memory LRU `FooterCache` of footers and page indexes, coalesced
+range requests (`RangePolicy` `LOCAL`, `CELLULAR`, `WIFI`) and pruning of row groups by footer
+statistics and of pages by the column and offset indexes. `:core:net` adds `HttpRangeSource` over OkHttp (`okhttp` in `gradle/libs.versions.toml`) on Android and
 `NSURLSession` on iOS. It sends `Accept-Encoding: identity`, so byte offsets stay true, and checks
-`If-Range` against the ETag, so a replaced file is read again from its new footer. Host and
-simulator tests only. `OpenAqAggregatesFeed` reads the OpenAQ aggregates through it (below).
+`If-Range` against the ETag, so a replaced file is read again from its new footer.
+`OpenAqAggregatesFeed` reads the OpenAQ aggregates through it (below).
 Android `DiscoverViewModel` and iOS `AppRoot` each build one per process, read only while Show
 public sensors is on and Real is chosen. Each file read goes through `CachedRangeSource` and the
-disk `BlockCache` (#94), so a second open of a view reads cached blocks with no request. No third-party Parquet or DuckDB library exists for iOS that would do this
-better.
+disk `BlockCache` (#94), so a second open of a view reads cached blocks with no request.
 
-Paths under `date=` and `hour=` never change, so footers and ranges are cached until the
-newest hour moves on. The last complete hour stays on disk for offline use.
-
-**Sample data.** `tools/discover-fixture/` writes the same layout and schema with Python `h3`
+**Sample data.** `tools/discover-fixture/` writes the layout and schema above with Python `h3`
 and PyArrow, including `sample = true` in the key value metadata, and the files ship in the app.
-The phone reads them through the same reader from a local file source, so the sample and the
-live feed share one code path. The toggle shows Sample while `sample` is true.
+The phone reads them through the same reader, so the sample and the Real feed share one code
+path.
 
-**Live feed, OpenAQ aggregates (current).** Until the opensensor publisher exists, the live feed
-is the OpenAQ aggregates collection on source.coop, read with the same reader. Root
-`https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/`.
+**Real feed, OpenAQ aggregates.** The Real feed is the OpenAQ aggregates collection on
+source.coop, read with the same reader. Its root is `OpenAqAggregatesFeed.DEFAULT_ROOT`.
 
 - **Discover Collection (#189).** `collection.json` at the root is a STAC Collection read with
   `ThingCollection` from `:core:model` (`DiscoverCollection`). H3 only. One cells asset per
@@ -709,8 +621,7 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
   still finds its partition and the cell blocks read before. With nothing kept the failure
   propagates. A broken body never replaces a kept one.
 - `cells/h3_res=<1..9>/data.parquet`, one file per resolution holding every day since 2023,
-  written by DuckDB. Verified on 2026-10-12 against `h3_res=3` (250 KB, 3,131 rows, generation
-  `007d89a5...`): one row group, SNAPPY, dictionary encoded, min and max statistics, no page
+  written by DuckDB. One row group, SNAPPY, dictionary encoded, min and max statistics, no page
   index, every column optional. Columns `h3_index` INT64, `date` INT32 with the DATE converted
   type (days since 1970-01-01, the thing local day), `devices` INT32 (things, 1 or more, no
   crowd rule, key `crowd_rule = none, public licensed things`), then `<id>__n` INT32 and
@@ -720,8 +631,8 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
   complete days (18 or more hours) are present, and data lags OpenAQ by about 72 hours.
 - `ParquetFeedReader` reads this daily schema when `updated` is absent and `date` is present.
   Each row keeps its `CellRow.date`, its `updatedEpochMs` is the UTC midnight after that date,
-  and an optional day range drops other days before a row is built. The hourly schema is
-  unchanged.
+  and an optional day range drops other days before a row is built. The sample keeps the hourly
+  schema.
 - `DailyCellFold` turns the daily rows of the 7 days ending at `as_of` into one cell each. 24
   hours takes, per property, the newest day in range that has a mean, as it is. 7 days takes the
   mean of the daily means, the min of the mins, the max of the maxes and the largest daily `n`,
@@ -746,57 +657,45 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
 
 **What we do not copy from the website.** The EOX Sentinel-2 cloudless basemap, whose licence
 restricts commercial use, and the deck.gl globe view. Some current website datasets also still
-store H3 as strings with a geometry column in one large ZSTD row group. The opensensor feed
-starts with the target layout from the producer guidance.
+store H3 as strings with a geometry column in one large ZSTD row group, which the phone does not
+read.
 
 ### Map technology
 
-- **Renderer.** `org.maplibre.compose:maplibre-compose` **0.20.0** (2026-10-10), on
-  `maplibre-native-ffi` 0.202610.0. Its own
-  catalogue pins Kotlin 2.4.20 and Compose Multiplatform 1.12.1, the same as ours, so the
-  `expect`/`actual` fallback is not needed now. Since 0.15.0 it renders through
-  `maplibre-native-ffi` instead of the platform SDKs. Android needs minSdk 24 and one runtime
-  artifact (`maplibre-compose-runtime-opengl-android`, Vulkan later after a phone check). iOS
+- **Renderer.** `org.maplibre.compose:maplibre-compose`, pinned as `maplibreCompose` in
+  `gradle/libs.versions.toml`. It renders through `maplibre-native-ffi` instead of the platform
+  SDKs. Android needs one runtime artifact (`maplibre-compose-runtime-opengl-android`). iOS
   needs no CocoaPods or SPM, only `-lc++ -lz` and the system frameworks (CoreFoundation,
   CoreGraphics, CoreText, Foundation, ImageIO, Metal, QuartzCore), which fits our direct Xcode
   framework setup. Minimum iOS 15.5. Android and iOS are Beta and minor releases may break, so
   pin the exact version and upgrade deliberately.
 - **Fallback.** If a future pin breaks it, wrap MapLibre Native directly behind the same
-  composable. Current releases are Android 13.6.1 and iOS 6.31.0 (iOS 7.0.0 is in pre-release).
+  composable (`BaseMap` in `:ui:map`).
 - **Cells.** One GeoJSON source built from the loaded rows, with a data-driven fill expression
   on the chosen value. No composable per cell. Each update replaces the whole dataset, so build
   it off the main thread and only after the 400 ms rest. The cover budget keeps it near 1,024
   polygons. Hit testing uses the layer
-  `onClick`. Performance needs a phone measurement on both platforms.
+  `onClick`.
 - **H3 on the phone.** Required, because the files carry no geometry. Behind one interface in
-  `:core:publicfeed`, `com.uber:h3` 4.5.1 on Android and the H3 C library v4 through cinterop on
-  iOS, for `polygonToCells`, `cellToBoundary` and `latLngToCell`. `phansier/h3-kmp` vendors the
-  same C library for both and is worth a review, but it is at 0.0.8. Descendant ranges need no
-  library. A `commonTest` checks both platforms against vectors from Python `h3`.
-- **Basemap online.** A Protomaps PMTiles extract hosted on our own storage, not hotlinked from
-  the Protomaps daily builds. `pmtiles://` is in MapLibre Native since Android 11.7 and iOS 6.10,
-  and the FFI build enables it, but `maplibre-compose` documents no PMTiles API, so it is
-  "verify on phone" on both platforms. Style from `@protomaps/basemaps` 5.7.2, the `white` or
-  `grayscale` flavour recoloured to the sensing palette, light and dark.
-- **Right-to-left labels on iOS (#53).** Up to maplibre-compose 0.19.0 the Apple build of
-  `maplibre-native-ffi` compiled a bidi stub, so Arabic names drew unjoined and in the wrong order
-  (seen on an iPhone 16 Pro on 2026-10-08), and iOS loaded Latin-only label styles. ffi 0.202610.0
-  links ICU on Apple and fixes Arabic shaping and right-to-left order (maplibre-native-ffi #799),
-  and maplibre-compose 0.20.0 ships it. Android and iOS now load the same `light` and `dark`
-  styles. Built and simulator tested only. Arabic labels on an iPhone still need a dated check in
-  `docs/status.md`.
-- **Basemap offline (owner decision 2026-10-08).** Nothing is bundled. The app Settings (not a
-  device's settings) offer an optional "Offline map" download, a small world extract
-  (`pmtiles extract --maxzoom` 3 or 4, a few MB, measured before release) with its glyphs and
-  sprites, stored in app storage and removable from the same row. PMTiles sources are not
-  cached by MapLibre, so without the download and without network the cells draw on the plain
-  paper background.
-- **Ornaments.** Use `MapOverlay.AttributionOnly` or draw our own attribution, scale bar off at
-  Simple. Compass only after rotation. Flat Web Mercator, no globe.
+  `:core:publicfeed` (`H3Grid`), `com.uber:h3` (`h3` in the catalog) on Android and the JVM and
+  the vendored H3 C library through cinterop on iOS, for `polygonToCells`, `cellToBoundary` and
+  `latLngToCell`. Descendant ranges need no library. A `commonTest` checks both platforms against vectors from Python `h3`.
+- **Basemap online.** The Protomaps OpenStreetMap PMTiles build on source.coop, read through
+  `pmtiles://` (the URL is in `ui/map` `files/basemap/light.json` and `dark.json`). The light
+  and dark styles are written by `tools/discover-fixture/make_basemap_style.mjs` from
+  `@protomaps/basemaps`, with glyphs and sprites from `protomaps.github.io`.
+- **Right-to-left labels on iOS (#53).** The Apple build of `maplibre-native-ffi` links ICU, so
+  Arabic names shape and run right to left, and Android and iOS load the same `light` and `dark`
+  styles. Arabic labels on an iPhone need a dated check in `docs/status.md`.
+- **Basemap offline.** Nothing is bundled, and the optional "Offline map" download of decision 9
+  is not built. Without network, or with "Show public sensors" off, the cells draw on the plain
+  paper style (`MapStyles`). Settings sizes and clears the tile cache (`MapCache`).
+- **Ornaments.** The app draws its own attribution. No rotation or tilt, flat Web Mercator, no
+  globe.
 
 ### Store compliance
 
-**W12 (read only, sample or public feed).**
+**Read only, sample or public feed (built).**
 
 - **Attribution.** "© OpenStreetMap" visible on the map at launch, collapsing to an info button,
   linking to openstreetmap.org/copyright (OSMF guidelines, ODbL Produced Work). The Protomaps
@@ -816,7 +715,7 @@ starts with the target layout from the producer guidance.
   reason entries for the APIs the binary uses (UserDefaults, file timestamps, disk space).
   Audit the built framework, since Kotlin/Native, Compose and MapLibre may call them.
 
-**Once per-device publishing exists.**
+**Once per-device publishing exists (not built).**
 
 - **What is collected.** Hourly outdoor readings and the chosen cell. Apple label "Coarse
   Location" (the cell) and "Other Data" (readings), not linked to identity, not used for
@@ -839,41 +738,24 @@ starts with the target layout from the producer guidance.
 
 | Module | Owns |
 | --- | --- |
-| `:core:model` | `BoardTemplate`, `TemplateKey`, `TemplateIndex`, `Datastream`, `ObservedProperty`, `Sensor`, `AppProfile`, `Family`, `ThingCollection`, `Scale`, `ValidityGate`, `Aggregate`, `Role` and the `Thing` join, parsed from stac-opensensor v0.1.0 JSON (#183). `BundledCatalog` and `LiveColumns` read the bundled templates and profiles in `core/model/bundled/` (#184). `Capability` ids and the `DerivedMetricProvider` seam live here too. `LiveReading`, `DeviceCapabilities` (a `Capability` set) and the batch estimate use them, `Metrics` still drives the screens |
-| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.1 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `DiscoverCollection` (the discover STAC Collection and the bundled WHO PM scales), `CellScale` (`StepScale` from the property's published scale, else `PercentileScale`), `StepAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. `OpenAqAggregatesFeed` over `:core:net`, the daily schema in `ParquetFeedReader` and `DailyCellFold`, built 2026-10-12 (host and simulator tests only). Its reads go through the `:core:net` block cache (#94). Planned here: S3 listing for the opensensor feed |
-| `:core:stac` | The board writes each File Item, a sidecar `.json` beside its `.parquet`, and the phone is its transport and validator. `FileItems.build` regenerates that Item from one verified device file, its `opensensor` footer and its `BoardTemplate`, and must equal the board's Item as JSON values. It follows the stac-opensensor v0.1.0 profile (tag v0.1.0, 83787768cc8451109d48a03d4ef5493ffcd403dd), or gives a `FileItemResult.NoItem` reason (#190). Only dated `data_HHMM_` files with a Thing UUID, a mobility, a UTC time on every row and at least one H3 cell get one (`ITEM_NEEDS_LOCATION`, bridge question 41). Every cell must be res 8, or the file gets `WrongResolution` and no Item, the phone never coarsens. The partition comes from the UTC start of the rotation window that holds the first row (`file.rotation_interval_s`). A footer with no allowed `rotation_interval_s` gets `NoRotationWindow`, a name whose `HHMM` is another window gets `WindowMismatch`, a cell H3 rejects (`isValidCell`) gets `InvalidCell` and a `file.purpose` other than `telemetry`, such as a codec benchmark, gets `NotTelemetry`. `FooterSchemaTest` runs the profile's `footer.json` over its footer fixtures, and the reader refuses a footer the schema refuses for a missing member or another version. The geometry is the union of the sorted cells (`H3Grid.cellsToMultiPolygon`). A fixed Thing also gets `grid:code` and lists Grid, a moving Thing does not. The Item also carries `anon:size` (0.01), `anon:warning`, `file:size`, `file:checksum` and `statistics` per measurement column under its `valid_when` gate. The data href is relative, `./<file>.parquet`, so an Item stays valid in any bucket or mirror. `FileItems.sidecarPath` places it beside the file. Pure, no upload, built 2026-10-26 (host and simulator tests only). JVM tests validate it against the profile and opensensor schemas, the core STAC 1.1.0 Item schema and the Grid, Anonymized Location, Table and File extension schemas, all bundled. Common tests on the JVM and iOS check that a phone Item rebuilt from each v0.1.0 row fixture equals its example as JSON values under the profile's canonical form (geometry within 1e-9 degrees), and pin the polygon order of a MultiPolygon to h3-js 4.5.0. The JVM uses h3-java 4.5.1, which matches the H3 C 4.5.0 reference within 1e-9. `PublishGate` in `:core:thing` is its only caller. `ThingCollections.build` writes the Thing Collection from the board template, the newest footer, the owner config (`ThingOwner`, mapped from the #148 site keys of `ThingSite`) and the upload ledger, and common tests prove it equals the v0.1.0 fixed and moving example Collections (#266). `CanonicalJson` holds the profile's JSON value equality |
+| `:core:model` | `BoardTemplate`, `TemplateKey`, `TemplateIndex`, `Datastream`, `ObservedProperty`, `Sensor`, `AppProfile`, `Family`, `ThingCollection`, `Scale`, `ValidityGate`, `Aggregate`, `Role` and the `Thing` join, parsed from stac-opensensor v0.1.0 JSON (#183). `BundledCatalog` and `LiveColumns` read the bundled templates and profiles in `core/model/bundled/` (#184). `Capability` ids and the `DerivedMetricProvider` seam live here too. `LiveReading`, `DeviceCapabilities` (a `Capability` set), the batch estimate and `Metrics` in `:core:history` use them |
+| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` on Android and JVM, the vendored H3 C library through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `DiscoverCollection` (the discover STAC Collection and the bundled WHO PM scales), `CellScale` (`StepScale` from the property's published scale, else `PercentileScale`), `StepAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`, `OpenAqAggregatesFeed` over `:core:net`, the daily schema in `ParquetFeedReader` and `DailyCellFold`. Its reads go through the `:core:net` block cache (#94) |
+| `:core:stac` | The board writes each File Item, a sidecar `.json` beside its `.parquet`, and the phone is its transport and validator. `FileItems.build` regenerates that Item from one verified device file, its `opensensor` footer and its `BoardTemplate`, and must equal the board's Item as JSON values. It follows the stac-opensensor v0.1.0 profile (tag v0.1.0, 83787768cc8451109d48a03d4ef5493ffcd403dd), or gives a `FileItemResult.NoItem` reason (#190). Only dated `data_HHMM_` files with a Thing UUID, a mobility, a UTC time on every row and at least one H3 cell get one (`ITEM_NEEDS_LOCATION`, bridge question 41). Every cell must be res 8, or the file gets `WrongResolution` and no Item, the phone never coarsens. The partition comes from the UTC start of the rotation window that holds the first row (`file.rotation_interval_s`). A footer with no allowed `rotation_interval_s` gets `NoRotationWindow`, a name whose `HHMM` is another window gets `WindowMismatch`, a cell H3 rejects (`isValidCell`) gets `InvalidCell` and a `file.purpose` other than `telemetry`, such as a codec benchmark, gets `NotTelemetry`. `FooterSchemaTest` runs the profile's `footer.json` over its footer fixtures, and the reader refuses a footer the schema refuses for a missing member or another version. The geometry is the union of the sorted cells (`H3Grid.cellsToMultiPolygon`). A fixed Thing also gets `grid:code` and lists Grid, a moving Thing does not. The Item also carries `anon:size` (0.01), `anon:warning`, `file:size`, `file:checksum` and `statistics` per measurement column under its `valid_when` gate. The data href is relative, `./<file>.parquet`, so an Item stays valid in any bucket or mirror. `FileItems.sidecarPath` places it beside the file. Pure, no upload. JVM tests validate it against the profile and opensensor schemas, the core STAC 1.1.0 Item schema and the Grid, Anonymized Location, Table and File extension schemas, all bundled. Common tests on the JVM and iOS check that a phone Item rebuilt from each v0.1.0 row fixture equals its example as JSON values under the profile's canonical form (geometry within 1e-9 degrees), and pin the polygon order of a MultiPolygon to the h3-js reference. The JVM binding matches the H3 C reference within 1e-9. `PublishGate` in `:core:thing` is its only caller. `ThingCollections.build` writes the Thing Collection from the board template, the newest footer, the owner config (`ThingOwner`, mapped from the #148 site keys of `ThingSite`) and the upload ledger, and common tests prove it equals the v0.1.0 fixed and moving example Collections (#266). `CanonicalJson` holds the profile's JSON value equality |
 | `:core:thing` | The `ThingKind` contract (`KindId`, `Evidence`, `Recognition`, `DataSource`, `PublishPolicy`), `OpenSensorBoardKind` (recognized by its GATT service, `_ossync._tcp` or its `INFO`, capabilities from `DeviceCapabilities`, `PullSync` with `OptInCcBy` at res 8) and the `ThingKinds` registry, a plain list built by Android `ThingModule` and iOS `launchThingKinds` (#222). `metricProviders` lists the kinds' derived metric providers, which each app hands to `AirFamily.install`. `PublishGate` issues a `PublishTicket` only for a Recording kind with `OptInCcBy` and an opted in Thing (`UploadConsent`, none by default) (#224). For a `PullSync` board file it rebuilds the Item at the policy's `publishedRes` only to check the board's sidecar and clears the sidecar as written. For a `PhoneLog` file of this phone's own install it clears the Item the phone built, and it refuses a board file there (#266). Each file asks consent again. No upload. `PlatformNeedsTable` lists what the app shell and each kind ask of the Android manifest and the iOS bundle, which `ManifestPermissionsTest` and `IosBundleGateTest` hold the files to (#227). `:core:thing:testkit` holds `ThingKindContract` |
 | `:core:archive`, `:core:sync` | File identity (#273). `FileIdentity` keys a file by its Thing, File Item id and SHA-256 (`file:checksum`). `CatchUpPlanner` plans a restore or catch up of an owned Thing from a remote listing. It skips a file already archived with the same name and checksum, surfaces the same name with other bytes as a conflict and never plans a second copy. Each UTC day reads raw or compacted files, never both, and an archived day keeps the tree it has. `ArchiveIndex.markUploaded` sets the uploaded marker from an upload status listing. No network code. See [history-pipeline.md](history-pipeline.md#file-identity-and-cloud-catch-up-273) |
-| `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp, `okhttp` in `gradle/libs.versions.toml`, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, used by `OpenAqAggregatesFeed` in both apps |
-| `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
-| `:ui:map` | The shared map of both apps, CMP `commonMain`. `BaseMap` and `rememberBaseMapState` with the zoom limits, no rotation or tilt, the camera rest callback (`CameraRest`), a one time fit and a content slot for the caller's sources and layers. `MapStyles` and `rememberMapStyle` give the bundled basemap styles (Compose resources) or a paper style when public data is off. `ZoomControls`, `MapCache` (the tile cache Settings sizes and clears), `CellOutlines` (plain H3 cell outlines as GeoJSON) Near me (`rememberNearMe`, `NearMeButton`, `NearMeLayer`, `nearMeTarget`), the offline place search (`PlaceSearch`, `PlaceSearchField`) and the resolution 8 area picker of setup and Device settings (`CellPicker`, `CellPickerGrid`). Its own string catalogue holds the zoom, Near me, search and picker labels and the map credits. Depends on `:core:publicfeed`, `:ui:designsystem` and `:ui:permissions` only, so any feature can use it. `:feature:discover` and `:feature:device` use it. Targets Android and iOS, not the JVM, for the same reason as Discover |
-| `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`) on `:ui:map`, `DiscoverController` state holder, the public cell layers and legend, the own Things layer (`OwnThingGeoJson`, `knownOwnThings`), `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
-| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, one row group per file sorted by `h3_index`, 16-row pages with page indexes, about 270 KB for 18 files, made-up cells around Berlin, Cairo, Lisbon, Nairobi, New York, Jakarta and Accra). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2. The sample is committed under `feature/discover/src/commonMain/composeResources/files/`, the styles under `ui/map/src/commonMain/composeResources/files/basemap/` |
+| `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp, `okhttp` in `gradle/libs.versions.toml`, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Used by `OpenAqAggregatesFeed` and `TemplateHrefs` in both apps |
+| `:core:parquet` | The portable reader, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
+| `:ui:map` | The shared map of both apps, CMP `commonMain`. `BaseMap` and `rememberBaseMapState` with the zoom limits, no rotation or tilt, the camera rest callback (`CameraRest`), a one time fit and a content slot for the caller's sources and layers. `MapStyles` and `rememberMapStyle` give the bundled basemap styles (Compose resources) or a paper style when public data is off. `ZoomControls`, `MapCache` (the tile cache Settings sizes and clears), `CellOutlines` (plain H3 cell outlines as GeoJSON) Near me (`rememberNearMe`, `NearMeButton`, `NearMeLayer`, `nearMeTarget`), the offline place search (`PlaceSearch`, `PlaceSearchField`) and the resolution 8 area picker of setup and Device settings (`CellPicker`, `CellPickerGrid`). Its own string catalogue holds the zoom, Near me, search and picker labels and the map credits. Depends on `:core:publicfeed`, `:ui:designsystem` and `:ui:permissions` only, so any feature can use it. `:feature:discover`, `:feature:device` and `:feature:history` use it. Targets Android and iOS, not the JVM |
+| `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`) on `:ui:map`, `DiscoverController` state holder, the public cell layers and legend, the own Things layer (`OwnThingGeoJson`, `knownOwnThings`), `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM |
+| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed (Python `h3`, PyArrow, SNAPPY, one row group per file sorted by `h3_index`, 16-row pages with page indexes, about 270 KB for 18 files, made-up cells around Berlin, Cairo, Lisbon, Nairobi, New York, Jakarta and Accra). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps`. `make_openaq_fixture.py` writes the OpenAQ and STAC test fixtures. The sample is committed under `feature/discover/src/commonMain/composeResources/files/`, the styles under `ui/map/src/commonMain/composeResources/files/basemap/` |
 
 `:feature:discover` is shared Compose, so Android and iOS show the same screens. Platform code
-provides only the strings, the saved state (`DiscoverPrefs`, DataStore on Android, NSUserDefaults on
-iOS), the H3 binding and later the HTTP engine and the cache directory.
-
-**What the first slice does (W12, 2026-10-08, host, Android emulator and iOS simulator only, no
-phone run).** Discover opens on the last camera or the time zone region, reads the bundled sample
-through the common Parquet reader with row group and page pruning, covers the viewport with at most 1,024
-cells at `round(zoom * 0.8)` clamped to 2..7, and redraws one GeoJSON source after 400 ms of camera
-rest. Chips rank properties by visible cells (three, then More), a vertical time slider on the left
-snaps between Last hour, 24 hours and 7 days, the legend shows the steps of the scale the feed publishes, WHO 2021 for PM2.5 and PM10 (host tests and builds only) and the 5th to 95th percentile of the cells in view on a viridis
-ramp, and the sheet peeks with the first-run card or the area count and opens on a cell tap with
-a spread chart of the chosen property and a range row per other property. Search moves the map over the bundled GeoNames list. The basemap is
-the Protomaps OpenStreetMap PMTiles build on source.coop (`pmtiles://` rendered on the Android
-emulator and the iOS simulator), "© OpenStreetMap" shows at launch and collapses to an info button.
-"Show public sensors" in Settings (both apps) swaps in a plain background style, so no request
-leaves the phone. Not built yet. The offline map download (TODO),
-the half sheet height, stale outline dashes, the device list and device page, the live feed on screen, the
-peacock on the first-run card and recolouring the basemap to the sensing palette. The basemap
-still points at the Protomaps build on source.coop, not at our own extract. HTTP range reads use
-OkHttp and `NSURLSession` behind `:core:net` (issue #62) instead of Ktor.
+provides only the saved state (`DiscoverPrefs`, DataStore on Android, NSUserDefaults on iOS), the
+H3 binding, the HTTP engine and the cache directory.
 
 ### Owner decisions and open questions
 
-Decided on 2026-10-08.
+Decided by the owner.
 
 1. "Near me" ships, approximate location only, asked on tap.
 2. No accounts or passkeys. A per-device anonymous key, with the ID and name derived from it.
@@ -888,19 +770,11 @@ Still open.
 
 1. Who builds and runs the hourly publisher and the upload ingest, and in which repository.
    This is the job that turns raw uploads into the public cell files and enforces the crowd
-   rule. The read only map in W12 works without it, on the sample data.
+   rule. The read only map works without it, on the sample and the OpenAQ aggregates.
 
 ### Sources
 
 UX and platform
-- PurpleAir map guide, https://community.purpleair.com/t/purpleair-map-guide/90
-- IQAir AirVisual, https://apps.apple.com/app/iqair-airvisual-air-quality/id1048912974 and https://www.iqair.com/support/knowledge-base/reported-aqi-levels-seem-lower-than-it-appears-visually
-- Sensor.Community map, https://maps.sensor.community/
-- Apple Weather, https://support.apple.com/guide/iphone/check-the-weather-iph1ac0b35f/ios and https://support.apple.com/102594
-- Google Air Quality heatmaps, https://developers.google.com/maps/documentation/air-quality/heatmaps
-- Eufy sign-up, https://service.eufy.com/article-description/Sign-up-for-A-eufy-Account
-- Netatmo Weathermap contribution, https://helpcenter.netatmo.com/hc/en-us/articles/360020909052-How-does-contribution-to-the-Netatmo-Weathermap-work
-- Ambient Weather Network, https://ambientweather.com/ambient-weather-network
 - Material bottom sheets, https://github.com/material-components/material-components-android/blob/master/docs/components/BottomSheet.md and https://developer.android.com/develop/ui/compose/components/bottom-sheets-partial
 - Apple HIG sheets, https://developer.apple.com/design/human-interface-guidelines/sheets
 
@@ -917,7 +791,7 @@ Privacy and location
 - NSLocationDefaultAccuracyReduced, https://developer.apple.com/documentation/bundleresources/information-property-list/nslocationdefaultaccuracyreduced
 
 Map technology
-- maplibre-compose releases, https://github.com/maplibre/maplibre-compose/releases and v0.15.0 notes https://github.com/maplibre/maplibre-compose/releases/tag/v0.15.0
+- maplibre-compose releases, https://github.com/maplibre/maplibre-compose/releases
 - maplibre-compose version catalogue, https://raw.githubusercontent.com/maplibre/maplibre-compose/main/gradle/libs.versions.toml
 - maplibre-compose docs, https://maplibre.org/maplibre-compose/getting-started/ , https://maplibre.org/maplibre-compose/controls/ , https://maplibre.org/maplibre-compose/interaction/
 - MapLibre Native releases, https://github.com/maplibre/maplibre-native/releases
@@ -930,15 +804,13 @@ Map technology
 Feed and libraries
 - Website `/indices` explorer, `../../website/walkthru-earth.github.io/docs/indices.md` and `docs/parquet-producer-guidance.md` (local)
 - Apache Parquet page index, https://parquet.apache.org/docs/file-format/pageindex/
-- S3 ListObjectsV2, https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html
 - hyparquet, the website's reader, https://github.com/hyparam/hyparquet
 - Apple Compression algorithms (no zstd), https://developer.apple.com/documentation/compression/compression_algorithm
 - zstd-kmp, https://klibs.io/project/square/zstd-kmp
 - H3 Java, https://github.com/uber/h3-java , h3-kmp https://github.com/phansier/h3-kmp
 - EOX cloudless licence, https://cloudless.eox.at/documentation/license
 - DuckDB on Android, https://duckdb.org/docs/lts/dev/building/android
-- Ktor releases, https://github.com/ktorio/ktor/releases
-- source.coop range and ETag behaviour, checked with curl on 2026-10-08 against https://data.source.coop/protomaps/openstreetmap/v4.pmtiles
+- source.coop range and ETag behaviour, https://data.source.coop/protomaps/openstreetmap/v4.pmtiles
 
 Store compliance
 - OSMF attribution guidelines, https://osmfoundation.org/wiki/Licence/Attribution_Guidelines

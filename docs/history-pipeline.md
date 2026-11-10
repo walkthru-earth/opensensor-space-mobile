@@ -1,9 +1,11 @@
 # History pipeline, index → tiers → derived day → charts
 
 **Scope:** everything between a verified file in the archive and a coloured column on screen: the file index, the metric registry, aggregation tiers, the derived daily Parquet, time estimation for unsynced boots, the friendly layer, chart binning.
-**Code (pure, `:core:history` `commonMain`, JVM and iOS since W8):** `Metrics.kt`, `FileTemplates.kt`, `Rollup.kt`, `Aggregation.kt` (`Resolution`, `Aggregator`, `Bucket`), `TimeEstimate.kt`, `Columns.kt`, `AirMood.kt` (+ `NowReading`), `HistoryModel.kt` (`HistoryRange`, `HistorySeries`, `HistoryColumn`), `HistoryWindow.kt`, `FileSummary.kt`, `ParquetIndexer.kt`.
-**Code (`:app`):** `data/history/HistoryIndexer.kt`, `HistoryDeriver.kt`, `DailyDerived.kt` (`DailyDerivedBuilder`, `DerivedStore`), `HistoryRepository.kt`; `ui/history/*`, `ui/files/FileChartCard.kt`, with the shared day builder in `core/history` (`DailyParquetBuilder`).
-**Tests:** `AggregationTest`, `TimeEstimateTest`, `ColumnsTest`, `AirMoodTest`, `FileSummaryTest`, `ParquetIndexerTest`, `RealArchiveTest` (all 766 real files when the firmware repo is a sibling); `HistoryIndexerTest`, `HistoryDeriverTest`, `HistoryRepositoryTest`.
+**Code (pure, `:core:history` `commonMain`, JVM and iOS):** `Metrics.kt`, `FileTemplates.kt`, `Rollup.kt`, `Aggregation.kt` (`Resolution`, `Aggregator`, `Bucket`), `TimeEstimate.kt`, `Columns.kt`, `HistoryModel.kt` (`HistoryRange`, `HistorySeries`, `HistoryColumn`), `HistoryWindow.kt`, `FileSummary.kt`, `ParquetIndexer.kt`, `DailyParquetBuilder.kt`, `HistoryOrchestrator.kt`, `RowChecks.kt`.
+**Code (`:family:air`):** `AirMood.kt` (with `NowReading`), `WhoGuidelines`, `EpaPm25Correction.kt`, `AirQc`.
+**Code (`:app`):** `data/history/HistoryIndexer.kt`, `HistoryDeriver.kt`, `DailyDerived.kt` (`DailyDerivedBuilder`, `DerivedStore`), `HistoryRepository.kt`, `ui/history/` (the Android host), `ui/files/FileChartCard.kt`.
+**Code (shared screen):** `feature/history/`.
+**Tests:** `AggregationTest`, `TimeEstimateTest`, `ColumnsTest`, `AirMoodTest`, `FileSummaryTest`, `ParquetIndexerTest`, `RealArchiveTest` (the real archive when the firmware repo is a sibling); `HistoryIndexerTest`, `HistoryDeriverTest`, `HistoryRepositoryTest`.
 **Related:** [parquet.md](parquet.md) (the reader/writer underneath), [data-model.md](data-model.md) (the tables), [screens.md](screens.md) (what is drawn).
 
 ## Flow
@@ -20,14 +22,16 @@ flowchart LR
   AG --> HR["HistoryRepository.observe"]
   F --> HR
   HR --> CO["Columns.rebin / axisMax"]
-  CO --> UI["BandColumnChart · DayRing · CalendarHeatmap · NowCard · FileChartCard"]
+  CO --> UI["BandColumnChart · DayRing · CalendarHeatmap · Today cards · FileChartCard"]
 ```
 
 **When it runs:** index at sync time (same upsert as the row), then the shared start order below
 (back-fill in batches of 100, never-indexed rows first, failures retried once per pass),
-`estimateTimes()` at the start of every derive pass, and `deriveStale()` at process start, after every
-interactive sync (repository `finally`), inside `SyncWorker` when files arrived, and in `DeriveWorker`
-for the days a post-sync pass deferred. Opening Files/History only observes Room. A day costs
+`estimateTimes()` at the start of every derive pass, and `deriveStale()` at process start
+(`OpenSensorApplication`), in `DeriveWorker` for the days a post-sync pass deferred, and from the
+Settings storage controls (`AppStorageControls`). After a sync the pass is
+`historyDeriver.deriveAfterSync(startedMs)`, which `DeviceLinkOwner.collectionFinished` launches in
+the owner scope after the manifest refresh, and which `SyncWorker` calls when files arrived. Opening Files/History only observes Room. A day costs
 milliseconds.
 
 ### Pass order (`HistoryOrchestrator`, `:core:history`)
@@ -135,9 +139,9 @@ error) is the one test of whether a row's index columns can be read, and `withUt
 same test in SQL. `ArchiveRecord.awaitsIndex` (never indexed, or reopened) marks a row the back-fill
 still has to read.
 
-Room schema 5 (`Migration4To5`) added the two footer digests and reopens every row indexed without an
-error, and the one time iOS receipt import reads every receipt as never indexed, since neither knew
-the digests. Until the back-fill reaches it, such a row awaits its index.
+`Migration4To5` reopens every row indexed without an error, and the one time iOS receipt import reads
+every receipt as never indexed, since neither holds the two footer digests. Until the back-fill
+reaches it, such a row awaits its index.
 
 ## File identity and cloud catch up (#273)
 
@@ -290,21 +294,16 @@ row before any mean, min or max. A row without a valid RH yields no corrected va
 without humidity has no `pm25_epa` buckets and every screen falls back to `pm25`, labelled raw.
 Both PM2.5 specs carry `property = "pm25"` for the WHO scale and a `basis` (`CORRECTED` or `RAW`)
 for the label. Daily files keep the raw `pm25_cf1_ug_m3` and RH columns, so they need no change.
-Template metrics came with `HistoryDeriver.DERIVE_VERSION` 8 on Android and `TierCodec.VERSION` 4
-on iOS, so installed days rebuild once. The `app_day` entry came with `DERIVE_VERSION` 9 and
-builder `derived-v4`, which both platforms check, so cached day files rebuild once more. The resolved
-template in the signature came with `DERIVE_VERSION` 10 and `TierCodec.VERSION` 5.
+A change to what a day holds bumps `HistoryDeriver.DERIVE_VERSION` on Android and `TierCodec.VERSION`
+on iOS, and a change to the day file bumps `DailyParquetBuilder.BUILDER`, which both platforms check,
+so cached days rebuild once.
 
-### Sensor warm-up and settling (2026-09-17)
+### Sensor warm-up and settling
 
-Firmware nulls PM for uptime < 30 s (`pms_status = 1`), the datasheet minimum and stricter than
-Sensor.Community (wake 15 s before a 5 s window every 145 s, discard first cycle) and AirGradient
-(continuous, moving averages, "Warming Up" on display only, EPA-2021 humidity compensation, needs
-RH this board lacks). OpenAQ has no warm-up logic. **Measured on our archive** (DuckDB, 766 files,
-14 boots ≥ 10 min): after the gate, minute 0 deviates from minutes 5–10 by 2.5 µg/m³ mean-absolute,
-minute 3 by 1.7, minute 7 by 0.6, inside one band. Decision: **discard nothing more**; particle
-metrics carry `settleSeconds = 180` (`PMS_SETTLE_S`) and `MetricAgg.settling` counts those rows per
-bucket for a future "n settling" hint. No humidity correction, no "AQI".
+Firmware nulls PM while the sensor warms up, and the template's `valid_when` gate drops those rows.
+Nothing more is discarded. A metric's `settleSeconds` comes from the template's `opensensor:settle_s`
+(`Metrics.kt`), and `MetricAgg.settling` counts the valid rows inside that time per bucket. Settling
+is not a gate. No screen shows a named index such as "AQI".
 
 ## Tiers (`Aggregator` → `metric_bucket`)
 
@@ -366,7 +365,7 @@ passed, and the `qc_checks` key that lists the check ids. The raw columns are wr
 `source_file_index`, `qc_flags` and the estimate column have no id. **No thing
 string column** (deviation from the evaluation). It stays flat numeric so our reader reads it back,
 and the thing is in the path. Metadata: the `app_day` key above, `derived_by`
-(`opensensor.space shared derived-v4`), `derived_version` (4), `source_count`, `coverage_rows`, `complete`
+(`DailyParquetBuilder.BUILDER`), `derived_version` (`DERIVED_VERSION`), `source_count`, `coverage_rows`, `complete`
 (every known file in and the day ended > 30 min ago), `day`, and the
 `time_estimate` note. Measured 188 B/row vs 512 B/row for device files (5–9× smaller). Validated by
 PyArrow 25 + DuckDB 1.5.5 (`TIMESTAMPTZ`, range pruning, `time_bucket`).
@@ -425,13 +424,11 @@ line after a sync: `HistoryDeriver: derived 0 of N thing-days (nothing changed)`
 A successful automatic clock handshake persists the acknowledged UTC/monotonic pair in
 app-private clock receipts, scoped to the original thing and full 128-bit boot ID.
 History uses the earliest receipt or fully-timed file of that boot. A footer carries no clock
-anchor (decision 25 dropped `reconciliation_anchor_*`), the rows and the receipts do. It no longer
-needs to wait for a fully-timed file to finalize. For that boot's unsynced files,
+anchor, the rows and the receipts do, so History does not wait for a fully-timed file to finalize.
+For that boot's unsynced files,
 `estimated_utc_ns = anchor_utc_ns + (monotonic_us − anchor_mono_us) * 1000`, never across a
 reboot, never overwriting the event time column. The 50 ppm drift assumption is not a measured
-accuracy bound and excludes phone clock error and transport latency. Verified on
-boot `e452563e…` (2026-09-08): reproduces the firmware's own stamp 43 min after the anchor
-**exactly**. Stored as `archived_file.estFirstUtcNs/estLastUtcNs/estAnchorFile` (index only, no
+accuracy bound and excludes phone clock error and transport latency. Stored as `archived_file.estFirstUtcNs/estLastUtcNs/estAnchorFile` (index only, no
 decode). A row's estimate is kept in a column with its own validity array, so no Long value stands
 for "no estimate". Tiers carry `estimatedRows`; charts draw estimated stretches **dashed** and say so. Boots
 that never retained a time anchor stay off the timeline. Durable receipts survive app restarts;
@@ -459,8 +456,7 @@ faces and emoji without changing measurement validity, labels, advice, WHO colou
 
 PM10 is banded on its own WHO scale (`WhoGuidelines.PM10`, 45 · 50 · 75 · 100 · 150 µg/m³) through
 `MetricSpec.healthScale`; `moodOf`/`stepOf` read the scale, so a PM10 value maps to the same six moods
-and colours. Colours are `WhoStep.color` (light to dark, colour-blind checked), mapped once in the
-app's `Color.kt`.
+and colours. Colours are `WhoStep.color` (light to dark, colour-blind checked).
 
 `AirMood` is the air-quality family's scale, not the app's model of "good". Other families
 show neutral metric cards unless their dictionary names a published scale. See
@@ -497,13 +493,12 @@ their own WHO step on a neutral background (no shaded bands), neutral ink for me
 scale, opacity = coverage, dashed outline = estimated time, whisker = peak. A caption states the
 averaging (hourly, daily or weekly means against a 24-hour guideline), and the touch readout names
 the mood and WHO step in words. Time labels
-in the phone's zone, buckets UTC-aligned. Day was 96 quarter-hours until 2026-09-18 (~3 dp bars
-were not tappable). **Files › Chart by file** (`FileSummary`) is the same column style in file
+in the phone's zone, buckets UTC-aligned. **Files › Chart by file** (`FileSummary`) is the same column style in file
 order, the diagnostic a time axis cannot give.
 
 ## Shared screen (`:feature:history`, #18)
 
-Android and iOS draw one History from `commonMain` (2026-10-09). The module holds the screen, the
+Android and iOS draw one History from `commonMain`. The module holds the screen, the
 band column chart, the day ring, the calendar heatmap, the archive and Developer cards and its
 strings (Compose resources with Arabic). Chart text is drawn with the Compose text measurer, in
 a left to right direction, and numbers go through `formatFixed` from `:core:units`. Date labels
@@ -545,7 +540,7 @@ controller over a fake archive. It runs as the Android host test and on the iOS 
 
 | Edit… | Affects… |
 | --- | --- |
-| A bundled template or app profile, or `Metrics` | `metric_bucket.metricId` strings, picker chips and the default metric, `DailyDerivedBuilder` columns, Now card if PM2.5; bump `DERIVE_VERSION` |
+| A bundled template or app profile, or `Metrics` | `metric_bucket.metricId` strings, picker chips and the default metric, `DailyDerivedBuilder` columns, the Today cards if PM2.5. Bump `DERIVE_VERSION` |
 | `WhoGuidelines` edges (`:family:air`) | `AirMood`, `MetricSpec.healthScale`, chart axis snap and colours, Home/Today moods, calendar colours, Discover |
 | `Aggregator` semantics | `DERIVE_VERSION`, `AggregationTest`, `HistoryDeriverTest` |
 | `TimeEstimate` | day signatures (anchor), dashed drawing, daily file's estimated column |
@@ -565,8 +560,8 @@ Scan summaries and index repair use aggregate queries instead of materializing e
 Android groups one archive listing into UTC thing-days and moves decoding to
 `Dispatchers.Default.limitedParallelism(2)`. Daily cache write failures keep valid tiers and
 leave the day eligible for retry. Sources are chosen by real first UTC and name consistently
-in tiers, daily output and raw chart fallback, including fractional chart windows. This fixes
-previous disagreement when duplicate identities carried conflicting payloads.
+in tiers, daily output and raw chart fallback, including fractional chart windows, so duplicate
+identities with conflicting payloads resolve the same way everywhere.
 
 iOS persists versioned tier sidecars beside daily files. Its three tier observers share a
 thing snapshot containing summaries, while full buckets stay in the bounded LRU or disk

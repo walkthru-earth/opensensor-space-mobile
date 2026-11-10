@@ -1,6 +1,13 @@
 # Automatic UTC and local Parquet reconciliation
 
-Decision: 2026-10-09. The mobile archive owns corrected UTC partitions. The ESP32 owns
+**Scope:** how both phones set the sensor clock on connection and how the phone archive dates
+rows the sensor recorded without UTC.
+**Code:** `core/sync` commonMain `data/sync/SmartSyncPolicy.kt`, `data/ble/DeviceSession.kt`
+(`synchronizeClockOnce`); `core/history` `DailyParquetBuilder.kt`; Android `data/history/`.
+**Related:** [sync-engine.md](sync-engine.md#smart-sync-and-state-changing-requests),
+[history-pipeline.md](history-pipeline.md), [parquet.md](parquet.md).
+
+The mobile archive owns corrected UTC partitions. The ESP32 owns
 sample timing and durable anchor evidence. The server is not required for local recovery.
 
 ## Connection and storage
@@ -11,7 +18,7 @@ claimed on the link, so a Smart Sync run on the same connection does not check a
 silent. No message, no button, and a failure only reaches the diagnostics log.
 A fresh `STATUS` snapshot reports clock source, current `utc_ms` and `clk_age_s`. The rules, in order:
 
-1. A phone clock earlier than the app build floor (`PHONE_CLOCK_FLOOR_MILLIS`, 2026-10-29) is
+1. A phone clock earlier than the app build floor (`PHONE_CLOCK_FLOOR_MILLIS`) is
    wrong and is never sent.
 2. A proto 3 sensor that did not answer `STATUS` (no push in 5 s and no cached read) is left
    alone. Nothing is known about its clock.
@@ -55,8 +62,7 @@ The device retains monotonic microseconds in its unknown-UTC Parquet files, unde
 `thing=<id>/unsynced/boot=<id>/`. No Unix-epoch date or phone-local date is invented for them.
 Unanchored batches finalize after six genuine samples (normally about one minute). An
 accepted anchor does not flush the pending batch; the next genuine sample finalizes the
-previous clock epoch when the quality transition or correction requires a new epoch. A file footer carries no clock anchor.
-Stac-opensensor decision 25 dropped the `reconciliation_anchor_*` keys, so the app takes
+previous clock epoch when the quality transition or correction requires a new epoch. A file footer carries no clock anchor, so the app takes
 same-boot evidence from its receipts and from timed rows only. The first genuine timed sample begins its normal interval file. First UTC, an RTC-to-external
 quality upgrade, or a correction exceeding two seconds starts a new clock epoch; smaller
 external refreshes preserve the epoch and open file. Normal interval rollover finalizes it,
@@ -79,7 +85,7 @@ Boot plus sequence remains row identity; moving a row to another UTC partition d
 create another sample. Partitioning uses UTC, regardless of the phone's display timezone.
 App restart reloads receipts and rebuilds missing or stale derived output. Both platforms use
 `DailyParquetBuilder` to write `derived/v1/<thing>/day=YYYY-MM-DD.parquet` and a source manifest.
-New files identify the shared writer as `derived_version=4`. Row UTC columns are microseconds in
+New files carry the shared writer's `derived_version` (`DailyParquetBuilder.DERIVED_VERSION`). Row UTC columns are microseconds in
 current device files (`event_time_utc_us`, `clock_anchor_utc_us`) and nanoseconds in older ones
 (`*_utc_ns`). The app reads the unit from the Parquet logical type and keeps its own timeline in
 nanoseconds.
@@ -114,21 +120,12 @@ The platform's [system-time documentation](https://docs.espressif.com/projects/e
 describes SNTP synchronization separately from RTC retention. Actual build versions and
 board evidence remain in the firmware repository.
 
-## Shared mobile clock policy implementation (2026-10-10)
+## Shared mobile clock policy implementation
 
-`DeviceSession.synchronizeClockIfNeeded` in `core/sync/commonMain` subscribes before sending
-`STATUS`, so the response cannot outrun its waiter. BLE and LAN status pushes reach the same
-policy on Android and iOS. A five-second legacy fallback reads platform status for quality and
-anchor age, but excludes potentially cached UTC from drift comparisons; cancellation
-propagates rather than sending a late clock command. Only real `TIME_SET` acknowledgements
-create reconciliation receipts. File sync does not issue `FLUSH`, so the current unfinished
-interval stays on the logger; live readings remain available.
-
-Kotlin was updated from 2.4.20 to the latest stable patch 2.4.21, released October 8, using the
-[official release history](https://kotlinlang.org/docs/releases.html) and
-[KMP compatibility guidance](https://kotlinlang.org/docs/multiplatform/multiplatform-compatibility-guide.html).
-The Compose compiler uses the same Kotlin pin. The shared policy and tests stay in common
-source sets, consistent with the [KMP source-set guide](https://kotlinlang.org/docs/multiplatform/multiplatform-discover-project.html);
-Swift remains the Apple transport adapter through the existing
-[Objective-C interop](https://kotlinlang.org/docs/native-objc-interop.html). No new platform
-framework or deployment target is required. Build and phone evidence is recorded separately.
+`DeviceSession.synchronizeClockOnce` in `core/sync/commonMain` is the per-connection entry. Its
+check subscribes before sending `STATUS`, so the response cannot outrun its waiter. BLE and LAN
+status pushes reach the same policy on Android and iOS. A five-second fallback reads platform
+status for quality and anchor age, but excludes potentially cached UTC from drift comparisons.
+Cancellation propagates and never sends a late clock command. Only real `TIME_SET`
+acknowledgements create reconciliation receipts. File sync does not issue `FLUSH`, so the current
+unfinished interval stays on the logger, and live readings remain available.

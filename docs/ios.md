@@ -9,23 +9,25 @@
 ## Shape
 
 Every `:core` module compiles for the JVM, `iosArm64` and `iosSimulatorArm64` from `commonMain`, with
-platform adapters in `jvmMain` and `iosMain`. On iOS, `core:parquet` reads with positional `pread`
+platform adapters in `jvmMain` and `iosMain`. `:core:database` is the exception, it targets Android
+and iOS because Room ships separate artifacts for each. On iOS, `core:parquet` reads with positional `pread`
 and inflates GZIP with the system zlib, and H3 is the vendored C library through cinterop.
 
 The UI is Compose Multiplatform. `ios/shared` (iOS only) holds `AppRoot.kt`, the bridges and the
 iOS sync runner, and builds the static `OpenSensorShared` framework that Xcode links directly. The
-screens are the same shared feature modules Android draws: Discover, My devices, Today, History,
-Files, Device settings, Debug and Settings. `AppRoot` has one bottom bar with Discover, My devices
+screens are the same shared `feature/*` modules Android draws, Discover, My devices, Today, History,
+Files, Device settings, the setup wizard, Debug and Settings. `AppRoot` has one bottom bar with Discover, My devices
 and Settings, and always starts on Discover. Swift in `ios/App` keeps Core Bluetooth, Network
-framework sockets, the Keychain, background tasks and system sheets.
+framework sockets, the Keychain, background tasks and the sticker scanner. The share sheet, the
+document picker and location are Kotlin `iosMain` actuals of the shared modules.
 
 ## Bluetooth
 
 `BluetoothCompanion` keeps UI state on the main actor. `BlePhysicalLink` runs Core Bluetooth on one
 serial queue, so discovery, GATT operations, notifications and write completions keep their order.
-The central manager is created on the first My devices Scan tap, or at launch when iOS restores
-Bluetooth state or an Auto-sync switch is on and access is already held, so launch shows no
-prompt. Core Bluetooth owns pairing prompts. A refused bond ends the connection without a retry
+The central manager is created at launch whenever Bluetooth access is already allowed, which
+shows no prompt. Without access it is created on the first tap that needs Bluetooth, and that is
+when iOS asks. Core Bluetooth owns pairing prompts. A refused bond ends the connection without a retry
 and asks the user to pair again from iOS Settings. A known sensor connects through its saved
 identifier even when it is not advertising.
 
@@ -37,9 +39,10 @@ prompt. A denial is reported only for `kDNSServiceErr_PolicyDenied`
 ([TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy)),
 and the browse keeps going so allowing access resumes it.
 
-A phone first connects over bonded Bluetooth and taps Save Wi-Fi access. `GET_TOKEN` goes over the
-encrypted BLE characteristics, and the token is saved in the Keychain with
-`AfterFirstUnlockThisDeviceOnly`. It never enters Kotlin, the UI or a log. The `OSS1` HELLO must
+The token is fetched quietly once per bonded Bluetooth connection when none is stored. `GET_TOKEN`
+goes over the encrypted BLE characteristics, and the token is stored only in the Keychain, with
+`AfterFirstUnlockThisDeviceOnly`. It passes through the shared codec in memory and never reaches
+the UI or a log. Save Wi-Fi access is a Developer level action. The `OSS1` HELLO must
 match the enrolled thing and full hardware ID, so discovery alone cannot enroll a replacement.
 A LAN `AUTH_FAILED` drops the saved token. Each `LanSession` is an actor on its own serial queue,
 keeps one receive of up to 64 KiB outstanding, splits `len` u16 frames and forbids cellular
@@ -94,7 +97,7 @@ A force quit stops everything. Downloaded bytes and index records stay for the n
   engine sets the device clock automatically from phone UTC.
 - **Device settings.** `IosDeviceConfigSource` borrows a short LAN or Bluetooth link per request.
   On the Developer Sync over Wi-Fi card, Get Wi-Fi token and Replace token reuse Save Wi-Fi
-  access, so the token stays in Swift. Below Developer the token is fetched quietly once per
+  access, so the token is stored only in the Keychain and never reaches the UI. Below Developer the token is fetched quietly once per
   Bluetooth connection, as on Android.
   `GET_TOKEN` and rotation need a live bonded Bluetooth link.
 - **Files.** Share one, share all, share zip and save zip stage copies under
@@ -123,7 +126,7 @@ framework. Skip it with `-Popensensor.skipIos=true`. The Xcode build compiles Sw
 concurrency checking and no warnings. `verify-native.sh` runs the Swift checks for LAN claims,
 framing, keepalive, policy, cancellation and the GATT queue on the Mac host, and the hostless
 `OpenSensorTests` target runs them on a simulator. CI details are in
-[build-and-release.md](build-and-release.md#github-actions-ios-validation-researched-2026-10-08).
+[build-and-release.md](build-and-release.md#github-actions-ios-validation).
 
 To run on an iPhone, open `ios/OpenSensor.xcodeproj`, pick your team in Signing and Capabilities and
 choose the phone. Team and provisioning stay local and are never committed. Keep
