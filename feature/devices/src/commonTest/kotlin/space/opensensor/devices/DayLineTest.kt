@@ -40,4 +40,16 @@ class DayLineTest {
         assertEquals(DayLine("21.5", "°C", null), dayLine(day(temp, 21.5f, 0.1), UnitFormatter.Metric))
         assertEquals(DayLine("70.7", "°F", null), dayLine(day(temp, 21.5f, 0.1), UnitFormatter(UnitSystem.IMPERIAL)))
     }
+
+    @Test
+    fun `a unit with a slash keeps a word joiner after it so a wrap never splits it`() {
+        assertEquals("µg/\u2060m³", wholeUnit("µg/m³"))
+        assertEquals("°C", wholeUnit("°C"))
+    }
+
+    @Test
+    fun `the day line keeps the plain unit for a screen reader`() {
+        val line = dayLine(day(AirMetrics.PM25_CORRECTED, 12.34f, 0.1), UnitFormatter.Metric)
+        assertEquals("µg/m³", line?.unit)
+    }
 }

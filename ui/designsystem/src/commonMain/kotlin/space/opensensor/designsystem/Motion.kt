@@ -1,5 +1,7 @@
 package space.opensensor.designsystem
 
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.snap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 
@@ -30,3 +32,6 @@ fun shouldReduceMotion(reduceMotion: Boolean = false, motionScaleFactor: Float =
  */
 fun reduceMotionDurationMillis(defaultMs: Int, reduceMotion: Boolean): Int =
     if (reduceMotion) 0 else defaultMs.coerceAtLeast(0)
+
+/** This spec, or a jump straight to the target when [reduceMotion] is true. */
+fun <T> AnimationSpec<T>.orSnap(reduceMotion: Boolean): AnimationSpec<T> = if (reduceMotion) snap() else this

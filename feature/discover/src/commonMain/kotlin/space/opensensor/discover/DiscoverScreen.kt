@@ -136,7 +136,7 @@ import space.opensensor.units.UnitFormatter
 import space.opensensor.units.UnitSystem
 
 // Tall enough for the chart, so it stays in sight while the sheet is down and the map is explored.
-private val PEEK_HEIGHT = 200.dp
+internal val PEEK_HEIGHT = 200.dp
 
 // A city and its surroundings, after a place search.
 private const val PLACE_ZOOM = 9.0
@@ -692,7 +692,7 @@ private fun Attribution(strings: DiscoverStrings, open: Boolean, real: Boolean, 
 private const val OPENAQ_LICENSES = "https://docs.openaq.org/resources/licenses"
 
 @Composable
-private fun SheetContent(
+internal fun SheetContent(
     state: DiscoverUiState,
     strings: DiscoverStrings,
     networkAllowed: Boolean,
@@ -768,7 +768,7 @@ internal fun FirstRunCard(strings: DiscoverStrings, sample: Boolean, onAddSensor
         Peacock(size = 80.dp, expression = PeacockExpression.WELCOME)
         // The tag sits beside the peacock, so the actions below stay inside the peek.
         Column(Modifier.weight(1f)) {
-            if (sample) SampleTag(strings)
+            if (sample) SampleTag(strings.sampleData)
             Text(strings.firstRunLine, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         }
     }
@@ -785,8 +785,8 @@ internal fun FirstRunCard(strings: DiscoverStrings, sample: Boolean, onAddSensor
  * cut. The cell sheets carry the full badge and its info.
  */
 @Composable
-private fun SampleTag(strings: DiscoverStrings, modifier: Modifier = Modifier) {
-    FitText(strings.sampleData, modifier, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
+internal fun SampleTag(text: String, modifier: Modifier = Modifier) {
+    FitText(text, modifier, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
 }
 
 /** "Sample data" in the tertiary tone with its info button, over a cell sheet that shows the sample. */
@@ -825,7 +825,7 @@ private fun InView(
     val values = property?.let { p -> state.rows.mapNotNull { it.mean(p.id) } }.orEmpty()
     val health = state.scale.who
     val charted = property != null && values.size >= 2 && (!simple || health != null)
-    if (state.isSample && !charted) SampleTag(strings, Modifier.padding(bottom = 4.dp))
+    if (state.isSample && !charted) SampleTag(strings.sampleData, Modifier.padding(bottom = 4.dp))
     if (state.loading && state.rows.isEmpty()) {
         // Read out when the areas arrive or fail to, while the user waits.
         DiscoverStateMessage(strings.loading, PeacockExpression.WORKING, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
@@ -1003,7 +1003,8 @@ private fun DiscoverStateMessage(text: String, expression: PeacockExpression, mo
  */
 @Composable
 internal fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: DiscoverUiState, trailing: String? = null, sample: Boolean = false) {
-    if (sample) SampleTag(strings, Modifier.padding(bottom = 4.dp))
+    // No gap under the tag, so with it the chart's axis still ends inside the 200 dp peek (#114).
+    if (sample) SampleTag(strings.sampleData)
     // One heading for the chart below, read as label, unit, window and the trailing note.
     Row(Modifier.semantics(mergeDescendants = true) { heading() }, verticalAlignment = Alignment.Bottom) {
         FitText("${property.shownLabel()}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)

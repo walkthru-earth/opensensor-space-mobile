@@ -37,11 +37,14 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.FloatingSurface
+import space.opensensor.designsystem.LocalReduceMotion
+import space.opensensor.designsystem.orSnap
 import space.opensensor.publicfeed.FeedWindow
 import kotlin.math.roundToInt
 
@@ -72,14 +75,15 @@ internal fun WindowSlider(
     val stopPx = with(LocalDensity.current) { STOP.toPx() }
     val current by rememberUpdatedState(window)
     var expanded by remember { mutableStateOf(false) }
-    // While dragging, the thumb follows the finger. Otherwise it springs to the chosen stop.
+    // While dragging, the thumb follows the finger. Otherwise it springs to the chosen stop. With
+    // reduce motion on, the thumb, the pill and its stops jump instead.
+    val reduce = LocalReduceMotion.current
     var drag by remember { mutableStateOf<Float?>(null) }
-    val springy = spring<Float>(dampingRatio = 0.7f)
-    val settled by animateFloatAsState(index.toFloat(), springy)
+    val settled by animateFloatAsState(index.toFloat(), spring<Float>(dampingRatio = 0.7f).orSnap(reduce))
     val thumb = drag ?: settled
-    val height by animateDpAsState(if (expanded) STOP * windows.size else STOP, spring(dampingRatio = 0.8f))
+    val height by animateDpAsState(if (expanded) STOP * windows.size else STOP, spring<Dp>(dampingRatio = 0.8f).orSnap(reduce))
     // Collapsed, the column scrolls so the chosen stop sits inside the pill.
-    val shift by animateFloatAsState(if (expanded) 0f else index.toFloat(), spring(dampingRatio = 0.8f))
+    val shift by animateFloatAsState(if (expanded) 0f else index.toFloat(), spring<Float>(dampingRatio = 0.8f).orSnap(reduce))
 
     // The window on screen is always reported too, so choosing a coerced one (24 hours standing in
     // for a saved last hour in Real) saves it. The controller ignores a repeat.

@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -59,7 +60,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import space.opensensor.designsystem.FitText
+import space.opensensor.designsystem.LocalReduceMotion
 import space.opensensor.designsystem.listSeparator
+import space.opensensor.designsystem.orSnap
 import space.opensensor.designsystem.spokenList
 import space.opensensor.designsystem.swatchBorderColor
 import space.opensensor.designsystem.touchTarget
@@ -88,6 +91,9 @@ private val BAR_AREA = 56.dp
 private val AXIS = 8.dp
 private val BAND = 4.dp
 private const val ANIM_MS = 350
+
+/** A test hook that receives where each frame draws a chart's marker, as a fraction of its track. Null in the app. */
+internal val LocalMarkerDrawRecorder = staticCompositionLocalOf<((Float) -> Unit)?> { null }
 private val GUIDE_DASH = PathEffect.dashPathEffect(floatArrayOf(6f, 5f))
 
 /** The window's name. A [daily] feed's DAY window is its latest day, not the last 24 hours. */
@@ -144,8 +150,9 @@ internal fun SpreadChart(
     val hereColor = here?.let { Color(scale?.color(it) ?: SequentialRamp.at(0.5)) }
     // Only a step axis marks values past its end. A percentile axis clamps them, as the map does.
     val offScaleMax = if (axis != null) values.filter { it.isFinite() && it > domain.high }.maxOrNull() else null
-    val anim = tween<Float>(ANIM_MS)
+    val anim = tween<Float>(ANIM_MS).orSnap(LocalReduceMotion.current)
     val hereX by animateFloatAsState(here?.let { domain.fraction(it) } ?: 0f, anim)
+    val recorder = LocalMarkerDrawRecorder.current
     val minX by animateFloatAsState(hereMin?.let { domain.fraction(it) } ?: 0f, anim)
     val maxX by animateFloatAsState(hereMax?.let { domain.fraction(it) } ?: 0f, anim)
     val showBand = here != null && hereMin != null && hereMax != null
@@ -296,6 +303,7 @@ internal fun SpreadChart(
                     drawLine(ink, Offset(sx, 0f), Offset(sx, axisTop + axisH), strokeWidth = 1.dp.toPx())
                 }
                 if (here == null || hereColor == null) return@Canvas
+                recorder?.invoke(hereX)
                 val x = hereX * size.width
                 drawLine(ink, Offset(x, 0f), Offset(x, axisTop + axisH / 2), strokeWidth = 2.dp.toPx())
                 if (showBand) {
@@ -351,8 +359,9 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
     val colors = chartColors(MaterialTheme.colorScheme)
     val track = colors.track
     val dot = Color(range.color)
-    val anim = tween<Float>(ANIM_MS)
+    val anim = tween<Float>(ANIM_MS).orSnap(LocalReduceMotion.current)
     val meanX by animateFloatAsState(range.domain.fraction(range.mean), anim)
+    val recorder = LocalMarkerDrawRecorder.current
     val minX by animateFloatAsState(range.min?.let { range.domain.fraction(it) } ?: 0f, anim)
     val maxX by animateFloatAsState(range.max?.let { range.domain.fraction(it) } ?: 0f, anim)
     val hasBand = range.min != null && range.max != null
@@ -391,6 +400,7 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
                 drawLine(ink, Offset(gx, 0f), Offset(gx, size.height), strokeWidth = 1.5.dp.toPx(), pathEffect = GUIDE_DASH)
             }
             if (offScale) offScaleCap(Offset(size.width, y), ink, 4.dp.toPx())
+            recorder?.invoke(meanX)
             marker(Offset(r + meanX * w, y), dot, ink, r - 1.dp.toPx())
         }
         Text(
