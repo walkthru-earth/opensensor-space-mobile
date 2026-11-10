@@ -464,7 +464,8 @@ private fun MyDevicesEntry(
                     onSetup(action.request)
                 }
                 DevicesAction.SetupMany -> onSetupMany()
-                else -> controller.onAction(action)
+                // No else, so a new action fails to compile until the route handles it.
+                DevicesAction.CollectAll, DevicesAction.StartScan, DevicesAction.StopScan -> controller.onAction(action)
             }
         },
         topActions = {
