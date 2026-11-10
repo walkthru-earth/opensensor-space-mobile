@@ -7,7 +7,7 @@ decisions that belong to that concern only. Current verification is recorded in 
 ## Product direction in one paragraph
 
 opensensor.space supports open sensors of every kind, and air quality is the first family. A new
-user lands on a public H3 discover map (sample data until the S3 and source.coop feed is live),
+user lands on a public H3 discover map (the bundled sample or the live OpenAQ aggregates),
 then pairs and collects their own devices over BLE or LAN into a verified local archive. Simple
 screens explain readings in plain words. Technical detail lives behind the Detailed and
 Developer levels. Android and iOS share rules, sync and design. Read
@@ -22,25 +22,31 @@ before planning new work. Use [architecture.md](architecture.md), [sync-engine.m
 | Know what is verified on Android, iOS simulator, and real devices | [status.md](status.md) | `../opensensor-space-firmware/docs/boards/*/bench-verified.md` |
 | Keep design and sync behaviour the same on iOS and Android, see what still differs and why, add a sensor family or transport | [cross-platform-guide.md](cross-platform-guide.md) | `core/*/src/commonMain/`, `ios/App/`, `app/` |
 | Understand the product direction, device families, the public H3 discover map and sharing rules | [devices-and-discovery.md](devices-and-discovery.md) | `core/publicfeed/`, `feature/discover/` |
-| Know which values identify a sensor and how the app recovers after a reset or reflash | [device-identity.md](device-identity.md) | `data/DeviceLinkOwner.kt`, `data/ble/`, `data/local/database/` |
+| Know which values identify a sensor and how the app recovers after a reset or reflash | [device-identity.md](device-identity.md) | `data/DeviceLinkOwner.kt`, `data/ble/`, `core/database/` |
 | Build or extend the iOS app and shared Kotlin core | [ios.md](ios.md), `../ios/AGENTS.md` | `core/*/src/commonMain/`, `ios/` |
 | Understand modules, layers, who depends on whom, "what a change touches" | [architecture.md](architecture.md) | `core/*/build.gradle.kts`, `app/build.gradle.kts` |
-| Change a screen, the nav graph, detail levels | [screens.md](screens.md) | `app/…/ui/`, `data/settings/AppSettings.kt` |
+| Change a screen, the nav graph, detail levels | [screens.md](screens.md) | `feature/*`, `ui/designsystem`, `app/…/ui/` |
 | Permissions, privacy manifest, Play Data safety and App Store label | [store-compliance.md](store-compliance.md) | `app/src/main/AndroidManifest.xml`, `ui/permissions/`, `ios/App/` |
-| Look up an opcode, frame type, error code, UUID, LAN framing constant | [protocol-quickref.md](protocol-quickref.md) | `core/protocol/…/Frames.kt`, `DeviceUuids.kt`, `LanFraming.kt` |
+| Look up an opcode, frame type, error code, UUID, LAN framing constant | [protocol-quickref.md](protocol-quickref.md) | `core/protocol/…/Frames.kt`, `DeviceGatt.kt`, `LanProtocol.kt` |
 | Touch BLE / LAN pipes, pairing, the LAN token, mDNS, reconnect | [transports.md](transports.md) | `data/ble/`, `data/lan/`, `data/DeviceLinkOwner.kt`, `core/sync/link/` |
 | Touch file download, verification, lost windows, resume, archive paths | [sync-engine.md](sync-engine.md) | `core/sync/`, `data/archive/`, `data/DeviceFacade.kt`, `ios/shared/` |
 | Touch auto-sync, WorkManager, the foreground notification, WifiLock, or the triggers that start a run early (companion presence, advertising flags, Wi-Fi arrival) | [background-sync.md](background-sync.md) | `data/background/`, `data/lan/LanWifiLock.kt`, `core/protocol/.../Advertisement.kt` |
-| Touch Room tables, migrations, DataStore keys, on-disk layout, backup | [data-model.md](data-model.md) | `core/database/` (`data/local/database/`, `schemas/`), `res/xml/data_extraction_rules.xml` |
-| Touch the index → tiers → derived-day → chart pipeline, metrics, moods, time estimate | [history-pipeline.md](history-pipeline.md) | `core/history/`, `data/history/`, `ui/history/` |
+| Touch Room tables, migrations, DataStore keys, on-disk layout, backup | [data-model.md](data-model.md) | `core/database/` (sources and `schemas/`), `core/settings/`, `res/xml/data_extraction_rules.xml` |
+| Touch the index → tiers → derived-day → chart pipeline, metrics, moods, time estimate | [history-pipeline.md](history-pipeline.md) | `core/history/`, `family/air/`, `data/history/`, `feature/history/` |
 | Reproduce history host benchmarks and understand their limits | [perf/history-2026-10-11.md](perf/history-2026-10-11.md) | `tools/history-benchmark/` |
 | Recover UTC after reboot, automatic clock sync, corrected day partitions | [time-reconciliation.md](time-reconciliation.md) | `core/archive/`, `core/history/`, `data/history/`, `ios/` |
 | Touch the Parquet reader/writer, GeoParquet, codecs, fixtures, oracles | [parquet.md](parquet.md) | `core/parquet/`, `tools/*.py` |
 | Build, sign, release, run hooks/CI, use the fake device | [build-and-release.md](build-and-release.md) | `tools/`, `.github/workflows/`, `data/fake/` |
+| Set a sensor's private location, tap only H3 provisioning, precision and country policy | [device-location.md](device-location.md) | `feature/device/`, `ui/map/` |
+| See why the shell and navigation are shared | [adr/0001-shared-navigation.md](adr/0001-shared-navigation.md) | `feature/shell/` |
+| Read the public privacy policy draft | [privacy-policy.md](privacy-policy.md) | None |
 | Avoid a mistake that was already made | [lessons-learned.md](lessons-learned.md) | (grouped by the concern above) |
 
 Rules (non-negotiables and AI delegation guidance) live in [`../AGENTS.md`](../AGENTS.md).
-The iOS app boundary is documented in [`../ios/AGENTS.md`](../ios/AGENTS.md). The protocol
+Each code area has its own rules file, [`../core/AGENTS.md`](../core/AGENTS.md),
+[`../feature/AGENTS.md`](../feature/AGENTS.md), [`../ui/AGENTS.md`](../ui/AGENTS.md),
+[`../ios/AGENTS.md`](../ios/AGENTS.md), [`../build-logic/AGENTS.md`](../build-logic/AGENTS.md) and
+[`../tools/AGENTS.md`](../tools/AGENTS.md). The protocol
 contract lives in the firmware repo, `../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`, never here.
 
 ## How the concerns connect
@@ -81,5 +87,3 @@ beside your own devices. `cross-platform-guide` holds the rules that keep both p
   `bench-verified.md`.
 - Host/JVM tests, iOS simulator builds, Android phone runs, and iPhone runs are separate
   evidence. A result for one platform does not qualify another.
-
-Private thing setup: [device-location.md](device-location.md) describes tap-only H3 provisioning, precision and country policy.
