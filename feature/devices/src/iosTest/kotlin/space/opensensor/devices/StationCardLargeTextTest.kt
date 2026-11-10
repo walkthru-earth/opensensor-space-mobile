@@ -10,12 +10,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.TextLayoutResult
@@ -36,8 +36,8 @@ import kotlin.test.assertTrue
  * whole, inside the card and apart from the others (#117). A failed link keeps its error words whole
  * too. Rendered headless on the iOS simulator.
  *
- * The ages tick from the system clock, so both sit 45 minutes back from the test start. That is the
- * middle of a minute and two digits wide, so the text is the same for the whole run.
+ * The ages tick from the system clock, so both sit 45 minutes back from the test start, two digits
+ * wide, and the checks match any minute count.
  */
 @OptIn(ExperimentalTestApi::class)
 class StationCardLargeTextTest {
@@ -62,6 +62,11 @@ class StationCardLargeTextTest {
     )
 
     private val hasAnyText = SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)
+
+    // Any minute count, so a slow runner that crosses into the next minute still matches.
+    private fun hasTextMatching(regex: Regex) = SemanticsMatcher("text matches $regex") { node ->
+        node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { regex.containsMatchIn(it.text) }
+    }
 
     private fun ComposeUiTest.show(card: @Composable () -> Unit) {
         setContent {
@@ -106,14 +111,14 @@ class StationCardLargeTextTest {
     fun aKnownCardKeepsItsDayLineAndSetupChipWholeAtDoubleText() = runComposeUiTest {
         show { KnownRow(row.copy(rssi = null, needsSetup = true), DetailLevel.DETAILED, onClick = {}) }
         // The seen line and the day line that ends with the synced age are both on the card.
-        onAllNodes(hasText("45 min ago", substring = true), useUnmergedTree = true).assertCountEquals(2)
+        onAllNodes(hasTextMatching(Regex("""\d+ min ago""")), useUnmergedTree = true).assertCountEquals(2)
         assertEveryTextFits(minTexts = 5)
     }
 
     @Test
     fun aNearbyCardKeepsItsTagsAndDayLineWholeAtDoubleText() = runComposeUiTest {
         show { NearbyRow(row, DetailLevel.DETAILED, onClick = {}) }
-        onAllNodes(hasText("synced 45 min ago", substring = true), useUnmergedTree = true).assertCountEquals(1)
+        onAllNodes(hasTextMatching(Regex("""synced \d+ min ago""")), useUnmergedTree = true).assertCountEquals(1)
         assertEveryTextFits(minTexts = 4)
     }
 
