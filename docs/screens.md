@@ -54,7 +54,8 @@ device, and nothing is asked at launch.
   never shows the page ([device-location.md](device-location.md#site)). After pairing, the close arrow and system back both ask
   "Leave setup?" first, and old firmware fails on Find with the update message. A sensor under Nearby
   on My devices that this phone has not added opens the wizard with it picked, never Today, so setup
-  always comes first on both platforms.
+  always comes first on both platforms. Find lists the picked sensor with its Pairing state before
+  the wizard's own scan hears it.
 - My devices opens the wizard by itself when exactly one sensor asks for setup (#272), at most once
   per foreground session. The shared `ThingSetupWatch` in `:core:sync` applies `ThingSetupPolicy` to
   the advert flags of the foreground Bluetooth scan (bit 6) and, for firmware without the flag, to
