@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -257,7 +258,7 @@ internal val LocalArchiveUnits = staticCompositionLocalOf { UnitFormatter.Metric
 
 /**
  * How the archive line shows [day]. The mean rounds to the profile's display step in [units], and a
- * unit [units] converts keeps its own decimals. The unit stays whole on a wrap ([wholeUnit]). [step]
+ * unit [units] converts keeps its own decimals. The card shows the unit through [wholeUnit]. [step]
  * is the WHO step of a metric with a health scale. Null when such a metric's mean has no step, so
  * the line never shows a banded value unjudged.
  */
@@ -267,12 +268,12 @@ internal fun dayLine(day: LatestDay, units: UnitFormatter): DayLine? {
     val metric = day.metric
     val mean = day.mean.toDouble()
     val step = if (metric.banded) metric.stepOf(mean) ?: return null else null
-    return DayLine(units.format(mean, metric.unit, day.displayStep, AppProfile.decimalsOf(day.displayStep)), wholeUnit(units.unit(metric.unit)), step)
+    return DayLine(units.format(mean, metric.unit, day.displayStep, AppProfile.decimalsOf(day.displayStep)), units.unit(metric.unit), step)
 }
 
 /**
  * [unit] with a word joiner after each slash, so a wrapping line never breaks "µg/m³" into "µg/" and
- * "m³" (#114). The joiner is invisible and screen readers skip it.
+ * "m³" (#114). Only for shown text, a screen reader gets the plain unit.
  */
 internal fun wholeUnit(unit: String): String = unit.replace("/", "/$WORD_JOINER")
 
@@ -298,27 +299,33 @@ private fun ArchiveLine(glance: ArchiveGlance?, level: DetailLevel) {
         val (dayOfMonth, month) = DeviceText.utcDayMonth(day.startEpochS)
         val label = metric.basis?.let { pm25Label(it) } ?: metric.label(Locale.current.language)
         val date = "$dayOfMonth ${stringResource(MONTHS[month - 1])}"
-        val base = if (step != null) {
-            stringResource(Res.string.scan_archive_day, moodWord(step), label, line.value, line.unit, date)
+        // The shown line keeps the unit whole on a wrap. A screen reader gets the plain unit.
+        val template = stringResource(if (step != null) Res.string.scan_archive_day else Res.string.scan_archive_day_plain)
+        val mood = step?.let { moodWord(it) }
+        fun sentence(unit: String) = if (mood != null) {
+            DeviceText.fill(template, mood, label, line.value, unit, date)
         } else {
-            stringResource(Res.string.scan_archive_day_plain, label, line.value, line.unit, date)
+            DeviceText.fill(template, label, line.value, unit, date)
         }
         val coverage = day.coverage?.takeIf { level.detailed }
             ?.let { ", " + stringResource(Res.string.scan_archive_coverage, "${(it * 100).toInt()} %") } ?: ""
         val fileCount = if (level.detailed) ", $files" else ""
+        val shown = sentence(wholeUnit(line.unit)) + coverage + fileCount
+        val spoken = sentence(line.unit) + coverage + fileCount
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
             StatusDot(step?.let { Color(it.color) } ?: MaterialTheme.colorScheme.onSurfaceVariant)
             val synced = glance.lastSyncedMs
             if (synced != null) {
                 TickingText(
-                    { now -> "$base$coverage$fileCount, " + DeviceText.fill(syncedTemplate, ago(now - synced)) },
+                    { now -> "$shown, " + DeviceText.fill(syncedTemplate, ago(now - synced)) },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     // The whole line stays readable at large text, it wraps instead of shrinking or cutting.
                     maxLines = Int.MAX_VALUE,
+                    spokenText = { now -> "$spoken, " + DeviceText.fill(syncedTemplate, ago(now - synced)) },
                 )
             } else {
-                Text("$base$coverage$fileCount", style = MaterialTheme.typography.bodySmall)
+                Text(shown, style = MaterialTheme.typography.bodySmall, modifier = Modifier.semantics { contentDescription = spoken })
             }
         }
     } else if (glance.lastDataUtcNs == null && glance.files > 0) {

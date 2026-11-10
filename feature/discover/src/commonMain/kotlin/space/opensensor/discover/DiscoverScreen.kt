@@ -136,7 +136,7 @@ import space.opensensor.units.UnitFormatter
 import space.opensensor.units.UnitSystem
 
 // Tall enough for the chart, so it stays in sight while the sheet is down and the map is explored.
-private val PEEK_HEIGHT = 200.dp
+internal val PEEK_HEIGHT = 200.dp
 
 // A city and its surroundings, after a place search.
 private const val PLACE_ZOOM = 9.0
@@ -692,7 +692,7 @@ private fun Attribution(strings: DiscoverStrings, open: Boolean, real: Boolean, 
 private const val OPENAQ_LICENSES = "https://docs.openaq.org/resources/licenses"
 
 @Composable
-private fun SheetContent(
+internal fun SheetContent(
     state: DiscoverUiState,
     strings: DiscoverStrings,
     networkAllowed: Boolean,

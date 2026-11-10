@@ -241,7 +241,8 @@ fun rememberNowMillis(periodMs: Long = 1000): Long {
 /**
  * A leaf text that re-renders with the current time at 1 Hz visually, while quantising its
  * accessibility [contentDescription] to 10 second steps so TalkBack and VoiceOver are not
- * interrupted every second.
+ * interrupted every second. [spokenText] is what a screen reader gets when it differs from the
+ * shown text, such as a unit without its word joiner.
  */
 @Composable
 fun TickingText(
@@ -250,10 +251,11 @@ fun TickingText(
     style: TextStyle = MaterialTheme.typography.labelSmall,
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     maxLines: Int = TypographyLimits.TickingMaxLines,
+    spokenText: (nowMs: Long) -> String = text,
 ) {
     val now = rememberNowMillis()
     val anchor = remember { now }
-    val spoken = text(quantiseSpokenMillis(now, anchor))
+    val spoken = spokenText(quantiseSpokenMillis(now, anchor))
     // FitText reruns its size search on every tick because the text changes. That is a few layouts
     // a second on one short leaf, and the size only moves when the digits change width.
     FitText(

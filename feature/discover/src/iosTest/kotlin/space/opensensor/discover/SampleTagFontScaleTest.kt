@@ -11,10 +11,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
@@ -24,6 +27,8 @@ import space.opensensor.designsystem.OpenSensorTheme
 import space.opensensor.designsystem.Peacock
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.rememberBrandTypography
+import space.opensensor.publicfeed.CellRow
+import space.opensensor.publicfeed.CellStat
 import space.opensensor.publicfeed.FeedProperty
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,6 +101,36 @@ class SampleTagFontScaleTest {
     }
 
     @Test
+    fun theSampleChartsAxisEndsInsideThePeekAtFontScale1() = runComposeUiTest {
+        val rows = listOf(8.0, 12.0, 14.0, 22.0, 35.0).mapIndexed { i, v ->
+            CellRow(i.toLong(), devices = 3, updatedEpochMs = 0L, stats = mapOf("pm25" to CellStat(3, v, null, null)))
+        }
+        val state = DiscoverUiState(loading = false, isSample = true, dictionary = listOf(pm25), property = pm25, rows = rows, newestUpdateEpochMs = 0L)
+        setContent {
+            // The test's own density, so the bounds below read back in dp, at font scale 1.
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 1f)) {
+                OpenSensorTheme(darkTheme = false, reduceMotion = true) {
+                    // The peek as BottomSheetScaffold lays it out, the handle on top of the sheet body.
+                    Column(Modifier.width(360.dp).testTag(PEEK)) {
+                        val strings = discoverStrings()
+                        SheetHandle(open = false, strings = strings, onToggle = {})
+                        SheetContent(
+                            state, strings, networkAllowed = true, simple = false, showAll = false, infoButton = { _, _ -> },
+                            onAddSensor = {}, onExplore = {}, onPickProperty = {}, onShowProperty = {}, onRetry = {}, onRetryLoad = {},
+                            onPickCell = {}, onPickOwn = {}, highlight = null, clearSignal = 0, onHighlight = {}, now = 0L,
+                        )
+                    }
+                }
+            }
+        }
+        val top = onNodeWithTag(PEEK).fetchSemanticsNode().boundsInRoot.top
+        // The chart, the node whose actions pin its bars, ends at its axis. The area's own band only shows on a cell.
+        val chart = onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val axisEnd = with(density) { (chart.bottom - top).toDp() }
+        assertTrue(axisEnd <= PEEK_HEIGHT, "the axis ends at $axisEnd, below the $PEEK_HEIGHT peek")
+    }
+
+    @Test
     fun theArabicTagSitsWholeOverTheChartTitle() = runComposeUiTest {
         // The sheet width, as ChartTitle gives the tag its own line.
         inArabicAtLargeFont { SampleTag(arabicSample) }
@@ -112,5 +147,9 @@ class SampleTagFontScaleTest {
             }
         }
         assertWhole(arabicSample)
+    }
+
+    private companion object {
+        const val PEEK = "peek"
     }
 }

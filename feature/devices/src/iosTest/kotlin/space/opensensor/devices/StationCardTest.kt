@@ -21,6 +21,9 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import space.opensensor.data.history.LatestDay
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirMetrics
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -85,6 +88,32 @@ class StationCardTest {
         show(2f) { NearbyRow(row, DetailLevel.SIMPLE, onClick = {}) }
         assertOneTapAndNoForget()
         assertTextStaysInside()
+    }
+
+    /** The archive line's shown text and what a screen reader gets for it. */
+    private fun archiveLine(lastSyncedMs: Long?): Pair<String, String> {
+        AirFamily.install()
+        val day = LatestDay(86_400, 12.34f, 1f, AirMetrics.PM25_CORRECTED, 0.1)
+        val glance = ArchiveGlance(files = 1, lastSyncedMs = lastSyncedMs, lastDataUtcNs = 1L, lastDay = day)
+        var result: Pair<String, String>? = null
+        runComposeUiTest {
+            mainClock.autoAdvance = false
+            show(1f) { KnownRow(row.copy(rssi = null, archive = glance), DetailLevel.SIMPLE, onClick = {}) }
+            val config = onNode(hasText("12.3", substring = true), useUnmergedTree = true).fetchSemanticsNode().config
+            result = config[SemanticsProperties.Text].joinToString() to config[SemanticsProperties.ContentDescription].joinToString()
+        }
+        return result!!
+    }
+
+    @Test
+    fun theArchiveLineShowsAWholeUnitAndSpeaksThePlainOne() {
+        // With a last sync the line ticks, without one it is plain text. Both keep the joiner off the spoken line (#114).
+        for (synced in listOf(1_000L, null)) {
+            val (shown, spoken) = archiveLine(synced)
+            assertTrue("/⁠" in shown, "the shown unit can wrap after its slash in '$shown'")
+            assertTrue('⁠' !in spoken, "the spoken line carries a word joiner, '$spoken'")
+            assertTrue("12.3" in spoken, "the spoken line has the value, '$spoken'")
+        }
     }
 
     @Test

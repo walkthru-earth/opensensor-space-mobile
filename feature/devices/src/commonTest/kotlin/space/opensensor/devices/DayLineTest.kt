@@ -22,7 +22,7 @@ class DayLineTest {
     @Test
     fun `a banded metric shows its WHO step and a mean without one shows no line`() {
         val line = dayLine(day(AirMetrics.PM25_CORRECTED, 12.34f, 0.1), UnitFormatter.Metric)
-        assertEquals(DayLine("12.3", wholeUnit(AirMetrics.PM25_CORRECTED.unit), AirMetrics.PM25_CORRECTED.stepOf(12.34)), line)
+        assertEquals(DayLine("12.3", AirMetrics.PM25_CORRECTED.unit, AirMetrics.PM25_CORRECTED.stepOf(12.34)), line)
         assertNotNull(line?.step, "a PM2.5 day always carries its WHO step")
         assertNull(dayLine(day(AirMetrics.PM25, Float.NaN, 0.1), UnitFormatter.Metric))
     }
@@ -30,8 +30,8 @@ class DayLineTest {
     @Test
     fun `a metric without a scale shows a neutral line at its display step`() {
         val moisture = MetricSpec(id = "soil_moisture", column = "soil_moisture", label = "Soil moisture", unit = "m3/m3", sourceUnit = "m3/m3", primary = true)
-        assertEquals(DayLine("0.31", "m3/\u2060m3", null), dayLine(day(moisture, 0.3149f, 0.01), UnitFormatter.Metric))
-        assertEquals(DayLine("25", "m3/\u2060m3", null), dayLine(day(moisture, 24.6f, 5.0), UnitFormatter.Metric))
+        assertEquals(DayLine("0.31", "m3/m3", null), dayLine(day(moisture, 0.3149f, 0.01), UnitFormatter.Metric))
+        assertEquals(DayLine("25", "m3/m3", null), dayLine(day(moisture, 24.6f, 5.0), UnitFormatter.Metric))
     }
 
     @Test
@@ -45,7 +45,11 @@ class DayLineTest {
     fun `a unit with a slash keeps a word joiner after it so a wrap never splits it`() {
         assertEquals("µg/\u2060m³", wholeUnit("µg/m³"))
         assertEquals("°C", wholeUnit("°C"))
+    }
+
+    @Test
+    fun `the day line keeps the plain unit for a screen reader`() {
         val line = dayLine(day(AirMetrics.PM25_CORRECTED, 12.34f, 0.1), UnitFormatter.Metric)
-        assertEquals("µg/\u2060m³", line?.unit)
+        assertEquals("µg/m³", line?.unit)
     }
 }
