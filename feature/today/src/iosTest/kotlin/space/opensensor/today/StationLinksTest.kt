@@ -2,6 +2,7 @@ package space.opensensor.today
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -31,6 +32,7 @@ import space.opensensor.today.resources.station_more
 import space.opensensor.units.UnitFormatter
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 /**
  * The Station page is the hub of one sensor (#117). Its More card opens History and Files at every
@@ -115,7 +117,12 @@ class StationLinksTest {
         onNodeWithContentDescription(back).performClick()
         onNodeWithContentDescription(gear).performClick()
         // The More card closes the Station page list, after every reading card.
-        onNode(hasScrollToKeyAction()).performScrollToKey(STATION_LINKS_KEY)
+        val list = onNode(hasScrollToKeyAction())
+        list.performScrollToKey(STATION_LINKS_KEY)
+        // No item follows it, so the list refuses to scroll one index past the More card.
+        val config = list.fetchSemanticsNode().config
+        val more = config[SemanticsProperties.IndexForKey](STATION_LINKS_KEY)
+        assertFailsWith<IllegalArgumentException> { runOnIdle { config[SemanticsActions.ScrollToIndex].action?.invoke(more + 1) } }
         onNodeWithText(history, useUnmergedTree = true).performClick()
         assertEquals(listOf(TodayAction.OpenDevices, TodayAction.OpenDevice, TodayAction.OpenHistory), actions)
     }

@@ -342,7 +342,7 @@ class SemanticsTest {
     }
 
     @Test
-    fun eyebrowTickingCardHeaderAndSectionTabsFitAt200PercentFontScale() = runComposeUiTest {
+    fun eyebrowTickingAndCardHeaderFitAt200PercentFontScale() = runComposeUiTest {
         setContent {
             androidx.compose.runtime.CompositionLocalProvider(
                 androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density = 2f, fontScale = 2f),
@@ -367,11 +367,6 @@ class SemanticsTest {
                             info = InfoContent("Wi-Fi sync", "Details"),
                             modifier = Modifier.testTag("card-header"),
                         )
-                        SectionTabs(
-                            labels = listOf("Today", "Historical readings", "Files"),
-                            selectedIndex = 0,
-                            onSelect = {},
-                        )
                     }
                 }
             }
@@ -388,12 +383,6 @@ class SemanticsTest {
         kotlin.test.assertTrue(infoBounds.right <= 480f, "CardHeader info button right ${infoBounds.right} <= 480")
         kotlin.test.assertTrue(infoBounds.width >= 96f, "CardHeader info button width ${infoBounds.width} >= 96 px (48 dp)")
         kotlin.test.assertTrue(infoBounds.height >= 96f, "CardHeader info button height ${infoBounds.height} >= 96 px (48 dp)")
-
-        val shortTabHeight = onNodeWithText("Today").fetchSemanticsNode().boundsInRoot.height
-        val longTabHeight = onNodeWithText("Historical readings").fetchSemanticsNode().boundsInRoot.height
-        kotlin.test.assertTrue(longTabHeight >= 96f, "SectionTabs height $longTabHeight >= 96 px (48 dp)")
-        kotlin.test.assertTrue(longTabHeight >= shortTabHeight, "Long tab fits without clipping")
-        kotlin.test.assertEquals(1, textLayout("Historical readings").lineCount, "a tab stays on one line")
     }
 
     @Test

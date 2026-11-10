@@ -78,11 +78,10 @@ class TabNavigator(
 
     /**
      * The Debug inspector, reachable only at the Developer detail level on both platforms. A tap below
-     * that level, or a second tap while it is already on top, does nothing.
+     * that level does nothing, and [push] ignores a second tap.
      */
     fun openDebug(address: String, developer: Boolean) {
-        if (!developer || top == DebugKey(address)) return
-        push(DebugKey(address))
+        if (developer) push(DebugKey(address))
     }
 
     /** A screen's own back arrow. Pops only while that screen is still on top, so a double tap cannot pop twice. */
