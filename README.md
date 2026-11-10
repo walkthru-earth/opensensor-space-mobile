@@ -116,7 +116,8 @@ Actions. Signed iPhone/TestFlight distribution is not available yet.
 ## Layout
 
 The module list is `settings.gradle.kts`. Every `:core`, `:family`, `:ui` and `:feature` module is
-Kotlin Multiplatform for Android and iOS.
+Kotlin Multiplatform. `:core` and `:family:air` target the JVM and iOS, and `:core:database`, `:ui`
+and `:feature` target Android and iOS.
 
 ```
 app/              Android app · data/{ble,lan,background,history,archive,storage,settings,local/security,di,fake} · ui/ screen hosts (Routes, ViewModels)

@@ -533,7 +533,9 @@ one plain Parquet file per H3 resolution.
 The opensensor feed is not built. No publisher, ingest endpoint, device list file or per-device
 series file exists, and the phone has no upload code. When it lands it is static files on
 source.coop with no server for reading, written by a publisher outside this repo that applies
-the privacy rules above, and the phone never holds source.coop write credentials.
+the privacy rules above, and the phone never holds source.coop write credentials. Uploads are
+signed and go hourly to an ingest endpoint the publisher owns, which checks each signature against
+the device's registered public key and keeps raw rows private until the hourly run aggregates them.
 
 ```
 discover-sample/v1/
@@ -543,8 +545,8 @@ discover-sample/v1/
 
 - **Cells file (`FeedPaths.cells`).** One plain Parquet file per resolution, `h3_res` 2 to 7.
   Columns are `h3_index` (INT64, sorted), `devices` (INT32), `updated` (TIMESTAMP UTC) and
-  flat metric columns `<property>__n`, `__mean`, `__min`, `__max` (DOUBLE, null when the cell
-  does not measure it). Property IDs, units and families come from the `dictionary` key of the
+  flat metric columns `<property>__n` (INT32) and `__mean`, `__min`, `__max` (DOUBLE), null when
+  the cell does not measure it. Property IDs, units and families come from the `dictionary` key of the
   file's key value metadata. No geometry, no nested columns.
 - **What a feed file must be.** SNAPPY or LZ4_RAW compression, not ZSTD, because iOS has no
   zstd in its system libraries and the reader keeps native code out of `:core:*`. Flat columns
@@ -743,7 +745,7 @@ read.
 | `:core:archive`, `:core:sync` | File identity (#273). `FileIdentity` keys a file by its Thing, File Item id and SHA-256 (`file:checksum`). `CatchUpPlanner` plans a restore or catch up of an owned Thing from a remote listing. It skips a file already archived with the same name and checksum, surfaces the same name with other bytes as a conflict and never plans a second copy. Each UTC day reads raw or compacted files, never both, and an archived day keeps the tree it has. `ArchiveIndex.markUploaded` sets the uploaded marker from an upload status listing. No network code. See [history-pipeline.md](history-pipeline.md#file-identity-and-cloud-catch-up-273) |
 | `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp, `okhttp` in `gradle/libs.versions.toml`, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Used by `OpenAqAggregatesFeed` and `TemplateHrefs` in both apps |
 | `:core:parquet` | The portable reader, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
-| `:ui:map` | The shared map of both apps, CMP `commonMain`. `BaseMap` and `rememberBaseMapState` with the zoom limits, no rotation or tilt, the camera rest callback (`CameraRest`), a one time fit and a content slot for the caller's sources and layers. `MapStyles` and `rememberMapStyle` give the bundled basemap styles (Compose resources) or a paper style when public data is off. `ZoomControls`, `MapCache` (the tile cache Settings sizes and clears), `CellOutlines` (plain H3 cell outlines as GeoJSON) Near me (`rememberNearMe`, `NearMeButton`, `NearMeLayer`, `nearMeTarget`), the offline place search (`PlaceSearch`, `PlaceSearchField`) and the resolution 8 area picker of setup and Device settings (`CellPicker`, `CellPickerGrid`). Its own string catalogue holds the zoom, Near me, search and picker labels and the map credits. Depends on `:core:publicfeed`, `:ui:designsystem` and `:ui:permissions` only, so any feature can use it. `:feature:discover` and `:feature:device` use it. Targets Android and iOS, not the JVM |
+| `:ui:map` | The shared map of both apps, CMP `commonMain`. `BaseMap` and `rememberBaseMapState` with the zoom limits, no rotation or tilt, the camera rest callback (`CameraRest`), a one time fit and a content slot for the caller's sources and layers. `MapStyles` and `rememberMapStyle` give the bundled basemap styles (Compose resources) or a paper style when public data is off. `ZoomControls`, `MapCache` (the tile cache Settings sizes and clears), `CellOutlines` (plain H3 cell outlines as GeoJSON) Near me (`rememberNearMe`, `NearMeButton`, `NearMeLayer`, `nearMeTarget`), the offline place search (`PlaceSearch`, `PlaceSearchField`) and the resolution 8 area picker of setup and Device settings (`CellPicker`, `CellPickerGrid`). Its own string catalogue holds the zoom, Near me, search and picker labels and the map credits. Depends on `:core:publicfeed`, `:ui:designsystem` and `:ui:permissions` only, so any feature can use it. `:feature:discover`, `:feature:device` and `:feature:history` use it. Targets Android and iOS, not the JVM |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`) on `:ui:map`, `DiscoverController` state holder, the public cell layers and legend, the own Things layer (`OwnThingGeoJson`, `knownOwnThings`), `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM |
 | `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed (Python `h3`, PyArrow, SNAPPY, one row group per file sorted by `h3_index`, 16-row pages with page indexes, about 270 KB for 18 files, made-up cells around Berlin, Cairo, Lisbon, Nairobi, New York, Jakarta and Accra). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps`. `make_openaq_fixture.py` writes the OpenAQ and STAC test fixtures. The sample is committed under `feature/discover/src/commonMain/composeResources/files/`, the styles under `ui/map/src/commonMain/composeResources/files/basemap/` |
 

@@ -8,6 +8,48 @@
 
 Every Markdown file and `AGENTS.md` was reconciled with `main`. Nothing in this entry is phone verified.
 
+### Evidence moved here from other docs
+
+The audit removed dated evidence from the concern docs. Each line keeps its own date and kind.
+
+Phone observations.
+
+- **2026-10-08, iPhone 16 Pro, Arabic map labels (#53).** Up to maplibre-compose 0.19.0 the Apple
+  build of `maplibre-native-ffi` compiled a bidi stub, so Arabic names drew unjoined and in the
+  wrong order, and iOS loaded Latin-only label styles. The fix is in the 2026-10-11 entry below
+  (maplibre-native-ffi #799). From `devices-and-discovery.md`.
+- **Undated, Android phone, locked screen LAN throughput.** Measured before the Wi-Fi lock was
+  added. Throughput fell from about 60 to about 12 files per minute with the screen locked, then
+  TCP stalled for more than 5 s. The source gave no date, phone model or build. From
+  `background-sync.md`.
+
+Host and CI records, none of them a phone run.
+
+- **2026-09-17, warm-up on the archive.** DuckDB over 766 files and 14 boots of 10 minutes or
+  more. After the firmware gate, minute 0 deviates from minutes 5 to 10 by 2.5 µg/m³ mean
+  absolute, minute 3 by 1.7 and minute 7 by 0.6, inside one band. From `history-pipeline.md`.
+- **2026-09-29, CI after the repository rename at `06ab6cc`.** The
+  [main verification run](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/36584773614)
+  passed. The release run then failed on the `apksigner` label format (`V2 Signer` in place of
+  `Signer #1`) with a valid signature. From `build-and-release.md`.
+- **2026-10-08, first hosted verify run.** The
+  [run for `27280bf`](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37741492239)
+  passed, the Xcode 27 native validation job included. Local validation the same day used Xcode
+  27.0 (27A266a), the iOS 26.5 simulator and the iOS 27 SDK. From `build-and-release.md`.
+- **2026-10-08, rolling tag failure.**
+  [Release run 22](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37740192533/job/113192946568)
+  for `cdd133c` passed verification, assembly and signer validation, then failed pushing `latest`
+  for lack of `workflows` permission. From `build-and-release.md`.
+- **2026-10-08, R8 release APK size.** Unminified universal release APK 55,080,672 bytes, minified
+  6,596,149 bytes, `mapping.txt` produced. With Discover the minified APK was 49,525,502 bytes,
+  about 42.6 MB of it native libraries uncompressed, started on the API 36 arm64 emulator only.
+  From `build-and-release.md`.
+- **2026-10-11, ABI filter (#61).** With `arm64-v8a` and `armeabi-v7a` only, the minified release
+  APK went from 51,731,831 to 35,130,751 bytes. From `build-and-release.md`.
+- **2026-10-08, `RealArchiveTest` timing, M-series Mac.** All 767 real archive files read in
+  about 0.45 s on the JVM. Another line of the same doc gave 766 files in 0.2 s with 67,272 rows.
+  From `parquet.md`.
+
 ## 2026-11-10, Thing Collection and two publish paths (code only)
 
 Host tests and the iOS simulator only. No phone or board run is recorded. Part of #266.

@@ -29,7 +29,8 @@ meaning and `../ui/AGENTS.md` for the design system, copy and permission rules.
   bands from there, never from literals, and never fabricate a default. Capability checks come
   from `DeviceCapabilities`, never from schema strings. Distinguish stale, unavailable and
   unverified readings from zero.
-- Copy lives in each module's `src/commonMain/composeResources/values/strings.xml`, with its
+- Copy lives in each module's `src/commonMain/composeResources/values/strings.xml` (`shell/` has
+  none and reads `:ui:strings`), with its
   `values-ar` copy and plurals for counts. State code holds a `UiText` and the composable edge
   resolves it. Typed UI values (`GroupTitle`, `RawError`, `FailReason`) are mapped in the screen,
   never rendered as English. `PresentationLiteralsTest` fails on an English literal in a shared
@@ -38,6 +39,10 @@ meaning and `../ui/AGENTS.md` for the design system, copy and permission rules.
   (`DetailLevel` in `:core:settings`) and list new ones in the level table in `docs/screens.md`.
   Simple speaks in moods and never names the guideline body (`SimpleCopyTest`). A level only
   reveals information, it never alters sync. Debug is reachable only at Developer.
+- Simple must show the current reading and the archive state without Debug. Keep archived history
+  usable when a device is disconnected or a worker owns it.
+- At every level Today says `today_none_clock` when the clock is missing and no timed reading
+  exists. Finalize sits in the Detailed Storage card and shows even before the first STATUS.
 - The clock and the Wi-Fi token are automatic, so their surfaces are Developer only (the Today
   CLOCK card, the token line of the auto sync card, the "no token" tag in device rows, the token
   sync endings).

@@ -14,8 +14,8 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   share sheet, the document picker and location are Kotlin `iosMain` actuals of the shared modules
   (`feature/files/src/iosMain`, `feature/device/src/iosMain`, `ui/map/src/iosMain`). Do not move
   OS behavior into common Kotlin or UI composables.
-- The screens are the shared Compose Multiplatform `feature/*` modules. `shared/src/iosMain/AppRoot.kt`
-  hosts them, and `shared/src/commonMain` holds the bridges and state between Swift and the
+- The screens are the shared Compose Multiplatform `feature/*` modules.
+  `shared/src/iosMain/kotlin/space/opensensor/AppRoot.kt` hosts them, and `shared/src/commonMain` holds the bridges and state between Swift and the
   screens. Swift files under `App/` are native adapters. Do not
   assume the UI is SwiftUI or duplicate a screen in SwiftUI unless a task explicitly
   calls for that architecture change.
