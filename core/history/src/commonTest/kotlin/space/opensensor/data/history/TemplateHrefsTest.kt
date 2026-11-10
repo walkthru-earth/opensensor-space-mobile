@@ -26,6 +26,7 @@ import space.opensensor.data.history.parquet.ParquetWriter
 import space.opensensor.data.protocol.ParquetVerify
 import space.opensensor.data.protocol.sha256Hex
 import space.opensensor.model.BoardTemplate
+import space.opensensor.net.BlockStore
 import space.opensensor.net.BodyLimit
 import space.opensensor.net.HttpRangeEngine
 import space.opensensor.net.HttpRangeException
@@ -70,9 +71,16 @@ class TemplateHrefsTest {
         }
     }
 
+    /** The template cache in memory, whose reads fail while [failReads] is true, like a disk error. */
+    private class FlakyStore(private val memory: MemoryBlockStore = MemoryBlockStore()) : BlockStore by memory {
+        var failReads = false
+
+        override fun read(name: String): ByteArray? = if (failReads) throw IllegalStateException("disk") else memory.read(name)
+    }
+
     private class Harness(scope: TestScope, answer: suspend (String) -> HttpRangeResponse) {
         val io = StandardTestDispatcher(scope.testScheduler)
-        val store = MemoryBlockStore()
+        val store = FlakyStore()
         val served = ServedTemplates()
         val descriptors = BoardDescriptors(store, served, bundled = emptyList(), io = io)
         val switch = MutableStateFlow(true)
@@ -220,6 +228,52 @@ class TemplateHrefsTest {
     }
 
     @Test
+    fun aPoisonedCacheFileIsDeletedAndFetchedAgain() = runTest {
+        val h = harness()
+        // The file is named by the desc but its bytes hash to something else.
+        h.store.write("$desc.json", soilTemplateJson(dict).replace("\"mean\"", "\"max\"").encodeToByteArray())
+        assertIs<HrefOutcome.Fetched>(h.hrefs.fetch(link))
+        assertEquals(listOf(href), h.engine.urls)
+        assertEquals(desc, ParquetVerify.sha256Hex(assertNotNull(h.store.read("$desc.json"))))
+        assertEquals(desc, h.served.all.value.single().key.desc)
+    }
+
+    @Test
+    fun aCacheReadThatFailsEndsOnlyThatLink() = runTest {
+        val h = harness()
+        h.store.failReads = true
+        assertEquals(HrefOutcome.Failed("IllegalStateException"), h.hrefs.fetch(link))
+        assertTrue(h.engine.urls.isEmpty())
+        // Not a try, so the desc is fetched once the cache reads again.
+        h.store.failReads = false
+        assertIs<HrefOutcome.Fetched>(h.hrefs.fetch(link))
+    }
+
+    @Test
+    fun aRunKeepsFetchingAfterACacheReadFails() = runTest {
+        val h = harness()
+        h.store.failReads = true
+        val running = launch { h.hrefs.run { emptyList() } }
+        h.hrefs.request(link)
+        advanceUntilIdle()
+        h.store.failReads = false
+        h.hrefs.request(link)
+        advanceUntilIdle()
+        running.cancel()
+        assertEquals(listOf(href), h.engine.urls)
+        assertNotNull(h.templates.template(dict, desc))
+    }
+
+    @Test
+    fun oneRunTriesAtMostMaxDescs() = runTest {
+        val h = harness { response(404) }
+        val descs = List(TemplateHrefs.MAX_DESCS + 1) { i -> i.toString(16).padStart(64, '0') }
+        for (d in descs.dropLast(1)) assertEquals(HrefOutcome.Failed("HTTP 404"), h.hrefs.fetch(link.copy(desc = d)))
+        assertEquals(HrefOutcome.Tried, h.hrefs.fetch(link.copy(desc = descs.last())))
+        assertEquals(TemplateHrefs.MAX_DESCS, h.engine.urls.size)
+    }
+
+    @Test
     fun theFooterHrefParsesIntoALink() {
         val footer = assertNotNull(OpenSensorFooter.of(mapOf(OpenSensorFooter.KEY to footerJson(href))))
         assertEquals(href, footer.templateHref)
@@ -234,11 +288,11 @@ class TemplateHrefsTest {
 
     // The end to end path. Index, request, fetch, resolve.
 
-    private fun footerJson(templateHref: String) =
-        opensensorFooterJson(dict, desc, 60_000, board = "soil-probe", schema = "soil-probe-v1", thing = thing, templateHref = templateHref)
+    private fun footerJson(templateHref: String, templateDesc: String = desc) =
+        opensensorFooterJson(dict, templateDesc, 60_000, board = "soil-probe", schema = "soil-probe-v1", thing = thing, templateHref = templateHref)
 
     /** Five soil rows a minute apart, written under the soil template that [href] serves. */
-    private fun soilFile(): ByteArray {
+    private fun soilFile(templateHref: String = href, templateDesc: String = desc): ByteArray {
         val out = MemorySink()
         val w = ParquetWriter(
             out,
@@ -248,7 +302,7 @@ class TemplateHrefsTest {
                 ParquetWriter.Column("soil_moisture_percent", ParquetType.FLOAT),
             ),
             ParquetCodec.UNCOMPRESSED,
-            keyValueMetadata = mapOf(OpenSensorFooter.KEY to footerJson(href)),
+            keyValueMetadata = mapOf(OpenSensorFooter.KEY to footerJson(templateHref, templateDesc)),
         )
         w.begin()
         w.rowGroup(
@@ -297,14 +351,28 @@ class TemplateHrefsTest {
         return Aggregator(thing, metrics = metrics, templates = templates).apply { add(ParquetFile.wrap(file)) }.buckets()
     }
 
-    private suspend fun Harness.archive(file: ByteArray): Pair<Store, Index> {
+    private suspend fun Harness.archive(vararg files: ByteArray): Pair<Store, Index> {
         val store = Store()
         val index = Index()
-        val name = "thing=$thing/year=2026/month=09/day=17/data_1000_a_2-1-1.parquet"
-        val record = ArchiveRecord(thing, name, file.size.toLong(), crc32 = 1, sha256 = ParquetVerify.sha256Hex(file), syncedAtEpochMs = 1, sourceDevice = "ble")
-        store.files[record.key] = file
-        index.put(record)
+        files.forEachIndexed { i, file ->
+            val name = "thing=$thing/year=2026/month=09/day=17/data_${1000 + i}_a_2-1-1.parquet"
+            val record = ArchiveRecord(thing, name, file.size.toLong(), crc32 = 1, sha256 = ParquetVerify.sha256Hex(file), syncedAtEpochMs = 1, sourceDevice = "ble")
+            store.files[record.key] = file
+            index.put(record)
+        }
         return store to index
+    }
+
+    @Test
+    fun anHrefOnAnotherHostNeverTakesASweepSlot() = runTest {
+        val h = harness()
+        val other = "c0" + "de".repeat(31)
+        // The other host comes first, so it would fill a sweep of one if it counted.
+        val (store, index) = h.archive(soilFile("https://example.invalid/templates/soil-probe/$dict.json", other), soilFile())
+        val repair = ArchiveIndexRepair(store, index, io = h.io, nowEpochMs = { 42L }, templates = h.templates)
+        repair.backfillAll()
+        assertEquals(listOf(other, desc), index.rows.value.map { it.templateSha256 })
+        assertEquals(listOf(link), repair.unresolvedTemplateLinks(limit = 1))
     }
 
     @Test

@@ -1,6 +1,7 @@
 package space.opensensor.data.history
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import space.opensensor.data.protocol.ParquetVerify
 import space.opensensor.data.protocol.sha256Hex
@@ -18,6 +20,7 @@ import space.opensensor.model.BoardTemplate
 import space.opensensor.net.BodyLimit
 import space.opensensor.net.HttpRangeEngine
 import space.opensensor.net.HttpRangeException
+import space.opensensor.net.HttpRangeResponse
 import space.opensensor.net.HttpTransportException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -71,7 +74,8 @@ sealed interface HrefOutcome {
  * - Only an https href on the firmware template host, a commit pinned path under
  *   `opensensor-space-firmware/docs/shared/templates/` ([isFirmwareTemplate]). No redirect is followed,
  *   a 3xx answer fails. The app builds [engine] with redirects off as well.
- * - At most [maxBytes] of body and [timeout] for the whole request.
+ * - At most [maxBytes] of body and [timeout] for the GET. Binding is not timed, it may wait while a
+ *   board serves a template over BLE.
  * - Each desc at most once per app run, and a failure is remembered, so a bad desc never loops. At most
  *   [MAX_DESCS] descs per run.
  * - The bytes bind only when their SHA-256 is the desc. [BoardDescriptors.adopt] checks it again,
@@ -130,15 +134,22 @@ class TemplateHrefs(
         val desc = link.desc.lowercase()
         if (!SHA256_HEX.matches(desc) || !isFirmwareTemplate(link.href)) return HrefOutcome.Refused
         if (!allowed.first()) return HrefOutcome.Off
-        if (descriptors.knows(desc)) return HrefOutcome.Known
-        if (!claim(desc)) return HrefOutcome.Tried
+        var claimed = false
         val outcome = try {
-            withTimeout(timeout) { download(link.href, desc, link.dict) }
+            // Inside the try, so a cache read that fails ends this link and never the loop in run.
+            if (descriptors.knows(desc)) return HrefOutcome.Known
+            if (!claim(desc)) return HrefOutcome.Tried
+            claimed = true
+            // Only the GET is timed. Binding may wait on the descriptor lock while a board serves one.
+            val response = withTimeout(timeout) {
+                engine.get(link.href, range = null, ifRange = null, ifNoneMatch = null, limit = BodyLimit(maxBytes, maxBytes))
+            }
+            bind(response, desc, link.dict)
         } catch (e: TimeoutCancellationException) {
             HrefOutcome.Failed("timeout")
         } catch (e: CancellationException) {
             // Cancelled is not a failure, so the next run of this process may try the desc again.
-            mutex.withLock { tried.remove(desc) }
+            if (claimed) withContext(NonCancellable) { mutex.withLock { tried.remove(desc) } }
             throw e
         } catch (e: HttpRangeException) {
             // An engine throws it only for a body over the limit, every status reaches download.
@@ -157,8 +168,8 @@ class TemplateHrefs(
         return outcome
     }
 
-    private suspend fun download(href: String, desc: String, dict: String?): HrefOutcome {
-        val response = engine.get(href, range = null, ifRange = null, ifNoneMatch = null, limit = BodyLimit(maxBytes, maxBytes))
+    /** Binds the template [response] carries when it is a 200 whose body hashes to [desc]. */
+    private suspend fun bind(response: HttpRangeResponse, desc: String, dict: String?): HrefOutcome {
         if (response.status in REDIRECTS) return HrefOutcome.Failed("redirect")
         if (response.status != OK) return HrefOutcome.Failed("HTTP ${response.status}")
         if (ParquetVerify.sha256Hex(response.body) != desc) return HrefOutcome.Rejected("sha256 differs from the footer")
@@ -192,8 +203,10 @@ class TemplateHrefs(
 
         /**
          * The firmware template host and path, `https://raw.githubusercontent.com/walkthru-earth/
-         * opensensor-space-firmware/<40 hex commit>/docs/shared/templates/<board>/<64 hex>.json`, as the
-         * firmware footer writes it. No port, user, query, fragment, escape or dot segment fits.
+         * opensensor-space-firmware/<40 hex commit>/docs/shared/templates/<board>/<dict>.json`, as the
+         * firmware footer writes it (`kTemplateHref`, firmware `tools/pinned_uris.py`). The file is named
+         * by the 64 hex dict, and its bytes hash to the desc. No port, user, query, fragment, escape or
+         * dot segment fits.
          */
         private val FIRMWARE_TEMPLATE = Regex(
             "^https://raw\\.githubusercontent\\.com/walkthru-earth/opensensor-space-firmware/[0-9a-f]{40}" +

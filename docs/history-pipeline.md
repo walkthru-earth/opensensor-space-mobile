@@ -65,17 +65,21 @@ footer desc nothing resolves (not served, not cached, not bundled) names the byt
 
 - `ArchiveIndexRepair` queues the `TemplateLink` (desc, dict, href) of each file it indexes that
   resolves no template, and never waits for it. Each time the switch turns on, and at start,
-  `unresolvedTemplateLinks` sweeps files indexed earlier, one footer per desc, at most 16.
+  `unresolvedTemplateLinks` sweeps files indexed earlier, one footer per desc, at most 16 links on
+  the firmware template host. A link on any other host never counts toward the 16.
 - Nothing is sent while the Settings switch "Show public sensors" (`showPublicSensors`) is off, the
   one that gates the Discover feed and the basemap.
 - Only an https href on the firmware template host is fetched, a commit pinned
-  `raw.githubusercontent.com/walkthru-earth/opensensor-space-firmware/<commit>/docs/shared/templates/<board>/<desc>.json`
-  (`TemplateHrefs.isFirmwareTemplate`). Any other host, port, user, query or path is refused without a
+  `raw.githubusercontent.com/walkthru-earth/opensensor-space-firmware/<commit>/docs/shared/templates/<board>/<dict>.json`
+  (`TemplateHrefs.isFirmwareTemplate`). The firmware names the file by its dict (`kTemplateHref`,
+  firmware `tools/pinned_uris.py`), and its bytes hash to the desc. Any other host, port, user, query or path is refused without a
   request. Both engines are built with redirects off (`OkHttpRangeEngine.newClient(followRedirects = false)`,
   `UrlSessionRangeEngine.create(followRedirects = false)`), and a 3xx answer fails.
-- The body is capped at 256 KiB and the whole request at 10 s. Each desc is tried at most once per
+- The body is capped at 256 KiB and the GET at 10 s. Binding is not timed, since it may wait while a
+  board serves a template over BLE. A cache read that fails ends that link only. Each desc is tried at most once per
   app run, and a failure is remembered, at most 64 descs per run. Offline, a 404 or a timeout leaves
-  the rows without metrics until a later run or a board serves the template.
+  the rows without metrics until a later run or a board serves the template. A cached `<desc>.json`
+  that no longer hashes to its name or parses is deleted and fetched again.
 - The bytes bind only when their SHA-256 is the footer desc and, when the footer names a dict, the
   template's dict is that dict. `BoardDescriptors.adopt` checks again, caches them as `<desc>.json`
   in `StorageRole.Templates` and adds them to `ServedTemplates`. `FileTemplates` and LIVE resolve

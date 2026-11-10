@@ -213,7 +213,9 @@ class ArchiveIndexRepair(
 
     /**
      * The [TemplateLink]s of indexed files whose footer desc no template resolves, one per desc and at
-     * most [limit], read from one footer each. A file that fails to read is skipped. For [TemplateHrefs.run].
+     * most [limit], read from one footer each. Only links on the firmware template host
+     * ([TemplateHrefs.isFirmwareTemplate]) count, so other hrefs never crowd one out. A file that fails
+     * to read is skipped. For [TemplateHrefs.run].
      */
     suspend fun unresolvedTemplateLinks(limit: Int = MAX_LINKS): List<TemplateLink> = withContext(io) {
         val links = LinkedHashMap<String, TemplateLink>()
@@ -234,7 +236,8 @@ class ArchiveIndexRepair(
                 } catch (e: Exception) {
                     null
                 }
-                if (link != null && link.desc == desc) links[desc] = link else skipped += desc
+                // Only an href TemplateHrefs would fetch counts toward the limit.
+                if (link != null && link.desc == desc && TemplateHrefs.isFirmwareTemplate(link.href)) links[desc] = link else skipped += desc
             }
         }
         links.values.toList()
