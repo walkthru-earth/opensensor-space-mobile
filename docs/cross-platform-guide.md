@@ -301,11 +301,12 @@ The rules for a new screen or component.
    `SectionCard`
    and `StatLine` weight their primary text and cap value width so trailing buttons and values stay
    inside a 320 dp viewport. `MascotGuide` stacks the peacock above its text on narrow widths
-   (`< 340.dp`) or at font scales `>= 1.5f`. `brandTypography` clamps display numeral sizes
+   (`< 340.dp`) or at font scales `>= 1.5f`. `brandTypography` caps display numeral sizes
    (`displayLarge`, `displayMedium`, `displaySmall`) through `clampedDisplaySizeSp(baseSp, density)`
-   using `Density.toDp()` so they never render smaller than their 1.0x `dp` size (including under
-   Android 14 non-linear font scaling) and cap at `TypographyLimits.MaxDisplayFontScale` (`1.35f`)
-   while body, label, title and headline styles scale up to 200 percent.
+   at `TypographyLimits.MaxDisplayFontScale` (`1.35f`) of their 1.0x `dp` size, measured with the
+   platform's own `Density.toDp()`, while body, label, title and headline styles scale up to 200
+   percent. Below the cap they follow the system scale, which never shrinks them under 1.0x. The
+   Android 14 non-linear tables stay under the cap, so it holds iOS's linear scale.
 7. **Contrast and non-colour cues.** `ColorContrast.kt` in `:ui:designsystem` is the single definition
    of `relativeLuminance`, `contrastRatio`, `BODY_TEXT_CONTRAST` (`4.5`), `LARGE_TEXT_CONTRAST` (`3.0`),
    `UI_COMPONENT_CONTRAST` (`3.0`), `WhoStep.color()`, `WhoStep.onColor()`,
@@ -349,11 +350,14 @@ The rules for a new screen or component.
     arguments, and no em dashes, colons or semicolons.
 
 `ColorContrastTest` and `ComponentsTest` in `:ui:designsystem` `commonTest` check palette contrast,
-threshold-pinned luminance math, touch target tokens, non-linear and linear display scale clamping,
-spoken tick quantisation and reduce-motion helpers. `SemanticsTest` in `:ui:designsystem` `iosTest`
-renders the shared components on the iOS simulator and checks 48 dp touch bounds, 8 dp bottom bar
-spacing, headings, merged rows, 200 percent font scale fitting without split words, `InfoSheet` close
-action, switch rows, tab roles and live iOS reduce-motion notifications. `FitTextTest` in
+threshold-pinned luminance math, touch target tokens, the display cap under each platform's own font
+scale converter, spoken tick quantisation and reduce-motion helpers. `DisplayFontScaleTest` in
+`androidHostTest` runs on Robolectric and compares display numerals with the framework's
+`FontScaleConverter` table at every Android font size step. `SemanticsTest` in `:ui:designsystem`
+`iosTest` renders the shared components on the iOS simulator and checks 48 dp touch bounds, 8 dp bottom
+bar spacing, headings, merged rows, 200 percent font scale fitting without split words, the 55 percent
+`StatLine` value cap, `valueSemantics` replacing its text, `TickingText` speaking in 10 second steps,
+`InfoSheet` close action, switch rows, tab roles and live iOS reduce-motion notifications. `FitTextTest` in
 `:ui:designsystem` `commonTest` pins the size search and the mid-word check, and `FitTextLayoutTest`
 in `iosTest` renders bottom bar labels, section tabs, titles and body text at font scale 1.0, 2.0 and
 3.1, 280 and 360 dp, in English and in Arabic right to left. Bottom bar labels stay on one line at no

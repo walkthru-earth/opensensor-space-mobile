@@ -330,14 +330,16 @@ class TcpLinkDriverTest {
     }
 
     @Test
-    fun `peer closing its side is PeerClosed`() = runBlocking {
+    fun `peer closing its side is PeerClosed`(): Unit = runBlocking {
         FakeLanDevice(token, hello(), afterHello = { it.shutdownOutput() }) { emptyList() }.use { device ->
             device.start()
             val sink = RecordingSink()
             val t = driver(device.port)
             withTimeout(5_000) { t.open(sink) }
             assertEquals(DisconnectCause.PeerClosed(), withTimeout(5_000) { sink.closed.await() })
-            assertTrue(t.connectionState.value is ConnectionState.Disconnected)
+            // The sink hears the cause before the driver publishes its state, on the reader thread,
+            // so wait for the state instead of reading it once.
+            withTimeout(5_000) { t.connectionState.first { it is ConnectionState.Disconnected } }
         }
     }
 
@@ -390,7 +392,7 @@ class TcpLinkDriverTest {
     }
 
     @Test
-    fun `cancelling open closes the socket at once`() = runBlocking {
+    fun `cancelling open closes the socket at once`(): Unit = runBlocking {
         val holding = CountDownLatch(1)
         val server = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
         val exec = Executors.newSingleThreadExecutor()
@@ -402,7 +404,7 @@ class TcpLinkDriverTest {
             delay(300)
             withTimeout(1_000) { job.cancelAndJoinCompat() }
             assertTrue(withTimeout(1_000) { sink.closed.await() } is DisconnectCause.Deliberate)
-            assertTrue(t.connectionState.value is ConnectionState.Disconnected)
+            withTimeout(1_000) { t.connectionState.first { it is ConnectionState.Disconnected } }
         } finally {
             holding.countDown()
             server.close()
