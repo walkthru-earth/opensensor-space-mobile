@@ -151,7 +151,8 @@ internal data class OwnLayer(val pins: List<OwnPin>, val geoJson: String, val tr
 internal object OwnThingGeoJson {
     /**
      * [tracks] are the moving Things' rows by Thing UUID. A moving pin stands at the newer of its
-     * read cell and the last fix in its rows. With neither it shows no pin, never a guessed cell.
+     * read cell and the last GNSS or phone fix in its rows, and the track outlines only those fixes.
+     * With neither it shows no pin, never a guessed or configured cell.
      */
     fun build(h3: H3Grid, things: List<OwnThing>, tracks: Map<String, CellTrack> = emptyMap()): OwnLayer {
         if (!h3.available || things.isEmpty()) return OwnLayer.EMPTY
@@ -160,7 +161,7 @@ internal object OwnThingGeoJson {
             val centre = h3.cellToLatLng(cell)
             OwnPin(t, centre.lat, centre.lng, cell)
         }.sortedWith(compareBy({ it.thing.name.lowercase() }, { it.thing.key }))
-        val trackJson = trackGeoJson(h3, things.filter { it.moving }.flatMap { tracks[it.key]?.cells.orEmpty() }.distinct())
+        val trackJson = trackGeoJson(h3, things.filter { it.moving }.flatMap { tracks[it.key]?.reportedCells.orEmpty() }.distinct())
         if (pins.isEmpty()) return OwnLayer(emptyList(), DiscoverUiState.EMPTY_GEOJSON, trackJson)
         val json = buildString {
             append("{\"type\":\"FeatureCollection\",\"features\":[")
@@ -174,11 +175,14 @@ internal object OwnThingGeoJson {
         return OwnLayer(pins, json, trackJson)
     }
 
-    /** The cell a pin stands in. A moving Thing takes its newer place, read or in its rows. */
+    /**
+     * The cell a pin stands in. A moving Thing takes its newer place, read or reported in its rows.
+     * Rows from its fixed hours carry the configured cell, which is never where a moving Thing is.
+     */
     private fun placeOf(t: OwnThing, track: CellTrack?): Long? {
         val read = cellOf(t.cell)
         if (!t.moving) return read
-        val fix = track?.lastFix ?: return read
+        val fix = track?.lastReportedFix ?: return read
         val fixCell = fix.cell ?: return read
         return if (read == null || fix.lastNs / 1_000_000 > t.updatedEpochMs) fixCell else read
     }

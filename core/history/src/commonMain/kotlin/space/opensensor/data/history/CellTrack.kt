@@ -6,15 +6,15 @@ import space.opensensor.model.H3Cell
  * Where a row's location came from, the firmware `location_source` column (time-and-location.md).
  * 0 and null both mean the row has no location.
  */
-enum class LocationSource(val wire: Int) {
+enum class LocationSource(val wire: Int, val reported: Boolean) {
     /** The owner's configured cell of a fixed Thing. */
-    CONFIGURED(1),
+    CONFIGURED(1, reported = false),
 
     /** A fresh fix of the Thing's own GNSS receiver. */
-    GNSS(2),
+    GNSS(2, reported = true),
 
-    /** A cell the phone supplied. No firmware writes it yet (#264). */
-    PHONE(3),
+    /** A cell the phone supplied as `location.phone_cell`. The firmware writes it, this app does not send it yet (#264). */
+    PHONE(3, reported = true),
     ;
 
     companion object {
@@ -49,6 +49,18 @@ data class CellTrack(val spans: List<Span>) {
 
     /** Each cell once, in the order the Thing first reached it. */
     val cells: List<Long> get() = fixes.mapNotNull { it.cell }.distinct()
+
+    /**
+     * The spans a moving Thing reported as where it was, GNSS or phone fixes. A configured cell is
+     * where the Thing stood while it was fixed, so it is never a moving Thing's place.
+     */
+    val reportedFixes: List<Span> get() = fixes.filter { it.source?.reported == true }
+
+    /** The newest of [reportedFixes], null when the rows reported none. */
+    val lastReportedFix: Span? get() = reportedFixes.lastOrNull()
+
+    /** Each cell of [reportedFixes] once, in the order the Thing first reached it. */
+    val reportedCells: List<Long> get() = reportedFixes.mapNotNull { it.cell }.distinct()
 
     /** Rows with no fix in the whole track. */
     val noFixRows: Int get() = spans.filter { !it.hasFix }.sumOf { it.rows }

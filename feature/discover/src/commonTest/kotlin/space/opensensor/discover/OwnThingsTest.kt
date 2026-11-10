@@ -9,6 +9,7 @@ import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.DaySpan
 import space.opensensor.data.history.HistoryTiers
 import space.opensensor.data.history.LatestReading
+import space.opensensor.data.history.LocationSource
 import space.opensensor.data.history.Resolution
 import space.opensensor.data.history.TierBucket
 import space.opensensor.data.history.TrackRow
@@ -140,6 +141,37 @@ class OwnThingsTest {
         assertFalse(layer.trackGeoJson.contains("Bike"), "no Thing name in the track source")
         // A closed ring in longitude, latitude order, its first vertex repeated.
         assertTrue(layer.trackGeoJson.contains("[[[1.0,1.0],[1.0,2.0],[2.0,1.0],[1.0,1.0]]]"), layer.trackGeoJson)
+    }
+
+    @Test
+    fun aMovingThingNeverStandsAtTheConfiguredCellOfItsFixedHours() {
+        // The owner switched it from Fixed to Moving. Its rows from the fixed hours carry the
+        // configured cell with source 1, and its later rows have no fix, so it has no pin and no track.
+        val moving = OwnThing("m", "Bike", "", updatedEpochMs = 10_000L, moving = true)
+        val configured = LocationSource.CONFIGURED.wire
+        val rows = track(TrackRow(1_000 * ms, cellA, configured), TrackRow(2_000 * ms, cellA, configured), TrackRow(11_000 * ms, null, null))
+        val layer = OwnThingGeoJson.build(IndexGrid, listOf(moving), mapOf("m" to rows))
+        assertEquals(emptyList(), layer.pins)
+        assertEquals(DiscoverUiState.EMPTY_GEOJSON, layer.trackGeoJson)
+        // A later GNSS or phone fix places it and is the only cell the track outlines.
+        val gnss = track(TrackRow(1_000 * ms, cellA, configured), TrackRow(12_000 * ms, cellB, 2))
+        val moved = OwnThingGeoJson.build(IndexGrid, listOf(moving), mapOf("m" to gnss))
+        assertEquals(cellB, moved.pins.single().cell)
+        assertEquals(1, Regex("\"Polygon\"").findAll(moved.trackGeoJson).count())
+        val phone = track(TrackRow(1_000 * ms, cellA, configured), TrackRow(12_000 * ms, cellB, 3))
+        assertEquals(cellB, OwnThingGeoJson.build(IndexGrid, listOf(moving), mapOf("m" to phone)).pins.single().cell)
+    }
+
+    @Test
+    fun aFixedThingDrawsNoTrackEvenWhenGivenOne() {
+        val fixed = OwnThing("f", "Roof", H3Index.toHex(cellA), updatedEpochMs = 0L)
+        val route = track(TrackRow(1 * ms, cellA, 2), TrackRow(3 * ms, cellB, 2))
+        assertEquals(DiscoverUiState.EMPTY_GEOJSON, OwnThingGeoJson.build(IndexGrid, listOf(fixed), mapOf("f" to route)).trackGeoJson)
+    }
+
+    @Test
+    fun theTrackSpansTheLast24Hours() {
+        assertEquals(24L * 60 * 60 * 1_000_000_000, OWN_TRACK_SPAN_NS)
     }
 
     @Test

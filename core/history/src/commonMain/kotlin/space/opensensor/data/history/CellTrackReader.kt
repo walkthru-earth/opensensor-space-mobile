@@ -4,8 +4,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -34,18 +38,32 @@ class CellTrackReader(
 
     /**
      * The track of the last [spanNs] before [nowNs], read again when the Thing's timeline changes (a
-     * synced or indexed file).
+     * synced or indexed file) and every [tickMs], so old rows leave the window with no new file. A
+     * [tickMs] of 0 or less reads again only on a timeline change.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observe(thing: String, spanNs: Long, nowNs: () -> Long): Flow<CellTrack> =
-        index.observeThing(thing)
+    fun observe(thing: String, spanNs: Long, tickMs: Long = TICK_MS, nowNs: () -> Long): Flow<CellTrack> {
+        val files = index.observeThing(thing)
             .map { files -> files.filter { it.isIndexed }.map { Triple(it.name, it.crc32, it.timelineFirstNs) } }
             .distinctUntilChanged()
+        val ticks = if (tickMs > 0) {
+            flow {
+                while (true) {
+                    emit(Unit)
+                    delay(tickMs)
+                }
+            }
+        } else {
+            flowOf(Unit)
+        }
+        return combine(files, ticks) { _, _ -> }
             .mapLatest {
                 val to = nowNs()
                 read(thing, to - spanNs, to)
             }
+            .distinctUntilChanged()
             .flowOn(io)
+    }
 
     private fun readFile(f: ArchiveRecord, fromNs: Long, toNs: Long, into: MutableList<TrackRow>) {
         try {
@@ -74,5 +92,8 @@ class CellTrackReader(
         /** The firmware row columns (table-and-observation-model.md). */
         const val CELL = "h3_cell_id"
         const val SOURCE = "location_source"
+
+        /** How often [observe] moves its window on with no new file, a quarter hour. */
+        const val TICK_MS: Long = 15L * 60 * 1_000
     }
 }

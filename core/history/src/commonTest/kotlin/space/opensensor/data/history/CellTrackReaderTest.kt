@@ -4,6 +4,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import space.opensensor.archive.ArchiveIndex
@@ -128,6 +130,19 @@ class CellTrackReaderTest {
         val nowNs = (startS + 15) * NS_PER_S
         assertEquals(listOf(away), reader.observe(thing, spanNs = 10 * NS_PER_S, nowNs = { nowNs }).first().cells)
         assertEquals(listOf(home, away), reader.read(thing, 0, nowNs).cells)
+    }
+
+    @Test
+    fun theWindowMovesOnWithTimeAndNoNewFile() = runTest {
+        val store = Store()
+        val index = Index()
+        val gnss = LocationSource.GNSS.wire
+        put(store, index, "thing=$thing/year=2026/month=09/day=21/a.parquet", file(startS, listOf(home, away), listOf(gnss, gnss)), startS, 2)
+        val reader = CellTrackReader(store, index, io = StandardTestDispatcher(testScheduler))
+        // The clock follows the test's virtual time. After one tick the away row is older than the span.
+        val nowNs = { (startS + 15) * NS_PER_S + testScheduler.currentTime * 1_000_000 }
+        val seen = reader.observe(thing, spanNs = 10 * NS_PER_S, nowNs = nowNs, tickMs = 10_000).take(2).map { it.cells }.toList()
+        assertEquals(listOf(listOf(away), emptyList()), seen)
     }
 
     private companion object {

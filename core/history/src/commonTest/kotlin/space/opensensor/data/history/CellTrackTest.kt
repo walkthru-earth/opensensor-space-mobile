@@ -55,6 +55,20 @@ class CellTrackTest {
     }
 
     @Test
+    fun onlyGnssAndPhoneFixesAreReported() {
+        val configured = LocationSource.CONFIGURED.wire
+        val phone = LocationSource.PHONE.wire
+        val fixedHours = CellTrack.of(listOf(row(0, home, configured), row(10, home, configured), row(20, null, null)))
+        assertEquals(home, fixedHours.lastFix?.cell)
+        assertTrue(fixedHours.reportedFixes.isEmpty())
+        assertNull(fixedHours.lastReportedFix)
+        assertTrue(fixedHours.reportedCells.isEmpty())
+        val moved = CellTrack.of(listOf(row(0, home, configured), row(10, away, gnss), row(20, home, phone), row(30, away, configured)))
+        assertEquals(listOf(away, home), moved.reportedCells)
+        assertEquals(home to LocationSource.PHONE, moved.lastReportedFix?.let { it.cell to it.source })
+    }
+
+    @Test
     fun rowsAreReadInTimeOrder() {
         val track = CellTrack.of(listOf(row(30, away), row(0, home), row(10, home)))
         assertEquals(listOf(home, away), track.fixes.map { it.cell })

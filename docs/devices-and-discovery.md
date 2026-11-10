@@ -474,8 +474,9 @@ Thing UUID or name, and the public source never carries an own Thing. A test hol
 
 The cell comes from `thing_place` on the phone ([data model](data-model.md)), written when Device
 settings reads or saves the location. A Thing with no well-formed cell has no pin. A moving Thing
-stands at the newer of its last GNSS cell and the last fix in its own rows, and the cells its rows
-reported in the last 24 hours are outlined in ink in a track source of their own, under the pins
+stands at the newer of its last GNSS cell and the last GNSS or phone fix in its own rows, never
+the configured cell of its fixed hours. The cells of those fixes in the last 24 hours are outlined
+with an ink fill and line in a track source of their own, under the pins
 and with no Thing UUID (#263, [device location](device-location.md#mobility-and-gnss)). A row with
 no location is no fix, so a moving Thing with no fix has no pin and never a guessed one. A
 forgotten sensor loses its pin, because Forget deletes its cells and the host joins the places with

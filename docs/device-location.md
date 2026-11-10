@@ -78,8 +78,11 @@ Discover shows a moving own Thing from its rows, never from a guess (#263). `Cel
 (`core/history`) reads the last 24 hours of the Thing's verified files on the phone, one
 `h3_cell_id` and `location_source` per row, into a `CellTrack`. A row with a null cell, a null or 0
 source, or a value that is no H3 cell is a row with no fix and never borrows a neighbour's cell.
-The track's cells are outlined in their own map source with no Thing UUID, and the pin stands at
-the newer of the stored GNSS cell and the track's last fix. With neither it shows no pin.
+Only GNSS (2) and phone (3) fixes place a moving Thing. Rows from its fixed hours carry the
+configured cell (1), which is never where it is now. Those fixes are outlined with an ink fill and
+line in their own map source with no Thing UUID, and the pin stands at the newer of the stored GNSS
+cell and the last such fix. With neither it shows no pin. The 24 hour window is read again when a
+file is synced and every quarter hour, so old cells leave the map with no new file.
 
 ## Site
 
