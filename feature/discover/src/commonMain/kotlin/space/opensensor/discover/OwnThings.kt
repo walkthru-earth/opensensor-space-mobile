@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.JsonPrimitive
 import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.HistoryTiers
 import space.opensensor.data.history.LatestReading
@@ -29,8 +30,12 @@ import kotlin.time.Instant
  */
 data class OwnThing(val key: String, val name: String, val cell: String, val updatedEpochMs: Long, val moving: Boolean = false)
 
-/** An own Thing placed at its cell centre, for the map source and the sheet list. [cell] is its H3 cell. */
-data class OwnPin(val thing: OwnThing, val lat: Double, val lng: Double, val cell: Long)
+/**
+ * An own Thing placed at its cell centre, for the map source and the sheet list. [cell] is its H3
+ * cell. [placedEpochMs] is when the phone read or a row reported that cell, for a moving Thing only,
+ * so its pin can say how old its place is (#263). Null for a fixed Thing.
+ */
+data class OwnPin(val thing: OwnThing, val lat: Double, val lng: Double, val cell: Long, val placedEpochMs: Long? = null)
 
 /**
  * What the phone knows of one own Thing now, keyed by its Thing UUID (#273). [reading] is the newest
@@ -146,8 +151,9 @@ internal data class OwnLayer(val pins: List<OwnPin>, val geoJson: String, val tr
 
 /**
  * Builds the own Things point source and the moving Things' track source. Both are sources of their
- * own, never mixed into the public cells. Each point carries only its index in the sorted pins, and
- * each track cell carries nothing, so no Thing UUID or name reaches the map.
+ * own, never mixed into the public cells. Each point carries only its index in the sorted pins and,
+ * for a moving Thing on screen, the age of its place. Each track cell carries nothing, so no Thing
+ * UUID or name reaches the map.
  */
 internal object OwnThingGeoJson {
     /**
@@ -158,34 +164,48 @@ internal object OwnThingGeoJson {
     fun build(h3: H3Grid, things: List<OwnThing>, tracks: Map<String, CellTrack> = emptyMap()): OwnLayer {
         if (!h3.available || things.isEmpty()) return OwnLayer.EMPTY
         val pins = things.mapNotNull { t ->
-            val cell = placeOf(t, tracks[t.key]) ?: return@mapNotNull null
-            val centre = h3.cellToLatLng(cell)
-            OwnPin(t, centre.lat, centre.lng, cell)
+            val place = placeOf(t, tracks[t.key]) ?: return@mapNotNull null
+            val centre = h3.cellToLatLng(place.cell)
+            OwnPin(t, centre.lat, centre.lng, place.cell, place.atEpochMs)
         }.sortedWith(compareBy({ it.thing.name.lowercase() }, { it.thing.key }))
         val trackJson = trackGeoJson(h3, things.filter { it.moving }.flatMap { tracks[it.key]?.reportedCells.orEmpty() }.distinct())
         if (pins.isEmpty()) return OwnLayer(emptyList(), DiscoverUiState.EMPTY_GEOJSON, trackJson)
-        val json = buildString {
+        return OwnLayer(pins, points(pins), trackJson)
+    }
+
+    /**
+     * The point source of [pins] in their order. Each point carries its index `i` and, where [ages]
+     * holds one at that index, the words `age` drawn under a moving pin (#263). Nothing else.
+     */
+    fun points(pins: List<OwnPin>, ages: List<String?> = emptyList()): String {
+        if (pins.isEmpty()) return DiscoverUiState.EMPTY_GEOJSON
+        return buildString {
             append("{\"type\":\"FeatureCollection\",\"features\":[")
             pins.forEachIndexed { i, p ->
                 if (i > 0) append(',')
-                append("{\"type\":\"Feature\",\"properties\":{\"i\":").append(i).append("},")
-                append("\"geometry\":{\"type\":\"Point\",\"coordinates\":[").append(p.lng).append(',').append(p.lat).append("]}}")
+                append("{\"type\":\"Feature\",\"properties\":{\"i\":").append(i)
+                ages.getOrNull(i)?.let { append(",\"age\":").append(JsonPrimitive(it).toString()) }
+                append("},\"geometry\":{\"type\":\"Point\",\"coordinates\":[").append(p.lng).append(',').append(p.lat).append("]}}")
             }
             append("]}")
         }
-        return OwnLayer(pins, json, trackJson)
     }
+
+    /** Where a pin stands and, for a moving Thing, since when, in epoch ms. */
+    private data class Place(val cell: Long, val atEpochMs: Long? = null)
 
     /**
      * The cell a pin stands in. A moving Thing takes its newer place, read or reported in its rows.
      * Rows from its fixed hours carry the configured cell, which is never where a moving Thing is.
      */
-    private fun placeOf(t: OwnThing, track: CellTrack?): Long? {
+    private fun placeOf(t: OwnThing, track: CellTrack?): Place? {
         val read = cellOf(t.cell)
-        if (!t.moving) return read
-        val fix = track?.lastReportedFix ?: return read
-        val fixCell = fix.cell ?: return read
-        return if (read == null || fix.lastNs / 1_000_000 > t.updatedEpochMs) fixCell else read
+        if (!t.moving) return read?.let { Place(it) }
+        val readPlace = read?.let { Place(it, t.updatedEpochMs.takeIf { ms -> ms > 0 }) }
+        val fix = track?.lastReportedFix ?: return readPlace
+        val fixCell = fix.cell ?: return readPlace
+        val fixMs = fix.lastNs / 1_000_000
+        return if (read == null || fixMs > t.updatedEpochMs) Place(fixCell, fixMs) else readPlace
     }
 
     /**

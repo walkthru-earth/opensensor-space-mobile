@@ -4,7 +4,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -32,7 +34,11 @@ class CellTrackReader(
     suspend fun read(thing: String, fromNs: Long, toNs: Long): CellTrack {
         if (toNs <= fromNs) return CellTrack.EMPTY
         val rows = ArrayList<TrackRow>()
-        for (f in index.timeline(thing, fromNs, toNs)) readFile(f, fromNs, toNs, rows)
+        for (f in index.timeline(thing, fromNs, toNs)) {
+            // A superseded read (mapLatest) stops between files instead of reading to the end.
+            currentCoroutineContext().ensureActive()
+            readFile(f, fromNs, toNs, rows)
+        }
         return CellTrack.of(rows)
     }
 
@@ -43,9 +49,7 @@ class CellTrackReader(
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe(thing: String, spanNs: Long, tickMs: Long = TICK_MS, nowNs: () -> Long): Flow<CellTrack> {
-        val files = index.observeThing(thing)
-            .map { files -> files.filter { it.isIndexed }.map { Triple(it.name, it.crc32, it.timelineFirstNs) } }
-            .distinctUntilChanged()
+        val files = indexedFiles(thing)
         val ticks = if (tickMs > 0) {
             flow {
                 while (true) {
@@ -64,6 +68,22 @@ class CellTrackReader(
             .distinctUntilChanged()
             .flowOn(io)
     }
+
+    /**
+     * The track of the rows in the fixed window `[fromNs, toNs)`, such as a History day, read again
+     * when the Thing's timeline changes.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeWindow(thing: String, fromNs: Long, toNs: Long): Flow<CellTrack> =
+        indexedFiles(thing)
+            .mapLatest { read(thing, fromNs, toNs) }
+            .distinctUntilChanged()
+            .flowOn(io)
+
+    /** The Thing's indexed files by name, checksum and first time, so only a timeline change reads again. */
+    private fun indexedFiles(thing: String): Flow<List<Triple<String, Long, Long?>>> = index.observeThing(thing)
+        .map { files -> files.filter { it.isIndexed }.map { Triple(it.name, it.crc32, it.timelineFirstNs) } }
+        .distinctUntilChanged()
 
     private fun readFile(f: ArchiveRecord, fromNs: Long, toNs: Long, into: MutableList<TrackRow>) {
         try {

@@ -1,8 +1,10 @@
 package space.opensensor.discover
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import kotlinx.serialization.json.jsonPrimitive
 import org.maplibre.compose.expressions.dsl.all
@@ -22,6 +24,8 @@ import org.maplibre.compose.expressions.dsl.lte
 import org.maplibre.compose.expressions.dsl.not
 import org.maplibre.compose.expressions.dsl.span
 import org.maplibre.compose.expressions.dsl.switch
+import org.maplibre.compose.expressions.dsl.textOffset
+import org.maplibre.compose.expressions.value.SymbolAnchor
 import org.maplibre.compose.interaction.ClickResult
 import org.maplibre.compose.layers.CircleLayer
 import org.maplibre.compose.layers.FillLayer
@@ -46,7 +50,9 @@ import space.opensensor.publicfeed.LatLng
  * [ownGeoJson] is the user's own fixed Things, a clustered point source of its own above the cells
  * (#226). A pin is a [paper] dot ringed in [ink], a cluster an [ink] badge with its count. Neither
  * takes the brand blue, which marks selection only. A tap on a cluster calls [onOwnCluster] with its
- * centre, a tap on a pin falls through to the cell under it.
+ * centre, a tap on a pin falls through to the cell under it. A moving pin says under it how old its
+ * place is, from the point's `age` ([ownGeoJsonWithAges]), in the basemap's font. The offline paper
+ * map has no fonts, so there the pin shows without it.
  *
  * [ownTrackGeoJson] outlines the cells a moving own Thing's rows reported (#263), in [ink] under the
  * pins. It takes no tap, so a tap falls through to the cell under it.
@@ -170,9 +176,39 @@ internal fun rememberDiscoverMapState(
             strokeColor = const(ink),
             strokeWidth = const(3.dp),
         )
+        SymbolLayer(
+            id = "discover-own-age",
+            source = own,
+            filter = all(!clustered, feature.has("age")),
+            textField = format(span(feature["age"].asString())),
+            textFont = const(listOf("Noto Sans Medium")),
+            textSize = const(11.sp),
+            textColor = const(ink),
+            textHaloColor = const(paper),
+            textHaloWidth = const(1.5.dp),
+            textAnchor = const(SymbolAnchor.Top),
+            textOffset = textOffset(0.em, 0.9.em),
+        )
         // The library's standard blue puck and accuracy circle, drawn above the cells.
         NearMeLayer(nearMe)
     }
+}
+
+/**
+ * [geoJson], the own pins' point source, with the age at [now] of each moving pin's place as its
+ * `age`, as in "12 min ago" (#263). The same source when no pin moves, so a fixed Thing's map does
+ * not change with the clock.
+ */
+@Composable
+internal fun ownGeoJsonWithAges(pins: List<OwnPin>, geoJson: String, now: Long, strings: DiscoverStrings): String {
+    if (pins.none { it.placedEpochMs != null }) return geoJson
+    val ages = pins.map { pin ->
+        pin.placedEpochMs?.let { placed ->
+            val (step, count) = ageOf(now - placed)
+            strings.age(step, count)
+        }
+    }
+    return remember(pins, ages) { OwnThingGeoJson.points(pins, ages) }
 }
 
 /** Own Things closer than this on screen merge into one badge. */

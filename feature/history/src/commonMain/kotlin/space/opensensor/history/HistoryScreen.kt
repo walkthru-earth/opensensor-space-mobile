@@ -152,6 +152,7 @@ fun HistoryScreen(
     topBar: @Composable () -> Unit,
 ) {
     val state by controller.state.collectAsState()
+    val track by controller.track.collectAsState()
     val noValue = stringResource(Res.string.history_no_value)
     val pickable = pickerMetrics(state.availableMetrics, level)
     // Simple shows corrected PM2.5 only, so a raw choice made in Detailed moves to corrected.
@@ -224,6 +225,9 @@ fun HistoryScreen(
                     ChartCard(state, units, controller.nowS(), level, onOpenDay = controller::openDay)
                 }
             }
+            // The track of the span on screen only, never one still loading for the span before.
+            val shownTrack = track?.takeIf { it.thing == state.thing && it.window == state.window }
+            if (shownTrack != null) item(key = "track") { HistoryTrackCard(shownTrack) }
             item(key = "archive") { ArchiveCard(state, level) }
             if (level.developer) {
                 item(key = "dev") {

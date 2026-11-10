@@ -21,6 +21,7 @@ import space.opensensor.publicfeed.LatLng
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class OwnThingsTest {
@@ -115,6 +116,34 @@ class OwnThingsTest {
         // A fixed Thing never moves with its rows.
         val fixed = moving.copy(moving = false)
         assertEquals(cellA, OwnThingGeoJson.build(IndexGrid, listOf(fixed), mapOf("m" to newer)).pins.single().cell)
+    }
+
+    @Test
+    fun aMovingPinKnowsWhenItsPlaceWasReadOrReported() {
+        val moving = OwnThing("m", "Bike", H3Index.toHex(cellA), updatedEpochMs = 10_000L, moving = true)
+        // The newer fix in the rows dates the pin, else the time the phone read its place.
+        val newer = track(TrackRow(9_000 * ms, cellA, 2), TrackRow(20_000 * ms, cellB, 2))
+        assertEquals(20_000L, OwnThingGeoJson.build(IndexGrid, listOf(moving), mapOf("m" to newer)).pins.single().placedEpochMs)
+        val older = track(TrackRow(5_000 * ms, cellB, 2))
+        assertEquals(10_000L, OwnThingGeoJson.build(IndexGrid, listOf(moving), mapOf("m" to older)).pins.single().placedEpochMs)
+        // A fixed Thing has no age on the map, and nor does a place read at an unknown time.
+        assertNull(OwnThingGeoJson.build(IndexGrid, listOf(moving.copy(moving = false))).pins.single().placedEpochMs)
+        assertNull(OwnThingGeoJson.build(IndexGrid, listOf(moving.copy(updatedEpochMs = 0L))).pins.single().placedEpochMs)
+    }
+
+    @Test
+    fun theAgeGoesOnlyOnTheMovingPinsAndNamesNoThing() {
+        val moving = OwnThing("3f6c2a9e-8d41-4b7a-9e2c-5a1d0b7c4e11", "Bike", H3Index.toHex(cellB), updatedEpochMs = 10_000L, moving = true)
+        val fixed = OwnThing("f", "Roof", H3Index.toHex(cellA), updatedEpochMs = 10_000L)
+        val pins = OwnThingGeoJson.build(IndexGrid, listOf(moving, fixed)).pins
+        assertEquals(listOf("Bike", "Roof"), pins.map { it.thing.name })
+        val json = OwnThingGeoJson.points(pins, listOf("12 min \"ago\"", null))
+        assertEquals(1, Regex("\"age\"").findAll(json).count(), json)
+        assertTrue(json.contains("\"age\":\"12 min \\\"ago\\\"\""), "the words are escaped, $json")
+        assertFalse(json.contains(moving.key) || json.contains("Bike") || json.contains("Roof"), json)
+        // With no ages it is the source the layer builds.
+        assertEquals(OwnThingGeoJson.build(IndexGrid, listOf(moving, fixed)).geoJson, OwnThingGeoJson.points(pins))
+        assertEquals(DiscoverUiState.EMPTY_GEOJSON, OwnThingGeoJson.points(emptyList()))
     }
 
     @Test

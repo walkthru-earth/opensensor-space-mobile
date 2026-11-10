@@ -96,4 +96,18 @@
     <string name="chart_guideline_short">24 h</string>
     <string name="chart_guideline_note_simple">The dashed line is the 24 hour health guideline.</string>
     <string name="info_history_body5_simple">PM2.5 and PM10 colours are moods of the air. A colour means the same in every place and every view.</string>
+    <string name="history_track">Track</string>
+    <string name="history_track_map">Map of the track</string>
+    <string name="history_track_picked">Picked area</string>
+    <string name="history_track_gps">Sensor GPS</string>
+    <string name="history_track_phone">Phone</string>
+    <string name="history_track_no_fix">No location</string>
+    <string name="info_history_track1">Each area is an H3 cell the sensor's own readings named, from files on this phone. No coordinate is kept.</string>
+    <string name="info_history_track2">The colour shows where an area came from, as the legend names it. The thick outline is the newest area.</string>
+    <string name="info_history_track3">No location marks readings that had none. The track never fills them in.</string>
+    <string name="info_history_track4">The strip runs from the start of the span on the left to its end on the right. The track shows for Day and Week.</string>
+    <plurals name="history_track_areas">
+        <item quantity="one">%1$d area</item>
+        <item quantity="other">%1$d areas</item>
+    </plurals>
 </resources>

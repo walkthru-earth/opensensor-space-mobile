@@ -2,11 +2,13 @@ package space.opensensor.history
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import space.opensensor.archive.ArchiveIndex
@@ -15,18 +17,23 @@ import space.opensensor.archive.ArchiveRecord
 import space.opensensor.archive.ArchiveStore
 import space.opensensor.archive.PartialMeta
 import space.opensensor.archive.PartialWriter
+import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.DaySpan
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeriesReader
 import space.opensensor.data.history.HistoryTiers
+import space.opensensor.data.history.LocationSource
 import space.opensensor.data.history.Resolution
 import space.opensensor.data.history.TierBucket
+import space.opensensor.data.history.TrackRow
 import space.opensensor.data.history.parquet.ByteReader
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -42,6 +49,11 @@ class HistoryControllerTest {
     private val lastReadingS = 1_789_909_200L // 2026-09-20T13:00Z
     private val lastDayEndS = 1_789_948_800L // 2026-09-21T00:00Z
     private val day = 86_400L
+
+    private companion object {
+        const val NS_PER_S = 1_000_000_000L
+        const val CELL = 0x887576970bfffffL
+    }
 
     private class Store : ArchiveStore {
         override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
@@ -105,6 +117,7 @@ class HistoryControllerTest {
         index: Index = Index(listOf(record("s1"))),
         current: String = "s1",
         things: List<String> = listOf("s1"),
+        trackWindow: ((String, Long, Long) -> Flow<CellTrack>)? = null,
     ): HistoryController {
         val store = Store()
         val tiers = Tiers(metricIds)
@@ -119,7 +132,51 @@ class HistoryControllerTest {
             zone = TimeZone.UTC,
             clock = clock,
             tickMs = 3_600_000,
+            trackWindow = trackWindow,
         )
+    }
+
+    @Test
+    fun theTrackIsReadForDayAndWeekOnlyAndIsNullWhileItsSpanLoads() = runTest {
+        val asked = mutableListOf<Long>()
+        // A window's rows arrive only once the test releases it, as a slow index read would.
+        val released = MutableStateFlow(emptySet<Long>())
+        val c = controller(
+            trackWindow = { _, fromNs, _ ->
+                asked += fromNs
+                released.filter { fromNs in it }.map { CellTrack.of(listOf(TrackRow(fromNs + 60 * NS_PER_S, CELL, LocationSource.GNSS.wire))) }
+            },
+        )
+        val day = c.state.first { !it.initializing && it.toS == lastDayEndS }
+        runCurrent()
+        assertNull(c.track.value, "nothing until the Day's rows are read")
+        released.value = asked.toSet()
+        runCurrent()
+        val t = assertNotNull(c.track.value)
+        assertEquals("s1", t.thing)
+        assertEquals(day.window, t.window)
+
+        c.page(-1)
+        runCurrent()
+        assertNull(c.track.value, "never the track of the span before while the new one loads")
+
+        for (range in listOf(HistoryRange.MONTH, HistoryRange.YEAR)) {
+            val before = asked.size
+            c.setRange(range)
+            runCurrent()
+            released.value = asked.toSet()
+            runCurrent()
+            assertNull(c.track.value, "$range")
+            assertEquals(before, asked.size, "$range reads no track")
+        }
+
+        c.setRange(HistoryRange.WEEK)
+        runCurrent()
+        released.value = asked.toSet()
+        runCurrent()
+        val week = assertNotNull(c.track.value)
+        assertEquals(c.state.value.window, week.window)
+        assertEquals(HistoryRange.WEEK, c.state.value.range)
     }
 
     @Test

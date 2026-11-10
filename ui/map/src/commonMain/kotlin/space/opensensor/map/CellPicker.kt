@@ -283,7 +283,7 @@ private fun PickerMap(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(MinTouchSpacing),
         ) {
-            Box(Modifier.weight(1f)) { MapCredits(networkAllowed) }
+            Box(Modifier.weight(1f)) { MapCredits(networkAllowed, pickerMapInfo(networkAllowed)) }
             Column(Modifier.width(FloatingControl.Size), verticalArrangement = Arrangement.spacedBy(MinTouchSpacing)) {
                 controls()
                 ZoomControls(mapState)
@@ -292,10 +292,10 @@ private fun PickerMap(
     }
 }
 
-/** The OpenStreetMap credit while the basemap may load, and the map info with every source. */
+/** The OpenStreetMap credit while the basemap may load, and the map info with each of [lines]. */
 @Composable
-private fun MapCredits(networkAllowed: Boolean) {
-    val info = InfoContent(stringResource(Res.string.map_info_title), pickerMapInfo(networkAllowed).map { stringResource(it) })
+fun MapCredits(networkAllowed: Boolean, lines: List<StringResource>) {
+    val info = InfoContent(stringResource(Res.string.map_info_title), lines.map { stringResource(it) })
     FloatingSurface(shape = FloatingControl.SmallShape) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = if (networkAllowed) 10.dp else 0.dp)) {
             if (networkAllowed) Text(stringResource(Res.string.map_osm), style = MaterialTheme.typography.labelSmall)
@@ -314,6 +314,9 @@ internal fun pickerMapInfo(networkAllowed: Boolean): List<StringResource> = list
     Res.string.map_info_geonames,
     Res.string.map_info_grid,
 )
+
+/** The basemap credits alone, for a map that draws cells but has no place search or picker. */
+fun basemapInfo(): List<StringResource> = listOf(Res.string.map_info_osm, Res.string.map_info_protomaps)
 
 /**
  * The phone location button for [CellPicker]'s controls. While [busy] a small spinner takes the
