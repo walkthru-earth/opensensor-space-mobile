@@ -80,7 +80,8 @@ fun ScanScreen(
                 }
                 DevicesAction.SetupMany -> onSetupMany()
                 DevicesAction.CollectAll -> notificationPermission.ensureThen { viewModel.onAction(action) }
-                else -> viewModel.onAction(action)
+                // No else, so a new action fails to compile until the route handles it.
+                DevicesAction.StartScan, DevicesAction.StopScan -> viewModel.onAction(action)
             }
         },
         topActions = {

@@ -2,13 +2,19 @@ package space.opensensor.data.history
 
 import space.opensensor.data.history.LiveFixtures.cores3
 import space.opensensor.data.history.LiveFixtures.waveshare
+import space.opensensor.data.history.LiveFixtures.waveshareDict
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.batchEstimate
 import space.opensensor.family.air.showsAirCards
 import space.opensensor.family.air.showsBatchEstimate
+import space.opensensor.model.BoardTemplate
+import space.opensensor.model.BundledCatalog
 import space.opensensor.model.Capability
+import space.opensensor.model.DerivedMetric
+import space.opensensor.model.DerivedMetricProvider
+import space.opensensor.model.Thing
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -101,5 +107,30 @@ class DeviceCapabilitiesTest {
         assertTrue(AirFamily.PARTICLES in coreS3)
         assertFalse(Capability.CONFIG in coreS3)
         assertEquals(emptySet(), DeviceCapabilities.NONE.capabilities)
+    }
+
+    @Test
+    fun `a template without a reviewed profile gets no family capability`() {
+        // The Waveshare template writes the batch estimate column, so only the derived gate keeps it out.
+        val caps = DeviceCapabilities.from(waveshare, profiles = { null })
+        assertNull(caps.thing)
+        assertEquals(setOf(Capability.CONFIG, Capability.SENSOR_IDENTITY), caps.capabilities)
+        assertFalse(caps.batchEstimate, "an unreviewed template must not show the estimate")
+    }
+
+    @Test
+    fun `providers run only after the derived gate`() {
+        val probe = Capability("probe")
+        val provider = object : DerivedMetricProvider {
+            override fun derive(template: BoardTemplate) = emptyList<DerivedMetric>()
+
+            override fun capabilitiesOf(thing: Thing) = setOf(probe)
+        }
+        val template = assertNotNull(BundledCatalog.template(waveshareDict))
+        val reviewed = Thing.join("t", template, BundledCatalog.profile(template.dict))
+        val derived = Thing.join("t", template, profile = null)
+        assertTrue(derived.profile.isDerived)
+        assertTrue(probe in DeviceCapabilities.capabilitiesOf(reviewed, proto = 3, providers = listOf(provider)))
+        assertFalse(probe in DeviceCapabilities.capabilitiesOf(derived, proto = 3, providers = listOf(provider)))
     }
 }

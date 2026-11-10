@@ -205,6 +205,27 @@ class SetupControllerTest {
     }
 
     @Test
+    fun aPickedSensorIsListedOnFindWhileItPairs() = runTest(UnconfinedTestDispatcher()) {
+        // Android's wizard scans on its own, so a sensor picked on My devices is not heard yet.
+        val port = FakePort()
+        port.nearby.value = emptyList()
+        val pick = SetupCandidate("CC", "OS-3", added = false)
+        val c = SetupController(backgroundScope, port, pick = pick)
+        assertEquals(listOf(pick), c.state.value.candidates)
+        assertEquals(pick, c.state.value.selected)
+        assertTrue(c.state.value.pairing)
+        // A scan that hears it lists it once, and a failure leaves it on Find to tap again.
+        port.nearby.value = listOf(SetupCandidate("cc", "OS-3", added = false), SetupCandidate("AA", "OS-1", added = false))
+        assertEquals(listOf("cc", "AA"), c.state.value.candidates.map { it.id })
+        // The scanned row with the id in lower case still reads as the one pairing.
+        assertEquals(listOf(true, false), c.state.value.candidates.map { c.state.value.pairingWith(it) })
+        port.nearby.value = emptyList()
+        port.links.getValue("CC").value = SetupLink.Unreachable
+        c.retry()
+        assertEquals(listOf(pick), c.state.value.candidates)
+    }
+
+    @Test
     fun aNewSensorPickedOnMyDevicesPairsAtOnceAndOpensName() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = SetupController(backgroundScope, port, pick = SetupCandidate("AA", "OS-1", added = false))

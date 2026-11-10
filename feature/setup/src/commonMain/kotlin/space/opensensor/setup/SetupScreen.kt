@@ -219,7 +219,7 @@ private fun LazyListScope.findItems(s: SetupUiState, controller: SetupController
         item(key = "empty") { InfoNote(stringResource(Res.string.setup_find_empty)) }
     }
     items(s.candidates, key = { "c-" + it.id }) { candidate ->
-        CandidateRow(candidate, pairing = s.pairing && s.selected?.id == candidate.id, enabled = !s.pairing) { controller.choose(candidate) }
+        CandidateRow(candidate, pairing = s.pairingWith(candidate), enabled = !s.pairing) { controller.choose(candidate) }
     }
 }
 
