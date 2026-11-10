@@ -1,6 +1,7 @@
 package space.opensensor.discover
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,6 +17,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.Dp
+import space.opensensor.designsystem.LocalReduceMotion
 import space.opensensor.designsystem.MinTouchTarget
 import space.opensensor.publicfeed.FeedWindow
 import kotlin.test.Test
@@ -25,8 +27,8 @@ import kotlin.test.assertTrue
 /**
  * The floating map controls work for one tap and for screen readers (#116). The time window pill
  * is a button that stays open until a window is picked, and the sheet header is a button that says
- * what it does. Zoom is tested with ui:map. Every target is at least 48 dp. Rendered headless on
- * the iOS simulator (verifyIos).
+ * what it does. Zoom is tested with ui:map. Every target is at least 48 dp. With reduce motion on,
+ * the pill opens without its spring (#114). Rendered headless on the iOS simulator (verifyIos).
  */
 @OptIn(ExperimentalTestApi::class)
 class MapControlsSemanticsTest {
@@ -72,6 +74,38 @@ class MapControlsSemanticsTest {
         waitForIdle()
         assertEquals(FeedWindow.WEEK, window)
         assertEquals(folded, slider.size().second)
+    }
+
+    /** The slider's height two frames after a tap opens it, and its height once fully open. */
+    private fun openedTwoFramesIn(reduceMotion: Boolean): Pair<Dp, Dp> {
+        var result: Pair<Dp, Dp>? = null
+        runComposeUiTest {
+            mainClock.autoAdvance = false
+            setContent {
+                CompositionLocalProvider(LocalReduceMotion provides reduceMotion) {
+                    MaterialTheme { WindowSlider(FeedWindow.DAY, FeedWindow.entries, discoverStrings(), onWindow = {}) }
+                }
+            }
+            mainClock.advanceTimeByFrame()
+            mainClock.advanceTimeByFrame()
+            val slider = onNodeWithContentDescription("Time window")
+            slider.performSemanticsAction(SemanticsActions.OnClick)
+            mainClock.advanceTimeByFrame()
+            mainClock.advanceTimeByFrame()
+            val early = slider.size().second
+            mainClock.advanceTimeBy(2_000)
+            result = early to slider.size().second
+        }
+        return result!!
+    }
+
+    @Test
+    fun theWindowSliderOpensWithoutItsSpringWithReduceMotion() {
+        val (early, open) = openedTwoFramesIn(reduceMotion = true)
+        assertEquals(open, early, "the slider is still growing with reduce motion")
+        // Guards the test above, without reduce motion the spring is still on its way two frames in.
+        val (springing, full) = openedTwoFramesIn(reduceMotion = false)
+        assertTrue(springing < full, "the slider opened at once without reduce motion")
     }
 
     @Test

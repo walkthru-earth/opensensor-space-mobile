@@ -257,8 +257,9 @@ internal val LocalArchiveUnits = staticCompositionLocalOf { UnitFormatter.Metric
 
 /**
  * How the archive line shows [day]. The mean rounds to the profile's display step in [units], and a
- * unit [units] converts keeps its own decimals. [step] is the WHO step of a metric with a health
- * scale. Null when such a metric's mean has no step, so the line never shows a banded value unjudged.
+ * unit [units] converts keeps its own decimals. The unit stays whole on a wrap ([wholeUnit]). [step]
+ * is the WHO step of a metric with a health scale. Null when such a metric's mean has no step, so
+ * the line never shows a banded value unjudged.
  */
 internal data class DayLine(val value: String, val unit: String, val step: WhoStep?)
 
@@ -266,8 +267,16 @@ internal fun dayLine(day: LatestDay, units: UnitFormatter): DayLine? {
     val metric = day.metric
     val mean = day.mean.toDouble()
     val step = if (metric.banded) metric.stepOf(mean) ?: return null else null
-    return DayLine(units.format(mean, metric.unit, day.displayStep, AppProfile.decimalsOf(day.displayStep)), units.unit(metric.unit), step)
+    return DayLine(units.format(mean, metric.unit, day.displayStep, AppProfile.decimalsOf(day.displayStep)), wholeUnit(units.unit(metric.unit)), step)
 }
+
+/**
+ * [unit] with a word joiner after each slash, so a wrapping line never breaks "µg/m³" into "µg/" and
+ * "m³" (#114). The joiner is invisible and screen readers skip it.
+ */
+internal fun wholeUnit(unit: String): String = unit.replace("/", "/$WORD_JOINER")
+
+private const val WORD_JOINER = '\u2060'
 
 /**
  * From the archive on this phone, never from a live link. The last UTC day with valid readings,

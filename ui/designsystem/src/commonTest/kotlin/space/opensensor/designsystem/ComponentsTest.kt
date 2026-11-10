@@ -1,5 +1,7 @@
 package space.opensensor.designsystem
 
+import androidx.compose.animation.core.SnapSpec
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -10,6 +12,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ComponentsTest {
@@ -118,6 +122,13 @@ class ComponentsTest {
         assertEquals(11_000L, quantiseSpokenMillis(nowMs = 11_000L, anchorMs = 1_000L))
         assertEquals(11_000L, quantiseSpokenMillis(nowMs = 19_500L, anchorMs = 1_000L))
         assertEquals(21_000L, quantiseSpokenMillis(nowMs = 21_000L, anchorMs = 1_000L))
+    }
+
+    @Test
+    fun aSpecJumpsToItsEndOnlyWithReduceMotion() {
+        val springy = spring<Float>(dampingRatio = 0.7f)
+        assertSame(springy, springy.orSnap(reduceMotion = false))
+        assertIs<SnapSpec<Float>>(springy.orSnap(reduceMotion = true))
     }
 
     @Test

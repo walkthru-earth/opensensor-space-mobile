@@ -50,6 +50,12 @@ class DiscoverLabelsLocaleTest {
     }
 
     @Test
+    fun theArabicSampleTagIsTheTextTheFontScaleTestRenders() {
+        // SampleTagFontScaleTest renders this text on the iOS simulator, which cannot pick the catalogue's locale.
+        assertEquals("بيانات تجريبية", ar.getValue("discover_sample_data"))
+    }
+
+    @Test
     fun anUnknownIdFallsBackToTheFeedLabelInEveryLanguage() {
         assertEquals("Radon", label(unknown, en))
         assertEquals("Radon", label(unknown, ar))

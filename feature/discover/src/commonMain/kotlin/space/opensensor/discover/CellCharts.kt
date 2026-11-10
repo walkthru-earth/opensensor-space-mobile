@@ -59,7 +59,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import space.opensensor.designsystem.FitText
+import space.opensensor.designsystem.LocalReduceMotion
 import space.opensensor.designsystem.listSeparator
+import space.opensensor.designsystem.orSnap
 import space.opensensor.designsystem.spokenList
 import space.opensensor.designsystem.swatchBorderColor
 import space.opensensor.designsystem.touchTarget
@@ -144,7 +146,7 @@ internal fun SpreadChart(
     val hereColor = here?.let { Color(scale?.color(it) ?: SequentialRamp.at(0.5)) }
     // Only a step axis marks values past its end. A percentile axis clamps them, as the map does.
     val offScaleMax = if (axis != null) values.filter { it.isFinite() && it > domain.high }.maxOrNull() else null
-    val anim = tween<Float>(ANIM_MS)
+    val anim = tween<Float>(ANIM_MS).orSnap(LocalReduceMotion.current)
     val hereX by animateFloatAsState(here?.let { domain.fraction(it) } ?: 0f, anim)
     val minX by animateFloatAsState(hereMin?.let { domain.fraction(it) } ?: 0f, anim)
     val maxX by animateFloatAsState(hereMax?.let { domain.fraction(it) } ?: 0f, anim)
@@ -351,7 +353,7 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
     val colors = chartColors(MaterialTheme.colorScheme)
     val track = colors.track
     val dot = Color(range.color)
-    val anim = tween<Float>(ANIM_MS)
+    val anim = tween<Float>(ANIM_MS).orSnap(LocalReduceMotion.current)
     val meanX by animateFloatAsState(range.domain.fraction(range.mean), anim)
     val minX by animateFloatAsState(range.min?.let { range.domain.fraction(it) } ?: 0f, anim)
     val maxX by animateFloatAsState(range.max?.let { range.domain.fraction(it) } ?: 0f, anim)

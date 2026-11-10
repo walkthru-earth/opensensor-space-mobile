@@ -324,7 +324,10 @@ The rules for a new screen or component.
    `ContentObserver`, iOS `UIAccessibility.isReduceMotionEnabled` observed via
    `UIAccessibilityReduceMotionStatusDidChangeNotification`). `OpenSensorTheme` is the one place
    that reads it and provides `LocalReduceMotion`. Components such as `Peacock` read
-   `LocalReduceMotion`, and `Peacock` skips its entrance animation when it is true. `rememberNowMillis` keeps its 1 second tick so stale checks stay
+   `LocalReduceMotion`, and `Peacock` skips its entrance animation when it is true. `orSnap` turns
+   a spring or tween into a jump when it is true, as the Discover time window pill, spread chart and
+   range rows do. Material 3 1.4 keeps its sheet motion internal, so on iOS a bottom sheet still
+   slides with Reduce Motion on. `rememberNowMillis` keeps its 1 second tick so stale checks stay
    exact, while `TickingText` quantises its spoken `contentDescription` to 10 second steps via
    `quantiseSpokenMillis()`. `liveRegion = LiveRegionMode.Polite` goes only on a line that changes
    while the person waits, such as sync progress or a notice, never on a value that ticks every second.
