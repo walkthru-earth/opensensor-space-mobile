@@ -2,8 +2,8 @@
 
 **Scope:** everything that must outlive the screen: Auto-sync periodic work, collection from multiple devices, interactive `connectedDevice` PROCESS protection, worker `dataSync` protection and the Wi-Fi lock, and the **event-driven triggers** that start a run before the period is up: companion-device presence, the device's advertising flags, Wi-Fi arrival.
 **Code:** `data/background/AutoSyncScheduler.kt`, `SyncWorker.kt`, `AutoSyncRunner.kt` (pure decision logic + `BackgroundSyncPolicy`), `AppAutoSyncGateway.kt` (Android plumbing), `SyncForegroundService.kt`, `SyncNotifications.kt`; `data/DeviceConnectionManager.kt`, `DeviceFacade.kt`, `DeviceLinkOwner.kt`, `CollectionAdmission.kt`, `DeviceIdentityClaims.kt`; triggers: `CompanionPresence.kt` + `CompanionPresenceService.kt`, `AdvertFlagScan.kt` (+ `AdvertScanReceiver`), `SyncTriggers.kt` (+ `WifiArrivalReceiver`, `BootReceiver`, `SyncTrigger`); `core/protocol/.../Advertisement.kt`; `data/lan/LanWifiLock.kt`, `LanDiscovery.kt`, `LanDiscoveryState.kt`; `ui/permissions/NotificationPermission.kt`; `AndroidManifest.xml` (services, receivers, `REQUEST_COMPANION_*`, `SystemForegroundService` merge, `WorkManagerInitializer` removal).
-**Tests:** `AutoSyncRunnerTest` (links, per-device ownership, bounded parallel collection, cancellation, "nothing new", `lanOnly`) over the fake; `DeviceOwnershipTest`, `ConcurrentArchiveTest`, `LanTransferLeasesTest`; `AdvertisementTest` (protocol 2.1 bytes). `SyncWorkerBudgetTest`, `SyncWorkerTargetTest`, `SyncServiceOwnershipTest`, `AndroidKeepAliveTest` and facade tests cover deadlines, stop mapping, command generations and lease accounting on the host. WorkManager, OS service and radio behavior still require a phone.
-**Design and evidence:** [`../opensensor-space-firmware/docs/shared/background-sync-triggers.md`](../../opensensor-space-firmware/docs/shared/background-sync-triggers.md) (why these triggers, what Android does, what to measure); contract [`../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`](../../opensensor-space-firmware/docs/shared/ble-sync-protocol.md). Historical phone evidence is in the [CoreS3 bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md): advertising-flag wake, once (2026-09-18, OnePlus 7 Pro, firmware `-v6.3`); companion presence and Wi-Fi arrival are not verified. The multi-device changes are host-tested only; no simultaneous hardware collection is claimed.
+**Tests:** `AutoSyncRunnerTest` (links, per-device ownership, bounded parallel collection, cancellation, "nothing new", `lanOnly`) over the fake; `DeviceOwnershipTest`, `ConcurrentArchiveTest`, `LanTransferLeasesTest`; `AdvertisementTest` (advertising payload bytes). `SyncWorkerBudgetTest`, `SyncWorkerTargetTest`, `SyncServiceOwnershipTest`, `AndroidKeepAliveTest` and facade tests cover deadlines, stop mapping, command generations and lease accounting on the host. WorkManager, OS service and radio behavior still require a phone.
+**Design and evidence:** [`../opensensor-space-firmware/docs/shared/background-sync-triggers.md`](../../opensensor-space-firmware/docs/shared/background-sync-triggers.md) (why these triggers, what Android does, what to measure); contract [`../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`](../../opensensor-space-firmware/docs/shared/ble-sync-protocol.md). Phone evidence is in the [CoreS3 bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md) and [status.md](status.md). The advertising-flag wake has one recorded phone run. Companion presence, Wi-Fi arrival and simultaneous multi-device collection are host-tested only.
 **Related:** [transports.md](transports.md), [sync-engine.md](sync-engine.md).
 
 ## Rule
@@ -22,7 +22,6 @@ flowchart TD
   T2["controller: device advertises new_files / no_utc<br/>AdvertScanReceiver"] --> O3
   T3["phone joined Wi-Fi<br/>WifiArrivalReceiver"] --> O4["OneTimeWorkRequest expedited · KEEP auto-sync-trigger-all<br/>KEY_TRIGGER + KEY_LAN_ONLY"]
   P --> W[SyncWorker]
-  O1 --> W
   O2 --> W
   O3 --> W
   O4 --> W
@@ -46,19 +45,17 @@ The 15-minute periodic request is the **floor**. Three sources enqueue expedited
 `SyncWorker` requests with `KEEP` and `KEY_TRIGGER`. Presence/advertisement work is unique per device
 (`auto-sync-trigger-<address>`); Wi-Fi arrival uses `auto-sync-trigger-all` for a run over all opted-in
 LAN devices. Manual work has separate names. Every enqueue checks its unique name first and returns
-`ALREADY_QUEUED` instead of claiming a run that `KEEP` drops (2026-10-12). A pending request for device A therefore does not
+`ALREADY_QUEUED` instead of claiming a run that `KEEP` drops. A pending request for device A therefore does not
 swallow device B's presence or advertising event; duplicate requests for the same target coalesce.
 All per-device ownership guards still apply.
 
 | Trigger | Mechanism | Fires when | Needs from the device |
 | --- | --- | --- | --- |
-| **Wake when nearby** (`SyncTrigger.PRESENCE`) | Companion Device Manager. Device screen › Auto-sync › *Set up wake when nearby* → `CompanionDeviceManager.associate` with a `BluetoothLeDeviceFilter` on the logger's **address**, single-device, one system confirm dialog (the logger must be advertising, so a BLE session is dropped for it and restored; LAN stays). Then `startObservingDevicePresence` (`ObservingDevicePresenceRequest` on API 36, address string on 31–35). The system binds `CompanionPresenceService`; `EVENT_BLE_APPEARED` / `onDeviceAppeared` → `syncNow(address, PRESENCE)` if the device's Auto-sync switch is on. Disappeared → nothing. Association id in `known_device.companionAssociationId` (schema v8); *Turn off* or *Forget* disassociates. | The logger comes into BLE range (once per arrival; AOSP scans `SCAN_MODE_LOW_POWER`, `FIRST_MATCH \| MATCH_LOST`, MAC filter; disappeared ≈ 10 s after the last report). | A stable public address, the CoreS3 default. |
-| **Advertising flags** (`SyncTrigger.ADVERTISEMENT`) | `AdvertFlagScan`: `BluetoothLeScanner.startScan(filters, LOW_POWER + FIRST_MATCH \| MATCH_LOST, PendingIntent)` with two offloaded filters per **bonded** Auto-sync device, `deviceAddress` AND `serviceData(SERVICE, [0, flag], mask [0, flag])` for `new_files` and for `no_utc`. `AdvertScanReceiver` decodes `Advertisement`, skips when `changeKey` (`boot16:fin:flags`) equals the last run's or within 5 min, else `syncNow(address, ADVERTISEMENT)`. Registered at process start, re-armed by every periodic run (stop + start; a Bluetooth toggle drops it), unregistered when no bonded Auto-sync device exists. Re-registration is serialized and shares `ScanStartBudget` with discovery. A denied start retains the current registration and leaves one start slot for discovery. Needs `isOffloadedFilteringSupported()`; otherwise absent, with a log line. | The **device** decides: it sets `new_files` when a file finalizes and clears it after a `LIST`; `no_utc` while it has no UTC anchor (reboot). | Firmware ≥ `-v6.3` (protocol 2.1 advertising payload). |
+| **Wake when nearby** (`SyncTrigger.PRESENCE`) | Companion Device Manager. Device screen › Auto-sync › *Set up wake when nearby* → `CompanionDeviceManager.associate` with a `BluetoothLeDeviceFilter` on the logger's **address**, single-device, one system confirm dialog (the logger must be advertising, so a BLE session is dropped for it and restored; LAN stays). Then `startObservingDevicePresence` (`ObservingDevicePresenceRequest` on API 36, address string on 31–35). The system binds `CompanionPresenceService`; `EVENT_BLE_APPEARED` / `onDeviceAppeared` → `syncNow(address, PRESENCE)` if the device's Auto-sync switch is on. Disappeared → nothing. Association id in `known_device.companionAssociationId`; *Turn off* or *Forget* disassociates. | The logger comes into BLE range (once per arrival; AOSP scans `SCAN_MODE_LOW_POWER`, `FIRST_MATCH \| MATCH_LOST`, MAC filter; disappeared ≈ 10 s after the last report). | A stable public address, the CoreS3 default. |
+| **Advertising flags** (`SyncTrigger.ADVERTISEMENT`) | `AdvertFlagScan`: `BluetoothLeScanner.startScan(filters, LOW_POWER + FIRST_MATCH \| MATCH_LOST, PendingIntent)` with two offloaded filters per **bonded** Auto-sync device, `deviceAddress` AND `serviceData(SERVICE, [0, flag], mask [0, flag])` for `new_files` and for `no_utc`. `AdvertScanReceiver` decodes `Advertisement`, skips when `changeKey` (`boot16:fin:flags`) equals the last run's or within 5 min, else `syncNow(address, ADVERTISEMENT)`. Registered at process start, re-armed by every periodic run (stop + start; a Bluetooth toggle drops it), unregistered when no bonded Auto-sync device exists. Re-registration is serialized and shares `ScanStartBudget` with discovery. A denied start retains the current registration and leaves one start slot for discovery. Needs `isOffloadedFilteringSupported()`; otherwise absent, with a log line. | The **device** decides: it sets `new_files` when a file finalizes and clears it after a `LIST`; `no_utc` while it has no UTC anchor (reboot). | The advertising service data payload (`Advertisement`). |
 | **Wi-Fi arrival** (`SyncTrigger.WIFI`) | `SyncTriggers`: `ConnectivityManager.registerNetworkCallback(NetworkRequest{TRANSPORT_WIFI}, PendingIntent)` → `WifiArrivalReceiver` → `syncOnTrigger(WIFI, lanOnly = true)` when ≥ 1 Auto-sync device has a LAN token; throttled to one start per 10 min (the callback also fires at registration when already on Wi-Fi). `lanOnly` keeps Bluetooth out of a run that says nothing about range. Re-registered at every process start (survives process death, not reboot → `BootReceiver`). | The phone joins any Wi-Fi network (SSID is location-gated, so "home" is unknown; the 10 s mDNS browse is the cost of a miss). | Nothing. |
 
-Measured 2026-09-18 (`bench-verified.md`, "advertising payload wakes the phone"): with the app process killed (`am kill`), a `flush` on the board flipped `new_files`; 19 s later `ActivityManager: Start proc … for broadcast {…AdvertScanReceiver}`, `AQ-6b40: advertisement bcb4:1:2 new_files=true … lan=true; enqueueing a sync`, `trigger=ADVERTISEMENT`, LAN, `1 new file(s), 22498 B` at +28 s; the board logged `BLE ADV flags=0x2c fin=1` after the `LIST`. `setForeground` was refused (no association yet).
-
-**Exemptions that come with CDM** (AOSP `CompanionExemptionProcessor`, *while an associated device is present*): `REQUEST_COMPANION_RUN_IN_BACKGROUND` → permanent power-save allowlist; `REQUEST_COMPANION_USE_DATA_IN_BACKGROUND` → background data allowed, the exemption the measured screen-off socket kill ("Destroyed live tcp sockets") called for; `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND` → the worker's `setForeground` should stop being refused. All normal permissions, no location. Whether they hold on the OnePlus's ROM is exactly what the next phone run must show.
+**Exemptions that come with CDM** (AOSP `CompanionExemptionProcessor`, *while an associated device is present*): `REQUEST_COMPANION_RUN_IN_BACKGROUND` → permanent power-save allowlist; `REQUEST_COMPANION_USE_DATA_IN_BACKGROUND` → background data allowed, which covers the background network restriction that closes LAN sockets after screen-off; `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND` → the worker's `setForeground` should stop being refused. All normal permissions, no location. Whether they hold on an OEM ROM is not verified on a phone.
 
 Both receivers that use `goAsync()` (`WifiArrivalReceiver`, `AdvertScanReceiver`) run their work in
 the injected `@ApplicationScope` (a `SupervisorJob` with a logging exception handler) through
@@ -70,8 +67,8 @@ work in the scope.
 
 | Request | Details |
 | --- | --- |
-| Periodic | Unique name, `KEEP`, **15 min** (`PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS`; Android picks the moment, later under Doze). Exists exactly while ≥ 1 `known_device.autoSync` row is on (the scheduler observes the count; the switch only flips the row) and is cancelled when the last goes off. Constraint: **battery not low only**, `NetworkType.CONNECTED` was dropped because the BLE path needs no network and a phone with Wi-Fi off never ran. |
-| Sync now / Collect all | `OneTimeWorkRequest`, `setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST)`, `KEEP`: `auto-sync-now-<address>` with `KEY_THING` (a `ThingId` key, `ble:<address>`) for one device, `auto-sync-collect-all` with `KEY_ALL_KNOWN` for all. Every per-device request also carries the tag `auto-sync-device-<address>`. A `KEY_THING` the worker cannot read as a Bluetooth `ThingId` skips the run, so a one-device request never widens to every device (`SyncWorker.dispatch`, `SyncWorkerTargetTest`). Expedited work may carry network/storage constraints only → no battery rule. |
+| Periodic | Unique name, `KEEP`, **15 min** (`PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS`; Android picks the moment, later under Doze). Exists exactly while ≥ 1 `known_device.autoSync` row is on (the scheduler observes the count; the switch only flips the row) and is cancelled when the last goes off. Constraint: **battery not low only**, There is no network constraint, because the BLE path needs no network. |
+| Collect all / one device | `OneTimeWorkRequest`, `setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST)`, `KEEP`: `auto-sync-collect-all` with `KEY_ALL_KNOWN` for all. `AutoSyncScheduler.syncNow` with `SyncTrigger.MANUAL` names `auto-sync-now-<address>` with `KEY_THING` (a `ThingId` key, `ble:<address>`) for one device, and no screen calls it. Every per-device request also carries the tag `auto-sync-device-<address>`. A `KEY_THING` the worker cannot read as a Bluetooth `ThingId` skips the run, so a one-device request never widens to every device (`SyncWorker.dispatch`, `SyncWorkerTargetTest`). Expedited work may carry network/storage constraints only → no battery rule. |
 | Triggered | `auto-sync-trigger-<address>` for presence/advertisement, `auto-sync-trigger-all` for Wi-Fi, `KEEP`; input `KEY_TRIGGER` (+ `KEY_THING` or `KEY_LAN_ONLY`). Workers may overlap. A controller already owned by another run is skipped; another device remains eligible. |
 | Retry | `Result.retry()` with exponential backoff from 5 min, at most `MAX_RETRIES` 2 per period, **only** for transient conditions (a link exception, or a transfer that broke before every planned file had an outcome, `BackgroundSyncResult.incomplete`). Not reachable is not an error: one log line, next period. Per-file failures are not retried inside the period. |
 
@@ -94,14 +91,11 @@ work in the scope.
 | User-started transfer | `SyncForegroundService` (`connectedDevice`, with `dataSync` as the permission fallback), started by a controller **while the app is in the foreground** (API 31+ start rule). Owns no logic: aggregates manager snapshots for active interactive transfers/reconnects into one ongoing notification (files, bytes, progress; one device's reconnect message only when it is the sole active device). **Stop** and API 35+ timeout cancel interactive transfers/reconnects across controllers, leaving workers to their own cancel actions. Updates are paced at `NOTIFY_INTERVAL_MS` 1 s and skipped while the screen is off (`ShadePacing.postPaced`, SCREEN_ON/OFF broadcasts); the final state always posts, even before the screen flow first emits. Lifetime follows only PROCESS leases, including preparation, retries and finalization. Stop calls `controller.stop(USER)` even while leased; timeout calls `controller.stop(FGS_TIMEOUT)`. Generation-specific refusal or destruction informs just its protected intents. There is no grace timer or inferred flag lifetime. |
 | Worker | `setForeground(ForegroundInfo(runNotificationId, …, FOREGROUND_SERVICE_TYPE_DATA_SYNC))` with the same `SyncNotifications.progress`. Each worker has its own notification ID, derived from the WorkRequest id (`SyncWorker.notificationIdFor`, at or above 10 000 so it never collides with the fixed IDs), so a retry or a restarted process reuses it, and its own WorkManager cancel intent; it aggregates only controllers whose `backgroundOwner` equals that run ID. Its Stop cancels that run's device jobs. `ForegroundServiceStartNotAllowedException` (app in background) → log one line, continue as a plain job; with notifications permission a progress notification can still be posted. With a companion association and the device present, `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND` should make the refusal go away, unverified. |
 | Manifest | WorkManager's `SystemForegroundService` merged with `foregroundServiceType="dataSync"` (`tools:node="merge"`), or Android 14+ throws; default `WorkManagerInitializer` removed from `InitializationProvider` because of the Hilt worker factory. |
-| Notifications | Channels `sync_progress`, `sync_summary`; interactive `FOREGROUND_ID` 1001, stable worker IDs derived from the WorkRequest UUID by `SyncWorker.notificationIdFor`, in `[10000, 10000 + 2^28)`, `SUMMARY_ID` 1003. The old `WORKER_ID` constant is no longer used by workers. Summary appears only when something arrived or failed, with a device count for several sources. `POST_NOTIFICATIONS` is requested on the first Sync tap / Auto-sync switch-on (API 33+); denial hides ordinary progress/summary notifications. |
+| Notifications | Channels `sync_progress`, `sync_summary`; interactive `FOREGROUND_ID` 1001, stable worker IDs derived from the WorkRequest UUID by `SyncWorker.notificationIdFor`, in `[10000, 10000 + 2^28)`, `SUMMARY_ID` 1003. Summary appears only when something arrived or failed, with a device count for several sources. `POST_NOTIFICATIONS` is requested on the first Sync tap / Auto-sync switch-on (API 33+); denial hides ordinary progress/summary notifications. |
 
-Why the service exists (measured 2026-09-17): ~2 min after screen-off, `ConnectivityService`
-logged "Destroyed live tcp sockets for uids={ours}" and the LAN socket (then `TcpTransport`) saw "Software caused
-connection abort" 6 ms later, the background network restriction, not the link. The companion
-exemption (above) addresses the same restriction from the other side, for the whole time the logger
-is present rather than only during a transfer; the service stays until a phone run shows it is
-redundant.
+The service exists because Android's background network restriction closes the app's live TCP
+sockets shortly after screen-off. The companion exemption above covers the same restriction for
+the whole time the logger is present, and the service covers a transfer without it.
 
 ## Wi-Fi lock (`LanWifiLock`)
 
@@ -117,8 +111,7 @@ with the screen **on** and the app in the foreground (AOSP `WifiLockManager` che
 `IMPORTANCE_FOREGROUND`; a `dataSync` service does not count). On API 34+ the framework turns
 HIGH_PERF into LOW_LATENCY anyway (`high_perf_lock_deprecated`). **Honest consequence: on Android
 14+ this lock does not protect a screen-off LAN sync**; the automatic resume does
-([sync-engine.md](sync-engine.md#resume-after-a-lost-link)). Measured before the lock: throughput
-fell ~60 → ~12 files/min with the screen locked, then TCP stalled > 5 s.
+([sync-engine.md](sync-engine.md#resume-after-a-lost-link)).
 
 ## OEM battery killers
 
@@ -129,7 +122,7 @@ deep-optimization / sleep-standby lists; a swiped-away app may still be killed. 
 
 ## iOS Auto-sync
 
-Issue #23. Host and simulator evidence only so far. No iPhone run.
+Host and simulator evidence only. Phone runs are recorded in [status.md](status.md).
 
 **Code:** `ios/App/BackgroundSync.swift` (`AutoSync`, the OS side), `AppDelegate.swift`
 (`AppServices` owns the adapters, so a launch without a screen works), the Auto-sync extensions in
@@ -178,14 +171,14 @@ and the iOS 18 fallback.
 
 ## Android worker runtime budget (#74)
 
-Pinned WorkManager is 2.12.0. Each attempt has an eight-minute deadline covering foreground setup,
+Each attempt has an eight-minute deadline covering foreground setup,
 discovery, collection, scan rearming, history derivation and summary. Cancellation propagates,
 with cleanup joined before the job returns. PROCESS comes from this worker's own `setForeground`
 or its bounded ordinary job, never a second app service. Android 16 may stop it earlier for job
 quota; foreground work does not exempt it. User cancellation maps to USER, foreground timeout
 to FGS_TIMEOUT, and quota or the local deadline to SYSTEM.
 
-Sources checked 2026-10-11 are the official [long-running worker guide](https://developer.android.com/develop/background-work/background-tasks/persistent/how-to/long-running),
+The sources are the official [long-running worker guide](https://developer.android.com/develop/background-work/background-tasks/persistent/how-to/long-running),
 [Android 16 quota changes](https://developer.android.com/about/versions/16/behavior-changes-all),
 [CoroutineWorker execution limit](https://developer.android.com/reference/androidx/work/CoroutineWorker),
 and [WorkManager release notes](https://developer.android.com/jetpack/androidx/releases/work).

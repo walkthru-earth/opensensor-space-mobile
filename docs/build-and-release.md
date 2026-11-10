@@ -25,8 +25,8 @@ tools/setup-hooks.sh                 # once per clone
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Lint fails the build on errors and on any new warning (`warningsAsErrors = true`). Warnings that
-existed on 2026-10-08 are recorded in `app/lint-baseline.xml`. Fix a baselined warning rather than
+Lint fails the build on errors and on any new warning (`warningsAsErrors = true`). Accepted
+warnings are recorded in `app/lint-baseline.xml`. Fix a baselined warning rather than
 adding to the file. Regenerate it with `./gradlew :app:updateLintBaseline` only after reviewing every
 new entry. The dependency version notices (`GradleDependency`, `NewerVersionAvailable`,
 `AndroidGradlePluginVersion`) are disabled because Dependabot owns updates and those checks would
@@ -38,14 +38,14 @@ checks, recorded separately in [status.md](status.md) and the firmware repo's `b
 
 CI minutes cost money and macOS minutes cost the most, so `verify.yml` runs once per change.
 Pull requests run on `pull_request` only, not again on the branch push. `main` runs on push.
-Changes to `docs/` or Markdown alone skip the gate. A branch without a PR runs it with
-`workflow_dispatch`. The device Release build runs on `main` and by hand, not on pull requests, in
-its own job ("iOS device Release build", 45 minute timeout) beside "iOS native validation" (60
-minutes). As one step after the simulator tests it took about 17 minutes and pushed that job near
-or over its 60 minute limit on `main`, and a cancelled job also skips saving the `main` caches. The
-Release job only reads the Gradle and Kotlin/Native caches, so it never saves over the ones the
-validation job writes. A slow macOS runner can still cancel "iOS native validation" at 60 minutes. That is
-infrastructure, rerun the job.
+Changes to `docs/` or Markdown alone skip the gate (`paths-ignore`). A branch without a PR runs it
+with `workflow_dispatch`. On a pull request a newer push cancels the older run
+(`concurrency.cancel-in-progress`). On `main` every run finishes, so each merged commit has its own
+result and its run saves the `main` caches. The device Release build runs on `main` and by hand,
+not on pull requests, in its own job ("iOS device Release build", 45 minute timeout) beside "iOS
+native validation" (60 minutes). The Release job only reads the Gradle and Kotlin/Native caches, so
+it never saves over the ones the validation job writes. A slow macOS runner can still end "iOS
+native validation" at its timeout. That is infrastructure, rerun the job.
 CI runs ktlint on every file, while the local hook checks only staged files, so run
 `pre-commit run --all-files` before a merge that touches many Kotlin files.
 
@@ -58,8 +58,8 @@ audits through `verify`; release-only APK optimization and signer checks remain 
 
 `FirmwareTemplatesTest` (`:core:model`) compares `core/model/bundled/templates` with
 opensensor-space-firmware `docs/shared/templates` byte for byte (#261). The `verify.yml` gradle job
-checks the firmware out at the commit the bundle was copied from, a literal `ref` in the workflow, and
-sets `OPENSENSOR_FIRMWARE_DIR`. The `ref` stays a literal because CodeQL reports a checkout ref read
+and the `release.yml` `apk` job check the firmware out at the commit the bundle was copied from, a
+literal `ref` in each workflow, and set `OPENSENSOR_FIRMWARE_DIR`. The `ref` stays a literal because CodeQL reports a checkout ref read
 from a repository file as cache poisoning. With that variable set, a missing checkout fails the test. Locally the
 test finds an `opensensor-space-firmware` folder beside the repository and skips without one. The
 weekly `live-key-drift.yml` `templates` job runs the same test against firmware `main`, so a
@@ -89,8 +89,7 @@ The build JDK does not set the bytecode. The shared modules compile to Java 17, 
 (`OpenSensorConventions.jvmTarget`). `:app` sets no JVM target and keeps AGP's default, so its classes
 are Java 11 (class file major 55).
 
-This is a behavior change. Before, any JDK 17 or newer could run the build. Now a `./gradlew` started
-without a JDK 25 in reach fails at once. macOS auto-detection reads `/usr/libexec/java_home`, which lists
+A `./gradlew` started without a JDK 25 in reach fails at once. macOS auto-detection reads `/usr/libexec/java_home`, which lists
 only JDKs under `/Library/Java/JavaVirtualMachines` and `~/Library/Java/JavaVirtualMachines`. Homebrew's
 `openjdk@25` is keg-only and is not there until you link it, so without the link it counts only when
 `JAVA_HOME` points at it. Two common cases run without your shell's `JAVA_HOME`. The pre-push
@@ -117,20 +116,20 @@ a plain major version, and passes it to `actions/setup-java`. The version lives 
 another JDK, run `./gradlew updateDaemonJvm --jvm-version=<major>` on a machine that has that JDK and
 commit the file. The root `build.gradle.kts` configures that task to write no download URLs.
 
-## Stack (verified building 2026-10-09; kotlinx-datetime 0.8.0 added for W8)
+## Stack
 
 | | |
 | --- | --- |
 | Language / UI | Kotlin (`kotlin`), Jetpack Compose through its BOM (`androidxComposeBom`, material3 included), the shared `:ui:designsystem` theme and vendored icons (no dynamic color, no `material-icons-extended`), Navigation 3 (`nav3Core` and `jetbrainsNavigation3`). Versions are the `gradle/libs.versions.toml` keys named here |
-| DI / data | Hilt (`hilt`), Room (`androidxRoom`, **schema v1**), DataStore Preferences (`androidxDatastore`), WorkManager (`androidxWork`) + `androidx.hilt:hilt-work` (`androidxHilt`), kotlinx.serialization (`kotlinxSerialization`), kotlinx-datetime (`kotlinxDatetime`, shared calendar math, added 2026-10-08), coroutines (`coroutines`). Versions are the `gradle/libs.versions.toml` keys named here |
-| Native | `zstd-jni` 1.5.7-20 (`@aar`). Discover (W12, 2026-10-08) adds `maplibre-compose` (0.20.0 since 2026-10-11) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.1 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
-| Build | Gradle as `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` names it (configuration cache on), with the daemon on JDK 25 through the Daemon JVM criteria (see Build JDK). AGP (`androidGradlePlugin`), KSP (`ksp`) and Compose Multiplatform (`composeMultiplatform`) as `gradle/libs.versions.toml` pins them. R8 for release. Every `:core` module (protocol, parquet, history, publicfeed, units, archive, storage, net, sync and settings) and `:family:air` target JVM (Java 17) and iOS. `:ui:designsystem`, `:ui:map` and `:feature:discover` use `opensensor.kmp.compose-feature`, Compose Multiplatform for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. `:ios:shared` targets iOS only |
+| DI / data | Hilt (`hilt`), Room (`androidxRoom`, schema `AppDatabase.version`, exported under `core/database/schemas/`), DataStore Preferences (`androidxDatastore`), WorkManager (`androidxWork`) + `androidx.hilt:hilt-work` (`androidxHilt`), kotlinx.serialization (`kotlinxSerialization`), kotlinx-datetime (`kotlinxDatetime`, shared calendar math), coroutines (`coroutines`). Versions are the `gradle/libs.versions.toml` keys named here |
+| Native | `zstd-jni` (`zstdJni`, `@aar`). Discover adds `maplibre-compose` (`maplibreCompose`) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`) and `com.uber:h3` (`h3`, JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C library (`core/publicfeed/src/nativeInterop/h3c`, its README names the version) with `xcrun clang` and binds it through cinterop |
+| Build | Gradle as `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` names it (configuration cache on), with the daemon on JDK 25 through the Daemon JVM criteria (see Build JDK). AGP (`androidGradlePlugin`), KSP (`ksp`) and Compose Multiplatform (`composeMultiplatform`) as `gradle/libs.versions.toml` pins them. R8 for release. Every `:core` module and `:family:air` target JVM (Java 17) and iOS, except `:core:database`, which targets Android and iOS (`opensensor.kmp.android-library`). Every `:ui` and `:feature` module uses `opensensor.kmp.compose-feature`, Compose Multiplatform for Android (`com.android.kotlin.multiplatform.library`) and iOS, with no JVM target. `:ios:shared` targets iOS only |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 
-Bump `libs.versions.toml` only to versions you have verified build, and note the date here.
+Bump `libs.versions.toml` only to versions you have verified build.
 
-## iOS build (migration started 2026-10-08)
+## iOS build
 
 The iOS app lives in `ios/OpenSensor.xcodeproj`, with the Compose framework in
 `:ios:shared`, which targets iOS only. `verifyIos` runs the simulator tests of every shared module,
@@ -151,13 +150,13 @@ each of these cases the build also leaves out the H3 C library build and cintero
 or command-line overrides. See [ios.md](ios.md) for commands,
 current feature scope and simulator versus phone qualification.
 
-### GitHub Actions iOS validation (researched 2026-10-08)
+### GitHub Actions iOS validation
 
 Keep one `iOS native validation` job in `verify.yml`, alongside the Linux checks, plus the
 `iOS device Release build` job that runs off pull requests only. The validation job runs on
 pushes, pull requests and manual dispatch, so its check is present if made required in a
 branch ruleset. Changes to `docs/` or Markdown alone start no run. The workflow
-uses read-only repository permissions and cancels obsolete runs. Validation needs
+uses read-only repository permissions and cancels an older run only on a pull request. Validation needs
 no Apple account, provisioning profile or signing secret.
 
 The project's chosen validation toolchain is **Xcode 27.0 / iOS 27 SDK** for every
@@ -173,12 +172,12 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | --- | --- |
 | `xcode-27` (standard ARM64 runner, public preview) | Matches `iosSimulatorArm64`; validates the latest chosen Apple SDK without an Intel target or a multi-version matrix. |
 | Explicit Xcode 27.0 through `DEVELOPER_DIR` | Matches the locally checked release build; avoids the runner's moving default and pre-release Xcode installations. |
-| Temurin, version read from `gradle/gradle-daemon-jvm.properties` (25), + repository Gradle wrapper | Uses the same Java major as Linux CI and local builds, and keeps the project's pinned Gradle distribution. |
+| Temurin, version read from `gradle/gradle-daemon-jvm.properties`, + repository Gradle wrapper | Uses the same Java major as Linux CI and local builds, and keeps the project's pinned Gradle distribution. |
 | `setup-gradle` with `cache-provider: basic` | Owns Gradle caching and wrapper validation, using standard GitHub caching. Do not also enable Gradle caching in `setup-java`. |
 | Separate `~/.konan` cache | Reuses the native compiler/dependencies, keyed by architecture, Xcode and dependency/build definitions. No DerivedData cache. |
 | Two Gradle workers | Limits simultaneous native compilation on the standard runner's 7 GB RAM. |
 | `ios/tests/verify-native.sh` | Compiles native archive export, LAN framing/policy, RunSlot cancellation and Bluetooth GATT queue checks in Swift 6 with complete concurrency checking and warnings as errors. Shared transfer checks run in Kotlin tests. No radio or UI qualification. |
-| `verifyIos` | Runs the simulator tests of every shared module (each `:core` module, `:ui:designsystem`, `:ui:map`, `:feature:discover`, `:ios:shared`), compiles the `iosMain`, `appleMain` and `nativeMain` metadata, and links the Debug framework. |
+| `verifyIos` | Runs the simulator tests of every shared module (every `:core`, `:family`, `:ui` and `:feature` module and `:ios:shared`), compiles the `iosMain`, `appleMain` and `nativeMain` metadata, and links the Debug framework. |
 | Xcode Debug simulator build | Compiles Swift adapters, app entry point and the Compose framework through the existing direct-integration build phase. |
 | Xcode Release device build, signing disabled, own job off pull requests | Checks optimized Kotlin and Swift for device ARM64. Catches failures hidden by Debug/simulator builds; produces no distributable IPA. |
 
@@ -197,30 +196,17 @@ The unsigned device product is a compile check, not an iPhone download.
 Check the [runner image inventory](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
 and [Kotlin compatibility matrix](https://kotlinlang.org/docs/multiplatform/multiplatform-compatibility-guide.html)
 together when updating Kotlin or Xcode. Do not fall back silently to the default if
-the pinned Xcode disappears from the hosted image. Kotlin 2.4.20's published
-baseline is Xcode 26.4; this project deliberately uses Xcode 27 with local build
-evidence. The Gradle pin (`gradle/wrapper/gradle-wrapper.properties`) and the AGP pin
-(`androidGradlePlugin` in `gradle/libs.versions.toml`) are also above that matrix's
-listed maxima (Gradle 9.7.0, AGP 9.3.1). Passing project builds do not extend the vendor's
-published compatibility range. Preserve the pins for this CI change and reassess
-compatibility during each toolchain update.
+the pinned Xcode disappears from the hosted image. The Xcode pin, the Gradle pin
+(`gradle/wrapper/gradle-wrapper.properties`) and the AGP pin (`androidGradlePlugin` in
+`gradle/libs.versions.toml`) can sit above the range that matrix lists for the pinned Kotlin
+(`kotlin`). Passing project builds do not extend the vendor's published compatibility range, so
+reassess compatibility during each toolchain update.
 
 The workflow follows JetBrains' [KMP CI guidance](https://kotlinlang.org/docs/multiplatform/github-actions-for-kmp.html)
 and [direct Xcode integration](https://kotlinlang.org/docs/multiplatform/multiplatform-direct-integration.html).
 Its cache choice follows the [Gradle action documentation](https://github.com/gradle/actions/blob/main/docs/setup-gradle.md).
 Local checks use the Xcode version actually installed on the developer's Mac;
 record hosted results separately against the run's exact commit.
-
-Local validation on 2026-10-08 used Xcode 27.0 (27A266a). All common iOS tests
-passed on the installed iOS 26.5 simulator; unsigned Debug simulator and optimized
-Release device builds passed with the iOS 27 SDK. Simulator app/result-bundle ZIP
-packaging and workflow linting also passed. This confirms local compilation with
-Xcode 27, not execution on an iOS 27 runtime or a hosted runner result.
-
-The first [hosted verification run for `27280bf`](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37741492239)
-completed successfully on 2026-10-08, including the Xcode 27 native validation job,
-Linux verification and hygiene hooks. This establishes the hosted build/test gate;
-it does not add iPhone radio or permission qualification.
 
 ### Later iOS release: start with TestFlight
 
@@ -252,9 +238,8 @@ Before implementing upload, complete these prerequisites:
    keys as artifacts. Follow [Apple's upload guidance](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds/).
 
 TestFlight distribution is the first release milestone. App Store submission and
-production release are separate explicit actions. Apple's upload requirements,
-checked on 2026-10-08, require Xcode 26 or later and the iOS 26 SDK or later; that
-does not require raising the app's iOS 18.5 deployment target. Recheck the
+production release are separate explicit actions. Apple's upload requirements set a minimum
+Xcode and SDK, which does not require raising the app's iOS 18.5 deployment target. Recheck the
 [current requirements](https://developer.apple.com/news/upcoming-requirements/)
 before enabling distribution. No iOS signing or upload workflow is configured yet.
 
@@ -297,23 +282,7 @@ the debug key. Without the flag, release tasks still require all four `OPENSENSO
 The flag is refused when `CI` is set, so it can not produce a published artifact. A debug-signed
 release can not update an installed release build, so uninstall first when testing it on a phone.
 
-Host evidence on 2026-10-08 (AGP 9.4.0, local machine, not a phone run). The unminified universal
-release APK was 55,080,672 bytes and the minified one 6,596,149 bytes. `mapping.txt` was produced.
-`dexdump` showed the `com.github.luben.zstd` classes, the four zstd-jni native ABIs, readable
-`ConnectionState`, `Frame` and exception class names, and `InnerClass` annotations on nested
-states.
-
-W12 Discover on 2026-10-08 (same host, emulator only). The minified universal release APK grew to
-49,525,502 bytes. Native libraries are about 42.6 MB of it uncompressed (MapLibre Native about
-14 to 16 MB per ABI for arm64-v8a, armeabi-v7a and x86_64), dex 5.2 MB, the sample feed and
-basemap styles 0.14 MB. A Play App Bundle delivers one ABI per phone, so the download is roughly a
-third of the native share. The minified build started on Discover on a fresh install of the API 36
-arm64 emulator, drew H3 cells (h3 JNI after R8) and switched to the plain style when "Show public
-sensors" was off. Not a phone run.
-
-ABI filter on 2026-10-11 (#61, same kind of host check, not a phone run). `ndk.abiFilters` keeps
-`arm64-v8a` and `armeabi-v7a`. The local minified release APK went from 51,731,831 bytes (x86 and
-x86_64 included, x86_64 without h3) to 35,130,751 bytes. `tools/check_apk_abis.py` fails the verify
+`ndk.abiFilters` keeps `arm64-v8a` and `armeabi-v7a`. `tools/check_apk_abis.py` fails the verify
 and release workflows when the APK holds any other ABI or one ABI lacks MapLibre, zstd-jni or h3.
 
 **R8 runtime behavior is not yet qualified on a phone.** Before the first tagged release
@@ -328,13 +297,13 @@ merged manifest to it ([store-compliance.md](store-compliance.md#per-kind-gates-
 | Permission | Why | Runtime? |
 | --- | --- | --- |
 | `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT` | the BLE pipe | yes |
-| `INTERNET` | LAN sockets to hosts from mDNS `_ossync._tcp` discovery, and the anonymous read-only Discover basemap GETs (Protomaps PMTiles on source.coop, glyphs and sprites from protomaps.github.io), which "Show public sensors" turns off. No other endpoint | – |
+| `INTERNET` | LAN sockets to hosts from mDNS `_ossync._tcp` discovery, and anonymous read-only GETs that "Show public sensors" turns off. These are the OpenAQ aggregates feed and the Protomaps PMTiles basemap on `data.source.coop` (`OpenAqAggregatesFeed.DEFAULT_ROOT`, `ui/map` `files/basemap/*.json`), glyphs and sprites from `protomaps.github.io`, and a board template by its footer href on `raw.githubusercontent.com` (`TemplateHrefs`). No other endpoint | – |
 | `ACCESS_NETWORK_STATE` | merged from the maplibre-compose library manifest (not in our source manifest), a normal permission | – |
 | `ACCESS_LOCAL_NETWORK` | mDNS + LAN on API 37+; denial leaves BLE working | yes, API 37+ only |
-| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` | `SyncForegroundService` and the worker's `setForeground` | – |
+| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` + `FOREGROUND_SERVICE_CONNECTED_DEVICE` | `SyncForegroundService` (types `connectedDevice` and `dataSync`) and the worker's `setForeground` | – |
 | `POST_NOTIFICATIONS` | progress + summary notifications | yes, API 33+ |
 | `WAKE_LOCK` | **only** `LanWifiLock` during LAN transfers; no CPU wake lock anywhere | – |
-| `REQUEST_COMPANION_RUN_IN_BACKGROUND`, `REQUEST_COMPANION_USE_DATA_IN_BACKGROUND`, `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND`, `REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE` | "wake when nearby": the system's presence exemptions apply only while an associated logger is in range ([background-sync.md](background-sync.md#triggers--starting-a-run-before-the-period-is-up)) | – (normal); the association itself is one system dialog |
+| `REQUEST_COMPANION_RUN_IN_BACKGROUND`, `REQUEST_COMPANION_USE_DATA_IN_BACKGROUND`, `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND`, `REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE` | "wake when nearby": the system's presence exemptions apply only while an associated logger is in range ([background-sync.md](background-sync.md#triggers-starting-a-run-before-the-period-is-up)) | – (normal); the association itself is one system dialog |
 | `RECEIVE_BOOT_COMPLETED` | restart the process after boot so the Wi-Fi-arrival and advertising-flag registrations are re-armed; schedules nothing itself | – |
 
 Only approximate location (`ACCESS_COARSE_LOCATION`), requested when **Near me**
@@ -353,21 +322,22 @@ Signing is **fail-closed**. Release tasks require all four `OPENSENSOR_*` signin
 existing keystore. Gradle substitutes the debug signing config only for the explicit local
 `-Popensensor.localRelease=true` check, which is refused on CI. The release job requires the
 four keystore secrets plus `RELEASE_CERT_SHA256`, validates that the alias/private-key entry opens,
-compares its certificate fingerprint to the configured value, runs the full `verify` suite in the
-same job, builds the APK, and checks the APK signer with `apksigner` before publishing. A missing,
+compares its certificate fingerprint to the configured value, checks out the pinned firmware and
+runs the full `verify` suite in the same job, builds the APK, and checks the APK signer with `apksigner` before publishing. A missing,
 partial, wrong, or debug configuration fails before release creation. The expected project key is
 `CN=OpenSensor, O=walkthru.earth`, SHA-256 `b039d9e8…f04f3f7`.
 
-`tools/setup-signing.sh` generated `secrets/release.jks` (PKCS12, RSA 4096, 30 y) and
+`tools/setup-signing.sh` generates `secrets/release.jks` (PKCS12, RSA 4096, 30 y) and
 `secrets/.env` with the `OPENSENSOR_*` variables `app/build.gradle.kts` reads
 (`OPENSENSOR_KEYSTORE_FILE/PASSWORD`, `OPENSENSOR_KEY_ALIAS/PASSWORD`, `OPENSENSOR_VERSION_CODE/NAME`) and
-uploaded the four Actions secrets. Local signed release:
+uploads the four Actions secrets. Local signed release:
 `set -a; source secrets/.env; set +a; ./gradlew :app:assembleRelease`. `secrets/` is git-ignored.
 **Back the keystore up.** Without it no future release installs over an existing one.
 
 The workflow runs as two jobs. The `apk` job validates the keystore, runs `verify`, builds and
-checks the signed APK, writes the notes and uploads `dist/` with a `contents: read` token and a
-read-only Gradle cache, so a release build never writes a cache entry. The `publish` job is the only
+checks the signed APK, writes the notes and uploads `dist/` with a `contents: read` token. It reads
+the Gradle cache read-only and restores the Kotlin/Native cache without saving it, so a release
+build never writes a cache entry. The `publish` job is the only
 one with `contents: write`. It downloads `dist/` and moves the tag and release.
 
 Rolling publication uses GitHub's [reference REST API](https://docs.github.com/en/rest/git/refs)
@@ -407,34 +377,7 @@ an update still needs a phone run before a release.
 Gradle jobs restore `~/.konan` (Kotlin/Native compiler and dependencies) keyed by OS, architecture
 and the build definitions. Both iOS jobs add the Xcode version to the key. The verify workflow
 writes the Gradle cache only on `main`, from the Linux gradle job and "iOS native validation". The
-iOS device Release build and release builds only read it.
-
-### Rolling tag failure (2026-10-08)
-
-[Release run 22](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37740192533/job/113192946568)
-passed verification, APK assembly and signer validation for `cdd133c`, then failed
-while pushing `latest`: the GitHub App token could not update workflow files without
-`workflows` permission. A newer `main` commit had already changed `verify.yml`.
-The revised workflow skips outdated rolling runs, moves the tag through REST,
-retains the release until upload succeeds, and preserves the APK before publishing.
-Hosted publication must pass before this recovery is considered verified.
-
-### Pipeline check (2026-09-29)
-
-After the repository rename and merge at `06ab6cc`, the
-[main verification run](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/36584773614)
-passed all hooks, the thing-epoch validator, Gradle verification, and artifact uploads.
-Downloaded reports showed zero test failures and only the lint warnings known at the time.
-The renamed repository resolves the Actions versions and retains its existing keystore secrets.
-`RELEASE_CERT_SHA256` was added from the trusted local keystore's public certificate; no signing key changed.
-
-The [release run](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/36584773885)
-then passed keystore/certificate validation and the full verified release build, but the final
-signer check rejected a changed `apksigner` output label (`V2 Signer:` rather than `Signer #1`).
-The APK verified cryptographically and reported the expected project certificate; publication
-remained blocked. The workflow now recognizes both explicit label formats and still requires
-one signer, one unique 64-digit SHA-256 certificate fingerprint, and an exact match to the
-validated certificate. A fresh main run must pass this corrected check before publication is qualified.
+iOS device Release build and release builds only read the Gradle cache and only restore `~/.konan`.
 
 ## Fake device (debug builds, `FakeTransport`)
 
@@ -448,15 +391,7 @@ that drops the link and applies pending `ble.*` changes. Persists for the proces
 `GET_TOKEN` → `ERROR` 13, **not a socket**. Fault hooks for tests: `dropLeadingChunks(readIndex)`,
 `closedDelayMs`. Extend the fake rather than mocking.
 
-## Provenance and generator gotchas
-
-```sh
-git clone --depth 1 --branch base https://github.com/android/architecture-templates.git opensensor-space-android
-cd opensensor-space-android && rm -rf .git
-/opt/homebrew/bin/bash customizer.sh space.opensensor Device "OpenSensor"   # bash ≥ 4; macOS ships 3
-```
-
-`customizer.sh` cannot take a spaced application name. Use one word.
+## Bundled places
 
 The offline place search ships GeoNames cities15000 (CC BY 4.0) as
 `ui/map/src/commonMain/composeResources/files/places/cities15000.tsv.gz`, 34,208 places in
@@ -467,9 +402,9 @@ byte for byte the same for the same download. `BundledPlacesTest` keeps it under
 
 | Edit… | Affects… |
 | --- | --- |
-| `libs.versions.toml` | all modules; note the verified date above |
+| `libs.versions.toml` | all modules |
 | `verify` task in root `build.gradle.kts`, `build-logic/src/main/kotlin/Gates.kt` | pre-push hook and `verify.yml` (both call it) |
-| manifest permissions | AGENTS.md non-negotiables; `LanPermission`, `NotificationPermission`, `BluetoothGate` |
+| manifest permissions | AGENTS.md non-negotiables; `LanPermission`, `NotificationPermission`, `RuntimeAccess` |
 | `FakeTransport` behaviour | `AutoSyncRunnerTest`, `HistoryDeriverTest` and every debug demo |
 | `.editorconfig` ktlint rules | the pre-commit hook and CI's `pre-commit --all-files` |
 | `app/src/main/keepRules/*.keep` or the release `optimization` block | the published APK; needs a host `-Popensensor.localRelease=true` build and a phone run |

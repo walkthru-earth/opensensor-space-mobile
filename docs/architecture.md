@@ -6,57 +6,76 @@
 
 ## Module graph
 
+The module list is `settings.gradle.kts`, and each arrow below is a production `project(...)`
+dependency of a `build.gradle.kts`. Test only dependencies are left out.
+
 ```mermaid
 flowchart TB
-  subgraph core["Kotlin core, JVM and iOS, no Android, Hilt, Room or Log"]
-    PR[":core:protocol<br/>common wire rules + JVM adapters"]
-    PQ[":core:parquet<br/>reader + writer, ByteReader, RangeSource, page index, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
-    NT[":core:net<br/>HTTP range source, OkHttp and NSURLSession"]
-    MO1[":core:model<br/>board templates, app profiles, datastreams, scales, thing join"]
-    HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
-    PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample, OpenAQ live feed"]
-    UN[":core:units<br/>display units, axis ticks"]
-    AR1[":core:archive<br/>layout, verifier, records, store ports"]
-    SE[":core:settings<br/>app preferences on DataStore, detail level, cache quotas"]
+  subgraph core["Kotlin core, no Android, Hilt or Log. JVM and iOS, except :core:database (Android and iOS)"]
+    MO[":core:model<br/>board templates, app profiles, datastreams, scales, thing join, H3Cell"]
+    PR[":core:protocol<br/>wire frames, codec, JSON, names, CRC and PAR1 rules"]
+    PQ[":core:parquet<br/>reader and writer, ByteReader, RangeSource, page index, codec SPI, WKB"]
     ST[":core:storage<br/>atomic files, storage budget, quotas, memory caches"]
-    SY1[":core:sync<br/>LinkSession, SyncEngine, ArchiveCollector, CollectionController"]
-    SC[":core:stac<br/>regenerates and checks the board's STAC File Item"]
+    UN[":core:units<br/>display units, axis ticks"]
+    NT[":core:net<br/>HTTP range source, block cache"]
+    AR[":core:archive<br/>layout, verifier, records, store ports"]
+    SY[":core:sync<br/>LinkSession, DeviceSession, SyncEngine, ArchiveCollector, CollectionController"]
+    HI[":core:history<br/>metric registry, file index, tiers, daily Parquet, calendar windows"]
+    DB[":core:database<br/>Room KMP AppDatabase, DAOs, migrations"]
+    PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample and OpenAQ feeds"]
+    SE[":core:settings<br/>DataStore preferences, detail level, cache quotas"]
+    SC[":core:stac<br/>STAC File Item and Thing Collection"]
     TH[":core:thing<br/>ThingKind contract, board kind, ThingKinds registry, PublishGate, PlatformNeedsTable"]
+    TK[":core:thing:testkit<br/>ThingKindContract"]
   end
   subgraph family["Sensor families, JVM and iOS"]
-    AQ[":family:air<br/>WHO 2021 scales and palette, EPA correction, moods, air metrics, PM quality checks"]
+    AQ[":family:air<br/>WHO 2021 scales, EPA correction, NowCast, moods, air metrics, PM quality checks"]
   end
-  subgraph ui["Compose Multiplatform, Android and iOS"]
-    DS[":ui:designsystem<br/>tokens, theme, fonts, floating controls"]
-    PM[":ui:permissions<br/>trigger table, permission policy, settings link"]
-    MP[":ui:map<br/>base map, styles, zoom, tile cache, cell outlines, Near me, res 8 CellPicker, offline place search"]
-    DI[":feature:discover<br/>public cells, own pins, legend, cell sheet, chart"]
-    DV[":feature:device<br/>Device settings, sensor location on the area map"]
-    FS[":feature:settings<br/>Settings screen and controller"]
-    SH[":feature:shell<br/>AppKey, TabNavigator, AppShell, bottom bar"]
+  subgraph ui["Shared UI, Compose Multiplatform, Android and iOS"]
+    STR[":ui:strings<br/>UiText, shared copy, copy lint tests"]
+    PM[":ui:permissions<br/>trigger table, permission policy, dialogs"]
+    DS[":ui:designsystem<br/>tokens, theme, fonts, components, floating controls"]
+    MP[":ui:map<br/>base map, styles, tile cache, cell outlines, Near me, CellPicker, place search"]
   end
-  APP[":app (Android)<br/>Hilt, DataStore, WorkManager, Compose, zstd-jni"]
-  IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, lifecycle, Keychain, export"]
-  IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the iOS bridges, static OpenSensorShared framework"]
-  SY1 --> PR & AR1
-  AR1 --> PR & PQ & ST
-  HI --> PQ & PR & MO1
-  PF --> PQ & NT
-  AQ --> HI & PF & PR & MO1
-  NT --> PQ
-  SC --> HI & PF & PR
-  TH --> SC & HI & PR & MO1
+  FE[":feature:*<br/>shell, discover, devices, today, history, files, device, setup, settings, debug"]
+  APP[":app (Android)<br/>Hilt, WorkManager, Android adapters, screen hosts, zstd-jni"]
+  IS[":ios:shared (iOS only)<br/>AppRoot, bridges, static OpenSensorShared framework"]
+  IOS["ios/App (Xcode and Swift)<br/>Core Bluetooth, sockets, Bonjour, Keychain, background tasks"]
+  PR --> MO
+  NT --> PQ & ST
+  AR --> PQ & PR & ST
+  SY --> AR & PR
+  HI --> AR & MO & NT & PQ & PR & SY
+  DB --> AR & HI & SY
+  PF --> MO & NT & PQ & ST
+  SE --> ST & UN
+  SC --> HI & PR & PF
+  TH --> HI & MO & PR & PF & SC
+  TK --> TH
+  AQ --> HI & MO & PR & PF & UN
+  PM --> STR
+  DS --> HI & AQ
   MP --> PF & DS & PM
-  DI --> PF & DS & MP & UN & SE
-  DV --> MP & DS & PM & PF & SY1
-  DS --> AQ
-  SE --> UN & ST
-  FS --> SE & DS
-  SH --> DS
-  APP --> AQ & TH & SY1 & ST & HI & PF & UN & DI & DV & MP & DS & SE & FS & PM & SH
-  IS --> AQ & TH & SY1 & AR1 & HI & PR & UN & DI & DV & MP & DS & SE & FS & PM & SH
+  FE --> SY & HI & PF & SE & UN & TH & DS & MP & PM & STR
+  APP --> FE & DB & HI & MO & PQ & PR & PF & SE & ST & SY & TH & UN & AQ & DS & MP & PM
+  IS --> FE & AR & DB & HI & PR & SE & SY & TH & UN & AQ & DS & MP & PM & STR
   IOS --> IS
 ```
+
+Each feature module takes only what its screen needs.
+
+| Feature module | Depends on |
+| --- | --- |
+| `:feature:shell` | `:ui:designsystem`, `:ui:strings` |
+| `:feature:discover` | `:core:history`, `:core:publicfeed`, `:core:settings`, `:core:units`, `:ui:designsystem`, `:ui:map` |
+| `:feature:devices` | `:core:history`, `:core:settings`, `:core:sync`, `:ui:designsystem`, `:ui:permissions`, `:ui:strings` |
+| `:feature:today` | `:core:history`, `:core:settings`, `:core:sync`, `:core:units`, `:ui:designsystem` |
+| `:feature:history` | `:core:history`, `:core:settings`, `:core:units`, `:ui:designsystem`, `:ui:map` |
+| `:feature:files` | `:core:history`, `:core:settings`, `:core:sync`, `:ui:designsystem`, `:ui:strings` |
+| `:feature:device` | `:core:history`, `:core:publicfeed`, `:core:settings`, `:core:sync`, `:ui:designsystem`, `:ui:map`, `:ui:permissions` |
+| `:feature:setup` | `:core:thing`, `:feature:device`, `:ui:permissions` |
+| `:feature:settings` | `:core:settings`, `:core:units`, `:ui:designsystem` |
+| `:feature:debug` | `:core:sync`, `:ui:designsystem` |
 
 No `:core` module names air quality. `:family:air` (#188) holds the WHO 2021 scales and palette,
 the EPA PM2.5 correction, the moods, the named air metrics, the PM sensor status and sticker, the
@@ -75,17 +94,19 @@ kotlinx-datetime (daily rows carry a local date). `:core:net` exposes `:core:par
 `DiscoverViewModel` (`OkHttpRangeEngine`) and iOS `AppRoot` (`UrlSessionRangeEngine`) each build one
 `OpenAqAggregatesFeed` per process for Discover's Real source. A `:core` class cannot import
 `android.*`, and the build enforces it. Every `:core` module compiles for JVM and iOS from
-`src/commonMain`. Platform edges live in `src/jvmMain` (Java files, streams, positional `FileChannel` reads,
+`src/commonMain`, except `:core:database`, which targets Android and iOS because Room ships
+separate Android and iOS artifacts. Platform edges live in `src/jvmMain` (Java files, streams, positional `FileChannel` reads,
 `java.util.zip`, `com.uber:h3`, OkHttp) and `src/iosMain` (`pread`, system zlib, H3 C
 cinterop, `NSURLSession`).
 Tests live in `src/commonTest` (JVM and iOS simulator) or `src/jvmTest` / `src/iosTest`. Calendar
 windows use kotlinx-datetime. Android passes its `ZoneId` through `toKotlinTimeZone()`.
 
-`:ui:designsystem`, `:ui:map`, `:ui:permissions`, `:feature:discover`, `:feature:settings` and `:feature:shell` target Android (the AGP KMP library target, not `jvm`)
-and iOS. `:ios:shared` targets iOS only, so its `commonMain` consumes them directly. It renders the
-current Compose iOS screen. `ios/App` supplies native app integration, Core Bluetooth, Bonjour
-discovery, lifecycle, Keychain and Files export. Both platforms run the shared sync engine. The Android app remains a separate
-platform entry point. See [ios.md](ios.md) for current scope and build commands.
+Every `:ui` and `:feature` module targets Android (the AGP KMP library target, not `jvm`) and
+iOS. `:ios:shared` targets iOS only, so its `commonMain` consumes them directly, and its
+`AppRoot` hosts the shared screens. `ios/App` supplies native app integration, Core Bluetooth,
+sockets and Bonjour discovery, lifecycle, the Keychain and background tasks. Both platforms run
+the shared sync engine and one shared collection controller per device, Android through
+`DeviceFacade` and iOS through `SensorCollections`. See [ios.md](ios.md) for build commands.
 
 Navigation is shared ([ADR 0001](adr/0001-shared-navigation.md)). `:feature:shell` holds the
 sealed `AppKey : NavKey` hierarchy, `AppNavConfig` (a `SavedStateConfiguration` built with
@@ -96,70 +117,31 @@ same androidx binaries. Both apps host `AppShell` and pass their screens in as e
 entries keep `hiltViewModel()`, iOS entries hold plain controllers in a `viewModel { }` holder.
 Screens that take Back first use `NavigationBackHandler`, never `BackHandler`.
 
-### Target module graph
-
-The graph above is today's code. The graph below is the target, where every rule that must give
-the same answer on both phones is shared and platform code only adapts OS services. `:core:sync`,
-`:core:archive`, `:core:settings` and `:feature:settings` exist. Both platforms run the shared
-sync engine and one shared collection controller per device (Android through `DeviceFacade`, iOS
-through `SensorCollections`, [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
-iOS Core Bluetooth runs on the `BlePhysicalLink` serial queue. Both phones keep the archive index and
-pruned marks in one Room KMP database, `:core:database`. `:core:model` holds what a thing measures
-as data (board template, app profile, datastreams, scales and the thing join, #183). No module
-depends on it yet. History, sync and the screens move onto it from #184 onward.
-
-```mermaid
-flowchart TB
-  subgraph shared["Kotlin commonMain, Android and iOS"]
-    MO[":core:model<br/>templates, profiles, datastreams, scales"]
-    PR2[":core:protocol"]
-    SY[":core:sync<br/>LinkSession, engine, collection controller"]
-    AR[":core:archive<br/>layout, verifier, records, store ports"]
-    ST[":core:settings<br/>DataStore preferences"]
-    PQ2[":core:parquet"]
-    HI2[":core:history"]
-    PF[":core:publicfeed"]
-    DS[":ui:designsystem<br/>tokens, theme, components"]
-    MP[":ui:map<br/>the shared map"]
-    FE[":feature:*<br/>shared screens and controllers"]
-    DI[":feature:discover"]
-  end
-  APP2[":app, Android adapters and Hilt edge"]
-  IOS2["ios/App, Swift OS adapters and :ios:shared"]
-  SY --> PR2 & AR & MO
-  AR --> PQ2
-  HI2 --> PQ2 & MO
-  FE --> SY & ST & HI2 & DS
-  MP --> PF & DS
-  DI --> PF & DS & MP & ST
-  APP2 --> FE & DI
-  IOS2 --> FE & DI
-```
-
 ## Build conventions (`build-logic/`)
 
 `settings.gradle.kts` includes `build-logic/` through `pluginManagement { includeBuild(...) }`.
-It holds four convention plugins, so a new shared module is one `plugins {}` line.
+It holds five convention plugins, so a new shared module is one `plugins {}` line. SDK levels and
+the bytecode target come from `OpenSensorConventions.kt`.
 
 | Plugin | Applied by | Sets |
 | --- | --- | --- |
-| `opensensor.kmp.library` | every `:core` module | Kotlin Multiplatform with `jvm` (bytecode 17), `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, a `test` task that runs `jvmTest`. Adds `jvmTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
-| `opensensor.kmp.compose-feature` | `:ui:designsystem`, `:ui:strings`, `:ui:permissions`, `:ui:map`, `:feature:discover`, `:feature:settings`, `:feature:shell` | the AGP KMP Android library target (namespace `space.opensensor.<module>`, SDK 37, min 31, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, internal resources class in `<namespace>.resources`, `kotlin-test` in `commonTest` (runs in the Android host test and on the simulator), a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
+| `opensensor.kmp.library` | every `:core` module except `:core:database`, and `:family:air` | Kotlin Multiplatform with `jvm`, `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, a `test` task that runs `jvmTest`. Adds `jvmTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
+| `opensensor.kmp.android-library` | `:core:database` | the AGP KMP Android library target, `iosArm64`, `iosSimulatorArm64`, no Compose and no `jvm` target, `kotlin-test` in `commonTest`, a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
+| `opensensor.kmp.compose-feature` | every `:ui` and `:feature` module | the AGP KMP Android library target (namespace `space.opensensor.<module>`, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, internal resources class in `<namespace>.resources`, `kotlin-test` in `commonTest` (runs in the Android host test and on the simulator), a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
 | `opensensor.kmp.ios-framework` | `:ios:shared` | iOS only Kotlin Multiplatform with the static `OpenSensorShared` framework for each iOS target. Adds `iosSimulatorArm64Test` and `linkDebugFrameworkIosSimulatorArm64` to `verifyIos` |
-| `opensensor.jvm.library` | none today (kept for a future JVM-only module) | Kotlin/JVM with Java and Kotlin bytecode 17 |
+| `opensensor.jvm.library` | `:tools:history-benchmark` | Kotlin/JVM with Java and Kotlin bytecode 17 |
 
 The conventions compile against the Kotlin, Android and Compose Gradle plugins as `compileOnly`.
 The root `build.gradle.kts` declares every plugin once with `apply false`, so all modules share one
 plugin classloader. The shared modules' bytecode 17 is a compiler target, not `jvmToolchain(17)`, so the build needs one JDK only. `:app` keeps AGP's default JVM target.
 Gradle runs on JDK 25, pinned in `gradle/gradle-daemon-jvm.properties`, which Android Studio, the terminal and CI
 all follow ([build-and-release.md](build-and-release.md#build-jdk)). A `jvmToolchain(17)` would need a second JDK or a download.
-Warnings are not errors yet, since existing code still has a few.
 
 The real Parquet fixtures live once in `core/parquet/src/test/resources` and are published as
 `:core:parquet` test fixtures (a hand-declared variant with the `java-test-fixtures` capability,
 because a multiplatform module cannot apply that plugin). `:core:history` and `:core:protocol` tests
 declare `testFixtures(project(":core:parquet"))` instead of pointing at another module's
-directory. `:app` still adds that directory to its unit-test resources.
+directory. `:app` also adds that directory to its unit-test resources.
 
 ### Gates
 
@@ -174,42 +156,47 @@ the simulator. `app/src/androidTest` is in neither gate.
 
 ```mermaid
 flowchart LR
-  UI["ui/* Compose screens + address-bound ViewModels"] --> MANAGER["DeviceConnectionManager<br/>process-scoped controller registry + snapshots"]
+  UI["feature/* shared screens<br/>hosted by ui/* Routes and address-bound ViewModels"] --> MANAGER["DeviceConnectionManager<br/>process-scoped controller registry + snapshots"]
   MANAGER --> REPO["DeviceFacade per address<br/>CollectionController state + UI flows"]
   REPO --> OWNER["DeviceLinkOwner<br/>connect, identity, commands, idle watch"]
-  OWNER --> SESS["data/ble/DeviceSession<br/>one request at a time"]
-  SESS --> TR{{"DeviceTransport"}}
+  OWNER --> SESS["core/sync DeviceSession<br/>one request at a time over one LinkSession"]
+  SESS --> TR{{"LinkDriver"}}
   TR --> BLE["data/ble/BleLinkDriver"]
   TR --> LAN["data/lan/TcpLinkDriver"]
   TR --> FAKE["data/fake/FakeTransport (debug)"]
-  REPO --> COLLECT["core CollectionController<br/>PROCESS, retry, ArchiveCollector"]
-  COLLECT --> SYNC["data/sync/SyncEngine → FileArchive"]
-  SYNC --> ROOM[("Room + filesDir")]
+  REPO --> COLLECT["core/sync CollectionController<br/>PROCESS, retry, ArchiveCollector"]
+  COLLECT --> SYNC["core/sync SyncEngine → data/sync/FileArchive"]
+  SYNC --> ROOM[("Room (core/database) + filesDir")]
   ROOM --> HIST["data/history/* (Indexer, Deriver, Repository)"]
   HIST --> UI
   WORK["data/background/SyncWorker<br/>run-owned foreground progress"] --> MANAGER
+  DERIVE["data/background/DeriveWorker<br/>derive after a background run"] --> HIST
   OWNER --> CLAIM["DeviceIdentityClaims<br/>one owner per full hardware ID"]
   COLLECT --> BUDGET["CollectionBudget<br/>two active transfers process-wide"]
 ```
 
 ## Package map
 
-| Path (under `app/src/main/java/space/opensensor/`) | Holds | Android-only? |
-| --- | --- | --- |
-| `data/DeviceConnectionManager.kt`, `data/DeviceFacade.kt`, `data/DeviceLinkOwner.kt`, `data/TransportFactory.kt` | Process-owned registry; one facade and shared collection controller per address. The link owner owns transport, identity, commands and idle reconnect. The repository name is a compatibility typealias | yes |
-| `data/DeviceIdentityClaims.kt`, `data/DeviceContinuityPolicy.kt` | Shared two-transfer budget; full hardware identity claims and authenticated continuity policy | no (JVM logic with DI bindings) |
-| `data/ble/` | `BleScanner`, `BleLinkDriver` (GATT, serialized ops, `LinkDriver`), `BleDisconnectCauses` (pure status table), `DeviceSession` (every request), `FrameRecorder` (last 200 frames, redacts) | yes |
-| `data/lan/` | `TcpLinkDriver` (`LinkDriver`), `SocketErrors` (pure errno table), `LanDiscovery` (NsdManager, shared legacy resolver), `LanDiscoveryState` (foreground browse), `LanWifiLock` (transfer leases), `LanTokenPolicy` (pure) | yes (policy/lease accounting: no) |
-| `data/sync/`, `data/archive/` | Android file and Room adapters for the shared planner, collector and engine | files + Room |
-| `data/background/` | `SyncForegroundService`, `SyncNotifications`, `SyncWorker`, `AutoSyncScheduler`, `AutoSyncRunner` (pure), `AppAutoSyncGateway`; triggers `CompanionPresence` + `CompanionPresenceService`, `AdvertFlagScan` + `AdvertScanReceiver`, `SyncTriggers` + `WifiArrivalReceiver` + `BootReceiver` | yes (runner: no) |
-| `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `parquet/AppParquetCodecs` (ZSTD) | Room + files |
-| `data/local/database/` | `AppDatabase` (v1), `KnownDevice`, `ThingEpoch`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
-| `data/settings/AppSettings.kt` | Android view of `:core:settings` (`DetailLevel` Simple · Detailed · Developer, units, public sensors) | yes |
-| `data/fake/FakeTransport.kt` | in-process proto 3 device with fault hooks | no (JVM) |
-| `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose. `ui/files` hosts the shared Files and inspector screens (`:feature:files`) with the Android slots and the chart by file. `Navigation.kt` supplies the Android entries to the shared `AppShell` (`:feature:shell`) | yes |
+| Path (under `app/src/main/java/space/opensensor/`) | Holds |
+| --- | --- |
+| `data/DeviceConnectionManager.kt`, `data/DeviceFacade.kt`, `data/DeviceLinkOwner.kt`, `data/TransportFactory.kt`, `data/AndroidLink.kt` | Process-owned registry, one facade and shared collection controller per address. The link owner owns transport, identity, commands and idle reconnect |
+| `data/DeviceIdentityClaims.kt`, `data/CollectionAdmission.kt` | Full hardware identity claims, the two-transfer `CollectionBudget` and the admission that excludes worker and interactive collections |
+| `data/ble/` | `BleScanner`, `BleLinkDriver` (GATT, serialized ops, `LinkDriver`), `BleDisconnectCauses` (pure status table), `BleBondAwaiter`, `BleStaleBondDetector` |
+| `data/lan/` | `TcpLinkDriver` (`LinkDriver`), `SocketErrors` (pure errno table), `LanDiscovery` (NsdManager, shared resolver), `LanDiscoveryState` (foreground browse), `LanWifiLock` (transfer leases) |
+| `data/sync/`, `data/archive/` | `FileArchive`, `FileArchiveStore` and the Hilt bindings of the shared planner, collector and engine |
+| `data/background/` | `SyncForegroundService`, `SyncNotifications`, `SyncWorker`, `DeriveWorker`, `AutoSyncScheduler`, `AutoSyncRunner` (pure), `AppAutoSyncGateway`, and the triggers `CompanionPresence` + `CompanionPresenceService`, `AdvertFlagScan` + `AdvertScanReceiver`, `SyncTriggers` + `WifiArrivalReceiver` + `BootReceiver` |
+| `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `RoomHistoryTiers`, `parquet/AppParquetCodecs` (ZSTD) |
+| `data/local/` | `di/DatabaseModule` (opens the shared `AppDatabase` of `:core:database`), `security/LanTokenCipher` and `SecureKnownDeviceDao` |
+| `data/settings/`, `data/storage/` | The Android view of `:core:settings` (`AppSettings`, `DiscoverStore`) and of `:core:storage` (`AndroidStorageBudget`, `AppStorageControls`) |
+| `data/di/` | `ThingModule` (the `ThingKinds` list), coroutine and data bindings |
+| `data/fake/FakeTransport.kt` | In-process proto 3 device with fault hooks |
+| `ui/` | Android hosts of the shared screens. `Navigation.kt` supplies the Android entries to the shared `AppShell` (`:feature:shell`), each `*Route.kt` and `*ViewModel.kt` hosts one `:feature` screen, `permissions/` launches the system dialogs, and `ui/files` adds the Android slots and the chart by file |
+
+`DeviceSession`, `FrameRecorder`, `LanTokenPolicy`, `LanAutoEnable`, `DeviceContinuityPolicy`,
+`SmartSyncPolicy` and `SyncEngine` are shared code in `core/sync/src/commonMain`.
 
 The iOS entry point is `ios/OpenSensor.xcodeproj`. Its Swift adapters own Apple services;
-the current screen and presentation state live in `ios/shared`. Follow [`../ios/AGENTS.md`](../ios/AGENTS.md)
+`ios/shared` hosts the shared screens and holds the bridges to them. Follow [`../ios/AGENTS.md`](../ios/AGENTS.md)
 for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI views are introduced.
 
 | Core module | Ownership |
@@ -218,13 +205,16 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `parquet` | Closeable positional readers, zero-copy byte views, footer cache, page index, range planning, codecs and writer |
 | `net` | HTTP range reads through OkHttp on JVM and NSURLSession on iOS |
 | `history` | Metric registry, indexing, aggregation, calendars, grouped `DayPass`, daily output and persistent tiers |
-| `publicfeed` | Discover feed, H3, viewport cover and sample data |
+| `publicfeed` | Discover feed port, the sample and OpenAQ feeds, H3 and viewport cover |
 | `units` | Display units and axis ticks |
 | `storage` | Durable/Derived/Scratch roots, atomic no-replace commits, free-space budget, quota and memory pressure |
 | `archive` | Layout, verifier, records and store/index ports. Android uses file adapters, iosMain supplies `IosArchiveStore` and `LegacyReceiptImport` |
-| `database` | Room KMP schema v1 (`AppDatabase`, entities, DAOs) on the bundled SQLite driver, `RoomArchiveIndex` and `RoomPrunedFiles` for both phones. iosMain opens `Application Support/database/opensensor.db` through `IosArchiveDatabase` |
+| `database` | The Room KMP schema (`AppDatabase`, entities, DAOs, migrations, exported schemas in `core/database/schemas/`) on the bundled SQLite driver, `RoomArchiveIndex` and `RoomPrunedFiles` for both phones. iosMain opens `Application Support/database/opensensor.db` through `IosArchiveDatabase` |
 | `sync` | `LinkSession`, typed `DeviceSession` views, `SyncEngine`, `ArchiveCollector`, `CollectionController`, policies, progress and `StorageJanitor` |
 | `settings` | Shared DataStore preferences, keys and detail level. iOS supplies its Application Support path and one-time UserDefaults import |
+| `model` | Board templates, app profiles, datastreams, scales, `Thing.join` and the pure `H3Cell` check |
+| `stac` | The STAC File Item and Thing Collection of a synced file, and `CanonicalJson` |
+| `thing`, `thing:testkit` | The `ThingKind` contract, the `ThingKinds` registry, `PublishGate`, `PlatformNeedsTable` and the contract checks every kind runs |
 
 ### Shared sync rules in `:core:protocol`
 
@@ -260,8 +250,9 @@ rolling window of the last 40 valid LIVE samples of one thing. LIVE is the same 
 queues for storage, so the window gives the checks their neighbours. A sample read again (the same
 `seq` and `mono`) joins once, and a new device or thing starts a new window. `TodayController` feeds
 the flags of the newest sample to `NowReading`. A spike needs the row after it, so the newest live
-sample is never a spike. The flags are not stored yet. The indexer and the daily builder do not
-carry them, so History and Discover show no flags.
+sample is never a spike. The indexer and the daily builder store the flags beside the values, and
+History and Discover show them, see
+[Stored row checks](history-pipeline.md#stored-row-checks-91).
 
 | Bit | Flag | Rule |
 | --- | --- | --- |
@@ -272,8 +263,8 @@ carry them, so History and Discover show no flags.
 
 Rows are neighbours when the later one comes at most three median steps after the earlier one.
 A longer step, a repeated time or a time going back ends a flatline run and clears a spike. A missing
-measurement is `NaN` or null counts, and the check that needs it does nothing. The bit values become
-part of the derived tier format once stored, so a bit is never reused or renumbered.
+measurement is `NaN` or null counts, and the check that needs it does nothing. The bit values are
+part of the derived tier format, so a bit is never reused or renumbered.
 
 ## Rules that keep the modules honest
 
@@ -282,7 +273,7 @@ part of the derived tier format once stored, so a bit is never reused or renumbe
 - **A new analysis is a pure object in `:core:history`** with a test over the real fixtures, fed by `:app` from Room/files. Never a query inside a composable.
 - **A new transport is a `LinkDriver`** behind `TransportFactory` and one `LinkSession` (`DeviceTransport` remains a compatibility surface); the session, engine and archive do not change ([transports.md](transports.md)).
 - **Transport work never lives in a composable or Activity**; manager-owned controllers keep session/sync state through rotation and navigation. Opening another device selects another controller without closing existing connections.
-- **The one native Android library** is `zstd-jni` (`@aar`), registered from `:app` into `:core:parquet`'s codec SPI (`AppParquetCodecs`). Every `:core` module targets JVM and iOS. iOS inflates GZIP with the system zlib and has no ZSTD codec yet.
+- **The one native Android library** is `zstd-jni` (`@aar`), registered from `:app` into `:core:parquet`'s codec SPI (`AppParquetCodecs`). iOS inflates GZIP with the system zlib and has no ZSTD codec.
 
 ## Concurrent collection and ownership
 
@@ -318,13 +309,12 @@ active LAN transfer acquires the radio lock and the last releases it. BLE and qu
 no Wi-Fi lease. API 31–33 mDNS resolution uses one shared resolver queue across foreground and
 worker browses.
 
-These changes are covered by host tests (`AutoSyncRunnerTest`, `DeviceOwnershipTest`,
-`ConcurrentArchiveTest`, `LanTransferLeasesTest`). Simultaneous physical-device collection and the
-new Android plumbing have **not been verified on hardware**. Historical phone measurements remain
-in the [CoreS3 bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md).
+These rules are covered by host tests (`AutoSyncRunnerTest`, `DeviceOwnershipTest`,
+`ConcurrentArchiveTest`, `LanTransferLeasesTest`). Phone evidence is in [status.md](status.md) and
+the [CoreS3 bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md).
 
 History derives a grouped day once with `DayPass`, producing tiers and daily Parquet.
-Android uses derive version 5. Its collection plans use projected thing archive identities rather
+Android stamps each derived day with `HistoryDeriver.DERIVE_VERSION`. Its collection plans use projected thing archive identities rather
 than full history rows. iOS persists tiers and enforces the derived quota after building.
 The [host benchmark](perf/history-2026-10-11.md) measures allocation on a synthetic corpus,
 not phone cold-open latency or a qualified latency improvement.
@@ -334,8 +324,8 @@ not phone cold-open latency or a qualified latency improvement.
 | If you change… | It is consumed by… | So re-check… |
 | --- | --- | --- |
 | `core/protocol/Frames.kt` (opcodes, layouts) | `DeviceSession`, `FakeTransport`, `FrameRecorder`, `DebugScreen` raw box | the firmware contract first (owner), `FrameCodec*Test`, the fake |
-| `DeviceTransport` interface | `BleLinkDriver`, `TcpLinkDriver`, `FakeTransport` (through `TransportLink`), `DeviceSession`, repository | `TcpLinkDriverTest` loopback, `:core:sync` `SyncEngineTest` |
-| `Metrics` registry | `Aggregator`, `HistoryDeriver`, `DailyDerivedBuilder`, History picker, charts, Now card | `AggregationTest`, `HistoryDeriverTest`, Room `metric_bucket` rows (id strings) |
+| `DeviceTransport` interface | `BleLinkDriver`, `TcpLinkDriver`, `FakeTransport` (through `TransportLink`), `DeviceSession`, `DeviceLinkOwner` | `TcpLinkDriverTest` loopback, `:core:sync` `SyncEngineTest` |
+| `Metrics` registry | `Aggregator`, `HistoryDeriver`, `DailyDerivedBuilder`, History picker, charts, Today cards | `AggregationTest`, `HistoryDeriverTest`, Room `metric_bucket` rows (id strings) |
 | Room entities | `SyncEngine`, `HistoryIndexer/Deriver/Repository`, ViewModels | a new migration + `core/database/schemas/<n>.json`, `DERIVE_VERSION` if tier meaning changed |
 | `ParquetWriter` output | `DailyDerivedBuilder`, `tools/validate_parquet_samples.py` | PyArrow + DuckDB oracle run |
 | `CollectionState` / `SyncProgress` | facade UI projections, Files, service and worker | `CollectionControllerTest`, facade tests, lease accounting and notification text |
@@ -343,11 +333,4 @@ not phone cold-open latency or a qualified latency improvement.
 | `DeviceCoordinator` admission and writer leases / immutable commit | `SyncEngine`, partial resume, janitor, index repair, old file cleanup, archive index and export | `DeviceCoordinatorTest`, `ConcurrentArchiveTest`, `SyncEngineTest`; preserve existing files on conflicts |
 | `HistoryStartup` and `HistoryOrchestrator` pass order | janitor, feed block quota, back-fill and its retry, time estimates and every derive pass on both phones | `HistoryOrchestratorTest`, `AppStartupTest`, `IosArchiveStartupTest`, `TierStoreTest`, `ThingDaysTest` |
 | LAN transfer leases / shared mDNS resolver | all interactive and worker LAN transfers | `LanTransferLeasesTest`; phone checks on API 31–33 and screen-off LAN |
-| `DetailLevel` | every screen's `detailed`/`advancedMode` gate, Debug destination | migration from `advanced_mode` |
-
-## Provenance
-
-Generated from Google's `android/architecture-templates` (`base` branch) with `customizer.sh`.
-The untouched output is commit `34f2d30` (first commit "Generate from android/architecture-templates base").
-Keep the template's structure
-(Hilt, Room, Navigation 3, version catalog). Everything after it is diffable against that.
+| `DetailLevel` | every screen's `level.detailed` and `level.developer` gate, Debug destination | `SettingsRepositoryTest`, the `advanced_mode` key written beside it |
