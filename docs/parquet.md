@@ -12,22 +12,22 @@ Kotlin DataFrame cannot read Parquet on Android (`dataframe-arrow` needs Arrow's
 JNI, no Android build) and boxes values; DuckDB for Android is an experimental self-build (Swift is
 official). Settled, do not re-research (evaluation §1). No Parquet library exists for Kotlin/Native
 either, so the same reader serves iOS. Only the requested column chunks are read (3 of 77 for a PM2.5
-chart), one range read per chunk from a memory-mapped file. Pages decode in one pass straight into
+chart), one positional range read per chunk. Pages decode in one pass straight into
 their final slot of an `IntArray`/`LongArray`/`FloatArray`/`DoubleArray`/binary column with a validity
 mask (`PrimitiveColumn`, or `ColumnValues` through `ParquetFile`), no per-row objects and no
 intermediate per-page arrays. Thrift field and list headers are packed value classes, so parsing a
 footer or page header allocates no header objects. All 881 columns of the device/v3 fixtures decode
-byte-identically to PyArrow, on the JVM and on the iOS simulator. `RealArchiveTest` reads all 767 real
-archive files in about 0.45 s on the JVM (2026-10-08, M-series Mac).
+byte-identically to PyArrow, on the JVM and on the iOS simulator. `RealArchiveTest` reads every real
+archive file when the firmware repo is a sibling.
 
-## Portability and storage (W8, 2026-10-08)
+## Portability and storage
 
 The module is Kotlin Multiplatform (`opensensor.kmp.library`). Common code never imports `java.*`.
 Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a suspending `RangeSource`.
 
 | Type | What it is | Implementations |
 | --- | --- | --- |
-| `ByteReader` | `size`, `read(offset, length)` and `view(offset, length)`, absolute and thread-safe, for `ParquetFile`. `AutoCloseable` since #61, a read after `close()` throws. The local readers never map. Each holds one descriptor and closes it when `close()` returns, so nothing waits for a collector | `ByteArrayReader`, `LocalFileReader` (JVM `FileChannel.read(dst, position)`, iOS `pread` on a reference counted descriptor) |
+| `ByteReader` | `size`, `read(offset, length)` and `view(offset, length)`, absolute and thread-safe, for `ParquetFile`. `AutoCloseable`, a read after `close()` throws. The local readers never map. Each holds one descriptor and closes it when `close()` returns, so nothing waits for a collector | `ByteArrayReader`, `LocalFileReader` (JVM `FileChannel.read(dst, position)`, iOS `pread` on a reference counted descriptor) |
 | `RangeSource` | suspending `id()`, `readTail(n)`, `readRanges(ranges)` returning one `ByteView` per range, and `close()`, for `ParquetReader` | `MemoryRangeSource`, `LocalRangeSource` (JVM `FileChannel`, iOS `pread`), `CoalescingRangeSource` (wraps another), `HttpRangeSource` in `:core:net` |
 | `ByteView` | a read-only window over a `ByteArray`. The decoder slices views and never copies them | made by every source |
 | `SourceId` | uri, size and version (ETag over HTTP, size and modification time for a file), one immutable version of a file | the `FooterCache` key |
@@ -57,8 +57,8 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
 - `:core:net` gives `HttpRangeSource`, a `RangeSource` over one URL through an `HttpRangeEngine` (OkHttp,
   `okhttp` in `gradle/libs.versions.toml`, on Android and the JVM, `NSURLSession` on iOS). The tail is a suffix range, later ranges carry
   `If-Range` with a strong ETag, and a 200 for a changed object raises `SourceChangedException`. It
-  sends `Accept-Encoding: identity`, skips the local HTTP cache and logs nothing. Issues #60 and #61
-  are closed. `OpenAqAggregatesFeed` builds one per feed file.
+  sends `Accept-Encoding: identity`, skips the local HTTP cache and logs nothing.
+  `OpenAqAggregatesFeed` builds one per feed file.
 - `CachedRangeSource` (`:core:net`, #94) serves a `RangeSource` through aligned 64 KiB blocks kept in a
   `BlockCache` on disk. A cached block is read with no request. Missing blocks are fetched in runs of
   consecutive blocks, one range per run. The key is the URL and a generation, the manifest's `as_of`
@@ -71,7 +71,7 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
   no request and no endpoint of its own.
 - `ParquetFileMetadata.longStatistics(column)` returns the footer min, max and null count of an INT32
   or INT64 column per row group without reading a page. `rowGroupsOverlapping(column, ranges)` keeps the
-  row groups whose `[min, max]` meets any inclusive `LongRange` (H3 descendant ranges in W12). A chunk
+  row groups whose `[min, max]` meets any inclusive `LongRange` (the H3 descendant ranges of the Discover feed). A chunk
   without statistics is kept, an all-null one dropped. `ParquetReader.scan` applies the same rule before
   page pruning.
 - `ColumnValues.longValues()` and `doubleValues()` hand out primitive arrays without boxing, the stored
@@ -151,13 +151,13 @@ backstop for crashes nobody thought of. The unit tests prove each guard.
 | **ZSTD** | `AppParquetCodecs` in `:app` registers `zstd-jni` (`@aar`) | the **one native library**, kept out of `:core:*`, `AppParquetCodecsTest`. Android only |
 
 `PageDecompressor.decompress(input: ByteArray, uncompressedSize)` receives exactly the compressed page
-bytes (it used to receive a `java.nio.ByteBuffer`).
+bytes.
 
 ## Writer (`ParquetWriter`), the mirror of the reader
 
 PLAIN, RLE definition levels, LZ4_RAW, per-chunk `min_value`/`max_value` + exact flags +
 `null_count` + `nan_count`, TYPE_ORDER column orders, `TIMESTAMP(MICROS|NANOS, UTC)`, schema `field_id`, `sorting_columns`,
-row-group `file_offset`/`ordinal`, key/value metadata; since D11 also `BYTE_ARRAY`/`DOUBLE`,
+row-group `file_offset`/`ordinal`, key/value metadata, `BYTE_ARRAY`/`DOUBLE`,
 `GEOMETRY`/`GEOGRAPHY` logical types with `geospatial_statistics` (bbox + WKB type codes) and the
 `geo` key. Used by `DailyDerivedBuilder` ([history-pipeline.md](history-pipeline.md#derived-daily-parquet-dailyparquetbuilder)).
 A derived day file may add the nullable INT32 `qc_flags` column and the `qc_checks` key of the
@@ -182,8 +182,7 @@ Every leaf of a current device file has `field_id` = its 1-based position in the
 `telemetry_fields.inc`, and dictionaries are append only, so an id never changes meaning. Older
 files have no ids and are mapped by name. A newer schema string is never a reason to refuse a file.
 
-Both layouts stay readable. The owner removed the old files from the Waveshare card, and a file
-that is no longer listed by the device is not data loss. The app never uploads a file to the device
+Both layouts stay readable. A file that is no longer listed by the device is not data loss. The app never uploads a file to the device
 and never asks the firmware to delete or rewrite one.
 
 ### Removing old files from the phone
@@ -224,9 +223,7 @@ so `SyncPlanner` matches on thing, name and size. A listed file with such a reco
 copy plans as `REMOVED`. It is not downloaded and counts as done, so the device card can still read
 as all synced. A phone copy always wins over the record. A whole LIST that no longer names the file
 drops the record, so a later file under the same name and size, after a card reset, downloads.
-Files shows the file as removed from this phone. On iOS a records file that cannot be read whole
-reads as no records, and new records are refused until Download again rewrites it, so a removal
-keeps the file rather than overwrite the other records. Settings › Storage › Removed files ›
+Files shows the file as removed from this phone. Settings › Storage › Removed files ›
 Download again empties the records after a confirm, and the next sync downloads those files again when the device still lists them.
 
 ### Iceberg v3 tables (not in the app yet)
@@ -241,9 +238,9 @@ committing library, the device never writes it. The commit uses iceberg-go 0.7.0
 metrics. PyIceberg 0.12 cannot write v3. Files from before CoreS3 v6.12 and Waveshare v2.6 store
 UTC as bare INT64 or `TIMESTAMP(NANOS, UTC)` without field ids. A name mapping cannot change a
 column's type, so these files stay out of the table or are rewritten on a host. Phone derived days
-(`derived-v4`) are a local cache and are not committed either.
+(`DailyParquetBuilder.BUILDER`) are a local cache and are not committed either.
 
-## GeoParquet 2.0 (D11, 2026-09-17)
+## GeoParquet 2.0
 
 **Read any GeoParquet 2.0 rc.1 file, write our own** by extending the reader, not importing an
 engine (evaluation §7). 2.0 dropped the nested GeoArrow encodings: a geometry column is a flat
@@ -262,7 +259,7 @@ files are unchanged; import UI and map are separate decisions (D4/D5).
 | `geoparquet/pyarrow/` + `duckdb/` | 20 files: PyArrow 25 `{none,snappy,gzip,zstd} × {plain,dict} × {page v1,v2}` + native-only + multipage; DuckDB 1.5.5 `GEOPARQUET_VERSION 'V1'` and `'V2'` | `make_geoparquet_fixtures.py` (PyArrow + DuckDB) | `expected.json`; decoded cell-for-cell |
 | `parquet/discover/` | `cells-24h-res7-pageindex.parquet`, one Discover sample file (190 rows, one row group sorted by `h3_index`, 16-row pages, page index) | `tools/discover-fixture/make_discover_sample.py` (PyArrow 25.0.1) | per-page `h3_index` bounds and null counts from PyArrow in `PageIndexTest` |
 | `parquet/encodings/` | 7 files of one seeded 500 row table (2 row groups, 256 byte pages, page index): PyArrow `{none,lz4_raw} × {page v1,v2}` with DELTA_BINARY_PACKED on integers and BYTE_STREAM_SPLIT on floats and two integer columns, a one row PyArrow file, DuckDB `PARQUET_VERSION V2` uncompressed and SNAPPY | `make_encoding_fixtures.py` (PyArrow + DuckDB) | `expected.json`, footer encodings, null counts and an FNV-1a 64 digest of every value's bits, checked by `EncodingFixtureTest` with full reads and pruned scans |
-| `RealArchiveTest` (`:core:history`) | sweeps **all 766 real files** when `../opensensor-space-firmware` is a sibling (67 272 rows, 58 868 column chunks, 136 statistics cross-checks, 0.2 s); skips otherwise | none | footer statistics vs decoded rows |
+| `RealArchiveTest` (`:core:history`) | sweeps every real archive file when `../opensensor-space-firmware` is a sibling and skips otherwise | none | footer statistics vs decoded rows |
 
 The fixtures live once in `core/parquet/src/test/resources`. The build publishes that directory as
 this module's test fixtures. A multiplatform module cannot apply `java-test-fixtures`, so
@@ -280,11 +277,10 @@ The oracle tests (`ParquetFileTest`, `GeoParquetFileTest`, `ParquetWriterTest`, 
 `ParquetMutationFuzzTest`) live in `commonTest` and run on the JVM (`verify`) and on the iOS simulator (`verifyIos`).
 The JVM loads fixtures from the classpath. The simulator test binary reads them straight from the
 checkout through `PARQUET_FIXTURES`, which the build passes as `SIMCTL_CHILD_PARQUET_FIXTURES`. iOS
-skips the ZSTD fixtures. `JvmParquetFileTest` (mapping, threads, `OutputStream`) and
-`IosParquetFileTest` (`NSData` mapping) cover the platform edges. `AllocationTest` in
-`:core:publicfeed` `jvmTest` asserts the one-pass decoder allocates at most 70 percent of the old
-per-page decoder (main at bed7949). Measured ratios were 0.52 for the whole sample feed, 0.58 for a
-Berlin viewport and 0.39 for every column through `ParquetFile`.
+skips the ZSTD fixtures. `JvmParquetFileTest` (no mapping, descriptors given back, threads,
+`OutputStream`) and `IosParquetFileTest` cover the platform edges. `AllocationTest` in
+`:core:publicfeed` `jvmTest` holds the one-pass decoder to at most 70 percent of its recorded
+baselines, for the whole sample feed, a Berlin viewport and every column through `ParquetFile`.
 
 Regenerate fixtures when the firmware writer changes; commit the result. Writer samples land in
 `app/build/parquet-samples/` after the tests (or a phone's `derived/` copy) for

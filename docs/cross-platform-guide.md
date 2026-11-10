@@ -1,8 +1,8 @@
 # Cross-platform guide (iOS and Android)
 
 **Scope:** how this project keeps one product, one design and one sync behaviour across Android
-and iOS, and the rules every new feature follows. **Code:** `core/`, `ios/shared/`, `app/`,
-`ios/App/`. **Related:** [architecture.md](architecture.md), [ios.md](ios.md), `../ios/AGENTS.md`.
+and iOS, and the rules every new feature follows. **Code:** `core/`, `family/`, `ui/`, `feature/`,
+`ios/shared/`, `app/`, `ios/App/`. **Related:** [architecture.md](architecture.md), [ios.md](ios.md), `../ios/AGENTS.md`.
 
 ## The one-sentence rule
 
@@ -12,22 +12,14 @@ Share every decision, keep every OS service native. If two phones must reach the
 (radio, socket, file handle, keychain, permission, background time, share sheet), it lives in the
 platform and stays thin.
 
-## How other teams do this
+## Shared logic and shared UI
 
-Three patterns are common in production today.
+The apps share their domain, data and sync code and their screens. Every screen is a
+`:feature:*` module in Compose Multiplatform, hosted by `app/` on Android and by `:ios:shared` on
+iOS, and one team maintains both. OS services stay native behind narrow seams (radio, sockets,
+Keychain and Keystore, background time, the sticker scanner), and no screen is built twice.
 
-| Pattern | Shared | Native | Fits when | Examples |
-| --- | --- | --- | --- | --- |
-| Shared logic, native UI | Domain, data, networking, sync | Each UI and OS service | Platform look matters most, two UI teams | Many KMP adopters listed in the [Kotlin case studies](https://kotlinlang.org/case-studies/) |
-| Shared logic and shared UI | Above plus screens through Compose Multiplatform | OS services and system sheets | One small team, Android already in Compose | [Compose Multiplatform for iOS](https://www.jetbrains.com/compose-multiplatform/) is stable since 1.8 |
-| Separate apps, shared contract | Only a written protocol and tokens | Everything | Two large independent teams | Apps that share only an API and a design system |
-
-**This project uses the second pattern.** Android screens are already Compose, the iOS screen is
-Compose Multiplatform, and one team maintains both. It is the cheapest path to parity. We keep the
-option to drop into SwiftUI or UIKit at a boundary (document picker, system sheets) and never
-build the same screen twice.
-
-Common to all three patterns, and non-negotiable here, are a written wire contract (owned by
+Non-negotiable here are a written wire contract (owned by
 `../opensensor-space-firmware/docs/shared/`), one source of design tokens, and platform adapters behind narrow
 interfaces.
 
@@ -41,8 +33,7 @@ the ports in `app/.../data/archive/` and routes collection through `DeviceFacade
 `IosArchiveStore` in `:core:archive` iosMain with the shared Room index from `:core:database`, one `IosLink` per
 connection over `LinkSession`, and `SensorCollections`, which every Swift sync entry point calls.
 Swift `LanSession` and `BlePhysicalLink` feed each `LinkSession` through `LinkDriver` and
-`FrameSink`. Keystore and Keychain stay platform code, and the credential port in the diagram is
-planned. See [sync-engine.md](sync-engine.md#where-ios-still-differs-from-android) for the
+`FrameSink`. Keystore and Keychain stay platform code with no shared port. See [sync-engine.md](sync-engine.md#where-ios-still-differs-from-android) for the
 behaviour that still differs.
 
 ```mermaid
@@ -57,19 +48,16 @@ flowchart LR
     FL[LinkDriver and FrameSink]
     AS[ArchiveStore]
     AI[ArchiveIndex]
-    CS[CredentialStore]
   end
   subgraph a["Android adapters"]
     AB[BLE GATT]
     AL[LAN TCP]
-    AF[Files + Room]
-    AK[Keystore]
+    AF[Files + Room KMP]
   end
   subgraph i["iOS adapters (Swift)"]
     IB[Core Bluetooth]
     IL[NWConnection]
     IF[FileManager + Room KMP]
-    IK[Keychain]
   end
   E --> FL & AS & AI
   E --> V & L & P
@@ -77,8 +65,6 @@ flowchart LR
   IB & IL -.implements.-> FL
   AF -.implements.-> AS & AI
   IF -.implements.-> AS & AI
-  AK -.implements.-> CS
-  IK -.implements.-> CS
 ```
 
 ### Rules
@@ -93,8 +79,8 @@ flowchart LR
    no JSON for binary data, no per-byte callbacks across the Swift boundary. Convert `ByteArray`
    to `NSData` once in `iosMain` with pinned memory.
 4. **One archive layout.** Hive paths and partial names are defined once in shared code, and the
-   Room `archived_file` record is the "is synced" receipt on both phones. Both are documented in [data-model.md](data-model.md). A layout
-   change ships with a migration for both platforms in the same change.
+   Room `archived_file` record is the "is synced" receipt on both phones. Both are documented in [data-model.md](data-model.md). A schema
+   change is one Room migration in `:core:database`, which both phones run.
 5. **Tests live in `commonTest`.** Shared tests run on the JVM or Android host in `verify` and on
    the iOS simulator in `verifyIos`. Each convention plugin gates its module, so a new module
    cannot be missed. A behaviour tested only in `jvmTest` or only in Swift is not shared
@@ -123,11 +109,11 @@ flowchart LR
 Air quality is one family among many. Follow "Adding a device family" in
 [devices-and-discovery.md](devices-and-discovery.md). In short, the firmware contract names the
 properties, the metric registry gets a dictionary entry with `commonTest` coverage, and screens
-pick it up through capabilities. Never a schema string check in a screen. Today the registry is
-`Metrics` and `DeviceCapabilities` in `:core:history`. `:core:model` holds the board template, app
-profile and datastream model that replaces them (#183), with the bundled templates and profiles
-that LIVE already reads (#184). Today picks its hero by the profile `hero` through
-`HeroRegistry`, else the generic `GenericMetricHero`
+pick it up through capabilities. Never a schema string check in a screen. `:core:model` holds the
+board template, app profile and datastream model with the bundled templates and profiles, and
+`Metrics` and `DeviceCapabilities` in `:core:history` build the metric specs and a device's `Thing`
+from them. The Today screen picks its hero by the profile `hero` through `HeroRegistry`, else the
+generic `GenericMetricHero`
 ([devices-and-discovery.md](devices-and-discovery.md)).
 
 ## Design parity
@@ -428,8 +414,8 @@ logs and diagnostics. A new field states its level in code, and screenshot tests
 ### Copy
 
 Write user-facing text so both platforms say the same thing. Shared screens keep their copy in
-Compose resources, one catalogue for both apps (`feature/<name>/src/commonMain/composeResources/values/strings.xml`,
-today Discover and Settings). Copy for iOS only screens and shared screens without a module
+Compose resources, one catalogue per module for both apps
+(`feature/<name>/src/commonMain/composeResources/values/strings.xml`). Copy for iOS only screens and shared screens without a module
 of their own lives in `:ui:strings`, and a key Android already has keeps its name and words. State
 code holds a `UiText` (a catalogue key with arguments) and the composable resolves it. Android-only
 screens still use `res/values*/strings.xml`. The `:ui:strings` host tests check every Android and

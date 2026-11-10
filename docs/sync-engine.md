@@ -18,7 +18,7 @@ platform supplies only an `ArchiveStore`, an `ArchiveIndex` and a byte pipe. On 
 request frame and hands back each reply frame. `SensorSync` runs one collection per link off the
 main thread and reports progress (at most four times a second) and one `SyncResult` on the main
 thread. The engine only lists, opens, reads and closes files. It never asks the sensor to delete,
-rename or rewrite one. The Swift transfer engine (`SensorTransfer.swift`) is gone. Swift keeps
+rename or rewrite one. Swift keeps
 LAN framing, the HELLO check, keepalive, STATUS and LIVE pushes, and the BLE token request.
 
 Outcomes cross to Swift as `SyncResult` with `keepsLink` and `resumable`, and the message is a
@@ -31,21 +31,21 @@ sentence for them.
 | Area | Android | iOS |
 | --- | --- | --- |
 | Verify and SHA-256 | Shared engine | Shared engine, size, CRC-32, `PAR1` and SHA-256 in one pass over the finished partial |
-| Partials | App files | Application Support `archive-partial`. Partials left by the old Swift engine are adopted when size and CRC match |
-| Index | Room `ArchiveIndex` | the same Room `ArchiveIndex` from `:core:database`. An older build's receipts are imported once, and a record with no hash is filled on the next verify |
-| Safe names | Shared check | Shared check, stricter than the old Swift whitelist. A name the plan rejects is reported and never downloaded |
+| Partials | App files | Application Support `archive-partial`. A partial in the older layout that `ArchiveLayout` names is adopted when size and CRC match |
+| Index | Room `ArchiveIndex` | the same Room `ArchiveIndex` from `:core:database`. `LegacyReceiptImport` imports receipt files once, and a record with no hash is filled on the next verify |
+| Safe names | Shared check | Shared check. A name the plan rejects is reported and never downloaded |
 | Byte counter | Card shows bytes received | `receivedBytes` counts only this run. Today and Files show that run's planned remaining bytes and received bytes, including on LAN |
 | One link per thing | Engine holds one writer | `SensorSync` refuses a second link for the same thing with `msg_hardware_in_use` |
-| LAN `AUTH_FAILED` | Renews the token over BLE and falls back to Bluetooth | Drops the saved token and shows `msg_token_needs_ble`. A sensor open can fall back to an already permitted Bluetooth link; token renewal still requires the explicit BLE action |
+| LAN `AUTH_FAILED` | Renews the token over BLE and falls back to Bluetooth | Drops the saved Keychain token (`SyncResult.dropsLanToken`). A sensor open can fall back to an already permitted Bluetooth link, and the next Bluetooth link fetches a new token quietly (`tokenWanted`) |
 | LAN busy | `msg_lan_*` wording that names the Bluetooth fallback | A sensor open can fall back to Bluetooth when permitted; an already running sync reports `msg_busy` without interrupting its link |
-| HELLO mismatch | `msg_identity_*` | Same keys. A different hardware ID and a different thing now give different notices |
+| HELLO mismatch | `msg_identity_*` | Same keys. A different hardware ID and a different thing give different notices |
 | Today Smart Sync | Syncs over the link the router picked | Routes to Wi-Fi when an idle LAN session for the same sensor is open; the shared Today card shows its progress and result |
 | Phone storage fault | `msg_file_failed` for that file, the run goes on | The run goes on and ends with `companion_sync_storage_failed`. The link stays |
-| Lost foreground sync | Shared `CollectionController` retries preparation and transfer while PROCESS remains held | BLE and LAN each retry a transient link loss twice, then leave retained partial bytes for an explicit retry. Stop and disconnect cancel pending attempts |
-| BLE writes | With response | `control` with response, payload sized from `maximumWriteValueLength(for: .withResponse)` |
+| Lost foreground sync | Shared `CollectionController` retries preparation and transfer while PROCESS remains held | The same controller and `RetryPolicy` through `SensorCollections`. A retry that finds no open link asks Swift to dial again. Stop and disconnect cancel pending attempts |
+| BLE writes | With response | `control` with response. The MTU comes from `maximumWriteValueLength(for: .withoutResponse)` capped at 512, plus the 3 byte header (`BlePhysicalLink.attMtu`) |
 | Background | `SyncWorker` on WorkManager | UIKit background-task leases for active BLE and LAN transfers. iOS 26 continued tasks support eligible collection, with bounded lease fallback |
 
-The keepalive rules are unchanged on both phones. See [ios.md](ios.md) for
+The keepalive rules are the same on both phones. See [ios.md](ios.md) for
 bounded execution and phone qualification.
 
 ## One file
@@ -211,7 +211,7 @@ removed. After a file fails to store, the check runs again for what is left, so 
 filled mid-run ends the run with its partial kept. Android uses `AndroidStorageBudget` and shows
 "Not enough space on this phone". iOS uses `IosStorageBudget` and ends as `STORAGE_FAILED`.
 
-## Concurrent archive safety (2026-09-29)
+## Concurrent archive safety
 
 The writer lease of the archive's one `DeviceCoordinator` (`core/sync`) guards OPEN through CLOSE in `SyncEngine`, including partial resume,
 verification, immutable commit and Room indexing. Other devices with different file identities can
@@ -267,8 +267,7 @@ count. Continuity is checked **in the session**, so the "one request, one ordere
 holds for every caller ([lesson](lessons-learned.md#protocol--sync)). `ProtocolViolationException`
 is reserved for malformed streams (wrong handle, undecodable frame). The device's `max_read`
 (16 KiB) is the `READ` window cap on **both** links and the window starts there. `ReadWindow.kt`
-records why BLE does not start smaller (the 2026-09-17 loss was 514-byte frames > 512, a firmware
-bug, not the radio). `info.max_read` missing → `DEFAULT_MAX_READ` 4096 (dead guard, firmware always
+records why BLE does not start smaller. `info.max_read` missing → `DEFAULT_MAX_READ` 4096 (dead guard, firmware always
 sends 16384). `STATUS` has no window field, so `max_read` is the only firmware cap.
 
 Under the cap, each link adapts its window (`AdaptiveReadWindow`, #98, shared by Android and iOS
@@ -401,8 +400,7 @@ stateDiagram-v2
 - **Logs** carry the intent id, state names, causes and counts, never names of networks, tokens or
   a PIN.
 
-Android collection
-retry is owned exclusively by `CollectionController`. `StopSource.FGS_TIMEOUT` distinguishes
+`StopSource.FGS_TIMEOUT` distinguishes
 the Android service deadline from a user Stop. A generation-specific refused foreground start
 ends only its protected intents as `Failed(KeepAliveRefused)`.
 
@@ -415,7 +413,7 @@ attempts. Worker summaries use those new totals.
 `CollectionState` is the authoritative Android lifecycle. `DeviceFacade` projects it to
 `SyncProgress` for Files and notifications, keeping `running` true through preparation,
 retry waiting and finalization. Done maps to COMPLETED, Failed to FAILURE and Stopped to
-STOPPED. `SyncProgress.endReason` names why a run ended (2026-10-12), set from
+STOPPED. `SyncProgress.endReason` names why a run ended, set from
 `CollectionState.endReason()` (below). Each reason has its own short message
 (`DeviceMessage.SyncEnded`), pairing repair and not enough space keep their own paths. The last
 `SyncProgress` and the archive summary survive a disconnect. The summary reads Room for the bound
@@ -428,25 +426,21 @@ Per-file outcomes remain separate from controller failure. iOS receives typed `S
 `SyncProgress.endReason`: Done is COMPLETED, Failed uses `CollectionFailure.endReason()`, Stopped by
 USER or APP is STOPPED and by SYSTEM or FGS_TIMEOUT is INTERRUPTED. Null while active or idle.
 
-**Session errors end the run (2026-10-09).** An `ERROR` about the session, not the file, is not a
+**Session errors end the run.** An `ERROR` about the session, not the file, is not a
 per-file `DeviceError`. `AUTH_FAILED`, `BUSY` and any `ERROR` with op 0 during `OPEN` or `READ`
 are rethrown by `SyncEngine`, so the run ends with that exception and no later file is tried.
-Before this, both phones turned a token revoked mid-sync, or a busy sensor, into "refused" for
-every remaining file, and LAN never dropped the stale token. iOS now ends with `AUTH_FAILED` or
-`BUSY`. Android ends the run as `FAILURE` with the "sync stopped early" message. Host test
+iOS ends with `AUTH_FAILED` or `BUSY`. Android ends the run as `FAILURE` with the "sync stopped early" message. Host test
 `ArchiveCollectorTest`, `SensorSyncTest` on the simulator.
 
-**This phone's storage fails one file (2026-10-09).** Every `ArchiveStore` and `ArchiveIndex`
+**This phone's storage fails one file.** Every `ArchiveStore` and `ArchiveIndex`
 call in `SyncEngine` (exists, open, write, sync, verify read, discard, commit, receipt) turns a
 failure into `FileOutcome.Failed(storage = true)` for that file, `FileProblem.STORAGE` in the
 summary, and the next file runs. The engine logs the file name, the exception class and its
 message, never bytes or secrets. Verified bytes stay as a partial for the next run. iOS ends such a
 run with `SyncEnd.STORAGE_FAILED` (`companion_sync_storage_failed`) and keeps the link. A protocol
 fault still ends the run with `SyncEnd.FAILED` (`msg_sync_aborted`), logged by class and message,
-and also keeps the link, BLE included. Android changes. Before, a disk-full or move failure threw
-out of the collection and the run ended with `SyncAborted`. Now Android shows `msg_file_failed` for
-that file and goes on. A directory at a final path used to be a per-file `Mismatch` ("archive
-destination is not a file") and is now a per-file storage failure. Host test
+and also keeps the link, BLE included. Android shows `msg_file_failed` for that file and goes on.
+A directory at a final path is a per-file storage failure too. Host test
 `ArchiveCollectorTest`, `SensorSyncTest` on the simulator.
 
 **The post-sync `LIST` runs inside finalization.** Android interactive collection refreshes the
@@ -459,15 +453,16 @@ LIST because its owned link closes after collection. Stop cancels finalization a
 own terminal reason. Service lifetime follows PROCESS leases, with no flag inference or grace
 period.
 
-**A refresh never blanks the listing** (`ManifestState`, `data/ManifestState.kt`). `Loading` and
+**A refresh never blanks the listing** (`ManifestState`, `core/sync` commonMain `data/ManifestState.kt`). `Loading` and
 `Error` carry the last `Loaded` in `last`; `plan` derives from `last`, and the Files screen keeps
 the list with "refreshing…" or "Refresh failed: …, showing the last listing." above it. Only a
 new session (`resetDerivedState` → `Idle`) drops it. There is no blind retry of `LIST` on the same
 session: a lost link is a reconnect (which re-lists), a timeout means the device is not answering
-and a second request would only queue behind the stale reply. Longer timeouts are not the answer
-either, "link lost" fires on the transport's state change, not on `FRAME_TIMEOUT_MS`.
+and a second request would only queue behind the stale reply. A longer timeout does not help
+either. "Link lost" fires on the transport's state change, not on the `RequestSpec` timeouts
+(`firstFrameTimeout`, `interFrameTimeout`).
 
-**Explicit whole-device sync takes a fresh listing (2026-10-10).** Android Sync all and Smart
+**Explicit whole-device sync takes a fresh listing.** Android Sync all and Smart
 Sync reserve the same operation gate before launching, take a fresh listing, and plan directly from the
 returned snapshot and current archive. They never execute a retained `plan` flow from an earlier
 listing, even when that plan has zero missing files. A failed refresh keeps known files visible
@@ -500,7 +495,7 @@ RTC-restored UTC automatically. A phone anchor (`clk == 1`) is kept until it is 
 whatever the difference, and refreshed after that. A network anchor (`clk == 3`) is replaced
 only when a pushed `STATUS` measured it within a minute of the phone and it is stale. More than a
 minute off, or not measured, it is kept. The full rules are in
-[time-reconciliation.md](time-reconciliation.md). An old stored `clock_sync_mode` key is ignored.
+[time-reconciliation.md](time-reconciliation.md).
 
 The accepted UTC/monotonic acknowledgement is bound to the full thing and boot identity,
 allowing the local archive to reconcile earlier untimed rows from that boot. Android collection
@@ -530,10 +525,6 @@ fetch/rotation and reboot cannot run alongside a collection. `CollectionAdmissio
 interactive and worker collections process-wide, and the shared `CollectionBudget` caps
 active transfers at two. A worker also supplies its run ID and bounded PROCESS protection.
 Stop targets the controller intent and cleanup completes before ownership is released.
-
-Audited 2026-09-17 after a `REBOOT` of uncertain origin reached the board;
-no phone-side cause of an unsolicited reboot was found, and these two gaps (buttons enabled during
-a sync; raw box accepting `0b`) were closed anyway.
 
 ## Thing setup
 
@@ -585,20 +576,6 @@ it.
   memory.
 - The watch sends nothing. Pairing stays the user's tap on Find, and every save stays an explicit
   SET_CONFIG from the wizard or Device settings.
-
-## Historical decisions (v1, mirrored into the firmware contract 2026-09-16)
-
-The table records the original implementation. Current finalization starts `deriveAfterSync` for
-the touched days once the link is released; charging `DeriveWorker` handles deferred stale history. Current
-request routing and terminal matching belong to `LinkSession` and `TerminalRules`.
-
-| Question | Decision |
-| --- | --- |
-| `STATUS` (0x07) has no response frame | Fire-and-forget; the `status` notification is the ack. Never awaited on `response`. |
-| `ERROR.op` for unparseable requests | "Mine" when it equals the request opcode; anything else is a protocol violation. |
-| One outstanding GATT operation | `Mutex` around every GATT call; Android's `BluetoothGatt` silently fails on concurrent ops. |
-| Downloads and rotation | Session and sync state are process-scoped in the repository, so rotation mid-sync does not abort. |
-| After every sync | `historyDeriver.deriveStale()` in the repository's `finally` (and in `SyncWorker` when files arrived), no separate `DeriveWorker`. |
 
 ## Uses → affects
 

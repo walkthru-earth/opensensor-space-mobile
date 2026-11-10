@@ -2,8 +2,9 @@
 
 **Scope:** which values identify a sensor, what the app does when one changes, and the names
 that stay fixed under the opensensor.space brand.
-**Code:** `data/DeviceLinkOwner.kt`, `data/ble/BleLinkDriver.kt`, `data/ble/BleStaleBondDetector.kt`,
-`data/local/database/` (`thing_epoch`), `core/protocol/.../JsonModels.kt`.
+**Code:** `data/DeviceLinkOwner.kt`, `data/DeviceIdentityClaims.kt`, `data/ble/BleLinkDriver.kt`,
+`data/ble/BleStaleBondDetector.kt`, `core/sync` `data/DeviceContinuityPolicy.kt`, `core/database`
+(`thing_epoch`), `core/protocol/.../JsonModels.kt`.
 **Related:** [transports.md](transports.md), [sync-engine.md](sync-engine.md),
 [data-model.md](data-model.md), [devices-and-discovery.md](devices-and-discovery.md).
 
@@ -15,7 +16,7 @@ that stay fixed under the opensensor.space brand.
 | Wire | Service UUIDs, `_ossync._tcp`, `OSS1`, framing and opcodes. The firmware owns them and they change only in lockstep with opensensor-space-firmware `docs/shared` |
 | Supported device | Any device that implements the shared sync contract. An ESP32-S3 radio alone does not imply it |
 | Unknown schema | Verified files are collected and exported. Live cards stay unavailable instead of guessing |
-| One owner per device | Firmware has one open file across BLE and LAN, so each physical device has one controller |
+| One owner per device | The phone keeps one controller per physical device. Firmware handles are per connection |
 
 Never show or log a stored PIN, Wi-Fi PSK or LAN token.
 
@@ -61,9 +62,10 @@ deduplicating old copies needs a firmware contract change first.
 
 ## Measurement capabilities
 
-Interpretation comes from bundled, reviewed schema and dictionary descriptors. The app never
-fetches the dictionary URI. LIVE `t` is board temperature on CoreS3 and ambient temperature on
-Waveshare, and `rh` is humidity only on the reviewed Waveshare profile. Unknown profiles show no
-guessed labels or units. History availability comes from the file's columns and validity gates,
+Interpretation comes from a board template. The app resolves it from the template the board
+served over `GET_DESCRIPTOR`, from a file's footer href when its SHA-256 is the footer desc
+(`TemplateHrefs`), or from the bundled copy (`TemplateIndex`). CoreS3 sends `imu_t`, shown as board
+temperature. Waveshare sends `t`, ambient temperature, and `rh`. A dict with no reviewed profile
+has no LIVE view, and nothing shows guessed labels or units. History availability comes from the file's columns and validity gates,
 not from a dictionary entry. Only PM values get health bands. The metric model is in
 [devices-and-discovery.md](devices-and-discovery.md).
