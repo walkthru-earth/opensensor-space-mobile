@@ -2,6 +2,7 @@ package space.opensensor.stac
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -126,6 +127,15 @@ class ThingCollectionsTest {
         assertEquals(CollectionLedger("2026-10-24T13:00:00.4Z", listOf(0.5, 2.0, 3.0, 5.0)), ledger)
         assertNull(CollectionLedger.of(emptyList()))
         assertNull(CollectionLedger.of(listOf(buildJsonObject { put("properties", buildJsonObject { put("start_datetime", "x") }) })))
+        // A start that is JSON null or a number is no start, never the text "null" or "1".
+        val box = JsonArray(listOf(1.0, 2.0, 3.0, 4.0).map { JsonPrimitive(it) })
+        for (start in listOf(JsonNull, JsonPrimitive(1))) {
+            val item = buildJsonObject {
+                put("bbox", box)
+                put("properties", buildJsonObject { put("start_datetime", start) })
+            }
+            assertNull(CollectionLedger.of(listOf(item)), "start_datetime $start")
+        }
     }
 
     @Test
@@ -134,6 +144,17 @@ class ThingCollectionsTest {
             ThingOwner.parse("""{"prefix":"p","columns":{"a":{"title":"A","unit":"K"}}}""")
         }
         assertFailsWith<IllegalArgumentException> { ThingOwner.parse("""{"title":"no prefix"}""") }
+    }
+
+    @Test
+    fun anOwnerMemberOfAnotherTypeIsRefused() {
+        for (member in listOf(""""providers":{}""", """"columns":[]""", """"scales":[]""", """"contacts":{}""", """"providers":[{"name":"A","roles":"producer"}]""")) {
+            assertFailsWith<IllegalArgumentException>(member) { ThingOwner.parse("""{"prefix":"p",$member}""") }
+        }
+        val missing = ThingOwner.parse("""{"prefix":"p"}""")
+        val nulls = ThingOwner.parse("""{"prefix":"p","providers":null,"columns":null,"scales":null,"contacts":null}""")
+        assertEquals(ThingOwner(null, null, emptyList(), "p"), missing)
+        assertEquals(missing, nulls)
     }
 
     @Test

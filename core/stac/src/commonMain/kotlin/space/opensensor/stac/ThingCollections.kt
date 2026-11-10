@@ -58,11 +58,12 @@ data class CollectionLedger(val start: String, val bbox: List<Double>) {
         /**
          * The ledger of the uploaded [items], as stac-opensensor `scripts/check-profile.mjs` computes it.
          * The earliest start is the least RFC 3339 text, which orders as time because every start is
-         * UTC with a `Z`. Null when there is no Item, or an Item has no start or no bbox.
+         * UTC with a `Z`. Null when there is no Item, or an Item has no start or no bbox. A start that is
+         * JSON null, a number or anything but a string counts as no start.
          */
         fun of(items: List<JsonObject>): CollectionLedger? {
             if (items.isEmpty()) return null
-            val starts = items.map { ((it["properties"] as? JsonObject)?.get("start_datetime") as? JsonPrimitive)?.content ?: return null }
+            val starts = items.map { ((it["properties"] as? JsonObject)?.get("start_datetime") as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: return null }
             val boxes = items.map { item -> (item["bbox"] as? JsonArray)?.map { (it as? JsonPrimitive)?.doubleOrNull ?: return null } ?: return null }
             if (boxes.any { it.size != 4 }) return null
             return CollectionLedger(

@@ -88,23 +88,25 @@ data class ThingOwner(
             )
         }
 
-        /** The owner config [json] in the shape of `owner.json`. Throws [IllegalArgumentException] when it is not one. */
+        /**
+         * The owner config [json] in the shape of `owner.json`. Throws [IllegalArgumentException] when it
+         * is not one, including a `providers`, `columns`, `scales`, `contacts` or `roles` of another JSON
+         * type. A member that is missing or JSON null counts as not given.
+         */
         fun parse(json: String): ThingOwner {
             val root = Json.parseToJsonElement(json) as? JsonObject ?: throw IllegalArgumentException("owner config is not an object")
-            val providers = (root["providers"] as? JsonArray ?: JsonArray(emptyList())).map { p ->
+            val providers = root.member<JsonArray>("providers", "an array").orEmpty().map { p ->
                 val o = p as? JsonObject ?: throw IllegalArgumentException("a provider is not an object")
                 require(o.keys.all { it in StacProvider.KEYS }) { "a provider has a key STAC does not define" }
                 StacProvider(
                     name = requireNotNull(o.string("name")) { "a provider has no name" },
-                    roles = o["roles"]?.let { roles ->
-                        (roles as? JsonArray ?: throw IllegalArgumentException("roles is not an array"))
-                            .map { requireNotNull((it as? JsonPrimitive)?.takeIf { r -> r.isString }?.content) { "a role is not a string" } }
-                    },
+                    roles = o.member<JsonArray>("roles", "an array")
+                        ?.map { requireNotNull((it as? JsonPrimitive)?.takeIf { r -> r.isString }?.content) { "a role is not a string" } },
                     url = o.string("url"),
                     description = o.string("description"),
                 )
             }
-            val columns = (root["columns"] as? JsonObject).orEmpty().mapValues { (name, c) ->
+            val columns = root.member<JsonObject>("columns", "an object").orEmpty().mapValues { (name, c) ->
                 val o = c as? JsonObject ?: throw IllegalArgumentException("column $name is not an object")
                 require(o.keys.all { it == "title" || it == ThingCollections.SCALE }) { "column $name adds a key the profile does not allow" }
                 ColumnLabel(title = o.string("title"), scale = o.string(ThingCollections.SCALE))
@@ -115,12 +117,19 @@ data class ThingOwner(
                 providers = providers,
                 prefix = requireNotNull(root.string("prefix")) { "owner config has no prefix" },
                 columns = columns,
-                scales = root["scales"] as? JsonObject,
-                contacts = root["contacts"] as? JsonArray,
+                scales = root.member<JsonObject>("scales", "an object"),
+                contacts = root.member<JsonArray>("contacts", "an array"),
             )
         }
 
         private fun String?.orBlank(): String? = this?.takeIf { it.isNotBlank() }
+
+        /** The member [key] as a [T], null when it is missing or JSON null. Throws when it is another type. */
+        private inline fun <reified T : JsonElement> JsonObject.member(key: String, kind: String): T? = when (val v = this[key]) {
+            null, JsonNull -> null
+            is T -> v
+            else -> throw IllegalArgumentException("$key is not $kind")
+        }
 
         private fun JsonObject.string(key: String): String? = when (val v: JsonElement? = this[key]) {
             null, JsonNull -> null
