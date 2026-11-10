@@ -36,6 +36,7 @@ import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.AirQc
 import space.opensensor.model.BoardTemplate
 import space.opensensor.storage.AtomicFiles
 import space.opensensor.storage.DerivedQuota
@@ -311,7 +312,10 @@ class HistoryDeriverTest {
         val daily = space.opensensor.data.history.parquet.ParquetFile.open(dayFile)
         assertEquals(105L, daily.numRows)
         assertEquals(1, daily.rowGroupCount) // 09:42–09:59Z is one UTC hour
-        assertEquals(78, daily.leaves.size) // 77 + source_file_index
+        assertEquals(79, daily.leaves.size) // 77 + source_file_index + qc_flags
+        // The air check of #91 read the rows, its flags sit beside the raw columns.
+        assertEquals(105, daily.readColumn(RowChecks.FLAGS_COLUMN).size)
+        assertEquals(AirQc(AirFamily.PARTICLE_BINS).id, daily.metadata.keyValueMetadata[RowChecks.CHECKS_KEY])
         assertEquals(ParquetLogicalType.TimeUnit.MICROS, daily.leaf("event_time_utc_us").timestampUtcUnit)
         // A day file never carries the contract key an indexer reads.
         assertTrue(OpenSensorFooter.KEY !in daily.metadata.keyValueMetadata)

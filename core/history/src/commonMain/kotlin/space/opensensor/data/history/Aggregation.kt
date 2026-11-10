@@ -78,6 +78,10 @@ class Aggregator(
     private val m = metrics.size
     private val rollups: Array<Aggregate> = Array(m) { metrics[it].aggregate }
 
+    /** The [MetricSpec.cleanable] metrics, which get a [RowChecks.cleanId] companion (#91). */
+    internal val cleaned: IntArray = metrics.indices.filter { metrics[it].cleanable }.toIntArray()
+    private val c = cleaned.size
+
     private var capacity = 16
     private var slots = 0
     private var slotRes = IntArray(capacity)
@@ -93,6 +97,12 @@ class Aggregator(
     private var lastNs = LongArray(capacity * m) { Long.MIN_VALUE }
     private var last = FloatArray(capacity * m)
     private val modes = HashMap<Int, HashMap<Float, Int>>()
+
+    // Flagged rows per slot ([flag]), their OR mask, and per [cleaned] metric their count and sum.
+    private var flaggedRows = IntArray(capacity)
+    private var flaggedMask = IntArray(capacity)
+    private var flaggedN = IntArray(capacity * c)
+    private var flaggedSum = DoubleArray(capacity * c)
     private val slotOf = Array(res.size) { LongIntMap() }
     private val lastStart = LongArray(res.size) { Long.MIN_VALUE }
     private val lastSlot = IntArray(res.size)
@@ -171,12 +181,8 @@ class Aggregator(
             if (interval > 0 && (slotInterval[slot] == 0L || interval < slotInterval[slot])) slotInterval[slot] = interval
             val base = slot * m
             for (k in 0 until m) {
-                val colv = columns.values[k] ?: continue
-                val gate = columns.gates[k]
-                if (gate != null && !gate.passes(i)) continue
-                if (!colv.has(i)) continue
-                val v = colv.values[i]
-                if (v.isNaN() || v.isInfinite()) continue
+                val v = valueOf(columns, k, i)
+                if (v.isNaN()) continue
                 val at = base + k
                 n[at]++
                 val settle = columns.settleUs[k]
@@ -190,6 +196,36 @@ class Aggregator(
                     last[at] = f
                 }
                 if (rollups[k] == Aggregate.MODE) modes.getOrPut(at) { HashMap() }.let { it[f] = (it[f] ?: 0) + 1 }
+            }
+        }
+    }
+
+    /** The value metric [k] takes from row [i] of [columns], `NaN` when the row gives it none or fails its gate. */
+    internal fun valueOf(columns: Columns, k: Int, i: Int): Double {
+        val colv = columns.values[k] ?: return Double.NaN
+        val gate = columns.gates[k]
+        if (gate != null && !gate.passes(i)) return Double.NaN
+        if (!colv.has(i)) return Double.NaN
+        val v = colv.values[i]
+        return if (v.isInfinite()) Double.NaN else v
+    }
+
+    /**
+     * Marks the row at timeline [ns], already [accumulate]d, as flagged with [flags] (#91). [value]
+     * gives the row's value of each [cleaned] metric by position, `NaN` for none, so the clean
+     * companion leaves it out.
+     */
+    internal fun flag(ns: Long, flags: Int, value: (Int) -> Double) {
+        val s = ns.floorDiv(1_000_000_000L)
+        for (r in res.indices) {
+            val slot = slot(r, res[r].bucketStart(s))
+            flaggedRows[slot]++
+            flaggedMask[slot] = flaggedMask[slot] or flags
+            for (j in 0 until c) {
+                val v = value(j)
+                if (v.isNaN()) continue
+                flaggedN[slot * c + j]++
+                flaggedSum[slot * c + j] += v
             }
         }
     }
@@ -224,6 +260,10 @@ class Aggregator(
         max = max.copyOf(c * m).also { it.fill(Float.NEGATIVE_INFINITY, capacity * m) }
         lastNs = lastNs.copyOf(c * m).also { it.fill(Long.MIN_VALUE, capacity * m) }
         last = last.copyOf(c * m)
+        flaggedRows = flaggedRows.copyOf(c)
+        flaggedMask = flaggedMask.copyOf(c)
+        flaggedN = flaggedN.copyOf(c * this.c)
+        flaggedSum = flaggedSum.copyOf(c * this.c)
         capacity = c
     }
 
@@ -246,8 +286,27 @@ class Aggregator(
                 val at = base + k
                 if (n[at] > 0) per[metrics[k].id] = MetricAgg(n[at], rolled(k, at), min[at], max[at], settling[at])
             }
+            if (flaggedRows[slot] > 0) addCompanions(slot, per)
             Bucket(thing, res[slotRes[slot]], slotStart[slot], rows[slot], estimated[slot], per, slotInterval[slot])
         }
+
+    /**
+     * The [RowChecks.FLAGS_ID] companion of a slot with flagged rows, its count and the OR of their
+     * flags, and the [RowChecks.cleanId] companion of each [cleaned] metric with values, over the rows
+     * that passed. A float holds every flag mask up to bit 23 exactly.
+     */
+    private fun addCompanions(slot: Int, per: MutableMap<String, MetricAgg>) {
+        val mask = flaggedMask[slot].toFloat()
+        per[RowChecks.FLAGS_ID] = MetricAgg(flaggedRows[slot], mask, mask, mask)
+        for (j in 0 until c) {
+            val k = cleaned[j]
+            val at = slot * m + k
+            if (n[at] == 0) continue
+            val left = n[at] - flaggedN[slot * c + j]
+            val mean = if (left > 0) ((sum[at] - flaggedSum[slot * c + j]) / left).toFloat() else 0f
+            per[RowChecks.cleanId(metrics[k].id)] = MetricAgg(left, mean, mean, mean)
+        }
+    }
 
     private companion object {
         const val US_PER_S = 1_000_000.0

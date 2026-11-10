@@ -53,12 +53,12 @@ import space.opensensor.designsystem.CardHeader
 import space.opensensor.designsystem.CardTone
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.FitText
-import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockPortrait
 import space.opensensor.designsystem.PillButton
+import space.opensensor.designsystem.QcFlagLine
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.StatusDot
 import space.opensensor.designsystem.TickingText
@@ -140,8 +140,6 @@ import space.opensensor.today.resources.now_sample_number
 import space.opensensor.today.resources.now_unrated_simple
 import space.opensensor.today.resources.now_waiting
 import space.opensensor.today.resources.particles_title
-import space.opensensor.today.resources.qc_flagged
-import space.opensensor.today.resources.qc_note
 import space.opensensor.today.resources.readings_absent
 import space.opensensor.today.resources.readings_cf1
 import space.opensensor.today.resources.readings_title
@@ -395,7 +393,7 @@ internal fun MetricHeroCard(
             }
             if (reading is NowReading.Reading && level.detailed && reading.flags != QcFlags.NONE) {
                 Spacer(Modifier.height(8.dp))
-                QcFlagLine(reading.flags, quiet)
+                QcFlagLine(reading.flags, color = quiet)
             }
             if (reading is NowReading.Reading && mood != null) {
                 Spacer(Modifier.height(16.dp))
@@ -421,20 +419,6 @@ internal fun MetricHeroCard(
                 }
             }
         }
-    }
-}
-
-/**
- * Detailed and Developer only. One short line that the live sample is suspect, with an info icon
- * that lists each check it failed (#91). The value itself is shown as measured.
- */
-@Composable
-private fun QcFlagLine(flags: Int, color: Color) {
-    val title = stringResource(Res.string.qc_flagged)
-    val reasons = qcReasonRes(flags).map { stringResource(it) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        BodyText(title, style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.weight(1f, fill = false))
-        InfoButton(InfoContent(title, reasons + stringResource(Res.string.qc_note)), tint = color)
     }
 }
 

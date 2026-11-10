@@ -163,7 +163,7 @@ class IosDailyDerivedStore(
             }
         }
 
-    /** The identity of a day's build: the builder, completeness, and every source with the anchor that dates it and the template it resolves to. */
+    /** The identity of a day's build: the builder, completeness, and every source with the anchor that dates it, the template it resolves to and the check that reads it. */
     private fun signature(sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>, complete: Boolean): String {
         val text = buildString {
             append("derive-cache-v3:${DailyParquetBuilder.BUILDER}:$complete\n")
@@ -174,6 +174,7 @@ class IosDailyDerivedStore(
                     append(":est${anchor?.boot}:${anchor?.utcNs}:${anchor?.monoUs}")
                 }
                 append(":t${templates.digestOf(source) ?: "-"}")
+                append(ArchiveHistoryTiers.checkSuffix(source, templates))
                 append('\n')
             }
         }

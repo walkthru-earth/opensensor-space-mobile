@@ -1,9 +1,12 @@
 package space.opensensor.today
 
+import space.opensensor.designsystem.qcReasonArg
+import space.opensensor.designsystem.qcReasonRes
 import space.opensensor.family.air.AirMood
 import space.opensensor.family.air.Averaging
 import space.opensensor.family.air.NowReading
 import space.opensensor.family.air.QcFlags
+import space.opensensor.family.air.QcRules
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -63,5 +66,11 @@ class TodayHeroCopyTest {
         val all = QcFlags.PM25_ABOVE_PM10 or QcFlags.FLATLINE or QcFlags.SPIKE or QcFlags.HIGH_HUMIDITY
         assertEquals(listOf("qc_pm25_above_pm10", "qc_flatline", "qc_spike", "qc_high_humidity"), qcReasonRes(all).map { it.key })
         assertEquals(listOf("qc_high_humidity"), qcReasonRes(QcFlags.HIGH_HUMIDITY).map { it.key })
+    }
+
+    @Test
+    fun qcRuleNumbersComeFromTheRules() {
+        val all = QcFlags.PM25_ABOVE_PM10 or QcFlags.FLATLINE or QcFlags.SPIKE or QcFlags.HIGH_HUMIDITY
+        assertEquals(listOf(null, QcRules.FLATLINE_ROWS, null, QcRules.HIGH_HUMIDITY_PERCENT.toInt()), qcReasonRes(all).map(::qcReasonArg))
     }
 }

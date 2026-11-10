@@ -34,4 +34,17 @@
     <string name="pm25_raw">PM2.5 raw</string>
     <!-- Behind the info icon of a PM2.5 card. -->
     <string name="pm25_correction_info">Corrected uses the US EPA humidity correction for this sensor. Raw is the sensor reading as stored. It shows when there is no humidity reading, and always in Detailed. Stored data never changes.</string>
+    <!-- Quality checks of stored and live readings (#91), at the Detailed and Developer levels. -->
+    <string name="qc_flagged">Flagged as suspect</string>
+    <plurals name="qc_flagged_readings">
+        <item quantity="one">%1$d reading flagged</item>
+        <item quantity="other">%1$d readings flagged</item>
+    </plurals>
+    <string name="qc_pm25_above_pm10">PM2.5 is above PM10, which cannot happen.</string>
+    <!-- The argument is QcRules.FLATLINE_ROWS. -->
+    <string name="qc_flatline">The particle counts have not changed for %1$d readings.</string>
+    <string name="qc_spike">A sudden jump that the particle counts do not show.</string>
+    <!-- The argument is QcRules.HIGH_HUMIDITY_PERCENT. -->
+    <string name="qc_high_humidity">Humidity is above %1$d percent, which makes the sensor read high.</string>
+    <string name="qc_note">The value is shown as measured.</string>
 </resources>

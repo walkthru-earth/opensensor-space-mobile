@@ -20,6 +20,7 @@ import space.opensensor.archive.ArchiveStore
 import space.opensensor.archive.ClockAnchorStore
 import space.opensensor.archive.EmptyClockAnchorStore
 import space.opensensor.data.history.parquet.ParquetFile
+import space.opensensor.model.RowCheck
 import space.opensensor.storage.ByteBudgetLru
 import space.opensensor.storage.MemoryPressure
 import space.opensensor.storage.MemoryTrimmable
@@ -246,12 +247,17 @@ class ArchiveHistoryTiers(
             .joinToString("\n")
 
         /**
-         * One source of a day signature on both phones, `name:crc32[:est<anchor>:<first>]:t<template>`.
+         * One source of a day signature on both phones, `name:crc32[:est<anchor>:<first>]:t<template>[:q<check>]`.
          * The template is [FileTemplates.digestOf], `-` when none resolves, so a template served after the
-         * file was indexed rebuilds the file's days.
+         * file was indexed rebuilds the file's days. The check is the [RowCheck.id] [checks] runs on the
+         * file's rows, so new rules rebuild exactly the days they read (#91).
          */
-        fun sourceLine(file: ArchiveRecord, templates: FileTemplates): String =
+        fun sourceLine(file: ArchiveRecord, templates: FileTemplates, checks: RowChecks = RowChecks.INSTALLED): String =
             "${file.name}:${file.crc32}" + (if (file.hasEstimatedUtc) ":est${file.estAnchorFile}:${file.estFirstUtcNs}" else "") +
-                ":t${templates.digestOf(file) ?: "-"}"
+                ":t${templates.digestOf(file) ?: "-"}" + checkSuffix(file, templates, checks)
+
+        /** The `:q<check>` of [sourceLine], empty when no check reads [file]. */
+        fun checkSuffix(file: ArchiveRecord, templates: FileTemplates, checks: RowChecks = RowChecks.INSTALLED): String =
+            checks.of(file, templates)?.let { ":q${it.id}" }.orEmpty()
     }
 }
