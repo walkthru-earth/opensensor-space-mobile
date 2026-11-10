@@ -9,8 +9,8 @@ Effective date [date]. Publisher [legal name], contact [privacy contact email].
 ## Summary
 
 The opensensor.space app copies readings from your own air quality sensors to your phone. It has
-no account, no ads, no analytics and no tracking. It never asks for your precise location, and
-your location is never sent anywhere.
+no account, no ads, no analytics and no tracking. It never asks for your precise location. The
+area you pick for a sensor is sent only to that sensor.
 
 ## What the app does with data
 
@@ -22,13 +22,17 @@ your location is never sent anywhere.
   sent anywhere else.
 - **Permissions.** Bluetooth (Nearby devices) to find and connect to your sensors, local network
   to reach them on your Wi-Fi, and notifications to show sync progress. Each is asked only when you
-  use the feature. If you tap Near me on the public map, the app asks for your approximate
-  location, uses it on your phone to move the map, and does not send or store it.
+  use the feature. If you tap Near me on the public map, or Use phone location on a sensor's area
+  map, the app asks for your approximate location, uses it on your phone to move the map, and does
+  not send or store it. On the area map you then tap an area, and only that area is sent to your
+  sensor when you save. On an iPhone, if you tap Scan on the sensor sticker card, the app asks for
+  the camera to read the barcode on your sensor. No picture is kept.
 
 ## Public sensor map (when available)
 
 When the public map is on, the app downloads public map data anonymously. Like any internet
-request this reaches the host, source.coop, with your IP address. We do not receive access logs
+request this reaches the hosts with your IP address. They are source.coop for the readings and
+the map, and protomaps.github.io for the map's lettering and symbols. We do not receive access logs
 and do not use it to identify you. You can turn the public map off in Settings.
 
 With the same setting on, when a file synced from your sensor names a sensor description the app
@@ -41,15 +45,17 @@ of sensor it is for. It carries no device name, nothing about you and none of yo
 app keeps the description only when it matches the fingerprint the file carries. With the public
 map off, nothing is downloaded.
 
-## Sharing a sensor publicly (optional, off by default)
+## Sharing a sensor publicly (not available yet)
 
-You can choose to share one sensor's readings on the public map from that sensor's settings. Only
+Sharing is not available in the app yet, and the app publishes nothing. When it becomes
+available it will be optional and off by default. You will be able to choose to share one sensor's
+readings on the public map from that sensor's settings. Only
 the readings, the sensor's public name and one area of a standard map grid, an H3 resolution 8
-cell, are published. A typical cell covers about 0.74 km² with sides of about 530 m. Real cells vary
-a little in size and shape. Where few people live, an area this small can point to a single home. The sensor's exact location, identifiers, Wi-Fi details, PIN and token are never
-published. Published data is released under the Creative Commons Attribution 4.0 licence and
-cannot be withdrawn. You can
-stop sharing at any time from the same place, and nothing is published after the end of that
+cell, will be published. A typical cell covers about 0.74 km² with sides of about 530 m. Real cells vary
+a little in size and shape. Where few people live, an area this small can point to a single home. The sensor's exact location, identifiers, Wi-Fi details, PIN and token will never be
+published. Published data will be released under the Creative Commons Attribution 4.0 licence and
+cannot be withdrawn. You will be able to
+stop sharing at any time from the same place, and nothing will be published after the end of that
 day.
 
 ## Data retention and deletion
