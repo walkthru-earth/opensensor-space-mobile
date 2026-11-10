@@ -66,8 +66,8 @@ weekly `live-key-drift.yml` `templates` job runs the same test against firmware 
 template the app has not bundled yet turns that run red. The firmware folders are inputs of the
 `:core:model` test task, so a cached result never stands in for other firmware bytes.
 
-GitHub Actions currently does not run because of account billing. The workflow descriptions
-below describe configured jobs, not completed CI. Local gates are the acceptance evidence.
+GitHub Actions runs these workflows on pull requests, on `main` and on their schedules. A green run
+and the local gates are the acceptance evidence.
 Mobile CodeRabbit provides summaries only, so use a scoped source review before opening a PR.
 Run `./ios/tests/verify-native.sh` for the native host checks. No host or simulator gate qualifies
 phone radio, screen-off collection or board behavior.
