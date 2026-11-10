@@ -96,6 +96,21 @@ class OkHttpRangeEngineTest {
     }
 
     @Test
+    fun `a client without redirects returns the 3xx and never requests its target`() = runBlocking<Unit> {
+        special = { r -> if (r.url.encodedPath == "/moved") MockResponse.Builder().code(302).addHeader("Location", url()).build() else null }
+        val c = OkHttpRangeEngine.newClient(followRedirects = false)
+        try {
+            val moved = OkHttpRangeEngine(c).get(server.url("/moved").toString(), null, null, null, roomy)
+            assertEquals(302, moved.status)
+            assertEquals(listOf("/moved"), requests.map { it.url.encodedPath })
+        } finally {
+            c.dispatcher.executorService.shutdown()
+            c.connectionPool.evictAll()
+        }
+        assertEquals(200, engine.get(server.url("/moved").toString(), null, null, null, roomy).status)
+    }
+
+    @Test
     fun `206 partial reads go through the socket with If-Range and identity encoding`() = runBlocking<Unit> {
         val source = HttpRangeSource(url(), engine)
 

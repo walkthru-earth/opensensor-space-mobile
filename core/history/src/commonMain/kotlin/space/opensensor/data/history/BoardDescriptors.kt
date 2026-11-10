@@ -146,12 +146,61 @@ class BoardDescriptors(
             return@withLock DescriptorOutcome.Rejected(e.message ?: "not a board template")
         }
         if (template.dict != dict) return@withLock DescriptorOutcome.Rejected("template dict differs from the device dict")
+        keep(template, hex, bytes)
+    }
+
+    /**
+     * True when a bundled or served template has the full [desc], or the cache on disk holds one that
+     * still verifies, which this registers first. So a caller never fetches a template [load] has not
+     * reached yet.
+     */
+    suspend fun knows(desc: String): Boolean = mutex.withLock {
+        val full = desc.lowercase()
+        if ((bundled + served.all.value).any { it.key.desc == full }) return@withLock true
+        if (!SHA256_HEX.matches(full)) return@withLock false
+        val bytes = withContext(io) { store.read(full + SUFFIX) } ?: return@withLock false
+        val template = if (ParquetVerify.sha256Hex(bytes) == full) {
+            runCatching { BoardTemplate.parse(bytes.decodeToString(), desc = full) }.getOrNull()
+        } else {
+            null
+        }
+        if (template == null) {
+            withContext(io) { store.delete(full + SUFFIX) }
+            return@withLock false
+        }
+        served.add(template)
+        true
+    }
+
+    /**
+     * Keeps the template [bytes] fetched from a file footer's `template.href` (#260). They are kept only
+     * when their SHA-256 is the footer's full [desc], they parse as an `OpenSensorTemplate` and, when the
+     * footer names a [dict], their `firmware.dict` is it. Kept bytes join the cache and [ServedTemplates]
+     * like a served template, under the same bound.
+     */
+    suspend fun adopt(desc: String, dict: String?, bytes: ByteArray): DescriptorOutcome = mutex.withLock {
+        val full = desc.lowercase()
+        if (!SHA256_HEX.matches(full)) return@withLock DescriptorOutcome.Unsupported
+        if ((bundled + served.all.value).any { it.key.desc == full }) return@withLock DescriptorOutcome.Known
+        val hex = ParquetVerify.sha256Hex(bytes)
+        if (hex != full) return@withLock DescriptorOutcome.Rejected("sha256 differs from the file footer")
+        val template = try {
+            BoardTemplate.parse(bytes.decodeToString(), desc = hex)
+        } catch (e: IllegalArgumentException) {
+            return@withLock DescriptorOutcome.Rejected(e.message ?: "not a board template")
+        }
+        if (dict != null && template.dict != dict.lowercase()) return@withLock DescriptorOutcome.Rejected("template dict differs from the file footer")
+        keep(template, hex, bytes)
+    }
+
+    /** Writes [bytes] as `<hex>.json`, oldest files out first, and serves [template]. Call under [mutex]. */
+    private suspend fun keep(template: BoardTemplate, hex: String, bytes: ByteArray): DescriptorOutcome {
         withContext(io) {
             store.list().sortedBy { it.modifiedEpochMs }.dropLast(MAX_TEMPLATES - 1).forEach { store.delete(it.name) }
             store.write(hex + SUFFIX, bytes)
         }
         served.add(template)
-        DescriptorOutcome.Fetched(template)
+        return DescriptorOutcome.Fetched(template)
     }
 
     /**

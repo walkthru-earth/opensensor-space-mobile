@@ -59,6 +59,29 @@ things through `TemplateRederive.generation`.
 
 No file is indexed again for a template.
 
+`HistoryStartup` also runs `TemplateHrefs` beside the passes, on both phones (#260). A file whose
+footer desc nothing resolves (not served, not cached, not bundled) names the bytes in its footer
+`template.href`, so one anonymous, read only GET can recover them.
+
+- `ArchiveIndexRepair` queues the `TemplateLink` (desc, dict, href) of each file it indexes that
+  resolves no template, and never waits for it. Each time the switch turns on, and at start,
+  `unresolvedTemplateLinks` sweeps files indexed earlier, one footer per desc, at most 16.
+- Nothing is sent while the Settings switch "Show public sensors" (`showPublicSensors`) is off, the
+  one that gates the Discover feed and the basemap.
+- Only an https href on the firmware template host is fetched, a commit pinned
+  `raw.githubusercontent.com/walkthru-earth/opensensor-space-firmware/<commit>/docs/shared/templates/<board>/<desc>.json`
+  (`TemplateHrefs.isFirmwareTemplate`). Any other host, port, user, query or path is refused without a
+  request. Both engines are built with redirects off (`OkHttpRangeEngine.newClient(followRedirects = false)`,
+  `UrlSessionRangeEngine.create(followRedirects = false)`), and a 3xx answer fails.
+- The body is capped at 256 KiB and the whole request at 10 s. Each desc is tried at most once per
+  app run, and a failure is remembered, at most 64 descs per run. Offline, a 404 or a timeout leaves
+  the rows without metrics until a later run or a board serves the template.
+- The bytes bind only when their SHA-256 is the footer desc and, when the footer names a dict, the
+  template's dict is that dict. `BoardDescriptors.adopt` checks again, caches them as `<desc>.json`
+  in `StorageRole.Templates` and adds them to `ServedTemplates`. `FileTemplates` and LIVE resolve
+  them from there, and `TemplateRederive` derives the files' things again. A tampered body is dropped,
+  and the log names only the desc and the reason, never the body or the href.
+
 ```mermaid
 flowchart LR
   J["storage janitor<br/>+ feed block quota"] --> B["backfill<br/>ArchiveIndexRepair"]
@@ -221,9 +244,10 @@ the bundled one. LIVE joins a device by the same rule
 result is part of the day signature, so a file indexed before its board served a template it needs
 gains its metrics at the next derive, with no index pass. An app update that bundles a new desc for
 the same dict leaves files of the older firmware without metrics until a board serves their template
-(#260), and their rows stay. The bundled bytes are the firmware's own, so a
-real footer resolves by its `template.sha256`. The catalog refuses to load when an `index.json` desc
-is not the build digest of its file. A positive footer interval wins. Otherwise
+or `TemplateHrefs` fetches it from the footer href (#260, see Pass order), and their rows stay. The
+bundled bytes are the firmware's own, so a real footer resolves by its `template.sha256`. The catalog
+refuses to load when an `index.json` desc is not the build digest of its file. A positive footer
+interval wins. Otherwise
 the template's default interval is used, and without both the interval is 0 and expected rows are 0.
 A tier bucket fed by files at different intervals keeps the shortest.
 

@@ -32,9 +32,16 @@ class HistoryIndexer internal constructor(
     val templates: FileTemplates = FileTemplates.SERVED,
     /** Gets each indexed file's footer `template.sha256`, see [BoardDescriptors.confirm]. */
     onTemplateDigest: suspend (String) -> Unit = {},
+    /** Gets the link of each indexed file whose desc nothing resolves, see [TemplateHrefs.request]. */
+    onTemplateLink: (TemplateLink) -> Unit = {},
 ) {
-    @Inject constructor(archive: FileArchive, archivedFileDao: ArchivedFileDao, coordinator: DeviceCoordinator, boardDescriptors: BoardDescriptors) :
-        this(archive, archivedFileDao, coordinator, FileTemplates.SERVED, boardDescriptors::confirm)
+    @Inject constructor(
+        archive: FileArchive,
+        archivedFileDao: ArchivedFileDao,
+        coordinator: DeviceCoordinator,
+        boardDescriptors: BoardDescriptors,
+        templateHrefs: TemplateHrefs,
+    ) : this(archive, archivedFileDao, coordinator, FileTemplates.SERVED, boardDescriptors::confirm, templateHrefs::request)
 
     val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
 
@@ -53,6 +60,7 @@ class HistoryIndexer internal constructor(
         log = { Log.i(TAG, it) },
         templates = templates,
         onTemplateDigest = onTemplateDigest,
+        onTemplateLink = onTemplateLink,
     )
 
     /** [row] with the index columns filled from [file] (already verified). Never throws. */

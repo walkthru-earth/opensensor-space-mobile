@@ -68,11 +68,14 @@ class OkHttpRangeEngine(private val client: OkHttpClient) : HttpRangeEngine {
          * A client for range reads. Build it once per process and share it. A stalled read gives up
          * after 15 s and a whole call after 120 s, like the iOS engine, so a dead network ends in an error
          * with Retry instead of a long spinner, while a whole cell file still arrives over a slow mobile link.
+         * With [followRedirects] false a 3xx answer comes back as it is, its target never requested.
          */
-        fun newClient(): OkHttpClient = OkHttpClient.Builder()
+        fun newClient(followRedirects: Boolean = true): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .callTimeout(120, TimeUnit.SECONDS)
+            .followRedirects(followRedirects)
+            .followSslRedirects(followRedirects)
             .build()
     }
 }

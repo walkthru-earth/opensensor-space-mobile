@@ -8,8 +8,9 @@ package space.opensensor.data.history
  * firmware writes (opensensor-space-firmware#105), naming [dict], [desc], [intervalMs], [thing],
  * [mobility], [purpose] and [boot]. Every member `footer.json` requires is written, so the reader trusts
  * it. Firmware always names both digests, so a null [dict] or [desc] is [UNKNOWN_DIGEST], which no
- * template carries. The firmware version is a placeholder, so no test pins a release string. Every
- * member the app does not read is there so the reader is shown to ignore it.
+ * template carries. The template href is [templateHref], else a placeholder link under [board]. The
+ * firmware version is a placeholder, so no test pins a release string. Every member the app does not
+ * read is there so the reader is shown to ignore it.
  */
 fun opensensorFooterJson(
     dict: String?,
@@ -21,13 +22,15 @@ fun opensensorFooterJson(
     mobility: String = "fixed",
     purpose: String = "telemetry",
     boot: String = "0123456789abcdef0123456789abcdef",
+    templateHref: String? = null,
 ): String {
     val dictionary = dict ?: UNKNOWN_DIGEST
     val template = desc ?: UNKNOWN_DIGEST
+    val href = templateHref ?: "https://example.invalid/templates/$board/$template.json"
     return """{"version":"0.1.0","thing":{"id":"$thing","device_id":"0123456789ab","board":"$board","deployment_id":"unknown","mobility":"$mobility"},""" +
         """"firmware":{"version":"test-firmware","schema":"$schema","boot_id":"$boot"},""" +
         """"dictionary":{"sha256":"$dictionary","version":"$schema","uri":"https://example.invalid/dictionaries/$schema.inc"},""" +
-        """"template":{"href":"https://example.invalid/templates/$board/$template.json","sha256":"$template"},""" +
+        """"template":{"href":"$href","sha256":"$template"},""" +
         """"acquisition":{"sample_interval_ms":$intervalMs,"time_semantics":"sample instant, UTC","config_id":"default","config":"{}","calibration_id":"unknown"},""" +
         """"file":{"rotation_interval_s":3600,"row_groups":4,"row_group_rows_max":90,"compression":"LZ4_RAW","purpose":"$purpose"}}"""
 }
