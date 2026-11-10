@@ -33,8 +33,6 @@ import space.opensensor.device.LanAccess
 import space.opensensor.device.StickerScan
 import space.opensensor.device.deviceConfigItems
 import space.opensensor.device.sensorIdentityItem
-import space.opensensor.today.DeviceSectionTabs
-import space.opensensor.today.DeviceTab
 import space.opensensor.today.TransportChip
 import space.opensensor.ui.components.ConnectionBanner
 import space.opensensor.ui.device.cards.AutoSyncCard
@@ -42,9 +40,8 @@ import space.opensensor.ui.device.cards.DeviceInfoCard
 
 /** Everything the Device screen can ask for. Device-changing ones are confirmed by the shared controller. */
 sealed interface DeviceAction {
-    data object OpenToday : DeviceAction
-    data object OpenHistory : DeviceAction
-    data object OpenFiles : DeviceAction
+    /** Back to the Station page, which opened Device settings. */
+    data object Back : DeviceAction
     data object Disconnect : DeviceAction
     data object Reconnect : DeviceAction
     data object RefreshConfig : DeviceAction
@@ -83,39 +80,32 @@ fun DeviceScreen(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Column {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                    title = {
-                        Column {
-                            Text(stringResource(R.string.device_screen_title), style = MaterialTheme.typography.titleLarge)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (state.detailLevel.detailed) TransportChip(state.transport)
-                                Text(state.name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                navigationIcon = {
+                    IconButton(onClick = { onAction(DeviceAction.Back) }) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(R.string.nav_back)) }
+                },
+                title = {
+                    Column {
+                        Text(stringResource(R.string.device_screen_title), style = MaterialTheme.typography.titleLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (state.detailLevel.detailed) TransportChip(state.transport)
+                            Text(state.name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                    },
-                    actions = {
-                        IconButton(onClick = { onAction(DeviceAction.RefreshConfig) }, enabled = state.ready && state.isV2) {
-                            Icon(AppIcons.Refresh, contentDescription = stringResource(R.string.device_refresh))
-                        }
-                        // Reconnect and Disconnect live only here, in the thing header, as on Today.
-                        if (state.thing.offersReconnect) {
-                            TextButton(onClick = { onAction(DeviceAction.Reconnect) }) { Text(stringResource(R.string.action_reconnect)) }
-                        } else {
-                            IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
-                        }
-                    },
-                )
-                DeviceSectionTabs(DeviceTab.DEVICE) {
-                    when (it) {
-                        DeviceTab.TODAY -> onAction(DeviceAction.OpenToday)
-                        DeviceTab.HISTORY -> onAction(DeviceAction.OpenHistory)
-                        DeviceTab.FILES -> onAction(DeviceAction.OpenFiles)
-                        DeviceTab.DEVICE -> Unit
                     }
-                }
-            }
+                },
+                actions = {
+                    IconButton(onClick = { onAction(DeviceAction.RefreshConfig) }, enabled = state.ready && state.isV2) {
+                        Icon(AppIcons.Refresh, contentDescription = stringResource(R.string.device_refresh))
+                    }
+                    // Reconnect and Disconnect live only here, in the thing header, as on Today.
+                    if (state.thing.offersReconnect) {
+                        TextButton(onClick = { onAction(DeviceAction.Reconnect) }) { Text(stringResource(R.string.action_reconnect)) }
+                    } else {
+                        IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
+                    }
+                },
+            )
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->

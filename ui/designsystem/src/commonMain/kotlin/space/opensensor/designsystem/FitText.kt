@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -24,7 +23,6 @@ import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -195,27 +193,6 @@ internal data class WordSafeAutoSize(
     private companion object {
         val DEFAULT_SIZE = 14.sp
     }
-}
-
-/**
- * True when every one of [labels] fits on one line in [slotPx] at [FitTextLimits.FloorFraction] of
- * its 1.0 size [oneScale], so a row of equal slots (tabs) holds them without wrapping or splitting a word.
- */
-internal fun TextMeasurer.allFitAtFloor(
-    labels: List<String>,
-    style: TextStyle,
-    oneScale: TextUnit,
-    slotPx: Float,
-    density: Density,
-): Boolean {
-    if (slotPx <= 0f) return labels.isEmpty()
-    val size = if (style.fontSize.isSp) style.fontSize else 14.sp
-    val one = if (oneScale.isSp) oneScale else size
-    val floorStyle = with(density) {
-        val floorPx = minOf(size.toPx(), one.value.dp.toPx()) * FitTextLimits.FloorFraction
-        style.wordSafe(heading = true).copy(fontSize = floorPx.toSp())
-    }
-    return labels.all { measure(it, floorStyle, maxLines = 1, softWrap = false, density = density).size.width <= slotPx }
 }
 
 /**

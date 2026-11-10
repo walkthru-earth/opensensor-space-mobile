@@ -66,27 +66,22 @@ class TabNavigator(
         if (known && !auto) openSetup(resume = id) else openSetup(pick = id, pickName = name, offer = true)
     }
 
-    /** A detail screen on top of the active tab. */
+    /**
+     * A detail screen on top of the active tab. The Station page opens History, Files, Device
+     * settings and Debug this way, so Back always returns to it. A second tap while [key] is already
+     * on top does nothing.
+     */
     fun push(key: NavKey) {
+        if (top == key) return
         stack(tab).add(key)
     }
 
     /**
      * The Debug inspector, reachable only at the Developer detail level on both platforms. A tap below
-     * that level, or a second tap while it is already on top, does nothing.
+     * that level does nothing, and [push] ignores a second tap.
      */
     fun openDebug(address: String, developer: Boolean) {
-        if (!developer || top == DebugKey(address)) return
-        push(DebugKey(address))
-    }
-
-    /** Today, History, Files and Device are siblings. Replace the open one rather than stack them. */
-    fun openSection(key: NavKey) {
-        val stack = stack(tab)
-        val last = stack.last()
-        if (last == key) return
-        if (isDeviceSection(last)) stack.removeAt(stack.lastIndex)
-        stack.add(key)
+        if (developer) push(DebugKey(address))
     }
 
     /** A screen's own back arrow. Pops only while that screen is still on top, so a double tap cannot pop twice. */
@@ -113,9 +108,5 @@ class TabNavigator(
     private fun popToRoot(target: TopTab) {
         val stack = stack(target)
         while (stack.size > 1) stack.removeAt(stack.lastIndex)
-    }
-
-    companion object {
-        fun isDeviceSection(key: NavKey): Boolean = key is TodayKey || key is HistoryKey || key is FilesKey || key is DeviceKey
     }
 }

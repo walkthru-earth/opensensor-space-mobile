@@ -278,8 +278,8 @@ internal fun AppRoot(
                             LeasePeripheral(leases, key.address)
                             TodayEntry(key.address, today, devices, settingsRepository, units, requestBluetooth) { action ->
                                 when (action) {
-                                    TodayAction.OpenHistory -> nav.openSection(HistoryKey(key.address))
-                                    TodayAction.OpenFiles -> nav.openSection(FilesKey(key.address))
+                                    TodayAction.OpenHistory -> nav.push(HistoryKey(key.address))
+                                    TodayAction.OpenFiles -> nav.push(FilesKey(key.address))
                                     TodayAction.OpenDevice -> nav.push(DeviceKey(key.address))
                                     // Debug borrows the authenticated link for this sensor, whether Wi-Fi or Bluetooth.
                                     TodayAction.OpenDebug -> {
@@ -312,7 +312,7 @@ internal fun AppRoot(
                         }
                     }
                     entry<HistoryKey> { key ->
-                        HistoryEntry(address = key.address, devices = devices, units = units, level = level, onBack = { nav.pop() })
+                        HistoryEntry(address = key.address, devices = devices, units = units, level = level, onBack = { nav.popIfTop { it == key } })
                     }
                     entry<FilesKey> { key ->
                         FilesEntry(
@@ -320,12 +320,12 @@ internal fun AppRoot(
                             devices = devices,
                             actions = filesActions,
                             level = level,
-                            onBack = { nav.pop() },
+                            onBack = { nav.popIfTop { it == key } },
                             onOpenFileMetrics = { thing, name -> nav.push(FileMetricsKey(thing, name)) },
                         )
                     }
                     entry<FileMetricsKey> { key ->
-                        FileMetricsEntry(thing = key.thing, name = key.name, level = level, onBack = { nav.pop() })
+                        FileMetricsEntry(thing = key.thing, name = key.name, level = level, onBack = { nav.popIfTop { it == key } })
                     }
                     entry<DebugKey> { key ->
                         val controller = viewModel(key = "debug-${key.address}") { DebugHolder(key.address, devices.state, openDebugLink) }.controller

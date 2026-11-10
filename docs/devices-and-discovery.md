@@ -407,9 +407,10 @@ and its settings hold "Share this sensor publicly", off by default.
 
 **Navigation (owner decision 2026-10-08).** One bottom bar for the whole app, Discover, My
 devices and Settings, drawn once at the app root on Android and iOS. Discover is always the start
-tab, whether or not a device is paired. A device's Today, History, Files and Device sections are a
-tab row inside the device screens, never a second bottom bar. Each tab keeps its own back stack
-(`docs/screens.md`).
+tab, whether or not a device is paired. A device opens on its Station page, the hub of that sensor.
+Its gear opens Device settings and its More card opens History, Files and, at Developer, Debug. Each
+is a plain push over the Station page, so Back returns to it, and there is no section tab row or
+second bottom bar. Each bottom bar tab keeps its own back stack (`docs/screens.md`).
 
 ### Centring the map and Near me
 

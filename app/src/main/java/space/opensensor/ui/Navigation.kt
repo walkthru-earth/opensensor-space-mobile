@@ -62,9 +62,10 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, develop
     entry<TodayKey> { key ->
         TodayRoute(
             address = key.address,
-            onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
-            onOpenFiles = { nav.openSection(FilesKey(key.address)) },
-            onOpenDevice = { nav.openSection(DeviceKey(key.address)) },
+            // The Station page is the hub. Each page is a plain push, so Back returns here.
+            onOpenHistory = { nav.push(HistoryKey(key.address)) },
+            onOpenFiles = { nav.push(FilesKey(key.address)) },
+            onOpenDevice = { nav.push(DeviceKey(key.address)) },
             // The shell checks the stored level itself, and the Debug screen pops when the level drops.
             onOpenDebug = { nav.openDebug(key.address, developer = developer()) },
             onDisconnected = { nav.toMyDevicesRoot() },
@@ -73,17 +74,13 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, develop
     entry<HistoryKey> { key ->
         HistoryScreen(
             address = key.address,
-            onOpenToday = { nav.openSection(TodayKey(key.address)) },
-            onOpenFiles = { nav.openSection(FilesKey(key.address)) },
-            onOpenDevice = { nav.openSection(DeviceKey(key.address)) },
+            onBack = { nav.popIfTop { it == key } },
         )
     }
     entry<FilesKey> { key ->
         FilesRoute(
             address = key.address,
-            onOpenToday = { nav.openSection(TodayKey(key.address)) },
-            onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
-            onOpenDevice = { nav.openSection(DeviceKey(key.address)) },
+            onBack = { nav.popIfTop { it == key } },
             onOpenFileMetrics = { thing, name -> nav.push(FileMetricsKey(thing, name)) },
             onDisconnected = { nav.toMyDevicesRoot() },
         )
@@ -98,9 +95,7 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, develop
     entry<DeviceKey> { key ->
         DeviceRoute(
             address = key.address,
-            onOpenToday = { nav.openSection(TodayKey(key.address)) },
-            onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
-            onOpenFiles = { nav.openSection(FilesKey(key.address)) },
+            onBack = { nav.popIfTop { it == key } },
             onDisconnected = { nav.toMyDevicesRoot() },
         )
     }

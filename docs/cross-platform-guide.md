@@ -278,11 +278,11 @@ The rules for a new screen or component.
    both 48 dp), with at least 8 dp (`MinTouchSpacing` and `FloatingControl.MinSpacing`) between
    neighbouring controls such as `BrandBottomBar` tabs. `Modifier.touchTarget()` combines
    `minimumInteractiveComponentSize()` and `sizeIn(minWidth = 48.dp, minHeight = 48.dp)`, and
-   `FloatingIconButton`, `FloatingTextButton`, `PillButton`, `OutlinePillButton`, `BottomBarItem`,
-   `SectionTabs` and `InfoButton` apply it directly.
+   `FloatingIconButton`, `FloatingTextButton`, `PillButton`, `OutlinePillButton`, `BottomBarItem`
+   and `InfoButton` apply it directly.
 6. **Text scaling and wrapping.** No text breaks a line inside a word, in English or Arabic.
    `brandTypography` gives every style `Hyphens.None`, `LineBreak.Paragraph` for body styles and
-   `LineBreak.Heading` for the rest. A short label (bottom bar tab, section tab, button, segment,
+   `LineBreak.Heading` for the rest. A short label (bottom bar tab, button, segment,
    chip, eyebrow, legend word, caption, screen or thing title) uses `FitText` in `FitText.kt`. It
    keeps the user's size while the label fits on one line, then shrinks on one line no lower than its
    own size at font scale 1.0, then to `FitTextLimits.FloorFraction` (85 percent) of that. The 1.0
@@ -296,9 +296,7 @@ The rules for a new screen or component.
    ellipsis. Its semantics keep the full text, so screen readers read all of it. A hyphen between two
    letters or digits (OS-7500, Wi-Fi) joins one word, so no line ends on it. Body text and info sheet
    paragraphs use `BodyText`, which keeps the user's full size and shrinks only when one word is wider
-   than the line, down to the same 50 percent. `SectionTabs` measures its labels at the floor and switches to
-   `PrimaryScrollableTabRow` when they do not all fit their equal slots, so a tab never wraps or
-   splits. `TypographyLimits` in `Typography.kt` sets the line caps of the remaining labels
+   than the line, down to the same 50 percent. `TypographyLimits` in `Typography.kt` sets the line caps of the remaining labels
    (`EyebrowMaxLines = 2`, `StatLabelMaxLines = 3`, `StatValueMaxLines = 2`, `TickingMaxLines = 2`).
    `SectionCard`
    and `StatLine` weight their primary text and cap value width so trailing buttons and values stay
@@ -364,7 +362,7 @@ bar spacing, headings, merged rows, 200 percent font scale fitting without split
 `StatLine` value cap, `valueSemantics` replacing its text, `TickingText` speaking in 10 second steps,
 `InfoSheet` close action, switch rows, tab roles and live iOS reduce-motion notifications. `FitTextTest` in
 `:ui:designsystem` `commonTest` pins the size search and the mid-word check, and `FitTextLayoutTest`
-in `iosTest` renders bottom bar labels, section tabs, titles and body text at font scale 1.0, 2.0 and
+in `iosTest` renders bottom bar labels, titles and body text at font scale 1.0, 2.0 and
 3.1, 280 and 360 dp, in English and in Arabic right to left. Bottom bar labels stay on one line at no
 less than their 1.0 size and body text breaks only between words. It also sweeps a label from 24 to
 360 dp and checks that no line ends inside a word, and that a display numeral wraps at its token floor

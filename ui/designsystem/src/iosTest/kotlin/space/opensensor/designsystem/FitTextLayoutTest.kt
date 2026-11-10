@@ -116,33 +116,6 @@ class FitTextLayoutTest {
     }
 
     @Test
-    fun sectionTabsNeverSplitAWord() {
-        val labels = listOf("Today", "History", "Files", "Device")
-        val arabicLabels = listOf("اليوم", "السجل", "الملفات", "الجهاز")
-        for (setup in setups) {
-            val shown = if (setup.arabic) arabicLabels else labels
-            runComposeUiTest {
-                lateinit var style: TextStyle
-                setContent {
-                    Scene(setup) {
-                        style = MaterialTheme.typography.titleSmall
-                        SectionTabs(shown, selectedIndex = 0, onSelect = {})
-                    }
-                }
-                // Tabs that cannot hold their labels at the floor scroll instead of shrinking further.
-                val floorPx = style.fontSize.value * 2f * FitTextLimits.FloorFraction
-                for (label in shown) {
-                    val layout = layoutOf(label)
-                    assertEquals(1, layout.lineCount, "$label lines at $setup")
-                    assertFalse(layout.hasVisualOverflow, "$label cut at $setup")
-                    assertFalse(breaksInsideWord(layout), "$label splits at $setup")
-                    assertTrue(layout.fontPx() >= floorPx - 0.5f, "$label ${layout.fontPx()} px >= floor $floorPx px at $setup")
-                }
-            }
-        }
-    }
-
-    @Test
     fun aThingTitleOrAScreenTitleNeverSplitsAWord() {
         // The thing name beside the header actions (#143) and the Arabic My devices title (#144).
         for (setup in setups) {

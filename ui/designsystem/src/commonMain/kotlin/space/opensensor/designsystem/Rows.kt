@@ -16,11 +16,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryScrollableTabRow
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,12 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -165,47 +160,6 @@ fun TagChip(icon: ImageVector, text: String, container: Color, content: Color, m
         }
     }
 }
-
-/**
- * Sibling sections of one thing (a device's Today, History, Files and Device) as a tab row under
- * the screen's top bar. Selecting the open section again does nothing.
- */
-@Composable
-fun SectionTabs(
-    labels: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    containerColor: Color = MaterialTheme.colorScheme.background,
-) {
-    val tabs: @Composable () -> Unit = {
-        labels.forEachIndexed { index, label ->
-            Tab(
-                selected = index == selectedIndex,
-                onClick = { if (index != selectedIndex) onSelect(index) },
-                modifier = Modifier.touchTarget(),
-                text = { FitText(label, maxLines = 1) },
-            )
-        }
-    }
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // Equal tabs while every label fits on one line at its floor size, otherwise the row
-        // scrolls so each label keeps the user's size and no word splits ("Histo / ry", #143).
-        val measurer = rememberTextMeasurer()
-        val density = LocalDensity.current
-        val style = MaterialTheme.typography.titleSmall
-        val oneScale = MaterialTheme.typography.oneScaleSize(style)
-        val slotPx = with(density) { (maxWidth / labels.size.coerceAtLeast(1) - TabTextPadding * 2).toPx() }
-        val fixed = remember(labels, style, oneScale, slotPx, density) { measurer.allFitAtFloor(labels, style, oneScale, slotPx, density) }
-        if (fixed) {
-            PrimaryTabRow(selectedTabIndex = selectedIndex, containerColor = containerColor, tabs = tabs)
-        } else {
-            PrimaryScrollableTabRow(selectedTabIndex = selectedIndex, containerColor = containerColor, edgePadding = 0.dp, tabs = tabs)
-        }
-    }
-}
-
-/** Material 3 `Tab` pads its text by 16 dp on each side. */
-private val TabTextPadding = 16.dp
 
 /** Wall-clock milliseconds since the epoch, the same clock on Android and iOS. */
 fun nowEpochMillis(): Long = Clock.System.now().toEpochMilliseconds()

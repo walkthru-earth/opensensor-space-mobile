@@ -43,9 +43,7 @@ import space.opensensor.ui.permissions.rememberNotificationPermission
 @Composable
 fun DeviceRoute(
     address: String,
-    onOpenToday: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenFiles: () -> Unit,
+    onBack: () -> Unit,
     onDisconnected: () -> Unit,
     viewModel: DeviceViewModel = hiltViewModel<DeviceViewModel, DeviceViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
@@ -94,9 +92,7 @@ fun DeviceRoute(
         snackbar = snackbar,
         onAction = { action ->
             when (action) {
-                DeviceAction.OpenToday -> onOpenToday()
-                DeviceAction.OpenHistory -> onOpenHistory()
-                DeviceAction.OpenFiles -> onOpenFiles()
+                DeviceAction.Back -> onBack()
                 DeviceAction.Disconnect -> { viewModel.disconnect(); onDisconnected() }
                 DeviceAction.Reconnect -> {
                     if (canReconnectLanOnly(bluetooth.ready, localNetwork.ready, lanReconnectAvailable)) {
