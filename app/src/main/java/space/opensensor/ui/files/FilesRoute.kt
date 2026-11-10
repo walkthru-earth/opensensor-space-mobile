@@ -2,7 +2,6 @@ package space.opensensor.ui.files
 
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,8 +17,6 @@ import space.opensensor.designsystem.AppIcons
 import space.opensensor.files.DeviceFilesAction
 import space.opensensor.files.FileMetricsScreen
 import space.opensensor.files.FilesScreen
-import space.opensensor.today.DeviceSectionTabs
-import space.opensensor.today.DeviceTab
 import space.opensensor.today.TransportChip
 import space.opensensor.ui.components.CollectEvents
 import space.opensensor.ui.components.ConnectionBanner
@@ -29,14 +26,12 @@ import space.opensensor.ui.permissions.rememberNotificationPermission
 /**
  * The Android host of the shared Files screen (`:feature:files`). It adds what only Android has
  * here, the device session, background sync, the notification permission, the link banner and the
- * chart by file, through the shared screen's slots.
+ * chart by file, through the shared screen's slots. Back returns to the Station page.
  */
 @Composable
 fun FilesRoute(
     address: String,
-    onOpenToday: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenDevice: () -> Unit,
+    onBack: () -> Unit,
     onOpenFileMetrics: (thing: String, name: String) -> Unit,
     onDisconnected: () -> Unit,
     viewModel: FilesViewModel = hiltViewModel<FilesViewModel, FilesViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
@@ -60,6 +55,7 @@ fun FilesRoute(
         controller = viewModel.files,
         level = level,
         onOpenFileMetrics = onOpenFileMetrics,
+        onBack = onBack,
         device = device,
         progress = viewModel.syncProgress,
         onDeviceAction = { action ->
@@ -73,16 +69,6 @@ fun FilesRoute(
         guard = { action -> notificationPermission.ensureThen(action) },
         snackbar = snackbar,
         subtitleLead = { if (state.detailLevel.detailed) TransportChip(state.transport) },
-        tabs = {
-            DeviceSectionTabs(DeviceTab.FILES, containerColor = MaterialTheme.colorScheme.surface) {
-                when (it) {
-                    DeviceTab.TODAY -> onOpenToday()
-                    DeviceTab.HISTORY -> onOpenHistory()
-                    DeviceTab.DEVICE -> onOpenDevice()
-                    DeviceTab.FILES -> Unit
-                }
-            }
-        },
         banner = if (state.thing.showsBanner) {
             { ConnectionBanner(state.connection, reconnecting = state.reconnecting, technical = level.developer, heldInBackground = state.heldInBackground) }
         } else {

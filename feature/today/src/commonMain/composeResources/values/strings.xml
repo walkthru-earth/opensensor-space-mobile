@@ -2,14 +2,15 @@
 <resources>
     <string name="device_unnamed">Unnamed device</string>
     <string name="today_thing_short">ID %1$s…</string>
-    <string name="nav_devices">Devices</string>
     <string name="nav_debug">Debug</string>
     <string name="nav_disconnect">Disconnect</string>
     <string name="action_reconnect">Reconnect</string>
-    <string name="tab_today">Today</string>
-    <string name="tab_history">History</string>
-    <string name="tab_files">Files</string>
-    <string name="tab_device">Device</string>
+    <string name="nav_back">Back</string>
+    <string name="nav_device_settings">Device settings</string>
+    <string name="station_more">More</string>
+    <string name="station_more_info">History and Files read what this phone keeps, so they open without the sensor nearby. The gear at the top opens Device settings.</string>
+    <string name="station_history">History</string>
+    <string name="station_files">Files</string>
     <string name="transport_ble">Bluetooth</string>
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">Fake device</string>

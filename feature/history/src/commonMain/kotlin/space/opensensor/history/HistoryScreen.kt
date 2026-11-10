@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -140,7 +141,7 @@ import space.opensensor.units.UnitFormatter
  * Day, Week, Month and Year of one thing from the phone archive, the same screen on Android and
  * iOS. It works offline and without a session, because the tiers and rows come from files already
  * verified on this phone. Every number says which window it describes and how much of that window
- * has readings. [topBar] is the platform header (Android, the device tabs, iOS, [HistoryTopBar]).
+ * has readings. [topBar] is the platform header, [HistoryTopBar] on both phones.
  */
 @Composable
 fun HistoryScreen(
@@ -247,10 +248,11 @@ fun HistoryScreen(
     }
 }
 
-/** The iOS header: a back arrow and the title. Android keeps its own app bar and device tabs. */
+/** The header on both phones, a back arrow to the Station page, the title and optional [actions]. */
 @Composable
-fun HistoryTopBar(onBack: (() -> Unit)?) {
+fun HistoryTopBar(onBack: (() -> Unit)?, actions: @Composable RowScope.() -> Unit = {}) {
     TopAppBar(
+        actions = actions,
         title = { Text(stringResource(Res.string.history_title), Modifier.semantics { heading() }) },
         navigationIcon = {
             if (onBack != null) {

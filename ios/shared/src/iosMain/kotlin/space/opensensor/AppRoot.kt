@@ -268,8 +268,8 @@ internal fun AppRoot(
                             LeasePeripheral(leases, key.address)
                             TodayEntry(key.address, today, devices, settingsRepository, units, requestBluetooth) { action ->
                                 when (action) {
-                                    TodayAction.OpenHistory -> nav.openSection(HistoryKey(key.address))
-                                    TodayAction.OpenFiles -> nav.openSection(FilesKey(key.address))
+                                    TodayAction.OpenHistory -> nav.push(HistoryKey(key.address))
+                                    TodayAction.OpenFiles -> nav.push(FilesKey(key.address))
                                     TodayAction.OpenDevice -> nav.push(DeviceKey(key.address))
                                     // Debug borrows the authenticated link for this sensor, whether Wi-Fi or Bluetooth.
                                     TodayAction.OpenDebug -> {

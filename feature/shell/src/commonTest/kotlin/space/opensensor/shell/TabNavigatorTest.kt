@@ -40,11 +40,11 @@ class TabNavigatorTest {
     fun `each tab keeps its own stack across tab switches`() {
         nav.select(TopTab.MY_DEVICES)
         nav.push(TodayKey("A"))
-        nav.openSection(FilesKey("A"))
+        nav.push(FilesKey("A"))
         nav.select(TopTab.DISCOVER)
         nav.select(TopTab.SETTINGS)
         nav.select(TopTab.MY_DEVICES)
-        assertEquals(listOf(ScanKey, FilesKey("A")), stack(TopTab.MY_DEVICES))
+        assertEquals(listOf(ScanKey, TodayKey("A"), FilesKey("A")), stack(TopTab.MY_DEVICES))
         assertEquals(FilesKey("A"), nav.top)
     }
 
@@ -71,22 +71,27 @@ class TabNavigatorTest {
     }
 
     @Test
-    fun `device sections replace each other rather than stack`() {
+    fun `every page the Station page opens is a push so Back returns to the Station page`() {
         nav.select(TopTab.MY_DEVICES)
         nav.push(TodayKey("A"))
-        nav.openSection(HistoryKey("A"))
-        nav.openSection(DeviceKey("A"))
-        nav.openSection(DeviceKey("A"))
-        assertEquals(listOf(ScanKey, DeviceKey("A")), stack(TopTab.MY_DEVICES))
+        for (page in listOf(HistoryKey("A"), FilesKey("A"), DeviceKey("A"))) {
+            nav.push(page)
+            assertEquals(listOf(ScanKey, TodayKey("A"), page), stack(TopTab.MY_DEVICES))
+            assertTrue(nav.showsBottomBar)
+            nav.popIfTop { it == page }
+            assertEquals(TodayKey("A"), nav.top)
+        }
     }
 
     @Test
-    fun `a section opened over an inspector stacks on it`() {
+    fun `a second tap on a page already on top does not stack it twice`() {
         nav.select(TopTab.MY_DEVICES)
-        nav.push(FilesKey("A"))
-        nav.push(FileMetricsKey("s", "f"))
-        nav.openSection(TodayKey("A"))
-        assertEquals(listOf(ScanKey, FilesKey("A"), FileMetricsKey("s", "f"), TodayKey("A")), stack(TopTab.MY_DEVICES))
+        nav.push(TodayKey("A"))
+        nav.push(HistoryKey("A"))
+        nav.push(HistoryKey("A"))
+        assertEquals(listOf(ScanKey, TodayKey("A"), HistoryKey("A")), stack(TopTab.MY_DEVICES))
+        assertTrue(nav.pop())
+        assertEquals(TodayKey("A"), nav.top)
     }
 
     @Test
@@ -97,7 +102,7 @@ class TabNavigatorTest {
         nav.push(DebugKey("A"))
         assertFalse(nav.showsBottomBar)
         nav.popIfTop { it is DebugKey }
-        nav.openSection(FilesKey("A"))
+        nav.push(FilesKey("A"))
         nav.push(FileMetricsKey("s", "f"))
         assertFalse(nav.showsBottomBar)
         nav.pop()
