@@ -274,7 +274,8 @@ fun FitText(
  * Body text (a sentence, an info sheet paragraph) at the user's full size, wrapping only between
  * words. It shrinks only when a single word is wider than the line, down to
  * [FitTextLimits.MinFraction], so Arabic and long English words are never split. Pass [heading] =
- * true for a multi-line title.
+ * true for a multi-line title. It sets title line breaking only, so a title screen readers should
+ * list as a heading also takes [headingSemantics].
  */
 @Composable
 fun BodyText(
