@@ -83,6 +83,13 @@ sealed interface DataSource {
      */
     class PullSync(override val publish: PublishPolicy) : Recording
 
+    /**
+     * Files this phone records as its own Thing, a [space.opensensor.model.ThingId.PhoneInstall]. The
+     * writer of a file writes its File Item, so this is the one source whose Items the phone writes.
+     * No kind declares it yet, the phone Thing template and owner rules come first.
+     */
+    class PhoneLog(override val publish: PublishPolicy) : Recording
+
     /** Things that are already public, read from [feed]. Nothing is written to `archive/`. */
     class RemoteFeed(val feed: PublicFeed) : DataSource
 
