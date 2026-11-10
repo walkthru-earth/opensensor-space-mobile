@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -167,7 +168,7 @@ internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, 
 internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, onSetup: () -> Unit = {}) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = knownCardColor(MaterialTheme.colorScheme),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
@@ -189,11 +190,17 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, o
                 if (row.needsSetup) SetupChip(stringResource(Res.string.scan_finish_setup), onSetup)
             }
             // Opens the sensor's page, where Forget lives.
-            Icon(AppIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f))
+            Icon(AppIcons.ChevronRight, contentDescription = null, tint = knownChevronTint(MaterialTheme.colorScheme))
             Spacer(Modifier.width(12.dp))
         }
     }
 }
+
+/** The known card surface. Its chevron is the card's only open cue, so [knownChevronTint] keeps 3.0 contrast on it (#117). */
+internal fun knownCardColor(scheme: ColorScheme): Color = scheme.surfaceContainerLow
+
+/** The known card chevron, full strength so it reads as a control rather than a hint. */
+internal fun knownChevronTint(scheme: ColorScheme): Color = scheme.onSurfaceVariant
 
 /**
  * A compact neutral control for setup (#272). Finish setup on a known row that asks for it, the
