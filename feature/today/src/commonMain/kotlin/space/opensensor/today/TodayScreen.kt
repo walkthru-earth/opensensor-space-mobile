@@ -52,8 +52,8 @@ import space.opensensor.today.resources.msg_busy
 import space.opensensor.today.resources.msg_failed_flush
 import space.opensensor.today.resources.msg_finalized
 import space.opensensor.today.resources.msg_rejected_flush
-import space.opensensor.today.resources.nav_debug
-import space.opensensor.today.resources.nav_devices
+import space.opensensor.today.resources.nav_back
+import space.opensensor.today.resources.nav_device_settings
 import space.opensensor.today.resources.nav_disconnect
 import space.opensensor.today.resources.today_forget
 import space.opensensor.today.resources.today_forget_body
@@ -76,7 +76,10 @@ sealed interface TodayAction {
     data object OpenFiles : TodayAction
     data object OpenDevice : TodayAction
     data object OpenDebug : TodayAction
+
+    /** The back arrow. It leaves the Station page for My devices and keeps the link. */
     data object OpenDevices : TodayAction
+
     data object OpenBluetoothSettings : TodayAction
     data object Disconnect : TodayAction
 
@@ -232,58 +235,50 @@ fun TodayContent(
             modifier = modifier,
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                Column {
-                    TopAppBar(
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                        title = {
-                            Column {
-                                // The device name titles the page (TalkBack headings list, VoiceOver rotor).
-                                // Fits to one line, then wraps only between words, so "OS-7500" never splits (#143).
-                                FitText(
-                                    snapshot.name ?: stringResource(Res.string.device_unnamed),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    modifier = Modifier.headingSemantics(),
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.
-                                    if (level.detailed) TransportChip(snapshot.transport)
-                                    if (level.developer) {
-                                        snapshot.info?.thing?.let {
-                                            FitText(
-                                                stringResource(Res.string.today_thing_short, it.take(8)),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontFamily = FontFamily.Monospace,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                            )
-                                        }
+                // The Station page is the hub of one sensor. History, Files, Device settings and Debug
+                // are plain pushes over it, so Back always returns here. There is no section tab row.
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                    navigationIcon = {
+                        IconButton(onClick = { onAction(TodayAction.OpenDevices) }) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.nav_back)) }
+                    },
+                    title = {
+                        Column {
+                            // The device name titles the page (TalkBack headings list, VoiceOver rotor).
+                            // Fits to one line, then wraps only between words, so "OS-7500" never splits (#143).
+                            FitText(
+                                snapshot.name ?: stringResource(Res.string.device_unnamed),
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.headingSemantics(),
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.
+                                if (level.detailed) TransportChip(snapshot.transport)
+                                if (level.developer) {
+                                    snapshot.info?.thing?.let {
+                                        FitText(
+                                            stringResource(Res.string.today_thing_short, it.take(8)),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                        )
                                     }
                                 }
                             }
-                        },
-                        actions = {
-                            TextButton(onClick = { onAction(TodayAction.OpenDevices) }) { Text(stringResource(Res.string.nav_devices)) }
-                            if (level.developer) {
-                                IconButton(onClick = { onAction(TodayAction.OpenDebug) }) { Icon(AppIcons.BugReport, contentDescription = stringResource(Res.string.nav_debug)) }
-                            }
-                            // Reconnect and Disconnect live only here, in the thing header.
-                            if (snapshot.thing.offersReconnect) {
-                                TextButton(onClick = { onAction(TodayAction.Reconnect) }) { Text(stringResource(Res.string.action_reconnect)) }
-                            } else {
-                                IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(Res.string.nav_disconnect)) }
-                            }
-                            MoreMenu(onForget = onRequestForget)
-                        },
-                    )
-                    DeviceSectionTabs(DeviceTab.TODAY) { tab ->
-                        when (tab) {
-                            DeviceTab.HISTORY -> onAction(TodayAction.OpenHistory)
-                            DeviceTab.FILES -> onAction(TodayAction.OpenFiles)
-                            DeviceTab.DEVICE -> onAction(TodayAction.OpenDevice)
-                            DeviceTab.TODAY -> Unit
                         }
-                    }
-                }
+                    },
+                    actions = {
+                        IconButton(onClick = { onAction(TodayAction.OpenDevice) }) { Icon(AppIcons.Settings, contentDescription = stringResource(Res.string.nav_device_settings)) }
+                        // Reconnect and Disconnect live only here, in the thing header.
+                        if (snapshot.thing.offersReconnect) {
+                            TextButton(onClick = { onAction(TodayAction.Reconnect) }) { Text(stringResource(Res.string.action_reconnect)) }
+                        } else {
+                            IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(Res.string.nav_disconnect)) }
+                        }
+                        MoreMenu(onForget = onRequestForget)
+                    },
+                )
             },
             snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
@@ -353,8 +348,13 @@ fun TodayContent(
                             }
                         }
                     }
+                    // History and Files read the phone archive, so they need no link. Debug joins them at Developer.
+                    item(key = STATION_LINKS_KEY) { StationLinksCard(level, onAction) }
                 }
             }
         }
     }
 }
+
+/** The list key of the Station page More card, after every [TodayCard]. */
+internal const val STATION_LINKS_KEY = "station_links"

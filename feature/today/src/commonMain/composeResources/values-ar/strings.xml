@@ -2,14 +2,15 @@
 <resources>
     <string name="device_unnamed">جهاز بلا اسم</string>
     <string name="today_thing_short">المعرّف %1$s…</string>
-    <string name="nav_devices">الأجهزة</string>
     <string name="nav_debug">تصحيح الأخطاء</string>
     <string name="nav_disconnect">قطع الاتصال</string>
     <string name="action_reconnect">إعادة الاتصال</string>
-    <string name="tab_today">اليوم</string>
-    <string name="tab_history">السجل</string>
-    <string name="tab_files">الملفات</string>
-    <string name="tab_device">الجهاز</string>
+    <string name="nav_back">رجوع</string>
+    <string name="nav_device_settings">إعدادات الجهاز</string>
+    <string name="station_more">المزيد</string>
+    <string name="station_more_info">يقرأ السجل والملفات ما يحفظه هذا الهاتف، لذا يفتحان دون أن يكون المستشعر قريبًا. يفتح الترس في الأعلى إعدادات الجهاز.</string>
+    <string name="station_history">السجل</string>
+    <string name="station_files">الملفات</string>
     <string name="transport_ble">Bluetooth</string>
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">جهاز وهمي</string>

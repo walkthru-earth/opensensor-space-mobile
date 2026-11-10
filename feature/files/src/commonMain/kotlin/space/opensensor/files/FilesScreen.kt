@@ -160,8 +160,8 @@ typealias MenuItems = @Composable ColumnScope.(close: () -> Unit) -> Unit
 /**
  * The Files screen for Android and iOS (docs/screens.md, Files). Without a [device] it lists the phone
  * archive, grouped by local day, with the inspector and every export. With one it shows the sensor's
- * listing, each file's sync state, and the sync controls. Platform pieces (the link banner, section
- * tabs, the chart, background sync) come in through the slots.
+ * listing, each file's sync state, and the sync controls. Platform pieces (the link banner, the
+ * chart, background sync) come in through the slots. [onBack] returns to the Station page.
  */
 @Composable
 fun FilesScreen(
@@ -175,7 +175,6 @@ fun FilesScreen(
     guard: (() -> Unit) -> Unit = { it() },
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     subtitleLead: @Composable () -> Unit = {},
-    tabs: @Composable () -> Unit = {},
     banner: (@Composable () -> Unit)? = null,
     chart: (@Composable () -> Unit)? = null,
     /** Shown when there is no device listing, before the archive groups. */
@@ -220,71 +219,68 @@ fun FilesScreen(
 
     Scaffold(
         topBar = {
-            Column {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(stringResource(Res.string.files_title), modifier = Modifier.semantics { heading() })
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                subtitleLead()
-                                Text(
-                                    stringResource(Res.string.files_in_archive, state.shown.size, formatBytes(state.archivedBytes)),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(stringResource(Res.string.files_title), modifier = Modifier.semantics { heading() })
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            subtitleLead()
+                            Text(
+                                stringResource(Res.string.files_in_archive, state.shown.size, formatBytes(state.archivedBytes)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                    },
-                    navigationIcon = {
-                        if (onBack != null) {
-                            IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back)) }
+                    }
+                },
+                navigationIcon = {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back)) }
+                    }
+                },
+                actions = {
+                    if (device != null) {
+                        IconButton(onClick = { onDeviceAction(DeviceFilesAction.Refresh) }, enabled = ready && !manifest.isLoading) {
+                            Icon(AppIcons.Refresh, contentDescription = stringResource(Res.string.files_refresh))
                         }
-                    },
-                    actions = {
-                        if (device != null) {
-                            IconButton(onClick = { onDeviceAction(DeviceFilesAction.Refresh) }, enabled = ready && !manifest.isLoading) {
-                                Icon(AppIcons.Refresh, contentDescription = stringResource(Res.string.files_refresh))
-                            }
+                    }
+                    IconButton(onClick = { menu = true }) { Icon(AppIcons.MoreVert, contentDescription = stringResource(Res.string.files_more)) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        val close = { menu = false }
+                        val hasFiles = state.shown.isNotEmpty() && !state.exporting
+                        if (menuLead != null) {
+                            menuLead(close)
+                            HorizontalDivider()
                         }
-                        IconButton(onClick = { menu = true }) { Icon(AppIcons.MoreVert, contentDescription = stringResource(Res.string.files_more)) }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            val close = { menu = false }
-                            val hasFiles = state.shown.isNotEmpty() && !state.exporting
-                            if (menuLead != null) {
-                                menuLead(close)
-                                HorizontalDivider()
-                            }
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.files_share_zip)) },
+                            leadingIcon = { Icon(AppIcons.IosShare, contentDescription = null) },
+                            enabled = hasFiles,
+                            onClick = { close(); controller.shareZip(presenter) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.files_save_zip)) },
+                            leadingIcon = { Icon(AppIcons.Download, contentDescription = null) },
+                            enabled = hasFiles,
+                            onClick = { close(); controller.saveZip(presenter) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(pluralStringResource(Res.plurals.files_share_all, state.shown.size, state.shown.size)) },
+                            enabled = hasFiles,
+                            onClick = { close(); controller.shareAll(presenter) },
+                        )
+                        if (state.dailyAvailable) {
                             DropdownMenuItem(
-                                text = { Text(stringResource(Res.string.files_share_zip)) },
+                                text = { Text(stringResource(Res.string.files_share_daily)) },
                                 leadingIcon = { Icon(AppIcons.IosShare, contentDescription = null) },
                                 enabled = hasFiles,
-                                onClick = { close(); controller.shareZip(presenter) },
+                                onClick = { close(); controller.shareDaily(presenter) },
                             )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(Res.string.files_save_zip)) },
-                                leadingIcon = { Icon(AppIcons.Download, contentDescription = null) },
-                                enabled = hasFiles,
-                                onClick = { close(); controller.saveZip(presenter) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(pluralStringResource(Res.plurals.files_share_all, state.shown.size, state.shown.size)) },
-                                enabled = hasFiles,
-                                onClick = { close(); controller.shareAll(presenter) },
-                            )
-                            if (state.dailyAvailable) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(Res.string.files_share_daily)) },
-                                    leadingIcon = { Icon(AppIcons.IosShare, contentDescription = null) },
-                                    enabled = hasFiles,
-                                    onClick = { close(); controller.shareDaily(presenter) },
-                                )
-                            }
-                            menuTail?.invoke(this, close)
                         }
-                    },
-                )
-                tabs()
-            }
+                        menuTail?.invoke(this, close)
+                    }
+                },
+            )
         },
         floatingActionButton = {
             when {
