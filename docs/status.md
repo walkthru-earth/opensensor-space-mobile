@@ -4,6 +4,19 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../opensensor-space-firmware/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-11-10, Thing Collection and two publish paths (code only)
+
+Host tests and the iOS simulator only. No phone or board run is recorded. Part of #266.
+
+- `ThingCollections.build` writes the Thing Collection in the canonical form of stac-opensensor
+  v0.1.0. A Collection rebuilt from each example owner config, board template, footer and Item
+  equals the fixed and moving example Collections as JSON values.
+- `ThingOwner.of` takes the title, description, provider and link the Site step stores (#148).
+- `PublishGate.boardFile` clears a board file only with the board's own sidecar, after the Item the
+  phone rebuilds matches it. `PublishGate.phoneFile` publishes the phone's Item only for this
+  phone's own Thing and refuses every board file.
+- To check on hardware. A board sidecar and Collection from firmware #145 against the phone's rebuild.
+
 ## 2026-11-09, field setup with a site step (code only)
 
 Host tests and the iOS simulator only. No phone or board run is recorded. Owner decisions of

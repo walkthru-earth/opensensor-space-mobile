@@ -1,3 +1,5 @@
 # Bundled board templates, copied verbatim from opensensor-space-firmware docs/shared/templates. A template's desc
 # is the SHA-256 of its exact bytes, so git never converts line endings or adds a final newline.
 core/model/bundled/templates/** -text
+# Board templates copied from stac-opensensor for the core/stac tests, kept byte for byte like the bundled ones.
+core/stac/src/commonTest/fixtures/stac-opensensor/templates/** -text

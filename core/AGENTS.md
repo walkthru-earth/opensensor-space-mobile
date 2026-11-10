@@ -60,16 +60,29 @@ and on iOS that an Item rebuilt from the profile's row fixtures equals its examp
 `FileItemSchemaTest` validates it against the schemas. `FooterSchemaTest` runs `footer.json` over the
 profile's footer fixtures and checks that `OpenSensorFooter` refuses what the schema refuses for a
 missing member or another version. The copied files live in
-`stac/src/commonTest/fixtures/stac-opensensor`. `PublishGate` in `thing/` is its only caller. Once upload exists, the
-phone uploads the board's sidecar `.json` together with its `.parquet`.
+`stac/src/commonTest/fixtures/stac-opensensor`, whose README records the source path of each. `PublishGate` in `thing/` is its only caller.
+`ThingCollections.build` (#266) writes the Thing Collection, `thing=<uuid>/collection.json`, from the board
+template's JSON, the newest footer (`CollectionFooter`), the owner config (`ThingOwner`) and the upload
+ledger (`CollectionLedger`, the earliest Item start and the union of the Item boxes). `ThingOwner.of` maps
+the #148 site keys of `ThingSite` to the title, description and producer and licensor provider, with the
+data host and bucket prefix passed in. `ThingCollectionsTest` proves that the rebuilt fixed and moving
+Collections equal the profile's examples. `CanonicalJson.difference` is the one comparison the Item and
+Collection tests and `PublishGate` use, JSON values with 1e-9 degrees under `geometry`, `bbox` and
+`extent.spatial`.
 `thing/` (`:core:thing`, #219) holds the `ThingKind` contract, its `DataSource` and `PublishPolicy`,
 `OpenSensorBoardKind` (#222) and the `ThingKinds` registry. Each app builds that registry as a plain
 list, Android in `data/di/ThingModule` and iOS in `ThingKindsIos.kt` from `AppServices`, with no self
 registration. Each app hands `ThingKinds.metricProviders` to `AirFamily.install`, which passes the family and then the kinds' `DerivedMetricProvider`s to `Metrics.install`,
 which rebuilds the catalog. `PublishGate` (#224) issues a ticket only for a `Recording` kind with
-`OptInCcBy` whose Thing the owner opted in (`UploadConsent`, none by default), then builds that file's
-Item at the policy's `publishedRes` (8 for the board, the contract's resolution), asking consent again so an opt out stops it. Health, feeds and anything else get none. It never
-uploads. `thing/testkit` (`:core:thing:testkit`) holds `ThingKindContract`, the checks every kind runs
+`OptInCcBy` whose Thing the owner opted in (`UploadConsent`, none by default). Health, feeds and anything else get none.
+A ticket's files take one of two paths, both asking consent again so an opt out stops them. The writer of a
+file writes its Item (OD-2026-11-04-D). `boardFile` is for a `PullSync` Thing. It rebuilds the Item at the
+policy's `publishedRes` (8 for the board) only to check the board's sidecar, and clears the sidecar text as
+the board wrote it, or names why not (`NoSidecar`, `SidecarUnreadable`, `SidecarDiffers`). `phoneFile` is
+for a `PhoneLog` Thing, this phone's own install, and its Item is the one published. It refuses a board
+kind, a board footer and any other Thing as `NotThePhone`. Only a `Cleared` check carries a
+`Publication`, so no Item the phone builds for a board file can reach an upload. No kind declares
+`PhoneLog` yet. It never uploads. `thing/testkit` (`:core:thing:testkit`) holds `ThingKindContract`, the checks every kind runs
 from its own tests. `PlatformNeedsTable` (#227) is the one table of what the app shell and each kind ask
 of the Android manifest (permissions, foreground service types) and the iOS bundle (Info.plist privacy
 keys, Bonjour types, background modes and task ids, entitlements, privacy manifest entries).

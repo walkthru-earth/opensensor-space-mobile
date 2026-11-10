@@ -30,7 +30,7 @@ import kotlin.test.assertIs
  *   folder per host, with only line endings normalized. Every `https://` reference resolves there.
  *   As in any STAC validator, an extension schema applies to the Items that list it in `stac_extensions`.
  *
- * Items are built at the published resolution, 8, as `PublishGate` builds them for a board. The
+ * Items are built at the published resolution, 8, as `PublishGate` rebuilds them for a board. The
  * Items rebuilt from the row fixtures validate too. `ProfileExampleTest` in commonTest checks that they
  * equal the examples as JSON values, on the JVM and on iOS.
  */
