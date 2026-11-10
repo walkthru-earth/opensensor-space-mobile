@@ -5,15 +5,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.DaySpan
 import space.opensensor.data.history.HistoryTiers
 import space.opensensor.data.history.LatestReading
 import space.opensensor.data.history.Resolution
 import space.opensensor.data.history.TierBucket
+import space.opensensor.data.history.TrackRow
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
+import space.opensensor.publicfeed.H3Grid
+import space.opensensor.publicfeed.H3Index
+import space.opensensor.publicfeed.LatLng
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class OwnThingsTest {
     init {
@@ -79,5 +86,72 @@ class OwnThingsTest {
         uploaded.value = setOf("a")
         assertEquals(true, out.first()["a"]?.shared)
         assertEquals(emptyMap(), observeOwnStatus(tiers, flowOf(emptySet()), linked, uploaded).first())
+    }
+
+    /** Every cell centres on its own low bits, and every outline is one small triangle. */
+    private object IndexGrid : H3Grid {
+        override fun latLngToCell(lat: Double, lng: Double, res: Int) = 0L
+        override fun cellToLatLng(cell: Long) = LatLng(0.0, (cell ushr 12 and 0xFFF).toDouble())
+        override fun cellToBoundary(cell: Long) = listOf(LatLng(1.0, 1.0), LatLng(2.0, 1.0), LatLng(1.0, 2.0))
+        override fun polygonToCells(ring: List<LatLng>, res: Int) = emptyList<Long>()
+    }
+
+    private val cellA = 0x8828308281fffffL
+    private val cellB = 0x8828308283fffffL
+    private val ms = 1_000_000L
+
+    private fun track(vararg rows: TrackRow) = CellTrack.of(rows.toList())
+
+    @Test
+    fun aMovingPinStandsAtTheNewerOfItsPlaceAndItsTrack() {
+        val moving = OwnThing("m", "Bike", H3Index.toHex(cellA), updatedEpochMs = 10_000L, moving = true)
+        // The track's last fix is newer than the read place, so the pin follows the rows.
+        val newer = track(TrackRow(9_000 * ms, cellA, 2), TrackRow(20_000 * ms, cellB, 2))
+        assertEquals(cellB, OwnThingGeoJson.build(IndexGrid, listOf(moving), mapOf("m" to newer)).pins.single().cell)
+        // A track older than the read place leaves the pin at the place.
+        val older = track(TrackRow(5_000 * ms, cellB, 2))
+        assertEquals(cellA, OwnThingGeoJson.build(IndexGrid, listOf(moving), mapOf("m" to older)).pins.single().cell)
+        // A fixed Thing never moves with its rows.
+        val fixed = moving.copy(moving = false)
+        assertEquals(cellA, OwnThingGeoJson.build(IndexGrid, listOf(fixed), mapOf("m" to newer)).pins.single().cell)
+    }
+
+    @Test
+    fun aMovingThingWithNoFixHasNoPinAndNoTrack() {
+        val moving = OwnThing("m", "Bike", "", updatedEpochMs = 10_000L, moving = true)
+        // Rows with no location, source 0 or a value that is no H3 cell are rows with no fix.
+        val noFix = track(TrackRow(20_000 * ms, null, null), TrackRow(21_000 * ms, cellA, 0), TrackRow(22_000 * ms, 42L, 2))
+        val layer = OwnThingGeoJson.build(IndexGrid, listOf(moving), mapOf("m" to noFix))
+        assertEquals(emptyList(), layer.pins)
+        assertEquals(DiscoverUiState.EMPTY_GEOJSON, layer.trackGeoJson)
+        // A fix in the rows alone places it, never a borrowed cell.
+        val fix = track(TrackRow(20_000 * ms, null, null), TrackRow(21_000 * ms, cellB, 2))
+        assertEquals(cellB, OwnThingGeoJson.build(IndexGrid, listOf(moving), mapOf("m" to fix)).pins.single().cell)
+    }
+
+    @Test
+    fun theTrackSourceDrawsEachVisitedCellOnceWithNoKey() {
+        val moving = OwnThing("3f6c2a9e-8d41-4b7a-9e2c-5a1d0b7c4e11", "Bike", "", updatedEpochMs = 0L, moving = true)
+        val fixed = OwnThing("f", "Roof", H3Index.toHex(cellA), updatedEpochMs = 0L)
+        val route = track(TrackRow(1 * ms, cellA, 2), TrackRow(2 * ms, null, null), TrackRow(3 * ms, cellB, 2), TrackRow(4 * ms, cellA, 2))
+        val layer = OwnThingGeoJson.build(IndexGrid, listOf(moving, fixed), mapOf(moving.key to route, fixed.key to route))
+        assertEquals(2, Regex("\"Polygon\"").findAll(layer.trackGeoJson).count(), "cells A and B once each, for the moving Thing only")
+        assertFalse(layer.trackGeoJson.contains(moving.key), "no Thing UUID in the track source")
+        assertFalse(layer.trackGeoJson.contains("Bike"), "no Thing name in the track source")
+        // A closed ring in longitude, latitude order, its first vertex repeated.
+        assertTrue(layer.trackGeoJson.contains("[[[1.0,1.0],[1.0,2.0],[2.0,1.0],[1.0,1.0]]]"), layer.trackGeoJson)
+    }
+
+    @Test
+    fun ownTracksAreReadForMovingThingsOnly() = runTest {
+        val asked = mutableListOf<String>()
+        val route = track(TrackRow(1 * ms, cellA, 2))
+        val out = observeOwnTracks(flowOf(setOf("m"))) { key ->
+            asked += key
+            flowOf(route)
+        }
+        assertEquals(mapOf("m" to route), out.first())
+        assertEquals(listOf("m"), asked)
+        assertEquals(emptyMap(), observeOwnTracks(flowOf(emptySet())) { flowOf(route) }.first())
     }
 }

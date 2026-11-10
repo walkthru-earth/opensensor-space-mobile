@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -19,8 +20,10 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import okhttp3.OkHttpClient
 import space.opensensor.archive.ArchiveIndex
+import space.opensensor.archive.ArchiveStore
 import space.opensensor.data.DeviceConnectionManager
 import space.opensensor.data.ble.ConnectionState
+import space.opensensor.data.history.CellTrackReader
 import space.opensensor.data.history.HistoryRepository
 import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.settings.AppSettings
@@ -31,10 +34,12 @@ import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.discover.DiscoverController
 import space.opensensor.discover.DiscoverScreen
+import space.opensensor.discover.OWN_TRACK_SPAN_NS
 import space.opensensor.discover.OwnThing
 import space.opensensor.discover.bundledSampleFeed
 import space.opensensor.discover.knownOwnThings
 import space.opensensor.discover.observeOwnStatus
+import space.opensensor.discover.observeOwnTracks
 import space.opensensor.net.BlockCache
 import space.opensensor.net.OkHttpRangeEngine
 import space.opensensor.publicfeed.OpenAqAggregatesFeed
@@ -55,6 +60,7 @@ class DiscoverViewModel @Inject constructor(
     history: HistoryRepository,
     connections: DeviceConnectionManager,
     index: ArchiveIndex,
+    archive: ArchiveStore,
 ) : ViewModel() {
     val controller = DiscoverController(
         scope = viewModelScope,
@@ -74,12 +80,18 @@ class DiscoverViewModel @Inject constructor(
         combine(settings.discoverSource, settings.showPublicSensors, ::Pair)
             .onEach { (source, publicSensors) -> controller.onSourceSettings(source, publicSensors) }
             .launchIn(viewModelScope)
-        // The user's own fixed Things, each at its saved cell (#226). Read from the phone only.
+        // The user's own Things, each at its saved cell (#226). Read from the phone only.
         combine(places.observeAll(), known.observeAll()) { saved, devices ->
             val names = devices.mapNotNull { d -> d.thing?.let { it to d.name } }.toMap()
-            knownOwnThings(saved.map { OwnThing(it.thing, "", it.cell, it.updatedEpochMs) }, names)
+            knownOwnThings(saved.map { OwnThing(it.thing, "", it.cell, it.updatedEpochMs, it.moving) }, names)
         }
             .onEach(controller::showOwnThings)
+            .launchIn(viewModelScope)
+        // A moving Thing's last day of rows, its own cell per row, read from this phone (#263).
+        val tracks = CellTrackReader(archive, index, Dispatchers.IO)
+        val moving = places.observeAll().map { saved -> saved.filter { it.moving }.mapTo(mutableSetOf()) { it.thing } }
+        observeOwnTracks(moving) { thing -> tracks.observe(thing, OWN_TRACK_SPAN_NS) { System.currentTimeMillis() * 1_000_000 } }
+            .onEach(controller::showOwnTracks)
             .launchIn(viewModelScope)
         // Each own Thing's newest reading from this phone's history, Live while a BLE or LAN link
         // is ready, and whether a file of it went up (#273). Read from the phone only.

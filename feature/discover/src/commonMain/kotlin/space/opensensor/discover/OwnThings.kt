@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.HistoryTiers
 import space.opensensor.data.history.LatestReading
 import space.opensensor.data.history.LatestReadings
@@ -19,11 +20,13 @@ import space.opensensor.publicfeed.H3Index
 import kotlin.time.Instant
 
 /**
- * One of the user's own fixed Things, as the host hands it to Discover (#226). [key] is the Thing
- * UUID, [cell] the H3 cell saved on it in lowercase hex, [updatedEpochMs] when the phone last read
- * that cell. The host never passes coordinates. The pin stands at the cell centre.
+ * One of the user's own Things, as the host hands it to Discover (#226). [key] is the Thing UUID,
+ * [cell] the H3 cell saved on it in lowercase hex, [updatedEpochMs] when the phone last read that
+ * cell. The host never passes coordinates. The pin stands at the cell centre. A [moving] Thing's
+ * cell is its last GNSS cell the phone read, empty before the first fix, and its rows may place it
+ * somewhere newer (#263).
  */
-data class OwnThing(val key: String, val name: String, val cell: String, val updatedEpochMs: Long)
+data class OwnThing(val key: String, val name: String, val cell: String, val updatedEpochMs: Long, val moving: Boolean = false)
 
 /** An own Thing placed at its cell centre, for the map source and the sheet list. [cell] is its H3 cell. */
 data class OwnPin(val thing: OwnThing, val lat: Double, val lng: Double, val cell: Long)
@@ -54,6 +57,23 @@ fun observeOwnStatus(tiers: HistoryTiers, things: Flow<Set<String>>, live: Flow<
         latest.mapValues { (key, reading) -> OwnStatus(reading, live = key in linked, shared = key in shared) }
     }.distinctUntilChanged()
 }
+
+/** How far back Discover draws a moving Thing's track, the last 24 hours of its rows. */
+const val OWN_TRACK_SPAN_NS: Long = 24L * 3_600 * 1_000_000_000
+
+/**
+ * The [CellTrack] of each moving own Thing, keyed by Thing UUID (#263). [moving] are the UUIDs of
+ * the moving Things and [track] reads one Thing's rows on this phone, so fixed Things cost nothing.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+fun observeOwnTracks(moving: Flow<Set<String>>, track: (String) -> Flow<CellTrack>): Flow<Map<String, CellTrack>> =
+    moving.distinctUntilChanged().flatMapLatest { keys ->
+        if (keys.isEmpty()) {
+            flowOf(emptyMap())
+        } else {
+            combine(keys.map { key -> track(key).map { key to it } }) { it.toMap() }
+        }
+    }.distinctUntilChanged()
 
 /** How old an own reading is, the steps the sheet names. */
 internal enum class AgeStep { JUST_NOW, MINUTES, HOURS, DAYS }
@@ -113,26 +133,35 @@ internal fun localDay(epochMs: Long, zone: TimeZone = TimeZone.currentSystemDefa
 /** The UTC day of [epochMs], for the bundled sample, whose rows are dated in UTC. */
 internal fun utcDay(epochMs: Long): LocalDate = localDay(epochMs, TimeZone.UTC)
 
-/** The own Things layer, its pins sorted by name and their GeoJSON. */
-internal data class OwnLayer(val pins: List<OwnPin>, val geoJson: String) {
+/**
+ * The own Things layer, its pins sorted by name and their GeoJSON. [trackGeoJson] outlines the
+ * cells the moving Things' rows reported.
+ */
+internal data class OwnLayer(val pins: List<OwnPin>, val geoJson: String, val trackGeoJson: String = DiscoverUiState.EMPTY_GEOJSON) {
     companion object {
         val EMPTY = OwnLayer(emptyList(), DiscoverUiState.EMPTY_GEOJSON)
     }
 }
 
 /**
- * Builds the own Things point source. It is a source of its own, never mixed into the public cells.
- * Each point carries only its index in the sorted pins, so no Thing UUID or name reaches the map.
+ * Builds the own Things point source and the moving Things' track source. Both are sources of their
+ * own, never mixed into the public cells. Each point carries only its index in the sorted pins, and
+ * each track cell carries nothing, so no Thing UUID or name reaches the map.
  */
 internal object OwnThingGeoJson {
-    fun build(h3: H3Grid, things: List<OwnThing>): OwnLayer {
+    /**
+     * [tracks] are the moving Things' rows by Thing UUID. A moving pin stands at the newer of its
+     * read cell and the last fix in its rows. With neither it shows no pin, never a guessed cell.
+     */
+    fun build(h3: H3Grid, things: List<OwnThing>, tracks: Map<String, CellTrack> = emptyMap()): OwnLayer {
         if (!h3.available || things.isEmpty()) return OwnLayer.EMPTY
         val pins = things.mapNotNull { t ->
-            val cell = cellOf(t.cell) ?: return@mapNotNull null
+            val cell = placeOf(t, tracks[t.key]) ?: return@mapNotNull null
             val centre = h3.cellToLatLng(cell)
             OwnPin(t, centre.lat, centre.lng, cell)
         }.sortedWith(compareBy({ it.thing.name.lowercase() }, { it.thing.key }))
-        if (pins.isEmpty()) return OwnLayer.EMPTY
+        val trackJson = trackGeoJson(h3, things.filter { it.moving }.flatMap { tracks[it.key]?.cells.orEmpty() }.distinct())
+        if (pins.isEmpty()) return OwnLayer(emptyList(), DiscoverUiState.EMPTY_GEOJSON, trackJson)
         val json = buildString {
             append("{\"type\":\"FeatureCollection\",\"features\":[")
             pins.forEachIndexed { i, p ->
@@ -142,7 +171,35 @@ internal object OwnThingGeoJson {
             }
             append("]}")
         }
-        return OwnLayer(pins, json)
+        return OwnLayer(pins, json, trackJson)
+    }
+
+    /** The cell a pin stands in. A moving Thing takes its newer place, read or in its rows. */
+    private fun placeOf(t: OwnThing, track: CellTrack?): Long? {
+        val read = cellOf(t.cell)
+        if (!t.moving) return read
+        val fix = track?.lastFix ?: return read
+        val fixCell = fix.cell ?: return read
+        return if (read == null || fix.lastNs / 1_000_000 > t.updatedEpochMs) fixCell else read
+    }
+
+    /** One polygon per cell, its outline closed, with no properties. Empty with no cell. */
+    private fun trackGeoJson(h3: H3Grid, cells: List<Long>): String {
+        if (cells.isEmpty()) return DiscoverUiState.EMPTY_GEOJSON
+        return buildString {
+            append("{\"type\":\"FeatureCollection\",\"features\":[")
+            cells.forEachIndexed { i, cell ->
+                if (i > 0) append(',')
+                val ring = h3.cellToBoundary(cell)
+                append("{\"type\":\"Feature\",\"properties\":{},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[")
+                (ring + ring.take(1)).forEachIndexed { j, p ->
+                    if (j > 0) append(',')
+                    append('[').append(p.lng).append(',').append(p.lat).append(']')
+                }
+                append("]]}}")
+            }
+            append("]}")
+        }
     }
 
     /** The cell [hex] names, or null when it is not a 64-bit H3 cell (mode 1). */

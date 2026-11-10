@@ -33,6 +33,7 @@ import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.protocol.ConfigFields
 import space.opensensor.data.protocol.ConfigGroup
 import space.opensensor.data.protocol.ConfigProblem
+import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.InfoNote
 import space.opensensor.device.resources.Res
@@ -114,6 +115,9 @@ sealed interface DeviceConfigAction {
     data object SaveLocation : DeviceConfigAction
     data object ClearLocation : DeviceConfigAction
 
+    /** Sends `thing.mobility` alone, then reads page 1 back. Only a tap on the other choice sends it. */
+    data class SetMobility(val mobility: ThingMobility) : DeviceConfigAction
+
     /** Drafts one owner site value. Nothing is sent until [SaveSite]. */
     data class SiteValue(val field: SiteField, val value: String) : DeviceConfigAction
 
@@ -151,6 +155,7 @@ fun DeviceConfigController.onAction(action: DeviceConfigAction): Boolean {
         is DeviceConfigAction.LocationCell -> acceptLocationCell(action.cell, action.resolution)
         DeviceConfigAction.SaveLocation -> saveLocation()
         DeviceConfigAction.ClearLocation -> clearLocation()
+        is DeviceConfigAction.SetMobility -> saveMobility(action.mobility)
         is DeviceConfigAction.SiteValue -> editSite(action.field, action.value)
         DeviceConfigAction.SaveSite -> saveSite()
         DeviceConfigAction.RetrySite -> retrySite()

@@ -9,9 +9,9 @@ import space.opensensor.data.sync.ThingPlaces
 
 /** The shared [ThingPlaces] over the `thing_place` table, on both phones. */
 class RoomThingPlaces(private val dao: ThingPlaceDao) : ThingPlaces {
-    override fun observeAll(): Flow<List<ThingPlace>> = dao.observeAll().map { rows -> rows.map { ThingPlace(it.thing, it.cell, it.updatedEpochMs) } }
+    override fun observeAll(): Flow<List<ThingPlace>> = dao.observeAll().map { rows -> rows.map { ThingPlace(it.thing, it.cell, it.updatedEpochMs, it.moving) } }
 
-    override suspend fun put(place: ThingPlace) = dao.put(ThingPlaceEntity(place.thing, place.cell, place.updatedEpochMs))
+    override suspend fun put(place: ThingPlace) = dao.put(ThingPlaceEntity(place.thing, place.cell, place.updatedEpochMs, place.moving))
 
     override suspend fun remove(thing: String) = dao.remove(thing)
 }

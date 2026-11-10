@@ -29,7 +29,6 @@ import space.opensensor.data.sync.ThingPlaces
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * Device settings keeps the sensor's Discover pin in step with the location page it reads, on a read
@@ -101,7 +100,7 @@ class IosDevicePlaceTest {
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
     @Test
-    fun aReadAndASaveKeepThePinAndAMovingPageDropsIt() = runTest {
+    fun aReadAndASaveKeepThePinAndAMovingPageDropsItsCell() = runTest {
         val port = RecordingPort()
         val link = IosLink(port, false, "synthetic-place-test", StandardTestDispatcher(testScheduler), StandardTestDispatcher(testScheduler))
         val places = MemoryThingPlaces()
@@ -112,7 +111,7 @@ class IosDevicePlaceTest {
             assertEquals(listOf(Opcode.GET_CONFIG), port.sent)
             link.reply(Frame.Config(0, page(cell, "fixed")))
             runCurrent()
-            assertEquals(cell, reading.await()?.cell)
+            assertEquals(cell, reading.await()?.location?.cell)
             assertEquals(listOf(thing to cell), places.all.map { it.thing to it.cell }, "a read records the pin")
 
             val moving = async { source.writeLocation(ConfigPatch.build { location(cell, "") }) }
@@ -121,8 +120,8 @@ class IosDevicePlaceTest {
             runCurrent()
             link.reply(Frame.Config(0, page(cell, "moving")))
             runCurrent()
-            moving.await()
-            assertTrue(places.all.isEmpty(), "a moving page drops the pin")
+            assertEquals("moving", moving.await()?.thing?.mobility)
+            assertEquals(listOf("" to true), places.all.map { it.cell to it.moving }, "a moving page drops the configured cell")
 
             val fixed = async { source.writeLocation(ConfigPatch.build { location(cell, "") }) }
             runCurrent()
@@ -130,7 +129,7 @@ class IosDevicePlaceTest {
             runCurrent()
             link.reply(Frame.Config(0, page(cell, "fixed")))
             runCurrent()
-            assertEquals(cell, fixed.await()?.cell)
+            assertEquals(cell, fixed.await()?.location?.cell)
             assertEquals(listOf(thing to cell), places.all.map { it.thing to it.cell }, "a save records the pin")
             assertEquals(listOf(Opcode.GET_CONFIG, Opcode.SET_CONFIG, Opcode.GET_CONFIG, Opcode.SET_CONFIG, Opcode.GET_CONFIG), port.sent)
         } finally {

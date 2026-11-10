@@ -148,11 +148,11 @@ interface DeviceConfigSource {
     /** Outcomes the platform reports itself. Android reports through its own repository events. */
     val notices: Flow<DeviceConfigNotice>
 
-    /** Page 1, or null on firmware without location provisioning. */
-    suspend fun readLocation(): space.opensensor.data.protocol.LocationConfig? = null
+    /** Page 1 with its `location` and `thing` objects, or null on firmware without location provisioning. */
+    suspend fun readLocation(): space.opensensor.data.protocol.DeviceConfig? = null
 
     /** Save and read back page 1 under the platform command guard. */
-    suspend fun writeLocation(patch: ConfigPatch): space.opensensor.data.protocol.LocationConfig? = null
+    suspend fun writeLocation(patch: ConfigPatch): space.opensensor.data.protocol.DeviceConfig? = null
 
     /**
      * Pages 5 and 6 merged, or null on firmware without site keys (page 5 `ERROR` 1 or no `owner`).

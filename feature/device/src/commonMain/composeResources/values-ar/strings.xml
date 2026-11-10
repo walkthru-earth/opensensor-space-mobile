@@ -232,4 +232,12 @@
     <string name="site_error_url_charset">يحتوي الرابط على حرف غير مسموح، مثل مسافة أو علامة اقتباس.</string>
     <string name="site_error_deployment_charset">استخدم أحرفًا لاتينية صغيرة وأرقامًا وشرطات فقط.</string>
     <string name="site_error_deployment_reserved">ابدأ وانتهِ بحرف أو رقم، ولا تستخدم unknown.</string>
+    <string name="location_mobility_title">التنقل</string>
+    <string name="location_mobility_fixed">ثابت</string>
+    <string name="location_mobility_moving">متنقل</string>
+    <string name="location_mobility_info">الثابت يبقى في المنطقة التي تختارها. المتنقل يأخذ منطقته من GPS الخاص به في كل قراءة. لا يضيف الهاتف أي موقع أبدًا. أي تغيير يبدأ ملفًا جديدًا.</string>
+    <string name="location_moving_gnss">المنطقة من GPS المستشعر</string>
+    <string name="location_moving_no_gnss">لا يحتوي هذا المستشعر على GPS، لذلك لا تحمل قراءاته أي موقع</string>
+    <string name="location_use_gnss">استخدام GPS المستشعر</string>
+    <string name="location_cell_change">القراءات الجديدة تستخدم المنطقة الجديدة. الملفات السابقة تحتفظ بالقديمة، ويبدأ ملف جديد.</string>
 </resources>

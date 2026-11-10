@@ -228,4 +228,12 @@
     <string name="site_error_url_charset">The link has a character that is not allowed, such as a space or a quote.</string>
     <string name="site_error_deployment_charset">Use lowercase letters, digits and dashes only.</string>
     <string name="site_error_deployment_reserved">Start and end with a letter or digit, and do not use unknown.</string>
+    <string name="location_mobility_title">Mobility</string>
+    <string name="location_mobility_fixed">Fixed</string>
+    <string name="location_mobility_moving">Moving</string>
+    <string name="location_mobility_info">Fixed stays in the area you pick. Moving takes its area from its own GPS on each reading. The phone never adds a location. A change starts a new file.</string>
+    <string name="location_moving_gnss">Area from the sensor's GPS</string>
+    <string name="location_moving_no_gnss">This sensor has no GPS, so its readings carry no location</string>
+    <string name="location_use_gnss">Use sensor GPS</string>
+    <string name="location_cell_change">New readings use the new area. Earlier files keep the old one, and a new file starts.</string>
 </resources>

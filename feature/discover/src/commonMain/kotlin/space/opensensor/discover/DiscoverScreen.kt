@@ -286,6 +286,7 @@ private fun DiscoverContent(
                     nearMe,
                     highlight,
                     ownGeoJson = state.ownGeoJson,
+                    ownTrackGeoJson = state.ownTrackGeoJson,
                     paper = paper,
                     onOwnCluster = { centre -> ownMove = centre to null },
                 ) { hex ->

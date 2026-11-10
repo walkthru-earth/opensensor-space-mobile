@@ -20,15 +20,16 @@ import kotlinx.coroutines.IO
  * adds `thing_place` (#226), the cell of each own fixed Thing, through an automatic migration. Version 5
  * adds the footer digests to `archived_file` through [Migration4To5], which reopens every indexed row.
  * Version 6 adds the upload time and the `(thing, sha256)` index to `archived_file` (#273) through an
- * automatic migration.
+ * automatic migration. Version 7 adds `moving` to `thing_place` (#263) through an automatic
+ * migration, false for every place already stored.
  * `metric_bucket` and `derived_day` are caches of the archive that `HistoryDeriver` rebuilds.
  */
 @ConstructedBy(AppDatabaseConstructor::class)
 @Database(
     entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, ThingEpoch::class, SensorInstallation::class, PrunedFileEntity::class, ListCursorEntity::class, ThingSourceEntity::class, ThingPlaceEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 3, to = 4), AutoMigration(from = 5, to = 6)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 3, to = 4), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun knownDeviceDao(): KnownDeviceDao

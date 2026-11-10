@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
+import space.opensensor.data.history.CellTrack
 import space.opensensor.family.air.PublicSummary
 import space.opensensor.family.air.ThingSummary
 import space.opensensor.map.CameraRest
@@ -109,10 +110,12 @@ data class DiscoverUiState(
     val newestUpdateEpochMs: Long? = null,
     val firstRun: Boolean = false,
     val res: Int = ViewportCover.MIN_RES,
-    /** The user's own fixed Things, sorted by name, each at its cell centre. The sheet lists them. */
+    /** The user's own placed Things, sorted by name, each at its cell centre. The sheet lists them. */
     val own: List<OwnPin> = emptyList(),
     /** The own Things point source. Separate from [geoJson], which never carries them. */
     val ownGeoJson: String = EMPTY_GEOJSON,
+    /** The cells the moving own Things' rows reported, outlines with no keys (#263). */
+    val ownTrackGeoJson: String = EMPTY_GEOJSON,
     /** What the phone knows of each own Thing, by Thing UUID. Local only, never part of [rows]. */
     val ownStatus: Map<String, OwnStatus> = emptyMap(),
     /**
@@ -218,6 +221,7 @@ class DiscoverController(
     private val rest = MutableStateFlow<CameraRest?>(null)
     private val reload = MutableStateFlow(0)
     private val ownThings = MutableStateFlow<List<OwnThing>>(emptyList())
+    private val ownTracks = MutableStateFlow<Map<String, CellTrack>>(emptyMap())
     private var saved = DiscoverSaved()
 
     /** The feed every read goes to. Swapped only by [switchTo]. */
@@ -239,12 +243,12 @@ class DiscoverController(
     private var rowsWindow: FeedWindow? = null
 
     init {
-        // The own Things source is built off the main thread, and only when the list changes.
-        // A StateFlow drops an equal list, so the same Things keep the same source.
+        // The own Things sources are built off the main thread, and only when the list or a moving
+        // Thing's track changes. A StateFlow drops an equal value, so the same Things keep the same source.
         scope.launch {
-            ownThings.collectLatest { things ->
-                val layer = withContext(io) { catching { OwnThingGeoJson.build(h3, things) }.getOrDefault(OwnLayer.EMPTY) }
-                _state.update { it.copy(own = layer.pins, ownGeoJson = layer.geoJson) }
+            combine(ownThings, ownTracks, ::Pair).collectLatest { (things, tracks) ->
+                val layer = withContext(io) { catching { OwnThingGeoJson.build(h3, things, tracks) }.getOrDefault(OwnLayer.EMPTY) }
+                _state.update { it.copy(own = layer.pins, ownGeoJson = layer.geoJson, ownTrackGeoJson = layer.trackGeoJson) }
             }
         }
         // A feed that caches bytes in memory gives them back under memory pressure (#61).
@@ -274,6 +278,14 @@ class DiscoverController(
      */
     fun showOwnThings(things: List<OwnThing>) {
         ownThings.value = things
+    }
+
+    /**
+     * The moving own Things' tracks by Thing UUID, on every change (#263). A moving pin follows its
+     * newest fix, and the cells the rows reported are outlined beside the public cells, never in them.
+     */
+    fun showOwnTracks(tracks: Map<String, CellTrack>) {
+        ownTracks.value = tracks
     }
 
     /**

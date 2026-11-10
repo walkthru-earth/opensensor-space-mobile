@@ -10,7 +10,9 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
+import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.LatestReading
+import space.opensensor.data.history.TrackRow
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.family.air.WhoStep
@@ -896,6 +898,25 @@ class DiscoverControllerTest {
         settle()
         assertEquals(DiscoverUiState.EMPTY_GEOJSON, c.state.value.ownGeoJson)
         assertTrue(c.state.value.own.isEmpty())
+    }
+
+    @Test
+    fun aMovingThingsTrackIsItsOwnSourceAndFollowsItsRows() = runTest {
+        val c = controller(FakeFeed())
+        // Moving with no fix read yet, so no pin until its rows report one.
+        c.showOwnThings(listOf(ownThing().copy(cell = "", moving = true)))
+        settle()
+        assertTrue(c.state.value.own.isEmpty())
+        assertEquals(DiscoverUiState.EMPTY_GEOJSON, c.state.value.ownTrackGeoJson)
+        val publicSource = c.state.value.geoJson
+        val track = CellTrack.of(listOf(TrackRow(1_000_000L, cellA, 2), TrackRow(2_000_000L, null, null), TrackRow(3_000_000L, cellB, 2)))
+        c.showOwnTracks(mapOf(ownUuid to track))
+        settle()
+        val s = c.state.value
+        assertEquals(cellB, s.own.single().cell, "the pin stands at the newest fix")
+        assertEquals(2, Regex("\"Polygon\"").findAll(s.ownTrackGeoJson).count())
+        assertFalse(s.ownTrackGeoJson.contains(ownUuid), "no Thing UUID in the track source")
+        assertEquals(publicSource, s.geoJson, "the public source never carries the track")
     }
 
     @Test

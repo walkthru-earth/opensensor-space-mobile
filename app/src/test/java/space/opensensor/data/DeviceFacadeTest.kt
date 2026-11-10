@@ -356,15 +356,15 @@ class DeviceFacadeTest {
     }
 
     @Test
-    fun `a location read keeps the fixed Thing's Discover pin and drops it once it moves`() = harnessTest { h ->
+    fun `a location read keeps the fixed Thing's Discover pin and drops its cell once it moves`() = harnessTest { h ->
         h.device.locationCell = "8828308281fffff"
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
-        assertEquals("8828308281fffff", h.repo.readLocation()?.cell)
+        assertEquals("8828308281fffff", h.repo.readLocation()?.location?.cell)
         assertEquals(listOf(h.device.thing to "8828308281fffff"), h.places.all.map { it.thing to it.cell })
         h.device.mobility = "moving"
-        h.repo.readLocation()
-        assertTrue("a moving Thing shows no pin", h.places.all.isEmpty())
+        assertEquals("moving", h.repo.readLocation()?.thing?.mobility)
+        assertEquals("a moving Thing never keeps its configured cell", listOf("" to true), h.places.all.map { it.cell to it.moving })
     }
 
     @Test
@@ -384,11 +384,11 @@ class DeviceFacadeTest {
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         val saved = h.repo.writeLocation(ConfigPatch.build { location("8828308281fffff", "") })
-        assertEquals("8828308281fffff", saved?.cell)
+        assertEquals("8828308281fffff", saved?.location?.cell)
         assertEquals(listOf(h.device.thing to "8828308281fffff"), h.places.all.map { it.thing to it.cell })
         h.device.mobility = "moving"
         h.repo.writeLocation(ConfigPatch.build { location("8828308281fffff", "") })
-        assertTrue("a save that reads back a moving Thing shows no pin", h.places.all.isEmpty())
+        assertEquals("a save that reads back a moving Thing keeps no cell", listOf("" to true), h.places.all.map { it.cell to it.moving })
     }
 
     @Test

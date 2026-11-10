@@ -16,7 +16,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * A version 2 database file, written as version 2 wrote it, opened by the app at version 6
+ * A version 2 database file, written as version 2 wrote it, opened by the app at version 7
  * ([Migration2To3], the automatic step that adds `thing_place`, [Migration4To5], then the automatic
  * step that adds the upload time). Every Thing it knew gets a board source, a blank Thing gets none
  * and no stored row is lost. A version 3 file reopens its indexed rows to read their footer digests.
@@ -86,7 +86,7 @@ class ThingSourceMigrationTest {
             assertEquals(7L to 3, cursor.wholeAtEpochMs to cursor.sinceWhole)
             assertEquals(listOf("day=03/data.parquet"), db.prunedFileDao().forThing("thing-a").map { it.name })
             val version = db.useReaderConnection { c -> c.usePrepared("PRAGMA user_version") { it.step(); it.getLong(0) } }
-            assertEquals(6L, version)
+            assertEquals(7L, version)
             // Version 6 starts every archived file as not uploaded.
             assertEquals(listOf(null, null), RoomArchiveIndex(db.archivedFileDao()).observeThing("thing-ios").first().map { it.uploadedAtEpochMs })
             // Version 4 adds the own Thing places empty. A pin waits for the next location read.

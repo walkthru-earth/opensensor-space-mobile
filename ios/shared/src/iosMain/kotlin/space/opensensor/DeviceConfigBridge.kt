@@ -250,13 +250,13 @@ internal class IosDeviceConfigSource(
         }
     }
 
-    override suspend fun readLocation(): space.opensensor.data.protocol.LocationConfig? {
+    override suspend fun readLocation(): DeviceConfig? {
         if (state.syncBusy) throw IllegalStateException("a sync holds the link")
         val result = borrow { recordPlace(it.getLocationPage()) ?: LOCATION_UNSUPPORTED } ?: throw IllegalStateException("link busy")
         return result.takeUnless { it === LOCATION_UNSUPPORTED }
     }
 
-    override suspend fun writeLocation(patch: ConfigPatch): space.opensensor.data.protocol.LocationConfig? {
+    override suspend fun writeLocation(patch: ConfigPatch): DeviceConfig? {
         if (state.syncBusy || working.value) throw IllegalStateException("link busy")
         working.value = true
         try {
@@ -292,12 +292,12 @@ internal class IosDeviceConfigSource(
      * Keeps this sensor's Discover pin in step with the location [page] it returned, and tells the
      * setup watch what page 1 says now (#272).
      */
-    private suspend fun recordPlace(page: DeviceConfig?): space.opensensor.data.protocol.LocationConfig? {
+    private suspend fun recordPlace(page: DeviceConfig?): DeviceConfig? {
         val thing = devices.thingFor(address)
         val read = now()
         if (page != null && !thing.isNullOrBlank()) places.recordFrom(thing, page, read)
         if (page != null) devices.setup.pageRead(address, page, read)
-        return page?.location
+        return page?.takeIf { it.location != null }
     }
 
     override suspend fun applySensorConfig(patch: ConfigPatch): ConfigSnapshot {
@@ -418,7 +418,7 @@ internal fun <L : Any> configLinkFor(id: String, bluetoothOnly: Boolean, anyLink
 internal fun shouldReopenAfterRestart(address: String, selectedId: String?, collectAllRunning: Boolean): Boolean =
     selectedId.equals(address, ignoreCase = true) || (selectedId == null && !collectAllRunning)
 
-private val LOCATION_UNSUPPORTED = space.opensensor.data.protocol.LocationConfig()
+private val LOCATION_UNSUPPORTED = DeviceConfig()
 
 /** Stands for a board without site keys inside [DeviceConfigBridge.borrow], whose null means busy. */
 private val SITE_UNSUPPORTED = space.opensensor.model.ThingSite()

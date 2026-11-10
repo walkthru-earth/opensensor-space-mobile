@@ -1,7 +1,9 @@
 package space.opensensor.device
 
 import androidx.compose.runtime.Composable
+import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.LocationConfig
+import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.model.H3Cell
 import space.opensensor.permissions.RuntimeAccess
 import space.opensensor.publicfeed.H3Index
@@ -52,7 +54,43 @@ data class DeviceLocationState(
     val result: DeviceLocationResult? = null,
     /** The board confirmed a valid `location.cell`, read back or acknowledged after Save. */
     val saved: Boolean = false,
-)
+    /** `thing.mobility` as page 1 reports it. Null hides the choice, because older firmware rejects the key. */
+    val mobility: ThingMobility? = null,
+    /** Page 1 reports `location.gnss_cell`, so the board has a GNSS receiver. */
+    val gnssReceiver: Boolean = false,
+    /** The receiver's fresh resolution 8 cell, offered in the picker. Null without a fresh fix. */
+    val gnssCell: String? = null,
+    /** The cell the board stores now, at [DeviceLocationDraft.RESOLUTION], or empty. */
+    val storedCell: String = "",
+) {
+    /** Setup may finish. The board stores a cell, or the Thing moves and takes no configured cell. */
+    val located: Boolean get() = saved || mobility == ThingMobility.MOVING
+
+    /** A moving Thing without a receiver writes rows with no location (#263). */
+    val movingWithoutGnss: Boolean get() = mobility == ThingMobility.MOVING && !gnssReceiver
+
+    /** The draft replaces a stored cell, so new rows take the new cell and the current file splits. */
+    val cellChanges: Boolean get() = storedCell.isNotEmpty() && draft.cell != storedCell
+
+    /** This state with everything a read or saved [page] says, keeping the [draft] and [result]. */
+    fun withPage(page: DeviceConfig): DeviceLocationState {
+        val loc = page.location ?: LocationConfig()
+        return copy(
+            supported = true,
+            saved = loc.hasCell(),
+            mobility = page.thing?.thingMobility,
+            gnssReceiver = loc.gnssCellText != null,
+            gnssCell = loc.gnssCell,
+            storedCell = DeviceLocationDraft.from(loc).cell,
+        )
+    }
+
+    companion object {
+        /** The state a fresh page 1 read gives, with the draft at the stored cell. */
+        fun of(page: DeviceConfig): DeviceLocationState =
+            DeviceLocationState(draft = DeviceLocationDraft.from(page.location ?: LocationConfig())).withPage(page)
+    }
+}
 
 /**
  * A valid H3 cell whose resolution is the one the board reports for it and no finer than the maximum.

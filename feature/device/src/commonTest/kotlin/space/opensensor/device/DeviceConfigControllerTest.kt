@@ -24,6 +24,8 @@ import space.opensensor.data.protocol.LanConfig
 import space.opensensor.data.protocol.LocationConfig
 import space.opensensor.data.protocol.PairMode
 import space.opensensor.data.protocol.SensorConfig
+import space.opensensor.data.protocol.ThingConfig
+import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.data.protocol.WifiConfig
 import space.opensensor.model.SiteField
 import space.opensensor.model.SiteProblem
@@ -39,6 +41,7 @@ import kotlin.test.assertTrue
 private const val SECRET_PIN = "482913"
 private const val SECRET_PSK = "correct horse battery"
 private const val CELL8 = "8828308281fffff"
+private const val OTHER_CELL8 = "8828308283fffff"
 
 // The bundled Waveshare template has the sensor_serial_code column, so the board stores a sticker.
 private val v2Info = DeviceInfo(
@@ -79,10 +82,14 @@ private class FakeSource(
     val wire = mutableListOf<String>()
     var sensorAnswer: ConfigSnapshot? = null
     var locationAnswer: LocationConfig? = null
-    override suspend fun readLocation(): LocationConfig? = locationAnswer
-    override suspend fun writeLocation(patch: ConfigPatch): LocationConfig? {
+
+    /** Page 1 `thing.mobility`. Null is firmware that does not report it. */
+    var mobilityAnswer: ThingMobility? = null
+    private fun page1() = locationAnswer?.let { DeviceConfig(location = it, thing = mobilityAnswer?.let { m -> ThingConfig(mobility = m.wire) }) }
+    override suspend fun readLocation(): DeviceConfig? = page1()
+    override suspend fun writeLocation(patch: ConfigPatch): DeviceConfig? {
         wire += patch.encode()
-        return locationAnswer
+        return page1()
     }
     val recorded = mutableListOf<String>()
 
@@ -614,6 +621,74 @@ class DeviceConfigControllerTest {
         source.snapshot.value = source.snapshot.value.copy(syncRunning = true)
         c.saveLocation()
         assertEquals(emptyList(), source.wire)
+    }
+
+    @Test
+    fun mobilityIsAnExplicitTapSentAloneAndReadBack() = runTest {
+        val source = FakeSource()
+        source.locationAnswer = LocationConfig(cell = CELL8, resolution = 8, country = "GH")
+        source.mobilityAnswer = ThingMobility.FIXED
+        val c = controller(source)
+        assertEquals(ThingMobility.FIXED, c.state.value.location.mobility)
+        assertTrue(c.state.value.location.located)
+        c.saveMobility(ThingMobility.FIXED)
+        assertEquals(emptyList(), source.wire, "the stored mobility is not sent again")
+        source.mobilityAnswer = ThingMobility.MOVING
+        c.saveMobility(ThingMobility.MOVING)
+        assertEquals(listOf("thing.mobility=moving\n"), source.wire)
+        assertEquals(DeviceLocationResult.SAVED, c.state.value.location.result)
+        assertEquals(ThingMobility.MOVING, c.state.value.location.mobility)
+        // The board did not keep the change, so the app says so and shows what it reads.
+        source.mobilityAnswer = ThingMobility.MOVING
+        c.saveMobility(ThingMobility.FIXED)
+        assertEquals(DeviceLocationResult.NOT_CONFIRMED, c.state.value.location.result)
+        assertEquals(ThingMobility.MOVING, c.state.value.location.mobility)
+    }
+
+    @Test
+    fun firmwareWithoutMobilityIsNeverSentIt() = runTest {
+        val source = FakeSource()
+        source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "")
+        val c = controller(source)
+        assertEquals(null, c.state.value.location.mobility)
+        c.saveMobility(ThingMobility.MOVING)
+        assertEquals(emptyList(), source.wire)
+        assertFalse(c.state.value.location.located)
+    }
+
+    @Test
+    fun aMovingThingIsLocatedWithoutACellAndWarnsWithoutAReceiver() = runTest {
+        val source = FakeSource()
+        source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "")
+        source.mobilityAnswer = ThingMobility.MOVING
+        val c = controller(source)
+        assertTrue(c.state.value.location.located)
+        assertTrue(c.state.value.location.movingWithoutGnss)
+        assertEquals(null, c.state.value.location.gnssCell)
+        // A receiver with no fresh fix offers nothing, and a fix is offered as a cell only.
+        source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "", gnssCellText = "")
+        val noFix = controller(source).state.value.location
+        assertFalse(noFix.movingWithoutGnss)
+        assertEquals(null, noFix.gnssCell)
+        source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "", gnssCellText = CELL8)
+        assertEquals(CELL8, controller(source).state.value.location.gnssCell)
+    }
+
+    @Test
+    fun aNewCellOverAStoredOneIsFlaggedAsASplit() = runTest {
+        val source = FakeSource()
+        source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "")
+        val empty = controller(source)
+        empty.acceptLocationCell(CELL8, 8)
+        assertFalse(empty.state.value.location.cellChanges, "a first cell splits nothing")
+        source.locationAnswer = LocationConfig(cell = CELL8, resolution = 8, country = "")
+        val c = controller(source)
+        assertFalse(c.state.value.location.cellChanges)
+        c.acceptLocationCell(OTHER_CELL8, 8)
+        assertTrue(c.state.value.location.cellChanges)
+        source.locationAnswer = LocationConfig(cell = OTHER_CELL8, resolution = 8, country = "")
+        c.saveLocation()
+        assertFalse(c.state.value.location.cellChanges)
     }
 
     // ------------------------------------------------------------------ owner site (#272)

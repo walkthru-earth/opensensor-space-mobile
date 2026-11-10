@@ -14,6 +14,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,18 +40,23 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.compose.resources.stringResource
+import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BrandCard
 import space.opensensor.designsystem.CardHeader
 import space.opensensor.designsystem.FitText
+import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
+import space.opensensor.designsystem.InfoNote
+import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.PillButton
 import space.opensensor.device.resources.Res
 import space.opensensor.device.resources.action_cancel
 import space.opensensor.device.resources.location_area_detail
 import space.opensensor.device.resources.location_area_km2
 import space.opensensor.device.resources.location_area_m2
+import space.opensensor.device.resources.location_cell_change
 import space.opensensor.device.resources.location_clear
 import space.opensensor.device.resources.location_configure
 import space.opensensor.device.resources.location_country
@@ -60,6 +67,12 @@ import space.opensensor.device.resources.location_fix_failed
 import space.opensensor.device.resources.location_fresh_required
 import space.opensensor.device.resources.location_info
 import space.opensensor.device.resources.location_locating
+import space.opensensor.device.resources.location_mobility_fixed
+import space.opensensor.device.resources.location_mobility_info
+import space.opensensor.device.resources.location_mobility_moving
+import space.opensensor.device.resources.location_mobility_title
+import space.opensensor.device.resources.location_moving_gnss
+import space.opensensor.device.resources.location_moving_no_gnss
 import space.opensensor.device.resources.location_not_confirmed
 import space.opensensor.device.resources.location_permission
 import space.opensensor.device.resources.location_permission_settings
@@ -73,6 +86,7 @@ import space.opensensor.device.resources.location_stop
 import space.opensensor.device.resources.location_title
 import space.opensensor.device.resources.location_unset
 import space.opensensor.device.resources.location_unsupported
+import space.opensensor.device.resources.location_use_gnss
 import space.opensensor.device.resources.location_use_phone
 import space.opensensor.device.resources.site_info
 import space.opensensor.device.resources.site_title
@@ -116,11 +130,18 @@ fun DeviceLocationForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction
     // Survives rotation. Only whether the map is open, never a place or a cell.
     var open by rememberSaveable { mutableStateOf(false) }
     Column {
-        Text(if (draft.cell.isEmpty()) stringResource(Res.string.location_unset) else stringResource(Res.string.location_set))
-        // The cell id is for people who read H3. Simple shows the words only.
-        if (state.level.detailed && draft.cell.isNotEmpty()) Text(draft.cell)
-        if (loc.supported == false) Text(stringResource(Res.string.location_unsupported))
-        PillButton(stringResource(Res.string.location_configure), onClick = { open = true }, enabled = state.canEdit && loc.supported == true && !loc.working)
+        // Only firmware that reports `thing.mobility` is offered the choice, older firmware rejects the key.
+        loc.mobility?.let { mobility -> MobilityChoice(mobility, enabled = state.canEdit && !state.snapshot.syncRunning && !loc.working, onAction) }
+        if (loc.mobility == ThingMobility.MOVING) {
+            // A moving Thing takes no configured cell. Its own receiver places each row, or nothing does.
+            Text(stringResource(if (loc.movingWithoutGnss) Res.string.location_moving_no_gnss else Res.string.location_moving_gnss))
+        } else {
+            Text(if (draft.cell.isEmpty()) stringResource(Res.string.location_unset) else stringResource(Res.string.location_set))
+            // The cell id is for people who read H3. Simple shows the words only.
+            if (state.level.detailed && draft.cell.isNotEmpty()) Text(draft.cell)
+            if (loc.supported == false) Text(stringResource(Res.string.location_unsupported))
+            PillButton(stringResource(Res.string.location_configure), onClick = { open = true }, enabled = state.canEdit && loc.supported == true && !loc.working)
+        }
         loc.result?.let { result ->
             Text(
                 stringResource(
@@ -136,6 +157,36 @@ fun DeviceLocationForm(state: DeviceConfigUiState, onAction: (DeviceConfigAction
     if (open) LocationPickerDialog(state, onAction, onClose = { open = false })
 }
 
+/** Fixed or moving, sent at once as `thing.mobility` on a tap (#263). Signal blue marks only the stored one. */
+@Composable
+private fun MobilityChoice(stored: ThingMobility, enabled: Boolean, onAction: (DeviceConfigAction) -> Unit) {
+    val title = stringResource(Res.string.location_mobility_title)
+    CardHeader(title, info = InfoContent(title, stringResource(Res.string.location_mobility_info)))
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+        MOBILITIES.forEachIndexed { i, option ->
+            SegmentedButton(
+                selected = option == stored,
+                onClick = { if (option != stored) onAction(DeviceConfigAction.SetMobility(option)) },
+                enabled = enabled,
+                shape = FloatingControl.segmentShape(i, MOBILITIES.size),
+                colors = FloatingControl.segmentedColors(),
+                label = {
+                    FitText(
+                        stringResource(
+                            when (option) {
+                                ThingMobility.FIXED -> Res.string.location_mobility_fixed
+                                ThingMobility.MOVING -> Res.string.location_mobility_moving
+                            }
+                        )
+                    )
+                },
+            )
+        }
+    }
+}
+
+private val MOBILITIES = listOf(ThingMobility.FIXED, ThingMobility.MOVING)
+
 /**
  * The full screen area map. A tap on a cell drafts it, Save sends it. The phone fix becomes a
  * [CellFocus] that moves the camera and never drafts a cell by itself.
@@ -150,7 +201,8 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
     var locating by remember { mutableStateOf(false) }
     var fixJob by remember { mutableStateOf<Job?>(null) }
     var fixFailed by remember { mutableStateOf(false) }
-    var focus by remember { mutableStateOf<CellFocus?>(null) }
+    // The board's own fresh GNSS cell comes first. The map opens on it, and the owner still confirms it.
+    var focus by remember { mutableStateOf(loc.gnssCell?.takeIf { draft.cell.isEmpty() }?.let { CellFocus(it, 1) }) }
     val close = {
         fixJob?.cancel()
         onClose()
@@ -233,6 +285,17 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
                     // The cell size in words. Detailed adds the H3 resolution and the cell id.
                     Text(areaText(draft.resolution, state.level.detailed), style = MaterialTheme.typography.labelMedium)
                     if (state.level.detailed && draft.cell.isNotEmpty()) Text(draft.cell, style = MaterialTheme.typography.labelMedium)
+                    if (loc.cellChanges) InfoNote(stringResource(Res.string.location_cell_change))
+                    loc.gnssCell?.takeIf { it != draft.cell }?.let { gnss ->
+                        OutlinePillButton(
+                            stringResource(Res.string.location_use_gnss),
+                            onClick = {
+                                onAction(DeviceConfigAction.LocationCell(gnss, DeviceLocationDraft.RESOLUTION))
+                                focus = CellFocus(gnss, (focus?.serial ?: 0) + 1)
+                            },
+                            enabled = canPick && !locating,
+                        )
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = draft.country,

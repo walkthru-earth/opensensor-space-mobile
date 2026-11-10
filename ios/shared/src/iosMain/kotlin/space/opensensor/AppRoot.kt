@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
@@ -34,6 +35,7 @@ import platform.Foundation.NSUserDefaults
 import platform.Foundation.localTimeZone
 import platform.Foundation.timeIntervalSince1970
 import space.opensensor.archive.IosExportSpace
+import space.opensensor.data.history.CellTrackReader
 import space.opensensor.debug.DebugController
 import space.opensensor.debug.DebugScreen
 import space.opensensor.designsystem.AppIcons
@@ -49,11 +51,13 @@ import space.opensensor.devices.SetupRequest
 import space.opensensor.devices.bluetoothAccessTexts
 import space.opensensor.discover.DiscoverController
 import space.opensensor.discover.DiscoverScreen
+import space.opensensor.discover.OWN_TRACK_SPAN_NS
 import space.opensensor.discover.OwnThing
 import space.opensensor.discover.UserDefaultsDiscoverPrefs
 import space.opensensor.discover.bundledSampleFeed
 import space.opensensor.discover.knownOwnThings
 import space.opensensor.discover.observeOwnStatus
+import space.opensensor.discover.observeOwnTracks
 import space.opensensor.files.FileMetricsController
 import space.opensensor.files.FileMetricsScreen
 import space.opensensor.files.FilesController
@@ -135,12 +139,18 @@ private class DiscoverHolder(known: Flow<List<KnownRecord>>, linked: Flow<Set<St
         combine(settingsRepository.discoverSource, settingsRepository.showPublicSensors, ::Pair)
             .onEach { (source, publicSensors) -> controller.onSourceSettings(source, publicSensors) }
             .launchIn(viewModelScope)
-        // The user's own fixed Things, each at its saved cell (#226). Read from the phone only.
+        // The user's own Things, each at its saved cell (#226). Read from the phone only.
         combine(IosArchive.places.observeAll(), known) { saved, records ->
             val names = records.filter { it.thing.isNotBlank() }.associate { it.thing to it.name }
-            knownOwnThings(saved.map { OwnThing(it.thing, "", it.cell, it.updatedEpochMs) }, names)
+            knownOwnThings(saved.map { OwnThing(it.thing, "", it.cell, it.updatedEpochMs, it.moving) }, names)
         }
             .onEach(controller::showOwnThings)
+            .launchIn(viewModelScope)
+        // A moving Thing's last day of rows, its own cell per row, read from this phone (#263).
+        val tracks = CellTrackReader(IosArchive.store, IosArchive.index, Dispatchers.Default)
+        val moving = IosArchive.places.observeAll().map { saved -> saved.filter { it.moving }.mapTo(mutableSetOf()) { it.thing } }
+        observeOwnTracks(moving) { thing -> tracks.observe(thing, OWN_TRACK_SPAN_NS) { (NSDate().timeIntervalSince1970 * 1e9).toLong() } }
+            .onEach(controller::showOwnTracks)
             .launchIn(viewModelScope)
         // Each own Thing's newest reading from this phone's history, Live while a Bluetooth or LAN
         // link is up, and whether a file of it went up (#273). Read from the phone only.
