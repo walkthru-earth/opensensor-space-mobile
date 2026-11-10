@@ -2,6 +2,9 @@
 # opensensor-space-firmware main tools/fixtures/live_keys/*.json with LiveKeyFixturesTest and fails on a digest the
 # app does not know. opensensor-space-firmware is public, so the default read-only token is enough. A red run is
 # the signal. It opens no issue.
+# The discover job reads the live Discover Collection on source.coop with the app's asset rules
+# (tools/check_discover_collection.py) and fails when a key or layout change leaves the map
+# without cells (#257).
 # Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
 name: live-key-drift
 
@@ -34,3 +37,23 @@ jobs:
           python3 -I tools/check_live_key_drift.py
           opensensor-space-firmware/tools/fixtures/live_keys
           core/protocol/src/commonTest/kotlin/space/opensensor/data/protocol/LiveKeyFixturesTest.kt
+
+  discover:
+    name: Live Discover Collection lists cells the app reads
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      FEED_ROOT: https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Self test the checker
+        run: python3 -I tools/check_discover_collection.py --self-test
+      - name: Fetch the live Collection
+        run: >-
+          curl --fail --silent --show-error --location --proto '=https' --max-time 60
+          --output "$RUNNER_TEMP/collection.json"
+          "${FEED_ROOT}collection.json"
+      - name: Check its cells assets
+        run: python3 -I tools/check_discover_collection.py "$RUNNER_TEMP/collection.json" "$FEED_ROOT"

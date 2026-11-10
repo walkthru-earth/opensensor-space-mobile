@@ -663,11 +663,19 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
 `https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/`.
 
 - **Discover Collection (#189).** `collection.json` at the root is a STAC Collection read with
-  `ThingCollection` from `:core:model` (`DiscoverCollection`). H3 only. One asset per
-  resolution, keyed `h3_res=<n>`, with a relative href (no `..`, no absolute path, no scheme) or an https
-  URL on the same host as the feed root. Any other asset, such as cleartext, another host or a
-  local address, is dropped alone and the rest of the Collection stands. The zoom picks the resolution. A zoom whose resolution has no asset reads the
-  nearest listed one, and between two equally near the one nearer 5, so a Collection that lists
+  `ThingCollection` from `:core:model` (`DiscoverCollection`). H3 only. One cells asset per
+  resolution. Its key names the resolution, `cells_r<n>` as the live feed writes it or `h3_res=<n>`.
+  An asset with any other key is a cells asset only when it is Parquet and its href has one
+  `h3_res=<n>` path segment, so `annual`, `daily`, `hourly`, `stations` and `manifest` are ignored.
+  `<n>` is plain decimal, 0 to 15. A key with another `<n>`, an href segment that names another
+  resolution than the key, and every asset of a resolution listed twice are dropped alone. Both key
+  forms are read until stac-opensensor#6 fixes one. The href is relative (no `..`, no absolute
+  path, no scheme) or an https URL on the same host as the feed root. Any other asset, such as
+  cleartext, another host or a local address, is dropped alone and the rest of the Collection
+  stands. The weekly `live-key-drift` workflow checks the live Collection with the same rules
+  (`tools/check_discover_collection.py`) and fails when the map would have no cells at resolution
+  2 to 7. The zoom picks the resolution. A zoom whose resolution has no asset reads the
+  nearest listed one, and between two equally near the one nearer 8, so a Collection that lists
   only some resolutions never shows an empty map. `item_assets.data.table:columns` name `<id>__n`,
   `__mean`, `__min` and `__max` per property. The `__mean` column's `title` names the property
   for an id the app does not know, and its `opensensor:scale` is a key of the Collection's

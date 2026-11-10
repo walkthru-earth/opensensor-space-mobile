@@ -105,10 +105,11 @@ STAC_ROWS = [
 ]
 
 WHO_URL = "https://www.who.int/publications/i/item/9789240034228"
+PARQUET = "application/vnd.apache.parquet"
 
 
 def stac_collection() -> dict:
-    """The discover Collection of the STAC fixture. One asset per h3_res, columns per property."""
+    """The discover Collection of the STAC fixture. A cells asset per resolution, columns per property."""
     columns = [{"name": "h3_index", "type": "int64", "title": "H3 cell"}, {"name": "date", "type": "date32", "title": "Station local day"}]
     for p in STAC_PROPERTIES:
         title = "Soil moisture" if p["id"] == "soil_moisture" else p["label"]
@@ -147,7 +148,15 @@ def stac_collection() -> dict:
             }
         },
         "item_assets": {"data": {"type": "application/vnd.apache.parquet", "roles": ["data"], "table:columns": columns}},
-        "assets": {f"h3_res={RES}": {"href": f"cells/h3_res={RES}/data.parquet", "type": "application/vnd.apache.parquet", "roles": ["data"]}},
+        # The live asset layout (fetched 2026-11-10). The app reads only the cells asset, the others
+        # are here so the tests prove they are ignored.
+        "assets": {
+            "annual": {"href": "./annual.parquet", "type": PARQUET, "roles": ["data"]},
+            f"cells_r{RES}": {"href": f"./cells/h3_res={RES}/data.parquet", "type": PARQUET, "roles": ["data"]},
+            "daily": {"href": "./daily.parquet", "type": PARQUET, "roles": ["data"]},
+            "manifest": {"href": "./manifest.json", "type": "application/json", "roles": ["metadata"]},
+            "stations": {"href": "./stations.parquet", "type": PARQUET, "roles": ["data", "geoparquet"]},
+        },
         "links": [],
     }
 
