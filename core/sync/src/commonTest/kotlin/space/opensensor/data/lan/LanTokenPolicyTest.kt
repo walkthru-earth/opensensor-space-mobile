@@ -54,7 +54,7 @@ class LanTokenPolicyTest {
         assertTrue(p.isStale(addr))
         // BLE session reaches Ready with nothing stored -> fetch again.
         assertTrue(p.shouldFetch(TransportKind.BLE, proto = 2, storedToken = null))
-        p.onFetched(addr)
+        p.clear(addr)
         assertFalse(p.isStale(addr))
     }
 
@@ -71,7 +71,7 @@ class LanTokenPolicyTest {
         val p = LanTokenPolicy()
         p.markStale(addr)
         assertFalse(p.isStale("AA:BB:CC:DD:EE:02"))
-        p.onFetched("AA:BB:CC:DD:EE:02")
+        p.clear("AA:BB:CC:DD:EE:02")
         assertTrue(p.isStale(addr))
     }
 }

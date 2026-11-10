@@ -618,7 +618,6 @@ class HistoryDeriverTest {
             return 1
         }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
-        override fun observeTotalBytes(): Flow<Long> = flowOf(rows.sumOf { it.bytes })
         override suspend fun upsert(file: ArchivedFile) {
             rows.removeAll { it.thing == file.thing && it.name == file.name }
             rows += file
@@ -632,7 +631,6 @@ class HistoryDeriverTest {
             rows.removeAll { it.thing == thing && it.name == name }
         }
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
-        override fun observeUnindexedCount(): Flow<Int> = flowOf(0)
 
         // The deriver lists a thing once and splits it by day (#63), a time query per day is a regression.
         override suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long): List<ArchivedFile> = error("the deriver must not query per day")

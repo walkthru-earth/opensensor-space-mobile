@@ -12,8 +12,6 @@ import space.opensensor.data.archive.toRecord
 interface DerivedArchivedFileQueries : ArchivedFileDao {
     private fun ArchivedFile.identity() = ArchivedFileIdentity(thing, name, bytes, crc32)
 
-    private fun ArchivedFile.unindexed() = !isIndexed
-
     private fun thingRows(thing: String): Flow<List<ArchivedFile>> = observeAll().map { rows -> rows.filter { it.thing == thing } }
 
     override fun observeIdentitiesForThing(thing: String): Flow<List<ArchivedFileIdentity>> =
@@ -21,12 +19,6 @@ interface DerivedArchivedFileQueries : ArchivedFileDao {
 
     override suspend fun identitiesForThing(thing: String): List<ArchivedFileIdentity> =
         forThing(thing).sortedBy { it.name }.map { it.identity() }
-
-    override fun observeCountForThing(thing: String): Flow<Int> = thingRows(thing).map { it.size }
-
-    override fun observeAnyForThing(thing: String): Flow<Boolean> = thingRows(thing).map { it.isNotEmpty() }
-
-    override fun observeUnindexedCountForThing(thing: String): Flow<Int> = thingRows(thing).map { rows -> rows.count { it.unindexed() } }
 
     override fun observeThingGlances(): Flow<List<ThingArchiveGlance>> = observeAll().map { rows ->
         rows.groupBy { it.thing }.map { (thing, list) ->

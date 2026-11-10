@@ -202,7 +202,7 @@ class DeviceLinkOwner @Inject constructor(
     private val setupWatch: ThingSetupWatch,
     /** Below Developer a sensor's Wi-Fi sync is switched back on once per connection. */
     private val developerLevel: DeveloperLevel,
-    /** The nickname and setup flag of a sensor, which go when it is forgotten. */
+    /** The nickname of a sensor, which goes when it is forgotten. */
     private val sensorSettings: SensorSettings,
 ) {
     /**
@@ -372,8 +372,6 @@ class DeviceLinkOwner @Inject constructor(
     private val _events = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val events: SharedFlow<DeviceEvent> = _events.asSharedFlow()
 
-    /** Address of the device we are connected to / connecting to. */
-    val currentAddress: String? get() = _session.value?.address
     val currentDisplayName: String? get() = _session.value?.transport?.displayName
     val isFake: Boolean get() = _session.value?.transport?.let(transportFactory::isFake) == true
 
@@ -778,21 +776,18 @@ class DeviceLinkOwner @Inject constructor(
             info.thing?.let { thing -> scope.launch { if (_session.value === session) reportArchiveTimeline(thing) } }
             recordDiagnostic("connect", "${transport.kind} ready")
 
-            val v2 = (proto ?: 1) >= 2
-            if (v2) {
-                // Token: quietly, over BLE only, when we do not hold one (or the LAN handshake just
-                // said ours is stale, see tryLan). Never logged.
-                if (tokenPolicy.shouldFetch(transport.kind, proto, previous?.lanToken?.takeUnless { continuity.invalidateLanToken })) {
-                    if (fetchTokenLocked(session, address, quiet = true)) tokenPolicy.onFetched(address)
-                }
-                suspendRunCatching { session.getConfig() }
-                    .onSuccess { _config.value = it }
-                    .onFailure { Log.w(TAG, "GET_CONFIG failed: ${it.message}") }
-                // Wi-Fi sync stays on below Developer, switched back once per connection.
-                suspendRunCatching { session.enableLanOnce(_config.value?.config, developerLevel.developer()) }
-                    .onSuccess { snapshot -> snapshot?.let { _config.value = it; recordDiagnostic("lan", "Wi-Fi sync switched back on") } }
-                    .onFailure { Log.w(TAG, "lan.on=1 failed (${it::class.simpleName})") }
+            // Token: quietly, over BLE only, when we do not hold one (or the LAN handshake just
+            // said ours is stale, see tryLan). Never logged.
+            if (tokenPolicy.shouldFetch(transport.kind, proto, previous?.lanToken?.takeUnless { continuity.invalidateLanToken })) {
+                if (fetchTokenLocked(session, address, quiet = true)) tokenPolicy.clear(address)
             }
+            suspendRunCatching { session.getConfig() }
+                .onSuccess { _config.value = it }
+                .onFailure { Log.w(TAG, "GET_CONFIG failed: ${it.message}") }
+            // Wi-Fi sync stays on below Developer, switched back once per connection.
+            suspendRunCatching { session.enableLanOnce(_config.value?.config, developerLevel.developer()) }
+                .onSuccess { snapshot -> snapshot?.let { _config.value = it; recordDiagnostic("lan", "Wi-Fi sync switched back on") } }
+                .onFailure { Log.w(TAG, "lan.on=1 failed (${it::class.simpleName})") }
             // The link is open and, on BLE, bonded. Only a desc no known template matches is fetched.
             suspendRunCatching { boardDescriptors.ensure(info, session) }
                 .onSuccess { if (it !is DescriptorOutcome.Known && it !is DescriptorOutcome.Unsupported) Log.i(TAG, "board template ${it.label()}") }
@@ -1244,9 +1239,6 @@ class DeviceLinkOwner @Inject constructor(
         job?.cancel()
         _reconnecting.value = null
     }
-
-    /** True when a session to [address] is Ready right now. */
-    fun isConnectedTo(address: String): Boolean = _session.value?.let { it.address == address && it.isUsable } == true
 
     /** Address of the session the app holds right now (Ready or still connecting), or null. */
     val interactiveSessionAddress: String? get() = _session.value?.address
@@ -1778,10 +1770,6 @@ class DeviceLinkOwner @Inject constructor(
     // ------------------------------------------------------------- known devices
 
     val knownDevices: Flow<List<KnownDevice>> = knownDeviceDao.observeAll()
-
-    suspend fun touchSeen(address: String, name: String?) = withContext(io) {
-        knownDeviceDao.touch(address, name, clock.nowEpochMs())
-    }
 
     /**
      * Forgets [address]. False when another command held the device, or when a newer connect took the

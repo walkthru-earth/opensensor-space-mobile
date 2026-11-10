@@ -42,7 +42,7 @@ fun interface DeveloperLevel {
     suspend fun developer(): Boolean
 }
 
-/** The phone only settings kept per sensor, its nickname and setup flag, dropped when it is forgotten. */
+/** The phone only settings kept per sensor, its nickname, dropped when it is forgotten. */
 fun interface SensorSettings {
     suspend fun forget(address: String)
 }

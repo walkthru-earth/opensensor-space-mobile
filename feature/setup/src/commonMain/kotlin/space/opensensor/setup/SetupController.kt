@@ -57,8 +57,6 @@ interface SetupPort {
     suspend fun nickname(id: String): String?
 
     suspend fun saveNickname(id: String, nickname: String?)
-
-    suspend fun setPending(id: String, pending: Boolean)
 }
 
 data class SetupUiState(
@@ -101,8 +99,8 @@ data class SetupUiState(
 
 /**
  * Walks [steps] for one sensor. Back goes one page but stops at Name once paired, since unpairing
- * belongs to settings. Closing after pairing asks first, and the sensor stays added with setup
- * pending. Nothing about the run is persisted besides the nickname and that flag, so a resumed run
+ * belongs to settings. Closing after pairing asks first, and the sensor stays added. Nothing about
+ * the run is persisted besides the nickname, so a resumed run
  * ([resumeId]) opens at the first required page, Location for the board, and reconnects silently.
  * A [pick] is a new sensor tapped outside Find, paired at once as if chosen there, so Name still
  * comes first. Find lists it first while it pairs, even before a scan hears it. With [offer] the
@@ -196,7 +194,6 @@ class SetupController(
             return
         }
         if (_state.value.paired) return
-        port.setPending(candidate.id, true)
         val nickname = port.nickname(candidate.id).orEmpty()
         _state.update { it.copy(pairing = false, paired = true, page = SetupStep.Name, nickname = nickname) }
     }
@@ -268,7 +265,6 @@ class SetupController(
         val next = pages.drop(pages.indexOf(s.page) + 1).firstOrNull(s::shows) ?: return
         if (next == SetupStep.Done && pages.any { it.required && !s.satisfied(it) }) return
         _state.update { it.copy(page = next) }
-        if (next == SetupStep.Done) s.selected?.let { scope.launch { port.setPending(it.id, false) } }
     }
 
     /** One page back. On Name after pairing, and on Find, it asks to close instead. */
@@ -292,7 +288,7 @@ class SetupController(
         _state.update { it.copy(askClose = false) }
     }
 
-    /** Leaves the wizard. A paired sensor stays added, with setup pending unless Done was reached. */
+    /** Leaves the wizard. A paired sensor stays added. */
     fun finish() {
         (_state.value.selected ?: offered)?.let { opened(it.id) }
         port.stopFind()

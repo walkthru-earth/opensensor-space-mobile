@@ -168,12 +168,10 @@ class HistoryRepositoryTest {
             return 1
         }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
-        override fun observeTotalBytes(): Flow<Long> = flowOf(rows.sumOf { it.bytes })
         override suspend fun upsert(file: ArchivedFile) { rows.removeAll { it.thing == file.thing && it.name == file.name }; rows += file }
         override suspend fun insertIfAbsent(file: ArchivedFile): Long = if (rows.any { it.thing == file.thing && it.name == file.name }) -1L else { rows += file; rows.size.toLong() }
         override suspend fun delete(thing: String, name: String) { rows.removeAll { it.thing == thing && it.name == name } }
         override suspend fun unindexed(limit: Int) = emptyList<ArchivedFile>()
-        override fun observeUnindexedCount(): Flow<Int> = flowOf(0)
         override suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long) =
             rows.filter { it.thing == thing && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs }
         override suspend fun indexedForThing(thing: String) = rows.filter { it.thing == thing && it.isIndexed }

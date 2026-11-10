@@ -12,6 +12,7 @@ import space.opensensor.storage.RetentionPolicy
 import space.opensensor.units.UnitSystem
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** An in-memory DataStore, so the repository logic runs the same on the JVM and the iOS simulator. */
 private class MemoryStore(initial: Preferences = emptyPreferences()) : DataStore<Preferences> {
@@ -131,20 +132,19 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun nicknamesAndPendingSetupStayPerSensor() = runTest {
+    fun nicknamesStayPerSensorAndGoWhenTheSensorIsForgotten() = runTest {
         val store = MemoryStore()
         val repo = SettingsRepository(store)
         repo.setNickname("AA:BB:CC:DD:EE:FF", "  Balcony  ")
-        repo.setSetupPending("AA:BB:CC:DD:EE:FF", true)
-        repo.setSetupPending("11:22:33:44:55:66", true)
-        assertEquals(mapOf("aa:bb:cc:dd:ee:ff" to "Balcony"), repo.nicknames.first())
-        assertEquals(setOf("aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66"), repo.setupPending.first())
+        repo.setNickname("11:22:33:44:55:66", "Roof")
+        assertEquals(mapOf("aa:bb:cc:dd:ee:ff" to "Balcony", "11:22:33:44:55:66" to "Roof"), repo.nicknames.first())
         assertEquals(AppPrefs(), repo.current())
 
-        repo.setSetupPending("11:22:33:44:55:66", false)
-        repo.forgetSensor("aa:bb:cc:dd:ee:ff")
+        repo.forgetSensor("AA:BB:CC:DD:EE:FF")
+        assertEquals(mapOf("11:22:33:44:55:66" to "Roof"), repo.nicknames.first())
+        repo.forgetSensor("11:22:33:44:55:66")
         assertEquals(emptyMap(), repo.nicknames.first())
-        assertEquals(emptySet(), repo.setupPending.first())
+        assertTrue(store.state.value.asMap().isEmpty(), "a forgotten sensor leaves no key")
 
         repo.setNickname("x", "Kitchen")
         repo.setNickname("x", " ")

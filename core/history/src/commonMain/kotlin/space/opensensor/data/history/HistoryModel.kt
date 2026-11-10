@@ -75,7 +75,6 @@ data class HistorySeries(
         return copy(points = clean, validRows = validRows - flaggedRows, mean = cleanMean, max = top, flaggedRows = 0, flags = 0, cleanMean = null)
     }
 
-    val hasEstimated: Boolean get() = estimatedRows > 0
     val coverage: Float get() = if (expectedRows == 0L) 0f else (validRows.toFloat() / expectedRows).coerceIn(0f, 1f)
     val isEmpty: Boolean get() = points.none { it.mean != null }
 }

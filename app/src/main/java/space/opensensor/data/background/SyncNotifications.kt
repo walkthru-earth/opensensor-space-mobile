@@ -155,8 +155,6 @@ class SyncNotifications @Inject constructor(
         /** Notification id of the foreground service (user-started sync). */
         const val FOREGROUND_ID = 1001
 
-        /** Notification id of the WorkManager foreground worker (auto-sync). */
-        const val WORKER_ID = 1002
         const val SUMMARY_ID = 1003
         private const val REQ_OPEN = 10
         private const val PROGRESS_MAX = 1000

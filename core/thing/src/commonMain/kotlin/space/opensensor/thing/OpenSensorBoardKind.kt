@@ -4,6 +4,7 @@ import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.data.protocol.LanProtocol
 import space.opensensor.model.DerivedMetricProvider
+import space.opensensor.model.H3Cell
 
 /**
  * An opensensor board, synced over BLE or LAN through today's collection path. It is recognized by
@@ -22,7 +23,7 @@ object OpenSensorBoardKind : ThingKind {
      * privacy rule 2). The board writes its cells at 8, so the phone's Item names the file's own cells
      * and equals the board's Item. A file with a cell at any other resolution is not published.
      */
-    const val PUBLISHED_RES = 8
+    const val PUBLISHED_RES = H3Cell.RESOLUTION
 
     override val source: DataSource = DataSource.PullSync(PublishPolicy.OptInCcBy(publishedRes = PUBLISHED_RES, trimSessionEnds = false))
 

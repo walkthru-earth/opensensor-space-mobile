@@ -4,7 +4,7 @@ import OpenSensorShared
 import Synchronization
 
 enum LanFailure: Error {
-    case invalidReply, credentialsUnavailable, enrollmentRequired, thingChanged, hardwareChanged, authentication,
+    case invalidReply, credentialsUnavailable, thingChanged, hardwareChanged, authentication,
         busy, timeout, disconnected
 
     /// The words for a session that failed or ended. The shared state shows Android's wording.
@@ -13,7 +13,7 @@ enum LanFailure: Error {
         case .invalidReply: return .verificationFailed
         // No token yet is normal. The next Bluetooth connection fetches it quietly, so the session
         // just closes with no error. A token the sensor refused is a real verification failure.
-        case .credentialsUnavailable, .enrollmentRequired: return .lanDisconnected
+        case .credentialsUnavailable: return .lanDisconnected
         case .authentication: return .verificationFailed
         case .thingChanged: return .thingChanged
         case .hardwareChanged: return .hardwareChanged
@@ -30,15 +30,6 @@ enum LanFailure: Error {
         case .some(let failure): return failure.notice
         }
     }
-}
-
-/// Who a collection talks to, read from HELLO or INFO.
-struct CollectTarget: Sendable {
-    let boot: String?
-    let thing: String
-    let device: String
-    let maxRead: Int32
-    let mtu: Int32
 }
 
 /// Invariant. Every `IosLink` entry point is thread safe in Kotlin, and `identify` checks its one-time atomic bind.
@@ -187,13 +178,6 @@ actor LanSession {
     func requestStatus() {
         guard identity != nil, !closed else { return }
         write(wire.statusRequest())
-    }
-
-    /// Who is on the other end, as HELLO proved it. Nil before HELLO or after the socket closed.
-    func target() -> CollectTarget? {
-        guard let identity, !closed else { return nil }
-        return CollectTarget(
-            boot: identity.boot, thing: identity.thing, device: identity.device, maxRead: identity.maxRead, mtu: Int32(payloadMax + 3))
     }
 
     /// The shared link for this socket, made once after HELLO and kept until the socket closes. Nil

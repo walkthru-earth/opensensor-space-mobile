@@ -91,11 +91,9 @@
     <string name="msg_sync_aborted">توقفت المزامنة مبكرًا. تُستأنف في المزامنة التالية.</string>
     <string name="msg_hardware_in_use">هذا المستشعر متصل بالفعل بطريقة أخرى.</string>
     <string name="msg_busy">انتظر حتى تنتهي مهمة المستشعر الحالية.</string>
-    <string name="msg_token_needs_ble">يصل رمز الوصول عبر Bluetooth فقط. أعد الاتصال عبر Bluetooth أولًا.</string>
     <string name="companion_sync_storage_failed">تعذّر حفظ بعض الملفات على هذا الهاتف. تحقق من المساحة الفارغة وحاول مرة أخرى.</string>
     <string name="msg_busy_before_sync">انتظر حتى تنتهي مهمة المستشعر الحالية قبل المزامنة.</string>
     <string name="msg_verification_failed">تعذّر التحقق من المستشعر. حاول مرة أخرى.</string>
-    <string name="msg_identity_enroll_ble">اتصل بهذا المستشعر عبر Bluetooth أولًا.</string>
     <string name="msg_identity_thing_ble">تغيّر معرّف المستشعر. أعد الاتصال عبر Bluetooth للتحقق منه.</string>
     <string name="msg_identity_hardware_changed">هذا عتاد مختلف. أقرنه كمستشعر جديد.</string>
     <string name="msg_lan_token_stored">حُفظ رمز الوصول عبر Wi-Fi على هذا الهاتف.</string>

@@ -66,7 +66,7 @@ class SyncEngineTest {
         progress: (FileProgress) -> Unit = {},
     ): FileOutcome {
         val f = device.first.files[index]
-        return download(device.second, thing, device.first.address, f.name, f.bytes.size.toLong(), device.first.maxRead, progress)
+        return download(device.second, thing, device.first.address, f.name, f.bytes.size.toLong(), device.first.maxRead, onProgress = progress)
     }
 
     private fun finalBytes(thing: String, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(thing, name))]

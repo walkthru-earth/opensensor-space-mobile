@@ -23,7 +23,6 @@
     <string name="scan_more">المزيد</string>
 
     <!-- Today -->
-    <string name="today_title">اليوم</string>
 
     <!-- WHO 2021 steps, named in text so colour is never the only carrier. One set for every screen,
          Discover included. Keep identical to feature/discover composeResources, CopyRulesTest checks. -->
@@ -35,13 +34,6 @@
     <string name="who_step_above_it1">فوق كل أهداف منظمة الصحة العالمية</string>
 
     <!-- Sensor states -->
-    <string name="pms_absent_title">لا يوجد مستشعر جسيمات</string>
-    <string name="pms_warming_title">جارٍ الإحماء</string>
-    <string name="pms_stale_title">القراءة قديمة</string>
-    <string name="pms_error_title">خطأ في المستشعر</string>
-    <string name="pms_mismatch_title">طراز المستشعر غير مطابق</string>
-    <string name="pms_sleeping_title">المستشعر في استراحة</string>
-    <string name="pms_valid_title">قراءة</string>
 
     <!-- Device -->
     <string name="device_screen_title">الجهاز</string>

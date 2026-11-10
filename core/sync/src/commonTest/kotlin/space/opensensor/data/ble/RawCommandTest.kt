@@ -16,7 +16,6 @@ class RawCommandTest {
     @Test
     fun denylistIncludesAutomaticOnlyClock() {
         assertEquals(setOf(Opcode.REBOOT, Opcode.SET_CONFIG, Opcode.SET_TIME), RawCommandPolicy.DENYLIST)
-        assertEquals(RawCommandPolicy.DENYLIST, DeviceSession.RAW_COMMAND_DENYLIST)
     }
 
     @Test

@@ -70,7 +70,7 @@ class ConcurrentArchiveTest {
     }
 
     private suspend fun download(device: Pair<FakeTransport, DeviceSession>, thing: String, progress: (FileProgress) -> Unit = {}): FileOutcome =
-        engine.download(device.second, thing, device.first.address, name, device.first.files.single().bytes.size.toLong(), device.first.maxRead, progress)
+        engine.download(device.second, thing, device.first.address, name, device.first.files.single().bytes.size.toLong(), device.first.maxRead, onProgress = progress)
 
     @Test
     fun `thing identities cannot select the archive root or its parent`() {
@@ -250,9 +250,7 @@ class ConcurrentArchiveTest {
             return 1
         }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
-        override fun observeTotalBytes(): Flow<Long> = flowOf(snapshot().sumOf { it.bytes })
         override suspend fun unindexed(limit: Int) = snapshot().filter { !it.isIndexed }.take(limit)
-        override fun observeUnindexedCount(): Flow<Int> = flowOf(snapshot().count { !it.isIndexed })
         override suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long) = snapshot().filter {
             it.thing == thing && it.isIndexed && it.hasUtc && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs
         }

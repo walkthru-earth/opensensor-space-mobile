@@ -23,6 +23,11 @@ sealed interface RawCommandCheck {
  * `SET_TIME` is automatic on connection and is never exposed as a manual command.
  */
 object RawCommandPolicy {
+    /**
+     * Opcodes the debug raw command never sends. `REBOOT` restarts the logger and `SET_CONFIG` can
+     * rotate the token, forget bonds or disable the passkey, so both need the Device screen's
+     * confirmation (root `AGENTS.md`). `SET_TIME` is sent only by the automatic clock check.
+     */
     val DENYLIST: Set<Int> = setOf(Opcode.REBOOT, Opcode.SET_CONFIG, Opcode.SET_TIME)
     const val MAX_BYTES = 512
 

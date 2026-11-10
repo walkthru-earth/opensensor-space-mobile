@@ -32,7 +32,6 @@
     <string name="conn_link_lost_detail">انقطع الاتصال (%1$s). جارٍ إعادة الاتصال، المحاولة %2$d من %3$d…</string>
     <string name="conn_bluetooth_settings">إعدادات Bluetooth</string>
     <string name="action_cancel">إلغاء</string>
-    <string name="action_not_now">ليس الآن</string>
     <string name="flush">إنهاء الصفوف المخزّنة مؤقتًا</string>
     <string name="flush_confirm">يكتب القراءات المنتظرة في الذاكرة إلى ملف قصير الآن، لتتمكن من مزامنتها.</string>
     <string name="flush_button">إنهاء</string>

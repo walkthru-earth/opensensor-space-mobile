@@ -8,7 +8,6 @@ import UserNotifications
 /// Step results built by the shared mapping (`BackgroundSteps`), so Swift never decides what a sync end means.
 extension BackgroundStepResult {
     static func skipped(_ reason: String) -> BackgroundStepResult { BackgroundSteps.shared.skipped(reason: reason) }
-    static func lost() -> BackgroundStepResult { BackgroundSteps.shared.lost() }
     static func ended(_ result: SyncResult, bytes: Int64) -> BackgroundStepResult {
         BackgroundSteps.shared.ended(result: result, bytes: bytes)
     }

@@ -133,12 +133,6 @@ interface ArchivedFileDao {
     @Query("SELECT thing, name, bytes, crc32 FROM archived_file WHERE thing = :thing ORDER BY name")
     suspend fun identitiesForThing(thing: String): List<ArchivedFileIdentity>
 
-    @Query("SELECT COUNT(*) FROM archived_file WHERE thing = :thing")
-    fun observeCountForThing(thing: String): Flow<Int>
-
-    @Query("SELECT EXISTS(SELECT 1 FROM archived_file WHERE thing = :thing)")
-    fun observeAnyForThing(thing: String): Flow<Boolean>
-
     /** One row per thing with files, for the device list (count, last sync, newest data). */
     @Query(
         "SELECT thing, COUNT(*) AS files, MAX(syncedAtEpochMs) AS lastSyncedMs, MAX(lastUtcNs) AS lastDataUtcNs " +
@@ -168,9 +162,6 @@ interface ArchivedFileDao {
     @Query("SELECT COUNT(*) FROM archived_file")
     fun observeCount(): Flow<Int>
 
-    @Query("SELECT COALESCE(SUM(bytes), 0) FROM archived_file")
-    fun observeTotalBytes(): Flow<Long>
-
     /**
      * `REPLACE`, not `@Upsert`, for the same reason as `DerivedDayDao.upsert`: auto-generated id plus a
      * unique `(thing, name)` index means `@Upsert` cannot update a row it did not fetch first. The
@@ -196,12 +187,6 @@ interface ArchivedFileDao {
     /** Rows not yet indexed (pre-v4 rows, or a previous attempt that failed and should be retried after an app update). */
     @Query("SELECT * FROM archived_file WHERE indexedAtEpochMs IS NULL OR indexError IS NOT NULL ORDER BY (indexedAtEpochMs IS NULL) DESC, name LIMIT :limit")
     suspend fun unindexed(limit: Int): List<ArchivedFile>
-
-    @Query("SELECT COUNT(*) FROM archived_file WHERE indexedAtEpochMs IS NULL OR indexError IS NOT NULL")
-    fun observeUnindexedCount(): Flow<Int>
-
-    @Query("SELECT COUNT(*) FROM archived_file WHERE thing = :thing AND (indexedAtEpochMs IS NULL OR indexError IS NOT NULL)")
-    fun observeUnindexedCountForThing(thing: String): Flow<Int>
 
     /**
      * Indexed telemetry files of one thing on the timeline between [fromNs, toNs): real UTC rows,

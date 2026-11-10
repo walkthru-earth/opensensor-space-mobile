@@ -2,10 +2,8 @@ package space.opensensor.ui.theme
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import space.opensensor.data.history.MetricSpec
 import space.opensensor.family.air.AirMood
 import space.opensensor.family.air.WhoStep
-import space.opensensor.family.air.stepOf
 import space.opensensor.designsystem.color as designSystemColor
 import space.opensensor.designsystem.contrastRatio as designSystemContrastRatio
 import space.opensensor.designsystem.onBand as designSystemOnBand
@@ -23,9 +21,6 @@ fun WhoStep.color(): Color = designSystemColor()
 
 /** A mood paints its WHO step. */
 fun AirMood.color(): Color = step.color()
-
-/** The step colour of [value] on [metric]'s scale, or [neutral] for a metric without one. */
-fun MetricSpec.valueColor(value: Double, neutral: Color): Color = stepOf(value)?.color() ?: neutral
 
 /** Dark ink used for text and face features drawn on a light band. */
 val BandInkDark = space.opensensor.designsystem.BandInkDark

@@ -8,15 +8,4 @@
             file="src/main/res/mipmap-anydpi-v26"/>
     </issue>
 
-    <issue
-        id="UnusedResources"
-        message="The resource `R.string.today_title` appears to be unused"
-        errorLine1="    &lt;string name=&quot;today_title&quot;>Today&lt;/string>"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/res/values/strings.xml"
-            line="21"
-            column="13"/>
-    </issue>
-
 </issues>

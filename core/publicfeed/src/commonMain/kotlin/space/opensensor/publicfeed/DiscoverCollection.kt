@@ -75,7 +75,7 @@ class DiscoverCollection private constructor(
          * The default H3 resolution of every Thing, fixed or moving. It is the tie break of [resolutionNear],
          * so between two drawable resolutions equally near the zoom the finer one wins.
          */
-        const val DEFAULT_RES: Int = 8
+        const val DEFAULT_RES: Int = H3Cell.RESOLUTION
 
         /** The key forms of a cells asset. `cells_r<n>` is the live feed's, `h3_res=<n>` the older one. */
         private val CELLS_KEYS = listOf("cells_r", "h3_res=")

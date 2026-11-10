@@ -44,12 +44,10 @@ class LanTokenPolicy {
     fun shouldFetch(kind: TransportKind, proto: Int?, storedToken: String?): Boolean =
         kind != TransportKind.LAN && (proto ?: 1) >= 2 && storedToken == null
 
-    /** A token was fetched and stored for [address], so it is no longer stale. */
-    fun onFetched(address: String) {
-        lock.withLock { staleAddresses.remove(address) }
-    }
-
-    /** The user forgot the device (or rotated the token deliberately); nothing to announce later. */
+    /**
+     * [address] is no longer stale. A token was fetched and stored for it, or the user forgot the
+     * device or rotated the token deliberately, so there is nothing to announce later.
+     */
     fun clear(address: String) {
         lock.withLock { staleAddresses -= address }
     }

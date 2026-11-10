@@ -23,7 +23,6 @@ internal class FakePort : SetupPort {
     val links = mutableMapOf<String, MutableStateFlow<SetupLink>>()
     val calls = mutableListOf<String>()
     val nicknames = mutableMapOf<String, String?>()
-    val pending = mutableSetOf<String>()
     var finding = false
 
     override fun startFind() { finding = true; calls += "startFind" }
@@ -32,7 +31,6 @@ internal class FakePort : SetupPort {
     override fun link(id: String): Flow<SetupLink> = links.getOrPut(id) { MutableStateFlow(SetupLink.Connecting) }
     override suspend fun nickname(id: String): String? = nicknames[id]
     override suspend fun saveNickname(id: String, nickname: String?) { nicknames[id] = nickname; calls += "saveNickname $id" }
-    override suspend fun setPending(id: String, pending: Boolean) { if (pending) this.pending += id else this.pending -= id }
 
     fun ready(id: String, protocol: Int? = 3) { links.getValue(id).value = SetupLink.Ready(protocol) }
 }
@@ -76,12 +74,11 @@ class SetupControllerTest {
     }
 
     @Test
-    fun pairingOpensNameAndMarksSetupPending() = runTest(UnconfinedTestDispatcher()) {
+    fun pairingOpensName() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = paired(port)
         assertEquals(SetupStep.Name, c.state.value.page)
         assertTrue(c.state.value.paired)
-        assertEquals(setOf("AA"), port.pending)
         assertFalse(port.finding)
     }
 
@@ -101,7 +98,6 @@ class SetupControllerTest {
         assertTrue(c.state.value.askClose)
         c.finish()
         assertTrue(c.state.value.closed)
-        assertEquals(setOf("AA"), port.pending)
     }
 
     @Test
@@ -128,7 +124,6 @@ class SetupControllerTest {
         c.onLocated(false)
         c.next()
         assertEquals(SetupFlows.LOCATION, c.state.value.page)
-        assertEquals(setOf("AA"), port.pending)
     }
 
     @Test
@@ -138,11 +133,10 @@ class SetupControllerTest {
         c.next()
         repeat(3) { c.skip() }
         assertEquals(SetupFlows.LOCATION, c.state.value.page)
-        assertEquals(setOf("AA"), port.pending)
     }
 
     @Test
-    fun wifiSkipsToDoneOnceLocatedWhichClearsPending() = runTest(UnconfinedTestDispatcher()) {
+    fun wifiSkipsToDoneOnceLocated() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = paired(port)
         c.next()
@@ -153,7 +147,6 @@ class SetupControllerTest {
         assertEquals(SetupFlows.WIFI, c.state.value.page)
         c.skip()
         assertEquals(SetupStep.Done, c.state.value.page)
-        assertEquals(emptySet(), port.pending)
         c.skip()
         assertEquals(SetupStep.Done, c.state.value.page)
         c.next()
@@ -174,7 +167,6 @@ class SetupControllerTest {
         c.onLocated(false)
         c.skip()
         assertEquals(SetupFlows.WIFI, c.state.value.page)
-        assertEquals(setOf("AA"), port.pending)
     }
 
     @Test
@@ -185,7 +177,6 @@ class SetupControllerTest {
         port.ready("AA", protocol = 2)
         assertEquals(SetupFailure.UPDATE_FIRMWARE, c.state.value.failure)
         assertEquals(SetupStep.Find, c.state.value.page)
-        assertEquals(emptySet(), port.pending)
     }
 
     @Test
@@ -233,7 +224,6 @@ class SetupControllerTest {
         assertTrue(c.state.value.pairing)
         port.ready("AA")
         assertEquals(SetupStep.Name, c.state.value.page)
-        assertEquals(setOf("AA"), port.pending)
     }
 
     @Test
@@ -447,6 +437,5 @@ class SetupControllerTest {
         c.skip()
         c.skip()
         assertEquals(SetupFlows.WIFI, c.state.value.page)
-        assertEquals(setOf("AA"), port.pending)
     }
 }

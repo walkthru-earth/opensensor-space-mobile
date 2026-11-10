@@ -248,7 +248,6 @@ class DeviceFacade internal constructor(
      * Sync everything. The clock follows the automatic rule shared with connection setup, so
      * there is no mode or confirmation to pass.
      */
-    fun smartSync() = interactive(CollectionScope.All, clockConfirmed = true)
     fun syncAll() = interactive(CollectionScope.All, clockConfirmed = true)
     fun syncOne(name: String) = interactive(CollectionScope.One(name), clockConfirmed = true)
     fun cancelSync() { stop(StopSource.USER) }
@@ -402,7 +401,6 @@ class DeviceFacade internal constructor(
     val archiveTimeSummary get() = linkOwner.archiveTimeSummary
     val syncDiagnostics get() = linkOwner.syncDiagnostics
     val events get() = linkOwner.events
-    val currentAddress get() = linkOwner.currentAddress
     val currentDisplayName get() = linkOwner.currentDisplayName
     val isFake get() = linkOwner.isFake
     val plan get() = linkOwner.plan
@@ -430,7 +428,6 @@ class DeviceFacade internal constructor(
     }
     suspend fun lendLink(address: String, prefer: LinkPreference) = linkOwner.lendLink(address, prefer)
     fun refreshManifest() = linkOwner.refreshManifest()
-    fun isConnectedTo(address: String) = linkOwner.isConnectedTo(address)
     suspend fun setAutoSync(address: String, enabled: Boolean) = linkOwner.setAutoSync(address, enabled)
     suspend fun setCompanionAssociation(address: String, associationId: Int?) = linkOwner.setCompanionAssociation(address, associationId)
     fun flush() = linkOwner.flush()
@@ -449,7 +446,6 @@ class DeviceFacade internal constructor(
     fun fetchToken() = linkOwner.fetchToken()
     fun rotateToken() = linkOwner.rotateToken()
     fun clearBonds() = linkOwner.clearBonds()
-    suspend fun touchSeen(address: String, name: String?) = linkOwner.touchSeen(address, name)
 
     /** False when the link owner refused the forget because another command held the device. */
     suspend fun forget(address: String, quiet: Boolean = false): Boolean {

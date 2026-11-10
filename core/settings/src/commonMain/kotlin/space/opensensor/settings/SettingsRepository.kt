@@ -67,9 +67,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         }.toMap()
     }.distinctUntilChanged()
 
-    /** Lowercase ids of sensors whose setup has not reached Done. */
-    val setupPending: Flow<Set<String>> = store.data.map { it[SettingsKeys.SETUP_PENDING].orEmpty() }.distinctUntilChanged()
-
     /**
      * Stores the nickname of sensor [id], or removes it when [nickname] is blank. The caller checks
      * the length. It is never put in a frame, a patch or a log.
@@ -80,21 +77,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { if (value.isEmpty()) it.remove(key) else it[key] = value }
     }
 
-    suspend fun setSetupPending(id: String, pending: Boolean) {
-        val lower = id.lowercase()
-        store.edit {
-            val now = it[SettingsKeys.SETUP_PENDING].orEmpty()
-            it[SettingsKeys.SETUP_PENDING] = if (pending) now + lower else now - lower
-        }
-    }
-
-    /** Drops the nickname and the setup flag of a forgotten sensor. */
+    /** Drops the nickname of a forgotten sensor. */
     suspend fun forgetSensor(id: String) {
-        val lower = id.lowercase()
-        store.edit {
-            it.remove(SettingsKeys.nickname(lower))
-            it[SettingsKeys.SETUP_PENDING] = it[SettingsKeys.SETUP_PENDING].orEmpty() - lower
-        }
+        store.edit { it.remove(SettingsKeys.nickname(id)) }
     }
 }
 
