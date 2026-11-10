@@ -100,7 +100,7 @@ internal data class TrackColours(val picked: Color, val gps: Color, val phone: C
  * Where the rows of the visible Day or Week put the Thing (#263). A map of the distinct H3 cells
  * coloured by source, the newest with a thick outline, a strip of the span in time order with the
  * rows that had no location outlined, and a legend of the sources present. The map stays still
- * inside the list and fits the cells once per span.
+ * inside the list and fits the cells again whenever their bounds change.
  */
 @Composable
 internal fun HistoryTrackCard(track: HistoryTrack) {

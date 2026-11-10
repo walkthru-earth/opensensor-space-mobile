@@ -1,11 +1,13 @@
 package space.opensensor.data.history
 
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import space.opensensor.archive.ArchiveIndex
@@ -33,11 +35,15 @@ class CellTrackReaderTest {
 
     private class Store : ArchiveStore {
         val files = HashMap<ArchiveKey, ByteArray>()
+        var onRead: (ArchiveKey) -> Unit = {}
         override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = key in files
-        override fun reader(key: ArchiveKey, partial: Boolean): ByteReader = ByteArrayReader(files[key] ?: throw NoSuchElementException(key.name))
+        override fun reader(key: ArchiveKey, partial: Boolean): ByteReader {
+            onRead(key)
+            return ByteArrayReader(files[key] ?: throw NoSuchElementException(key.name))
+        }
         override suspend fun commit(key: ArchiveKey) = Unit
         override suspend fun listFinal(thing: String?): List<ArchiveKey> = files.keys.toList()
     }
@@ -159,6 +165,26 @@ class CellTrackReaderTest {
         // A row past the window's end stays out.
         put(store, index, "thing=$thing/year=2026/month=09/day=21/c.parquet", file(startS + 200, listOf(home), listOf(gnss)), startS + 200, 1)
         assertEquals(2, window.first().spans.size)
+    }
+
+    @Test
+    fun aCancelledReadStopsBeforeTheNextFile() = runTest {
+        val store = Store()
+        val index = Index()
+        val gnss = LocationSource.GNSS.wire
+        put(store, index, "thing=$thing/year=2026/month=09/day=21/a.parquet", file(startS, listOf(home), listOf(gnss)), startS, 1)
+        put(store, index, "thing=$thing/year=2026/month=09/day=21/b.parquet", file(startS + 50, listOf(away), listOf(gnss)), startS + 50, 1)
+        val opened = ArrayList<String>()
+        lateinit var job: Job
+        // A newer window supersedes this read while its first file is open.
+        store.onRead = { key ->
+            opened += key.name
+            job.cancel()
+        }
+        job = launch { CellTrackReader(store, index).read(thing, startS * NS_PER_S, (startS + 100) * NS_PER_S) }
+        job.join()
+        assertTrue(job.isCancelled)
+        assertEquals(1, opened.size)
     }
 
     private companion object {

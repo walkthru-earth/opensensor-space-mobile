@@ -4,7 +4,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -32,7 +34,11 @@ class CellTrackReader(
     suspend fun read(thing: String, fromNs: Long, toNs: Long): CellTrack {
         if (toNs <= fromNs) return CellTrack.EMPTY
         val rows = ArrayList<TrackRow>()
-        for (f in index.timeline(thing, fromNs, toNs)) readFile(f, fromNs, toNs, rows)
+        for (f in index.timeline(thing, fromNs, toNs)) {
+            // A superseded read (mapLatest) stops between files instead of reading to the end.
+            currentCoroutineContext().ensureActive()
+            readFile(f, fromNs, toNs, rows)
+        }
         return CellTrack.of(rows)
     }
 
