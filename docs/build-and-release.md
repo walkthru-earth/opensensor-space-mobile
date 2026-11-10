@@ -41,9 +41,10 @@ Pull requests run on `pull_request` only, not again on the branch push. `main` r
 Changes to `docs/` or Markdown alone skip the gate. A branch without a PR runs it with
 `workflow_dispatch`. The device Release build runs on `main` and by hand, not on pull requests, in
 its own job ("iOS device Release build", 45 minute timeout) beside "iOS native validation" (60
-minutes). As one step after the simulator tests it took about 17 minutes and pushed that job past
-60 minutes on every `main` run from a6aea84a on, and a cancelled job also skips saving the `main`
-caches. A slow macOS runner can still cancel "iOS native validation" at 60 minutes. That is
+minutes). As one step after the simulator tests it took about 17 minutes and pushed that job near
+or over its 60 minute limit on `main`, and a cancelled job also skips saving the `main` caches. The
+Release job only reads the Gradle and Kotlin/Native caches, so it never saves over the ones the
+validation job writes. A slow macOS runner can still cancel "iOS native validation" at 60 minutes. That is
 infrastructure, rerun the job.
 CI runs ktlint on every file, while the local hook checks only staged files, so run
 `pre-commit run --all-files` before a merge that touches many Kotlin files.
@@ -402,8 +403,9 @@ seven day cooldown. Each update must pass `verify.yml`. Real BLE, LAN and backgr
 an update still needs a phone run before a release.
 
 Gradle jobs restore `~/.konan` (Kotlin/Native compiler and dependencies) keyed by OS, architecture
-and the build definitions. The iOS job adds the Xcode version to the key. The verify workflow writes
-the Gradle cache only on `main`. Release builds only read it.
+and the build definitions. Both iOS jobs add the Xcode version to the key. The verify workflow
+writes the Gradle cache only on `main`, from the Linux gradle job and "iOS native validation". The
+iOS device Release build and release builds only read it.
 
 ### Rolling tag failure (2026-10-08)
 
