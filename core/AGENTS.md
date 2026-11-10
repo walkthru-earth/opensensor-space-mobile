@@ -1,98 +1,46 @@
 # Shared core modules
 
-`protocol/` mirrors the sibling firmware repo's
-`docs/shared/ble-sync-protocol.md`; `parquet/`
-implements the reader/writer and codec SPI; `history/` owns metrics, indexing,
-aggregation and presentation-ready analysis; `publicfeed/` owns the Discover feed
-port, H3 and the viewport cover; `units/` owns display units. No core module
-names air quality. The WHO 2021 scales, the EPA correction, the moods and the air metrics live in
-`:family:air` (`family/air/`, pinned by `CoreStaysAirFreeTest`). `net/` owns HTTP range reads (`HttpRangeSource`, OkHttp
-on Android and the JVM, `NSURLSession` on iOS) and the disk block cache (`CachedRangeSource`,
-`BlockCache`, #94). `archive/` owns the archive layout, verifier,
-records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `StorageClass`,
-`StorageRoots`, `AtomicFiles` (no-replace commit, F_FULLFSYNC on iOS, directory sync),
-`StorageBudget`, `StorageTree`, `RetentionPolicy` with the derived `QuotaEnforcer`, and
-`MemoryPressure` with `ByteBudgetLru` for memory caches that trim on the OS signal (#61). Every file
-writer goes through `AtomicFiles`, and the `StorageJanitor` (in `sync/`, it needs the archive ports)
-sweeps Scratch at start, enforces the derived quota and never deletes Durable data. Only the user's old format cleanup in Settings (`LegacyFileCleanup`, `:core:history`) removes archive files, phone only, and leaves a `PrunedFiles` record. Sync skips such a file while the device lists it at the same size and the phone has no copy. A whole LIST that no longer names it drops the record, and Settings › Storage › Removed files › Download again clears them all ([sync guide](../docs/sync-engine.md)). One `DeviceCoordinator` (`:core:sync`) per archive owns thing admission, writer leases, thing gates and tombstones. Every archive index write takes its thing gate, lease first then gate, readers never. `HistoryOrchestrator` (`:core:history`) owns the janitor, back-fill and derive order on both phones. `ParquetFile` and
-`ByteReader` are `AutoCloseable`, open them with `use`. `sync/` holds the link session, the sync
-engine and, in `collection/`, the per-device `CollectionController` ([sync guide](../docs/sync-engine.md)). Android adopts the controller
-through `DeviceFacade`; iOS uses `IosLink` and `SensorSync` for link and engine adoption,
-and `SensorCollections` for one controller per device, which every native sync entry point
-runs through ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
-`model/` owns what a thing measures as data. `BoardTemplate` (parsed from the stac-opensensor
-v0.1.0 board template, keyed by `TemplateKey` of `dict` and an optional `desc`), `TemplateIndex`
-(the one resolver LIVE and History share, the exact `desc` with a matching `dict`, served before
-bundled, and by `dict` only when no `desc` is given, so an unknown `desc` resolves to nothing), `Datastream` (one column or
-one phone-derived stream with its own id and `sourceColumns`, referencing a board-neutral
-`ObservedProperty` and a `Sensor` of procedure and board), `AppProfile` (app owned, keyed by `dict`,
-derived from the template when none is bundled), `ThingCollection`, `Scale`, `ValidityGate`, and
-`Thing.join`, which joins them. A thing keeps every datastream whatever its role, the profile
-picks what shows first. `Aggregate`, `Role` and `Family` are open value classes, so an unknown value
-parses (an unknown aggregate rolls up as `point`). The template sample interval is a default, the
-runtime interval and a file footer `acquisition.sample_interval_ms` win (`Thing.sampleIntervalFor`). `LiveColumns`
-maps a template's columns to LIVE keys and picks the temperature and humidity keys, and
-`BundledCatalog.live` reads it for a bundled `dict`. `LiveReading` in `protocol/` reads a LIVE
-sample through a `Thing`, `DeviceCapabilities` in `history/` builds that thing from `info.desc`
-and `info.dict`, and the Today screen reads it from there. `BoardDescriptors` in `history/` fetches
-the template a board serves over `GET_DESCRIPTOR` (`DeviceSession.downloadDescriptor`,
-`DescriptorDownload` in `sync/`), verifies it against `desc` and `dict`, caches it by SHA-256 in
-`StorageRole.Templates` and adds it to `ServedTemplates`, which resolves ahead of the bundled ones. Both
-keep at most 16 templates, oldest out first. `ArchiveIndexRepair` hands each indexed file's footer
-`template.sha256` to `BoardDescriptors.confirm`, which evicts a served template with the same 16 hex
-prefix and another full digest. Bundled templates are never evicted. `TemplateHrefs` in `history/`
-GETs the template of a file whose desc nothing resolves from its footer `template.href`, only under
-the `showPublicSensors` switch, only on the firmware template host, with no redirect, and binds it
-through `BoardDescriptors.adopt` only when its SHA-256 is the desc (#260). All Kotlin code lives under `space.opensensor`.
-`stac/` regenerates the STAC File Item of a synced device file (`FileItems.build`, #190). The board
-writes the Item, a sidecar JSON at `thing=<uuid>/year=YYYY/month=MM/day=DD/<file>.json` beside the
-file, and the phone is its transport and validator. An Item the phone builds must equal the board's
-Item as JSON values. Its data href is relative, `./<file>.parquet`. It is a pure function of the verified
-file bytes, its `opensensor` footer and its `BoardTemplate`, with no upload, network or Room. The
-geometry is H3 cells only, `ColumnStatistics` gives each measurement column `statistics` under its
-`valid_when` gate, and `FileItemResult.NoItem` names why a file gets none (no UTC anchor, no located
-row under `FileItems.ITEM_NEEDS_LOCATION`, a fixed Thing in two cells, a cell not at its required
-`publishedRes`, a cell H3 rejects as `InvalidCell`, a footer with no allowed `rotation_interval_s` as
-`NoRotationWindow`, a name whose `HHMM` is not the rotation window of its first row as
-`WindowMismatch`, a `file.purpose` other than `telemetry` as `NotTelemetry`). It never coarsens. It follows the canonical form of stac-opensensor v0.1.0
-(83787768cc8451109d48a03d4ef5493ffcd403dd). `ProfileExampleTest` in `commonTest` proves on the JVM
-and on iOS that an Item rebuilt from the profile's row fixtures equals its examples, and
-`FileItemSchemaTest` validates it against the schemas. `FooterSchemaTest` runs `footer.json` over the
-profile's footer fixtures and checks that `OpenSensorFooter` refuses what the schema refuses for a
-missing member or another version. The copied files live in
-`stac/src/commonTest/fixtures/stac-opensensor`, whose README records the source path of each. `PublishGate` in `thing/` is its only caller.
-`ThingCollections.build` (#266) writes the Thing Collection, `thing=<uuid>/collection.json`, from the board
-template's JSON, the newest footer (`CollectionFooter`), the owner config (`ThingOwner`) and the upload
-ledger (`CollectionLedger`, the earliest Item start and the union of the Item boxes). `ThingOwner.of` maps
-the #148 site keys of `ThingSite` to the title, description and producer and licensor provider, with the
-data host and bucket prefix passed in. `ThingCollectionsTest` proves that the rebuilt fixed and moving
-Collections equal the profile's examples. `CanonicalJson.difference` is the one comparison the Item and
-Collection tests and `PublishGate` use, JSON values with 1e-9 degrees under `geometry`, `bbox` and
-`extent.spatial`.
-`thing/` (`:core:thing`, #219) holds the `ThingKind` contract, its `DataSource` and `PublishPolicy`,
-`OpenSensorBoardKind` (#222) and the `ThingKinds` registry. Each app builds that registry as a plain
-list, Android in `data/di/ThingModule` and iOS in `ThingKindsIos.kt` from `AppServices`, with no self
-registration. Each app hands `ThingKinds.metricProviders` to `AirFamily.install`, which passes the family and then the kinds' `DerivedMetricProvider`s to `Metrics.install`,
-which rebuilds the catalog. `PublishGate` (#224) issues a ticket only for a `Recording` kind with
-`OptInCcBy` whose Thing the owner opted in (`UploadConsent`, none by default). Health, feeds and anything else get none.
-A ticket's files take one of two paths, both asking consent again so an opt out stops them. The writer of a
-file writes its Item (OD-2026-11-04-D). `boardFile` is for a `PullSync` Thing. It rebuilds the Item at the
-policy's `publishedRes` (8 for the board) only to check the board's sidecar, and clears the sidecar text as
-the board wrote it, or names why not (`NoSidecar`, `SidecarUnreadable`, `SidecarDiffers`). `phoneFile` is
-for a `PhoneLog` Thing, this phone's own install, and its Item is the one published. It refuses a board
-kind, a board footer and any other Thing as `NotThePhone`. Only a `Cleared` check carries a
-`Publication`, so no Item the phone builds for a board file can reach an upload. No kind declares
-`PhoneLog` yet. It never uploads. `thing/testkit` (`:core:thing:testkit`) holds `ThingKindContract`, the checks every kind runs
-from its own tests. `PlatformNeedsTable` (#227) is the one table of what the app shell and each kind ask
-of the Android manifest (permissions, foreground service types) and the iOS bundle (Info.plist privacy
-keys, Bonjour types, background modes and task ids, entitlements, privacy manifest entries).
-`ManifestPermissionsTest` (app) and `IosBundleGateTest` (ios/shared, simulator) fail on any entry the
-enabled kinds do not declare and on any declared entry that is missing. A kind with no row fails too.
-`settings/` owns shared DataStore preferences, keys, units and detail level, with the
-iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
-root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log` in any
-`:core:*` module. Room appears only in `:core:database`, the shared Room KMP database for both phones.
+All Kotlin code lives under `space.opensensor`. No Android, Hilt, `Context` or `android.util.Log`
+in any `:core:*` module. Room appears only in `:core:database`, the shared Room KMP database for
+both phones. No core module names air quality. The WHO 2021 scales, the EPA correction, the moods
+and the air metrics live in `:family:air` (`family/air/`), and `CoreStaysAirFreeTest` fails the
+gate when a `:core` source names one. Open the doc of the module you change.
 
+| Module | Owns | Doc |
+| --- | --- | --- |
+| `model/` | What a thing measures as data. `BoardTemplate`, `TemplateIndex`, `Datastream`, `AppProfile`, `Thing.join`, `H3Cell`, the bundled templates and profiles under `bundled/` | [devices and discovery](../docs/devices-and-discovery.md) |
+| `protocol/` | The mirror of the firmware `docs/shared/ble-sync-protocol.md`. Frames, opcodes, `DeviceGatt`, `LanProtocol`, `LiveReading`, `ParquetVerify`, `SafeName` | [protocol quickref](../docs/protocol-quickref.md) |
+| `parquet/` | The Parquet reader and writer and the codec SPI. `ByteReader`, `RangeSource`, `ParquetFile`, `ParquetReader` | [parquet](../docs/parquet.md) |
+| `net/` | HTTP range reads (`HttpRangeSource`) and the disk block cache (`CachedRangeSource`, `BlockCache`) | [parquet](../docs/parquet.md) |
+| `storage/` | `StorageClass`, `StorageRoots`, `AtomicFiles`, `StorageBudget`, `RetentionPolicy`, `QuotaEnforcer`, `MemoryPressure` | [data model](../docs/data-model.md) |
+| `archive/` | The archive layout, the verifier, records and the `ArchiveStore` and `ArchiveIndex` ports | [data model](../docs/data-model.md) |
+| `sync/` | `LinkSession`, `DeviceSession`, `SyncEngine`, `ArchiveCollector`, `CollectionController` in `collection/`, `DeviceCoordinator`, `StorageJanitor`, `SmartSyncPolicy` | [sync engine](../docs/sync-engine.md), [transports](../docs/transports.md) |
+| `history/` | Metrics, indexing, tiers, daily Parquet, `HistoryOrchestrator`, `DeviceCapabilities`, `BoardDescriptors`, `TemplateHrefs`, `LegacyFileCleanup` | [history pipeline](../docs/history-pipeline.md) |
+| `database/` | The Room KMP database (`AppDatabase`), its DAOs, migrations and exported schemas | [data model](../docs/data-model.md) |
+| `publicfeed/` | The Discover feed port, H3 (`H3Grid`) and the viewport cover | [devices and discovery](../docs/devices-and-discovery.md) |
+| `units/` | Display units | [screens](../docs/screens.md) |
+| `settings/` | Shared DataStore preferences, `SettingsKeys`, units and detail level, with the iOS Application Support path | [data model](../docs/data-model.md) |
+| `stac/` | The STAC File Item (`FileItems.build`) and Thing Collection (`ThingCollections.build`) of a synced file, pure functions with no upload, network or Room, and `CanonicalJson` | [devices and discovery](../docs/devices-and-discovery.md) |
+| `thing/` | The `ThingKind` contract, `OpenSensorBoardKind`, the `ThingKinds` registry, `PublishGate` and `PlatformNeedsTable`. It never uploads | [devices and discovery](../docs/devices-and-discovery.md), [store compliance](../docs/store-compliance.md) |
+| `thing/testkit/` | `ThingKindContract`, the checks every kind runs from its own tests | [devices and discovery](../docs/devices-and-discovery.md) |
+
+Rules that hold across modules.
+
+- Every file writer goes through `AtomicFiles`. `StorageJanitor` sweeps Scratch at start, enforces
+  the derived quota and never deletes Durable data. Only the user's old format cleanup in Settings
+  (`LegacyFileCleanup`) removes archive files, phone only, and leaves a `PrunedFiles` record.
+- One `DeviceCoordinator` per archive owns thing admission, writer leases, thing gates and
+  tombstones. Every archive index write takes its thing gate, lease first then gate, readers never.
+- `ParquetFile` and `ByteReader` are `AutoCloseable`, open them with `use`.
+- Each app builds the `ThingKinds` registry as a plain list, Android in `data/di/ThingModule` and
+  iOS in `ThingKindsIos.kt`, with no self registration, and hands `ThingKinds.metricProviders` to
+  `AirFamily.install`.
+- An Item or Collection the phone builds must equal the board's as JSON values
+  (`CanonicalJson.difference`). `PublishGate` is the only caller of `FileItems.build`, and only a
+  `Cleared` check carries a `Publication`.
+- `ManifestPermissionsTest` (app) and `IosBundleGateTest` (ios/shared, simulator) fail on any
+  manifest or bundle entry the enabled kinds do not declare in `PlatformNeedsTable`, and on any
+  declared entry that is missing.
 - Change firmware's shared contract first for wire or measurement schema edits;
   preserve old archived bytes. Tests here should exercise real fixtures and
   PyArrow/DuckDB oracles where the format is involved.
@@ -130,16 +78,18 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   host tools. Android files/DAO integration belongs in `:app` adapters; Apple OS
   integration belongs in `ios/` adapters.
 - Every `:core` module is Kotlin Multiplatform with the standard layout.
-  `src/commonMain` compiles for JVM and iOS, and `src/jvmMain` / `src/iosMain` keep the platform
+  `src/commonMain` compiles for JVM and iOS, except in `:core:database`, which targets Android and
+  iOS. `src/jvmMain` and `src/iosMain` keep the platform
   edges (files, streams, SHA-256, positional `FileChannel` and `pread` reads, gzip, H3). Calendar math uses
   kotlinx-datetime (`TimeZone`, `LocalDate`), never `java.time`, in common code. Parquet bytes come
   through `ByteReader` (blocking, `ParquetFile`) or `RangeSource` (suspending, `ParquetReader`)
   (docs/parquet.md), so a new source (a cache, another transport) implements `RangeSource`
   instead of touching the decoder. The decoder reads `ByteView`s in place and never copies them.
 - Module build files apply a convention plugin from `../build-logic/` (`opensensor.kmp.library`,
-  `opensensor.kmp.compose-feature`, `opensensor.kmp.ios-framework`, `opensensor.jvm.library`).
+  `opensensor.kmp.android-library` for `:core:database`, `opensensor.kmp.compose-feature`,
+  `opensensor.kmp.ios-framework`, `opensensor.jvm.library`).
   Change targets, bytecode level, test wiring or gate membership there, once, not in a module.
-  See `docs/architecture.md`.
+  See `../build-logic/AGENTS.md` and `docs/architecture.md`.
 - Sync rules that both phones must share live in `protocol/commonMain`. `ParquetVerify` (size,
   CRC-32, `PAR1` head and tail) decides when a file is synced, `Crc32` is the streaming checksum,
   and `SafeName` is the firmware name rule (charset, no `..` or `//`, 399-byte cap) plus the phone's
@@ -166,7 +116,8 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
     over 2 s plus uncertainty and up to 60 s plus uncertainty.
   - Otherwise set only an anchor 6 h old or more.
 - History derives each grouped day once with `DayPass`, producing tiers and daily Parquet
-  together. Android uses derive version 5 and plans from projected thing archive identities.
+  together. Android stamps each derived day with `HistoryDeriver.DERIVE_VERSION`, tiers carry
+  `TierCodec.VERSION`, and Android plans from projected thing archive identities.
   iOS persists rebuildable tiers and enforces the derived quota after building.
   Preserve these paths and immutable raw archives. See [history pipeline](../docs/history-pipeline.md)
   and the [host benchmark](../docs/perf/history-2026-10-11.md), which does not qualify phone latency.

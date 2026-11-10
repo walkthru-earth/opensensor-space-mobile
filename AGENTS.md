@@ -16,9 +16,11 @@ concern you are changing in `docs/README.md`.
 | iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios.md`, `ios/AGENTS.md` | `core/`, `ios/` |
 | App layers and dependencies | `docs/architecture.md`, `core/AGENTS.md` | `core/`, `app/` |
 | BLE, LAN, sync, pairing, background work | `docs/transports.md`, `docs/sync-engine.md`, `docs/background-sync.md`, `app/src/main/java/space/opensensor/data/AGENTS.md` | `data/` |
-| Room, history, Parquet | `docs/data-model.md`, `docs/history-pipeline.md`, `docs/parquet.md` | `data/history/`, `data/local/`, `core/` |
-| Screens and interaction | `docs/screens.md`, `app/src/main/java/space/opensensor/ui/AGENTS.md` | `ui/` |
-| Build, hooks and release | `docs/build-and-release.md` | `tools/`, `.github/` |
+| Room, history, Parquet | `docs/data-model.md`, `docs/history-pipeline.md`, `docs/parquet.md` | `data/history/`, `core/database/`, `core/` |
+| Shared screens and controllers | `docs/screens.md`, `feature/AGENTS.md` | `feature/` |
+| Design system, strings, permissions, map | `docs/screens.md`, `ui/AGENTS.md` | `ui/` |
+| Android screen hosts (Routes, ViewModels) | `docs/screens.md`, `app/src/main/java/space/opensensor/ui/AGENTS.md` | `app/src/main/java/space/opensensor/ui/` |
+| Build, hooks and release | `docs/build-and-release.md`, `build-logic/AGENTS.md`, `tools/AGENTS.md` | `build-logic/`, `tools/`, `.github/` |
 | Store forms, permission timing, privacy manifest | `docs/store-compliance.md` | `ui/permissions/`, `ios/App/` |
 
 ## Boundaries
@@ -33,13 +35,14 @@ concern you are changing in `docs/README.md`.
   GETs of the public discover feed and basemap, and of a file's board template from
   its footer href on the firmware template host when nothing on the phone resolves it
   (`TemplateHrefs`, accepted only when its SHA-256 is the footer desc). One Settings
-  switch turns all of them off (`docs/devices-and-discovery.md`). Uploading a device's data is off by default
-  and is enabled only per device, from that device's settings, with
+  switch turns all of them off (`docs/devices-and-discovery.md`). Nothing uploads. Upload is not
+  built, and `:core:thing` holds only its gate (`PublishGate`, `UploadConsent`). When it lands it
+  stays off by default and is enabled only per device, from that device's settings, with
   confirmation, under CC BY 4.0. No analytics or accounts. Location permission is foreground and approximate only, asked from "Near me" on
   Discover or on the area map of setup and Device settings. The coarse fix only moves
   the map. The user taps the selected H3 cell, and the app sends only that cell on
   explicit Save. Never persist, log or send the original fix.
-  Default device resolution is 8; increasing precision requires a fresh fix.
+  Device resolution is fixed at 8, with no resolution menu.
   Public data carries H3 cells, never coordinates. See `docs/device-location.md`.
 - A downloaded file becomes synced only after size, CRC-32 and `PAR1` head/tail
   checks pass. Missing measurements stay null. Never ask firmware to delete,
@@ -54,10 +57,11 @@ concern you are changing in `docs/README.md`.
   bonds and pairing mode `none` require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
 - The once-per-link claim and the `SmartSyncPolicy` clock rule are in `core/AGENTS.md`.
 - `:core:*` stays reusable without Android or Hilt. Room lives only in `:core:database`,
-  one Room KMP schema on the bundled SQLite driver for both phones. Every other `:core` module
+  one Room KMP schema on the bundled SQLite driver for both phones, and it targets Android and iOS
+  (`opensensor.kmp.android-library`). Every other `:core` module
   (`model`, `protocol`, `parquet`, `history`, `publicfeed`, `units`, `archive`,
   `storage`, `net`, `sync`, `settings`, `stac`, `thing`, `thing:testkit`) compiles for JVM and iOS from `commonMain`.
-  Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
+  Platform adapters stay in `jvmMain` and `iosMain` (streams, positional file reads, zlib,
   H3). Every `:feature:*` module and `:ui:designsystem`, `:ui:map`, `:ui:permissions` and `:ui:strings`
   are Compose for Android and iOS (`opensensor.kmp.compose-feature`). A sensor family (`:family:air`) holds its own science and plugs in through
   `DerivedMetricProvider`. No `:core` source names PM, WHO, EPA, Plantower or the moods, and
@@ -112,9 +116,10 @@ plugin adds its module to the gates, so a new module needs no list edit.
 secrets and ktlint; the pre-push hook runs `verify`. For setup and CI details see
 `docs/build-and-release.md`. Phone behavior requires a phone run and dated evidence.
 
-CI (`.github/workflows/verify.yml`) runs the same gates. The "iOS native validation" job has a
-60 minute timeout, and under macOS runner contention it hits it and shows as cancelled. That is
-infrastructure, not a code failure. The unsigned device Release build is its own job, "iOS device
+CI (`.github/workflows/verify.yml`) runs the same gates. On a pull request a newer push cancels
+the older run, which then shows as cancelled. On `main` every run finishes. The "iOS native
+validation" job has a 60 minute timeout. A cancelled or timed out job is infrastructure, not a
+code failure. The unsigned device Release build is its own job, "iOS device
 Release build", with a 45 minute timeout. It runs on `main` and by hand, never on a pull request.
 A change that only touches `docs/**` or Markdown starts no CI run (`paths-ignore`). Rerun the job, or run `./gradlew --no-daemon verify` and
 `verifyIos` locally before calling a change broken.

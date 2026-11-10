@@ -9,11 +9,14 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 - `shared/` builds the Kotlin framework used by the app. Keep cross-platform
   protocol and sensor-domain rules in `core/*/src/commonMain`; Android/JVM
   adapters do not belong here.
-- `App/` owns Apple platform integration such as Core Bluetooth, Bonjour/Network,
-  application lifecycle, permissions, and Xcode configuration. Do not move OS
-  behavior into common Kotlin or UI composables.
-- The current live screen is Compose Multiplatform in
-  `shared/src/commonMain`. Swift files under `App/` are native adapters. Do not
+- `App/` owns the Swift adapters and Xcode configuration. Swift keeps Core Bluetooth, sockets and
+  Bonjour, the Keychain, background tasks, the application lifecycle and the sticker scanner. The
+  share sheet, the document picker and location are Kotlin `iosMain` actuals of the shared modules
+  (`feature/files/src/iosMain`, `feature/device/src/iosMain`, `ui/map/src/iosMain`). Do not move
+  OS behavior into common Kotlin or UI composables.
+- The screens are the shared Compose Multiplatform `feature/*` modules. `shared/src/iosMain/AppRoot.kt`
+  hosts them, and `shared/src/commonMain` holds the bridges and state between Swift and the
+  screens. Swift files under `App/` are native adapters. Do not
   assume the UI is SwiftUI or duplicate a screen in SwiftUI unless a task explicitly
   calls for that architecture change.
 - Preserve the generated framework name, Xcode build phase, bundle identity,
