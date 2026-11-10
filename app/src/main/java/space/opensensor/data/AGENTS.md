@@ -6,7 +6,8 @@ logic belongs in `:core:*`; this layer adapts Android BLE, LAN, files, Room and
 WorkManager. Each physical connection has one shared `LinkSession`; `DeviceSession` is
 a typed view. `DeviceFacade` routes interactive and worker collection through one
 `CollectionController` per address. `DeviceLinkOwner` owns connections, identity, manual
-commands and idle reconnect.
+commands and idle reconnect. `DeviceConnectionManager` keeps one process-owned `DeviceFacade` per
+BLE endpoint, so a UI selection never closes another device.
 The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads through archive ports.
 
 | Change | Owner | Contract / test |
@@ -15,7 +16,10 @@ The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads throug
 | TCP, discovery, token, WifiLock | `lan/` | `docs/transports.md`; mDNS addresses only, token from bonded BLE |
 | Plan, read windows, resume, archive | `DeviceFacade.kt`, `core/sync/` | `docs/sync-engine.md`; fake faults and CRC/PAR1 verification |
 | Worker, foreground lifetime, triggers | `background/` | `docs/background-sync.md`; all triggers enqueue the same worker |
-| Index, derived history, Room | `history/`, `local/` | `docs/history-pipeline.md`, `docs/data-model.md` |
+| Index, derived history, Room | `history/`, `local/security/`, `core/database/` | `docs/history-pipeline.md`, `docs/data-model.md` |
+| Archive files, sync engine bindings | `archive/`, `sync/` | `docs/sync-engine.md`, `docs/data-model.md` |
+| Storage budget and controls | `storage/` | `docs/data-model.md` |
+| Thing kinds registry | `di/ThingModule.kt` | `docs/devices-and-discovery.md`; a plain list, no self registration |
 
 - Serialize GATT operations and session requests. A lost chunk or bad
   `READ_END.next_offset` retries from locally verified bytes; never trust a
@@ -53,8 +57,9 @@ The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads throug
   finalization. `SyncWorker.notificationIdFor` derives a stable ID from the WorkRequest.
   Workers do not pair or scan. LAN WIFI leases cover LIST/PLAN, transfer and finalization
   after a permit is acquired, and are released in `finally`.
-- Network use outside BLE and LAN is limited to the planned anonymous, read-only
-  discover feed and basemap GETs, and per-device opt-in uploads
-  (`docs/devices-and-discovery.md`). No other remote call belongs in this layer.
-- Preserve immutable Hive paths and thing epochs. Room migrations must keep
-  old archives and be validated against exported schemas.
+- Network use outside BLE and LAN is the anonymous, read-only GETs of the discover feed, the
+  basemap and a board template by its footer href (`docs/devices-and-discovery.md`). Nothing
+  uploads. No other remote call belongs in this layer.
+- Preserve immutable Hive paths and thing epochs. `:core:database` keeps every Room migration
+  from schema 1 to `AppDatabase.version`, and each is validated against the exported schemas in
+  `core/database/schemas/`.
