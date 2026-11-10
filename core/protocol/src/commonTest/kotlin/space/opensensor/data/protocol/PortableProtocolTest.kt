@@ -46,9 +46,12 @@ class PortableProtocolTest {
     }
 
     @Test fun signedClockAndRssi() {
-        val time = FrameCodec.decode("30ffffffffffffffff0000000000000080".hexToBytes()) as Frame.TimeSet
-        assertEquals(-1L, time.epochSeconds)
-        assertEquals(Long.MIN_VALUE, time.monotonicMicros)
+        // Both TIME_SET fields are signed on the wire, and a negative value in either is refused.
+        assertFailsWith<FrameDecodeException> { FrameCodec.decode("30ffffffffffffffff0000000000000000".hexToBytes()) }
+        assertFailsWith<FrameDecodeException> { FrameCodec.decode("306bdaaa6a000000000000000000000080".hexToBytes()) }
+        val time = FrameCodec.decode("306bdaaa6a00000000ffffffff00000000".hexToBytes()) as Frame.TimeSet
+        assertEquals(1_789_581_931L, time.epochSeconds)
+        assertEquals(0xFFFF_FFFFL, time.monotonicMicros)
         val ap = FrameCodec.decode("41b00206436166c3a9".hexToBytes()) as Frame.WifiAp
         assertEquals(-80, ap.rssi)
         assertEquals("Café", ap.ssid)
@@ -57,7 +60,7 @@ class PortableProtocolTest {
     @Test fun truncatedFixedHeadersFailAsProtocolErrors() {
         val frames = listOf(
             "110100000002000300000004000000", "2001000200000003000000", "21010002000000",
-            "2201000200000000", "230100", "3000000000000000000000000000000000",
+            "2201000200000000", "230100", "306bdaaa6a000000000000000000000000",
             "31010002000000", "4000", "41000206", "42010000", "430100", "45010000000200",
             "47030004", "4a0002000000", "7f0102", "4b0104030201f5ff0300100e0000", "4d03",
         )

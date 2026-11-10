@@ -19,6 +19,7 @@ import space.opensensor.data.ble.AuthFailedException
 import space.opensensor.data.ble.DeviceBusyException
 import space.opensensor.data.ble.DeviceErrorException
 import space.opensensor.data.ble.DeviceSession
+import space.opensensor.data.ble.ProtocolViolationException
 import space.opensensor.data.ble.WindowLostException
 import space.opensensor.data.history.parquet.ByteReader
 import space.opensensor.data.protocol.Frame
@@ -284,7 +285,8 @@ class SyncEngine(
     /**
      * `READ` windows from the writer's resume point to [size]. Each chunk is only queued for
      * [writer], so the frames keep flowing while the disk works. Null when every byte was queued,
-     * or the outcome that ends this file.
+     * or the outcome that ends this file. A `CHUNK` that ends past [size] is never queued. It is a
+     * [ProtocolViolationException], which ends the attempt.
      */
     private suspend fun readAll(
         session: DeviceSession,
@@ -307,6 +309,9 @@ class SyncEngine(
             val before = offset
             val end = try {
                 session.read(handle, offset, window.current.toLong()) { chunk ->
+                    if (chunk.offset + chunk.payload.size > size) {
+                        throw ProtocolViolationException("CHUNK ends at ${chunk.offset + chunk.payload.size}, past the OPENED size $size")
+                    }
                     when {
                         chunk.offset == offset -> {
                             writer.write(chunk.offset, chunk.payload)

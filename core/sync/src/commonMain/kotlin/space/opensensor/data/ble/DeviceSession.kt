@@ -33,6 +33,7 @@ import space.opensensor.link.LinkTimeoutException
 import space.opensensor.link.RequestSpec
 import space.opensensor.link.TransportLinkDriver
 import space.opensensor.sync.nowEpochMs
+import kotlin.math.abs
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -118,6 +119,13 @@ class ProtocolViolationException(message: String) : Exception(message)
 class WindowLostException(val receivedUpTo: Long, reason: String) : Exception(reason)
 
 /**
+ * The most a multi-frame reply may carry. A reply past a limit is a [ProtocolViolationException],
+ * so a device cannot grow the phone's memory without bound. [listFiles] is about 19 years of
+ * 10-minute files, the shortest rotation. [logBytes] is the `LOG_TAIL` contract maximum.
+ */
+data class ReplyLimits(val listFiles: Int = 1_000_000, val logBytes: Int = DeviceSession.LOG_RING_BYTES)
+
+/**
  * The typed device API, a thin view over one [LinkSession]. The session owns the reply routing,
  * the drain of abandoned replies and any owed `CLOSE`, so any number of views on one session share
  * them. A view keeps only [latestStatus], the last status it asked for, so a view made per run starts
@@ -127,7 +135,12 @@ class WindowLostException(val receivedUpTo: Long, reason: String) : Exception(re
  * the Android and iOS drivers land (#57, #58). It is never read for replies. [frames] records raw
  * frames for Advanced, Debug, filled by the driver ([TransportLinkDriver]) with secrets redacted.
  */
-class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val frames: FrameRecorder = FrameRecorder()) {
+class DeviceSession(
+    val link: LinkSession,
+    val transport: DeviceTransport,
+    val frames: FrameRecorder = FrameRecorder(),
+    private val limits: ReplyLimits = ReplyLimits(),
+) {
     val address: String get() = transport.address
     val connectionState get() = transport.connectionState
 
@@ -171,7 +184,7 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
         val end = request(Request.List) { frame ->
             when (frame) {
                 is Frame.File -> {
-                    files += frame
+                    files.addListed(frame, "LIST")
                     null
                 }
                 is Frame.ListEnd -> frame
@@ -192,7 +205,7 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
         val end = request(Request.ListSince(cursor)) { frame ->
             when (frame) {
                 is Frame.File -> {
-                    files += frame
+                    files.addListed(frame, "LIST_SINCE")
                     null
                 }
                 is Frame.ListSinceEnd -> frame
@@ -219,7 +232,8 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
      * means notifications were lost on the way to the phone. The rest of the window is consumed
      * and discarded until its `READ_END`, and only then is [WindowLostException] thrown. The caller
      * re-issues `READ` from [WindowLostException.receivedUpTo]. A `CHUNK` for another handle is a
-     * [ProtocolViolationException]: that stream is malformed, not lossy.
+     * [ProtocolViolationException]: that stream is malformed, not lossy. So is a `CHUNK` that ends
+     * past `offset + length`, which [onChunk] never sees.
      */
     suspend fun read(
         handle: Int,
@@ -230,11 +244,15 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
         var expected = offset
         var lost: String? = null
         var discarded = 0
+        val windowEnd = offset + length
         val end = request(Request.Read(handle, offset, length)) { frame ->
             when (frame) {
                 is Frame.Chunk -> {
                     if (frame.handle != handle) {
                         throw ProtocolViolationException("CHUNK for handle ${frame.handle}, expected $handle")
+                    }
+                    if (frame.offset + frame.payload.size > windowEnd) {
+                        throw ProtocolViolationException("CHUNK ends at ${frame.offset + frame.payload.size}, past the READ window end $windowEnd")
                     }
                     when {
                         lost != null -> discarded++
@@ -274,15 +292,22 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
     suspend fun setTime(epochSeconds: Long, subsecondMicros: Int? = null): Frame.TimeSet =
         single(Request.SetTime(epochSeconds, subsecondMicros), "SET_TIME")
 
-    /** Automatic UTC anchor. Retry legacy seconds only when old firmware rejects the extension. */
-    suspend fun synchronizeClock(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet {
+    /**
+     * Automatic UTC anchor. Retry legacy seconds only when old firmware rejects the extension.
+     * Null when the acknowledged `epoch_s` is more than [CLOCK_ECHO_TOLERANCE_S] from the second
+     * sent. The contract echoes the request, so any other value is no clock evidence.
+     */
+    suspend fun synchronizeClock(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet? {
         val millis = nowMillis()
-        return try {
-            setTime(millis / 1000, ((millis % 1000) * 1000).toInt())
+        var sent = millis / 1000
+        val ack = try {
+            setTime(sent, ((millis % 1000) * 1000).toInt())
         } catch (e: DeviceErrorException) {
             if (e.protocolError != ProtocolError.MALFORMED_REQUEST) throw e
-            setTime(nowMillis() / 1000)
+            sent = nowMillis() / 1000
+            setTime(sent)
         }
+        return ack.takeIf { abs(it.epochSeconds - sent) <= CLOCK_ECHO_TOLERANCE_S }
     }
 
     /**
@@ -290,10 +315,9 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
      * treating reconnect or a new native byte pipe as a reason to cut the current archive window.
      * Null means the external clock is already usable; only a real TIME_SET is receipt evidence.
      * Legacy status has no age/drift fields, so a reported usable UTC anchor is retained.
+     * [onDecided] runs once STATUS answered or timed out. Only [synchronizeClockOnce] calls this,
+     * so every check takes the once per connection claim.
      */
-    suspend fun synchronizeClockIfNeeded(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet? = clockCheck(nowMillis) {}
-
-    /** [synchronizeClockIfNeeded], calling [onDecided] once STATUS answered or timed out. */
     private suspend fun clockCheck(nowMillis: () -> Long, onDecided: () -> Unit): Frame.TimeSet? {
         val before = nowMillis()
         val elapsed = TimeSource.Monotonic.markNow()
@@ -489,9 +513,14 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
     /** `LOG_TAIL max_bytes` → `LOG` × n, then `LOG_END`. Text for humans, not an API. */
     suspend fun logTail(maxBytes: Int = LOG_RING_BYTES): LogTail {
         val slices = ArrayList<ByteArray>()
+        var received = 0L
         val end = request(Request.LogTail(maxBytes.coerceIn(0, 0xFFFF))) { frame ->
             when (frame) {
                 is Frame.Log -> {
+                    received += frame.bytes.size
+                    if (received > limits.logBytes) {
+                        throw ProtocolViolationException("LOG_TAIL sent more than ${limits.logBytes} bytes")
+                    }
                     slices += frame.bytes
                     null
                 }
@@ -571,6 +600,12 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
     private suspend inline fun <reified F : Frame> single(request: Request, label: String, oweCloseIfUnsent: Int? = null): F =
         request(request, oweCloseIfUnsent) { frame -> frame as? F ?: throw unexpected(label, frame) }
 
+    /** Keeps one `FILE` of a listing, or refuses a listing longer than [ReplyLimits.listFiles]. */
+    private fun MutableList<Frame.File>.addListed(file: Frame.File, request: String) {
+        if (size >= limits.listFiles) throw ProtocolViolationException("$request sent more than ${limits.listFiles} FILE frames")
+        add(file)
+    }
+
     private fun concat(slices: List<ByteArray>): ByteArray {
         val out = ByteArray(slices.sumOf { it.size })
         var at = 0
@@ -591,8 +626,11 @@ class DeviceSession(val link: LinkSession, val transport: DeviceTransport, val f
         private const val CLOCK_CHECK = "clock"
         private const val LAN_ENABLE = "lan.on"
 
-        /** The device's serial log ring. */
-        const val LOG_RING_BYTES = 8192
+        /** The most a `LOG_TAIL` returns, the `max_bytes` u16 of the request. */
+        const val LOG_RING_BYTES = 0xFFFF
+
+        /** How far an acknowledged `TIME_SET.epoch_s` may be from the second sent. */
+        const val CLOCK_ECHO_TOLERANCE_S = 2L
 
         /** How long a raw command waits for a first or next frame before it shows what came. */
         val RAW_QUIET: Duration = 1.5.seconds

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import space.opensensor.data.ble.ConnectionState
+import space.opensensor.data.ble.DeviceSession
 import space.opensensor.data.ble.DeviceTransport
 import space.opensensor.data.ble.TransportException
 import space.opensensor.data.ble.TransportKind
@@ -113,7 +114,7 @@ class FakeTransport(
     private var wifiJob: Job? = null
     private val bootTimeMs = System.currentTimeMillis()
 
-    /** 8 KiB ring of "serial" output, like the firmware's debug_log. */
+    /** A ring of "serial" output, as long as the most a `LOG_TAIL` returns. */
     private val log = StringBuilder()
     private var logTotal = 0L
 
@@ -558,7 +559,7 @@ class FakeTransport(
         const val FAKE_ADDRESS = "FA:KE:00:00:00:01"
         const val FAKE_LAN_ADDRESS = "FA:KE:00:00:00:02"
         private const val SD_KIB = 31_166_976L
-        private const val LOG_RING = 8192
+        private const val LOG_RING = DeviceSession.LOG_RING_BYTES
         private const val LAN_PORT = 47390
 
         /** The bundled CoreS3 dictionary, so the fake board resolves like a current CoreS3. */

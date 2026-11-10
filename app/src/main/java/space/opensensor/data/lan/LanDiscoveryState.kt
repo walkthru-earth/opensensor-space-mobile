@@ -1,16 +1,18 @@
 package space.opensensor.data.lan
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import space.opensensor.data.coroutines.ApplicationScope
+import space.opensensor.data.coroutines.IoDispatcher
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,8 +24,12 @@ interface LanTargets {
 
 /** Shared foreground discovery; controllers consume its targets without each starting a browse. */
 @Singleton
-class LanDiscoveryState @Inject constructor(private val discovery: LanDiscovery) : LanTargets {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+class LanDiscoveryState @Inject constructor(
+    private val discovery: LanDiscovery,
+    @ApplicationScope appScope: CoroutineScope,
+    @IoDispatcher io: CoroutineDispatcher,
+) : LanTargets {
+    private val scope = appScope + io
     private val _devices = MutableStateFlow<Map<String, LanDevice>>(emptyMap())
     override val devices: StateFlow<Map<String, LanDevice>> = _devices.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)

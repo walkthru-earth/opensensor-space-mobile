@@ -75,7 +75,7 @@ class DeviceSessionTest {
         val transport = StubTransport(statusSnapshot)
         val link = LinkSession(driver, scope, timeSource = timeSource, log = { events += it })
 
-        fun view() = DeviceSession(link, transport, FrameRecorder())
+        fun view(limits: ReplyLimits = ReplyLimits()) = DeviceSession(link, transport, FrameRecorder(), limits)
     }
 
     private suspend fun TestScope.peer(statusSnapshot: ByteArray? = null) =
@@ -314,6 +314,55 @@ class DeviceSessionTest {
     }
 
     @Test
+    fun aChunkThatEndsPastTheRequestedWindowIsAProtocolViolationAndIsNeverHandedOn() = runTest {
+        val p = peer()
+        p.reply = { op, _ ->
+            if (op == Opcode.READ) emit(Frame.Chunk(1, 4, ByteArray(4)), Frame.Chunk(1, 8, ByteArray(5)), Frame.ReadEnd(1, 13, 0))
+        }
+        val got = mutableListOf<Long>()
+        assertFailsWith<ProtocolViolationException> { p.view().read(1, 4, 8) { got += it.offset } }
+        assertEquals(listOf(4L), got)
+    }
+
+    @Test
+    fun aChunkThatFillsTheRequestedWindowExactlyIsAccepted() = runTest {
+        val p = peer()
+        p.reply = { op, _ -> if (op == Opcode.READ) emit(Frame.Chunk(1, 4, ByteArray(8)), Frame.ReadEnd(1, 12, 0)) }
+        assertEquals(Frame.ReadEnd(1, 12, 0), p.view().read(1, 4, 8) { })
+    }
+
+    @Test
+    fun aListingLongerThanTheLimitIsAProtocolViolation() = runTest {
+        val p = peer()
+        val limits = ReplyLimits(listFiles = 2)
+        val next = ListCursor(ByteArray(ListCursor.BYTES) { (it + 1).toByte() })
+        p.reply = { op, _ ->
+            val files = arrayOf(Frame.File(12, "a.parquet"), Frame.File(12, "b.parquet"), Frame.File(12, "c.parquet"))
+            when (op) {
+                Opcode.LIST -> emit(*files, Frame.ListEnd(3, 0, 1024, 0))
+                Opcode.LIST_SINCE -> emit(*files, Frame.ListSinceEnd(3, 0, 1024, 0, 0, next))
+            }
+        }
+        assertFailsWith<ProtocolViolationException> { p.view(limits).list() }
+        runCurrent()
+        assertFailsWith<ProtocolViolationException> { p.view(limits).listSince(ListCursor.ZERO) }
+        runCurrent()
+        assertEquals(3, p.view(ReplyLimits(listFiles = 3)).list().first.size)
+    }
+
+    @Test
+    fun logTailAsksForTheWholeRingAndRefusesMoreBytesThanTheContractAllows() = runTest {
+        val p = peer()
+        p.reply = { op, _ -> if (op == Opcode.LOG_TAIL) emit(Frame.Log(ByteArray(5) { 'a'.code.toByte() }), Frame.Log(ByteArray(5) { 'b'.code.toByte() }), Frame.LogEnd(10, 10)) }
+        val tail = p.view().logTail()
+        assertContentEquals(Request.LogTail(0xFFFF).encode(), p.bodies.last())
+        assertEquals("aaaaabbbbb", tail.text)
+        assertTrue(tail.complete)
+        assertEquals(10, p.view(ReplyLimits(logBytes = 10)).logTail().receivedBytes)
+        assertFailsWith<ProtocolViolationException> { p.view(ReplyLimits(logBytes = 9)).logTail() }
+    }
+
+    @Test
     fun chunkForAnotherHandleIsAProtocolViolation() = runTest {
         val p = peer()
         p.reply = { op, _ -> if (op == Opcode.READ) emit(Frame.Chunk(2, 0, ByteArray(4)), Frame.ReadEnd(1, 4, 0)) }
@@ -492,7 +541,7 @@ class DeviceSessionTest {
         runCurrent()
         assertContentEquals(Request.SetTime(1_789_581_931L, 987_000).encode(), p.bodies.single())
         p.driver.emit(Frame.TimeSet(1_789_581_931L, 500))
-        assertEquals(1_789_581_931_000_000_000L, request.await().epochNanos)
+        assertEquals(1_789_581_931_000_000_000L, request.await()?.epochNanos)
     }
 
     @Test
@@ -506,8 +555,36 @@ class DeviceSessionTest {
         runCurrent()
         assertContentEquals(Request.SetTime(1_789_581_932L).encode(), p.bodies.last())
         p.driver.emit(Frame.TimeSet(1_789_581_932L, 501))
-        assertEquals(501L, request.await().monotonicMicros)
+        assertEquals(501L, request.await()?.monotonicMicros)
         assertEquals(2, p.bodies.size)
+    }
+
+    @Test
+    fun anAcknowledgedTimeThatIsNotTheTimeSentIsNoAnchor() = runTest {
+        val sent = PHONE_NOW / 1000
+        for (echo in listOf(sent - DeviceSession.CLOCK_ECHO_TOLERANCE_S - 1, sent + DeviceSession.CLOCK_ECHO_TOLERANCE_S + 1, 1_577_836_800L)) {
+            val p = peer()
+            p.reply = { op, _ -> if (op == Opcode.SET_TIME) emit(Frame.TimeSet(echo, 501L, 0)) }
+            assertNull(p.view().synchronizeClock { PHONE_NOW })
+        }
+        val p = peer()
+        val near = Frame.TimeSet(sent + DeviceSession.CLOCK_ECHO_TOLERANCE_S, 501L, 0)
+        p.reply = { op, _ -> if (op == Opcode.SET_TIME) emit(near) }
+        assertEquals(near, p.view().synchronizeClock { PHONE_NOW })
+    }
+
+    @Test
+    fun aWrongEchoFromTheClockCheckGivesNoAnchorAndKeepsTheClaim() = runTest {
+        val p = peer()
+        p.reply = { op, _ -> if (op == Opcode.SET_TIME) emit(Frame.TimeSet(PHONE_NOW / 1000 + 3600, 501L, 0)) }
+        val first = async { p.view().synchronizeClockOnce { PHONE_NOW } }
+        runCurrent()
+        p.transport.statusNotifications.emit("{\"utc\":0}".encodeToByteArray())
+        assertNull(first.await())
+        assertEquals(1, p.driver.sent.count { it == Opcode.SET_TIME })
+        val sent = p.driver.sent.size
+        assertNull(p.view().synchronizeClockOnce { PHONE_NOW })
+        assertEquals(sent, p.driver.sent.size)
     }
 
     @Test
@@ -522,23 +599,22 @@ class DeviceSessionTest {
 
     @Test
     fun maintenanceReadsFreshStatusAndRetainsARecentExternalClock() = runTest {
-        val p = peer()
-        val session = p.view()
         for (source in listOf(1, 3)) {
-            val request = async { session.synchronizeClockIfNeeded { PHONE_NOW } }
+            val p = peer()
+            val request = async { p.view().synchronizeClockOnce { PHONE_NOW } }
             runCurrent()
             assertContentEquals(Request.Status.encode(), p.bodies.last())
             p.transport.statusNotifications.emit("{\"utc\":1,\"clk\":$source,\"utc_ms\":$PHONE_NOW,\"clk_age_s\":60}".encodeToByteArray())
             assertNull(request.await())
+            assertEquals(1, p.bodies.size)
         }
-        assertEquals(2, p.bodies.size)
     }
 
     @Test
     fun maintenanceAnchorsMissingRtcAndOldExternalClocks() = runTest {
         for (json in listOf("{\"utc\":0}", "{\"utc\":1,\"clk\":2}", "{\"utc\":1,\"clk\":1,\"clk_age_s\":21600}")) {
             val p = peer()
-            val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
+            val request = async { p.view().synchronizeClockOnce { PHONE_NOW } }
             runCurrent()
             p.transport.statusNotifications.emit(json.encodeToByteArray())
             runCurrent()
@@ -552,7 +628,7 @@ class DeviceSessionTest {
     @Test
     fun noStatusOnAProto3LinkNeverSetsTime() = runTest {
         val p = peer()
-        val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
+        val request = async { p.view().synchronizeClockOnce { PHONE_NOW } }
         runCurrent()
         advanceTimeBy(5_000)
         runCurrent()
@@ -563,7 +639,7 @@ class DeviceSessionTest {
     @Test
     fun aCachedNetworkAnchorIsNeverSetEvenWhenItIsOld() = runTest {
         val p = peer("{\"utc\":1,\"clk\":3,\"utc_ms\":${PHONE_NOW - 3_600_000},\"clk_age_s\":86400}".encodeToByteArray())
-        val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
+        val request = async { p.view().synchronizeClockOnce { PHONE_NOW } }
         runCurrent()
         advanceTimeBy(5_000)
         runCurrent()
@@ -574,7 +650,7 @@ class DeviceSessionTest {
     @Test
     fun legacyStatusReadFallbackRetainsAnAlreadyUsableUtcClock() = runTest {
         val p = peer("{\"utc\":1}".encodeToByteArray())
-        val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
+        val request = async { p.view().synchronizeClockOnce { PHONE_NOW } }
         runCurrent()
         advanceTimeBy(5_000)
         runCurrent()
@@ -585,7 +661,7 @@ class DeviceSessionTest {
     @Test
     fun aCachedFallbackCannotBeMistakenForClockDrift() = runTest {
         val p = peer("{\"utc\":1,\"clk\":1,\"utc_ms\":${PHONE_NOW - 120_000},\"clk_age_s\":60}".encodeToByteArray())
-        val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
+        val request = async { p.view().synchronizeClockOnce { PHONE_NOW } }
         runCurrent()
         advanceTimeBy(5_000)
         runCurrent()
@@ -598,7 +674,7 @@ class DeviceSessionTest {
         val p = peer()
         // A day early, not a millisecond. The policy judges the request midpoint, which adds the real
         // monotonic time STATUS took, and a slow simulator would carry FLOOR - 1 past the floor.
-        val request = async { p.view().synchronizeClockIfNeeded { SmartSyncPolicy.PHONE_CLOCK_FLOOR_MILLIS - 86_400_000L } }
+        val request = async { p.view().synchronizeClockOnce { SmartSyncPolicy.PHONE_CLOCK_FLOOR_MILLIS - 86_400_000L } }
         runCurrent()
         p.transport.statusNotifications.emit("{\"utc\":0}".encodeToByteArray())
         assertNull(request.await())
@@ -711,7 +787,7 @@ class DeviceSessionTest {
     @Test
     fun maintenanceCancellationNeverSetsTime() = runTest {
         val p = peer()
-        val request = async { p.view().synchronizeClockIfNeeded { PHONE_NOW } }
+        val request = async { p.view().synchronizeClockOnce { PHONE_NOW } }
         runCurrent()
         request.cancelAndJoin()
         runCurrent()
