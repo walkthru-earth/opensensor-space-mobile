@@ -61,7 +61,10 @@ sealed interface NowReading {
     /** No sample yet, or the link is quiet. */
     data object Waiting : NowReading
 
-    /** The sensor is present but its reading is not usable yet (warming up, stale, error). */
+    /**
+     * The sensor reports any [PmsStatus] but [PmsStatus.VALID], so its numbers are not shown. That is
+     * absent, warming up, stale, error, model mismatch or sleeping, each with its own [hint].
+     */
     data class SensorNotReady(val status: PmsStatus, val hint: String) : NowReading
 
     /**
