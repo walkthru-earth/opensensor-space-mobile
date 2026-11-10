@@ -136,6 +136,21 @@ class DeviceConfigTest {
     }
 
     @Test
+    fun `sensor identity refuses a line break in any field`() {
+        for (bad in listOf("a\nb", "a\rb", "a\u0000b")) {
+            val cases = listOf<ConfigPatch.Builder.() -> Unit>(
+                { sensorIdentity(bad, "Model", "S-1", false) },
+                { sensorIdentity("Vendor", bad, "S-1", false) },
+                { sensorIdentity("Vendor", "Model", bad, false) },
+            )
+            cases.forEach { case ->
+                val e = assertFailsWith<ConfigValidationException> { ConfigPatch.build(case) }
+                assertEquals(ConfigProblem.LINE_BREAK, e.problem)
+            }
+        }
+    }
+
+    @Test
     fun `sensor identity patch and board echo agree`() {
         val patch = ConfigPatch.build { sensorIdentity("Plantower", "PMS5003T", "PMS5003T-202604081332", true) }
         assertEquals(
