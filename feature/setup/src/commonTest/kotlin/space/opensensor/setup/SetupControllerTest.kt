@@ -217,6 +217,8 @@ class SetupControllerTest {
         // A scan that hears it lists it once, and a failure leaves it on Find to tap again.
         port.nearby.value = listOf(SetupCandidate("cc", "OS-3", added = false), SetupCandidate("AA", "OS-1", added = false))
         assertEquals(listOf("cc", "AA"), c.state.value.candidates.map { it.id })
+        // The scanned row with the id in lower case still reads as the one pairing.
+        assertEquals(listOf(true, false), c.state.value.candidates.map { c.state.value.pairingWith(it) })
         port.nearby.value = emptyList()
         port.links.getValue("CC").value = SetupLink.Unreachable
         c.retry()

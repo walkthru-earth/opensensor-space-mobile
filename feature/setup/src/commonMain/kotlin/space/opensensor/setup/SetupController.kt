@@ -94,6 +94,9 @@ data class SetupUiState(
 
     /** Display name on Done, `nickname ?: name`. */
     val displayName: String? get() = nickname.trim().ifEmpty { null } ?: selected?.name
+
+    /** Whether [candidate] is the sensor pairing now. Ids match ignoring case, as a scan may spell one in lower case. */
+    fun pairingWith(candidate: SetupCandidate): Boolean = pairing && selected?.id.equals(candidate.id, ignoreCase = true)
 }
 
 /**
@@ -102,9 +105,10 @@ data class SetupUiState(
  * pending. Nothing about the run is persisted besides the nickname and that flag, so a resumed run
  * ([resumeId]) opens at the first required page, Location for the board, and reconnects silently.
  * A [pick] is a new sensor tapped outside Find, paired at once as if chosen there, so Name still
- * comes first. Find lists it first while it pairs, even before a scan hears it. With [offer] the pick is a sensor that asked for setup by itself (#272). It is only
- * listed first on Find, as pairing stays the owner's tap. Done, which clears the flag, is reached
- * only once every required page is satisfied.
+ * comes first. Find lists it first while it pairs, even before a scan hears it. With [offer] the
+ * pick is a sensor that asked for setup by itself (#272). It is only listed first on Find, as
+ * pairing stays the owner's tap. Done, which clears the flag, is reached only once every required
+ * page is satisfied.
  *
  * [opened] tells the shared setup watch that the wizard ran for a sensor, when it opens on a resume
  * or an offer, whenever it pairs and again when it closes, so it does not open by itself again this

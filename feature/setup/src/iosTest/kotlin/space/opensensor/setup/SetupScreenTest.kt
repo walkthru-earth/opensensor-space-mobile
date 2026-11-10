@@ -6,6 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.v2.runComposeUiTest
@@ -139,6 +140,11 @@ class SetupScreenTest {
         port.nearby.value = emptyList()
         show(port, pick = SetupCandidate("CC", "Balcony", added = false))
         onNode(hasText("Balcony") and hasClickAction()).assertExists()
+        onNode(hasText("Pairing"), useUnmergedTree = true).assertExists()
+        // The scan hears the same sensor with its id in lower case, so its row replaces the pick.
+        port.nearby.value = listOf(SetupCandidate("cc", "Balcony", added = false))
+        waitForIdle()
+        onAllNodes(hasText("Balcony") and hasClickAction()).assertCountEquals(1)
         onNode(hasText("Pairing"), useUnmergedTree = true).assertExists()
     }
 
