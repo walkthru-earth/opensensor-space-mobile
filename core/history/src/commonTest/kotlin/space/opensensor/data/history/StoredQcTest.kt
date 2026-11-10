@@ -28,7 +28,7 @@ class StoredQcTest {
     private object Above100 : RowCheck {
         override val id = "test-above-100-v1"
         override val columns = listOf(AirMetrics.PM25.column)
-        override fun flags(timeMs: LongArray, values: List<FloatArray>) = IntArray(timeMs.size) { if (values[0][it] > 100f) 4 else 0 }
+        override fun flags(timeMs: LongArray, values: List<DoubleArray>) = IntArray(timeMs.size) { if (values[0][it] > 100.0) 4 else 0 }
     }
 
     private val above100 = RowChecks { Above100 }
@@ -101,7 +101,7 @@ class StoredQcTest {
 
     @Test
     fun aRowNoFlagIsRaisedOnHasNoCompanions() {
-        val day = build(humidPm25Parquet(), RowChecks { object : RowCheck by Above100 { override val id = "test-none-v1"; override fun flags(timeMs: LongArray, values: List<FloatArray>) = IntArray(timeMs.size) } })
+        val day = build(humidPm25Parquet(), RowChecks { object : RowCheck by Above100 { override val id = "test-none-v1"; override fun flags(timeMs: LongArray, values: List<DoubleArray>) = IntArray(timeMs.size) } })
         assertContentEquals(IntArray(5), (day.file.readColumn(RowChecks.FLAGS_COLUMN) as ColumnValues.Int32).values)
         assertNull(day.hour(RowChecks.FLAGS_ID))
         assertNull(day.hour(RowChecks.cleanId(AirMetrics.PM25.id)))
@@ -124,7 +124,7 @@ class StoredQcTest {
         val check = assertNotNull(RowChecks.INSTALLED.of(coreS3Template)) as AirQc
         assertEquals(check.id, day.file.metadata.keyValueMetadata[RowChecks.CHECKS_KEY])
         val time = day.file.readColumn(UtcColumns.EVENT_US).longValues()
-        val values = check.columns.map { c -> day.file.leaves.firstOrNull { it.name == c }?.let { day.file.readColumn(it).doubleValues().let { v -> FloatArray(v.size) { i -> v[i].toFloat() } } } ?: FloatArray(time.size) { Float.NaN } }
+        val values = check.columns.map { c -> day.file.leaves.firstOrNull { it.name == c }?.let { day.file.readColumn(it).doubleValues().let { v -> DoubleArray(v.size) { i -> v[i] } } } ?: DoubleArray(time.size) { Double.NaN } }
         val stored = (day.file.readColumn(RowChecks.FLAGS_COLUMN) as ColumnValues.Int32).values
         assertContentEquals(check.flags(LongArray(time.size) { time[it] / 1_000 }, values), stored)
         // Every source row is in the day file with its PM2.5 as measured.

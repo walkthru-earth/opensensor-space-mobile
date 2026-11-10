@@ -18,10 +18,10 @@ class AirQcTest {
     private val check = AirQc(bins)
 
     /** [rows] as the check columns the daily builder hands [AirQc], NaN where a value is missing. */
-    private fun columns(rows: List<QcRow>): List<FloatArray> {
-        fun col(f: (QcRow) -> Double) = FloatArray(rows.size) { f(rows[it]).toFloat() }
+    private fun columns(rows: List<QcRow>): List<DoubleArray> {
+        fun col(f: (QcRow) -> Double) = DoubleArray(rows.size) { f(rows[it]) }
         return listOf(col { it.pm1 }, col { it.pm25 }, col { it.pm10 }, col { it.rh }) +
-            bins.indices.map { b -> FloatArray(rows.size) { rows[it].counts?.get(b)?.toFloat() ?: Float.NaN } }
+            bins.indices.map { b -> DoubleArray(rows.size) { rows[it].counts?.get(b)?.toDouble() ?: Double.NaN } }
     }
 
     private fun stored(rows: List<QcRow>): IntArray = check.flags(LongArray(rows.size) { rows[it].timeMs }, columns(rows))
@@ -69,7 +69,7 @@ class AirQcTest {
         assertEquals(0, flags.count { it and QcFlags.FLATLINE != 0 })
         // One NaN bin is a row without counts too.
         val values = columns(synthetic(40, counts = { intArrayOf(900, 300, 40, 4, 0, 0) }))
-        values[4 + 3][20] = Float.NaN
+        values[4 + 3][20] = Double.NaN
         assertEquals(0, check.flags(LongArray(40) { 1_789_638_000_000L + it * 10_000L }, values).count { it and QcFlags.FLATLINE != 0 })
     }
 

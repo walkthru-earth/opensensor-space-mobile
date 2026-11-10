@@ -18,12 +18,11 @@ data class AirQc(val bins: List<String>) : RowCheck {
         AirFamily.RELATIVE_HUMIDITY,
     ) + bins
 
-    override fun flags(timeMs: LongArray, values: List<FloatArray>): IntArray {
+    override fun flags(timeMs: LongArray, values: List<DoubleArray>): IntArray {
         val n = timeMs.size
-        fun column(k: Int) = values[k].let { v -> DoubleArray(n) { v[it].toDouble() } }
-        val counts = List(bins.size) { column(FIRST_BIN + it) }
+        val counts = List(bins.size) { values[FIRST_BIN + it] }
         val width = IntArray(n) { i -> if (bins.isNotEmpty() && counts.all { it[i].isFinite() }) bins.size else -1 }
-        return QcRules.flags(QcRules.Columns(timeMs, column(0), column(1), column(2), column(3), counts, width))
+        return QcRules.flags(QcRules.Columns(timeMs, values[0], values[1], values[2], values[3], counts, width))
     }
 
     companion object {

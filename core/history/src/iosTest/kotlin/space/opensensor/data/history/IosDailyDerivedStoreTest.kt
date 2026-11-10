@@ -161,6 +161,50 @@ class IosDailyDerivedStoreTest {
         assertNull(derived.open(record.thing, day, listOf(record), anchors))
     }
 
+    /** #91. The iOS day signature names the air check that reads a source, so a day built without it rebuilds once. */
+    @Test
+    fun theAirCheckIdIsInTheDaySignatureSoADayBuiltWithoutItRebuildsOnce() = runTest {
+        space.opensensor.family.air.AirFamily.install()
+        val bytes = humidPm25Parquet()
+        var opens = 0
+        val humid = object : ArchiveStore by archive {
+            override fun reader(key: ArchiveKey, partial: Boolean): ByteReader {
+                opens++
+                return ByteArrayReader(bytes)
+            }
+        }
+        val summary = ParquetIndexer.index(ParquetFile.wrap(bytes), templates = CoreS3Files)
+        val record = space.opensensor.archive.ArchiveRecord(
+            "thing-a", "humid.parquet", bytes.size.toLong(), 123, "hash", 1, "device",
+            indexedAtEpochMs = 1, rows = summary.rows, utcRows = summary.utcRows, firstUtcNs = summary.firstUtcNs, lastUtcNs = summary.lastUtcNs,
+        )
+        val day = ThingDays.dayOf(record.firstUtcNs!!)
+        val now = (day + 3) * 86_400
+        val atomic = space.opensensor.storage.IosAtomicFiles("$root/temps")
+        val derived = IosDailyDerivedStore(root, atomic, templates = CoreS3Files)
+        val path = derived.rebuild(record.thing, listOf(record), humid, emptyMap(), now).single()
+        val manifest = path.removeSuffix(".parquet") + ".manifest.json"
+        fun manifestJson() = LocalFileReader(manifest).use { reader -> kotlinx.serialization.json.Json.parseToJsonElement(reader.read(0, reader.size.toInt()).decodeToString()) as kotlinx.serialization.json.JsonObject }
+        fun cached() = (manifestJson()["source_signature"] as kotlinx.serialization.json.JsonPrimitive).content
+        fun signatureOf(line: String) = space.opensensor.data.protocol.ParquetVerify.sha256Hex("derive-cache-v3:${DailyParquetBuilder.BUILDER}:true\n$line\n".encodeToByteArray())
+        val checkId = assertNotNull(RowChecks.INSTALLED.of(record, CoreS3Files)).id
+        val line = "${record.name}:${record.bytes}:${record.crc32}:${record.sha256}:t${CoreS3Files.digestOf(record)}"
+        assertEquals(signatureOf("$line:q$checkId"), cached())
+
+        // A manifest an install wrote before the check, the same source without its check id.
+        val unchecked = kotlinx.serialization.json.JsonObject(manifestJson() + ("source_signature" to kotlinx.serialization.json.JsonPrimitive(signatureOf(line))))
+        atomic.writeAtomically(manifest, unchecked.toString().encodeToByteArray(), space.opensensor.storage.StorageClass.Rebuildable)
+        assertNull(derived.open(record.thing, day, listOf(record), emptyMap()))
+        opens = 0
+        derived.rebuild(record.thing, listOf(record), humid, emptyMap(), now)
+        assertTrue(opens > 0, "the day without the check id rebuilds")
+        assertEquals(signatureOf("$line:q$checkId"), cached())
+        assertNotNull(derived.open(record.thing, day, listOf(record), emptyMap())).close()
+        opens = 0
+        derived.rebuild(record.thing, listOf(record), humid, emptyMap(), now + 1)
+        assertEquals(0, opens, "and then stays cached")
+    }
+
     @Test
     fun anOpenedDescriptorRetainsItsSnapshotAcrossReplacement() = runTest {
         val (source, anchor) = dailyFixture()

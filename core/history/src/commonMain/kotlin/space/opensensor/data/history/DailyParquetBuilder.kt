@@ -520,7 +520,12 @@ object DailyParquetBuilder {
 
     const val BUILDER = "opensensor.space shared derived-v4"
 
-    /** The `derived_version` of a day file. A change to the day metadata bumps it, with [BUILDER]. */
+    /**
+     * The `derived_version` of a day file, in step with [BUILDER]. A change a reader of the day file
+     * must know about bumps both. An optional key or column, such as the [RowChecks.CHECKS_KEY] and
+     * [RowChecks.FLAGS_COLUMN] of #91, does not, because a reader without it reads every row as before.
+     * The day signature, not this value, decides which days rebuild.
+     */
     const val DERIVED_VERSION = "4"
     const val SOURCE_INDEX = "source_file_index"
     const val ESTIMATED_UTC = "event_time_utc_estimated_us"

@@ -40,7 +40,7 @@ interface RowCheck {
      * row's event time in epoch milliseconds and [values] one array per [columns] entry, `NaN` for a
      * missing value.
      */
-    fun flags(timeMs: LongArray, values: List<FloatArray>): IntArray
+    fun flags(timeMs: LongArray, values: List<DoubleArray>): IntArray
 }
 
 /** One row's value of a derived datastream from its source columns. */

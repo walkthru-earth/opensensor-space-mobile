@@ -15,7 +15,7 @@ internal class RowCheckPass(private val aggregator: Aggregator?) {
     class Group(val check: RowCheck, cleaned: Int) {
         var size = 0
         var kept = IntArray(INITIAL)
-        val values = Array(check.columns.size) { FloatArray(INITIAL) }
+        val values = Array(check.columns.size) { DoubleArray(INITIAL) }
         val clean = Array(cleaned) { DoubleArray(INITIAL) }
 
         /** Drops the rows of a failed source, every row at or after kept index [first]. */
@@ -49,7 +49,7 @@ internal class RowCheckPass(private val aggregator: Aggregator?) {
         g.kept[at] = keptIndex
         for (k in source.columns.indices) {
             val col = source.columns[k]
-            g.values[k][at] = if (col != null && col.has(i)) col.values[i].toFloat() else Float.NaN
+            g.values[k][at] = if (col != null && col.has(i)) col.values[i] else Double.NaN
         }
         if (tier != null && aggregator != null) {
             for (j in g.clean.indices) g.clean[j][at] = aggregator.valueOf(tier, aggregator.cleaned[j], i)
@@ -77,7 +77,7 @@ internal class RowCheckPass(private val aggregator: Aggregator?) {
             val order = IntArray(g.size) { it }
             DailyParquetBuilder.sortByTimeline(order, times)
             val timeMs = LongArray(g.size) { times[order[it]].floorDiv(NS_PER_MS) }
-            val values = g.values.map { v -> FloatArray(g.size) { v[order[it]] } }
+            val values = g.values.map { v -> DoubleArray(g.size) { v[order[it]] } }
             val flags = g.check.flags(timeMs, values)
             for (p in 0 until g.size) {
                 val e = order[p]
