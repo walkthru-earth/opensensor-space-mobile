@@ -214,7 +214,9 @@ until its template is known. Only a footer without `template.sha256` resolves by
 the newest served one first, then the bundled one. LIVE joins a device by the same rule
 (`TemplateIndex.resolve`, #259). History resolves a file's template from its stored footer digests at each derive, and the
 result is part of the day signature, so a file indexed before its board served a template it needs
-gains its metrics at the next derive, with no index pass. The bundled bytes are the firmware's own, so a
+gains its metrics at the next derive, with no index pass. An app update that bundles a new desc for
+the same dict leaves files of the older firmware without metrics until a board serves their template
+(#260), and their rows stay. The bundled bytes are the firmware's own, so a
 real footer resolves by `template.sha256` alone, with no dictionary member needed. The catalog refuses
 to load when an `index.json` desc is not the build digest of its file. The footer interval wins. Without it
 the template's default interval is used, and without both the interval is 0 and expected rows are 0.

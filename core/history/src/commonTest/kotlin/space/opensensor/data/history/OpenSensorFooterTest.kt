@@ -201,7 +201,7 @@ class OpenSensorFooterTest {
     private fun resolve(dict: String?, desc: String?) = FileTemplates.BUNDLED.of(mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict, desc, 10_000))).template
 
     @Test
-    fun theBundledTemplatesResolveByTemplateDigestFirstThenByDict() {
+    fun theBundledTemplatesResolveByTemplateDigestAndByDictOnlyWithoutOne() {
         val waveshareDesc = waveshareTemplate.key.desc!!
         assertSame(coreS3Template, resolve(dict = null, desc = desc))
         assertSame(coreS3Template, resolve(dict, desc))

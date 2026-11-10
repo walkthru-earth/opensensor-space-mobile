@@ -261,8 +261,9 @@ object Metrics {
      * [spec] as the tiers hold it for a thing of [template], the [catalog] metric of its id bound to that
      * template ([MetricSpec.inTemplate]), the spec the tiers aggregate each file of that template with.
      * Null when [template] stores the column in another unit or rolls it up another way, since its files
-     * then add no buckets under that id. [spec] itself when the catalog has no metric of its id. A reader
-     * of the tiers asks through it, so a served template that changes a unit never labels old buckets.
+     * then add no buckets under that id. [spec] itself when the catalog has no metric of its id, and the
+     * tiers then hold no buckets for it, so a reader gets an empty series rather than a wrong one. A
+     * reader of the tiers asks through it, so a served template that changes a unit never labels old buckets.
      */
     fun tiered(spec: MetricSpec, template: BoardTemplate): MetricSpec? {
         val kept = byId(spec.id) ?: return spec

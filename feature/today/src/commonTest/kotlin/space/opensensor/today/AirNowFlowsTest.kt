@@ -31,6 +31,9 @@ import space.opensensor.family.air.Pm25Basis
 import space.opensensor.family.air.Pm25NowCast
 import space.opensensor.family.air.QcFlags
 import space.opensensor.family.air.QcRules
+import space.opensensor.model.BoardTemplate
+import space.opensensor.model.BundledCatalog
+import space.opensensor.model.TemplateKey
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,6 +99,25 @@ class AirNowFlowsTest {
         assertEquals(listOf(null, 28.4, 28.4), seen.map { it?.value }, "no null between two hours")
         info.value = WAVESHARE.copy(thing = "st-2")
         assertEquals(listOf(null, 28.4, 28.4, null, 28.4), seen.map { it?.value }, "a new thing starts empty")
+    }
+
+    /** An unknown desc has no thing until its board serves the template, then the NowCast starts (#259). */
+    @Test
+    fun theNowCastFollowsATemplateTheBoardServesAfterInfo() = runTest {
+        val bundled = BundledCatalog.template(WAVESHARE.dict!!)!!
+        val desc = "ab".repeat(32)
+        val revised = bundled.copy(key = TemplateKey(bundled.dict, desc))
+        val observe = { _: String, metric: MetricSpec, window: HistoryWindow ->
+            flowOf(series(metric, window, airNowHours())) as Flow<HistorySeries>
+        }
+        val info = MutableStateFlow<DeviceInfo?>(WAVESHARE.copy(thing = "st-1", desc = desc.take(TemplateKey.DESC_PREFIX_HEX)))
+        val served = MutableStateFlow<List<BoardTemplate>>(emptyList())
+        val seen = mutableListOf<Pm25NowCast?>()
+        val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+        scope.launch { pm25NowCast(info, observe, flowOf(hour), served).collect { seen += it } }
+        assertEquals(listOf(null), seen.map { it?.value }, "no thing before the template is known")
+        served.value = listOf(revised)
+        assertEquals(28.4, seen.last()?.value, "the served template starts the NowCast in the same session")
     }
 
     @Test
