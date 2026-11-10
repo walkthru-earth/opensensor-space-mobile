@@ -57,22 +57,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # FirmwareTemplatesTest compares core/model/bundled/templates with the firmware templates at the
-      # commit pinned in core/model/bundled/FIRMWARE_COMMIT (#261). OPENSENSOR_FIRMWARE_DIR on the
-      # verify step makes a missing checkout fail the test instead of skipping it.
-      - name: Read the pinned firmware commit
-        id: firmware
-        shell: bash
-        run: |
-          sha="$(tr -d '[:space:]' < core/model/bundled/FIRMWARE_COMMIT)"
-          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error file=core/model/bundled/FIRMWARE_COMMIT::Expected one full 40 hex commit"
-            exit 1
-          fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      # commit pinned in `ref` below, the commit the bundle was copied from (#261). Bump it with each
+      # copy. OPENSENSOR_FIRMWARE_DIR on the verify step makes a missing checkout fail the test
+      # instead of skipping it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: walkthru-earth/opensensor-space-firmware
-          ref: ${{ steps.firmware.outputs.sha }}
+          ref: 5a7bb7a13bf9405125fe51e0c5f7fdfb3c95298e
           path: opensensor-space-firmware
           persist-credentials: false
           sparse-checkout: docs/shared/templates

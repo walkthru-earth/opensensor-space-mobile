@@ -9,8 +9,8 @@ import kotlin.test.assertEquals
  * The bundled templates equal opensensor-space-firmware `docs/shared/templates` byte for byte, so the
  * next `dict` or `desc` move fails this gate instead of a phone (#182). The firmware checkout is
  * `OPENSENSOR_FIRMWARE_DIR`, else an `opensensor-space-firmware` folder beside this repository or one
- * of its parents, which also finds it from a worktree. CI sets `OPENSENSOR_FIRMWARE_DIR` to the
- * commit pinned in `bundled/FIRMWARE_COMMIT`, and weekly to firmware `main`, so there a missing
+ * of its parents, which also finds it from a worktree. CI sets `OPENSENSOR_FIRMWARE_DIR` to a
+ * checkout at the commit pinned in `verify.yml`, and weekly to firmware `main`, so there a missing
  * checkout fails (#261). Only a local run without either skips.
  */
 class FirmwareTemplatesTest {

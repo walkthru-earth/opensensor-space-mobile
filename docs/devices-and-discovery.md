@@ -66,8 +66,8 @@ Rules.
    `<board>/<dict>.json` per board plus `index.json` and `README.md`) into
    `core/model/bundled/templates/`, byte for byte, with
    `rsync -a --delete ../opensensor-space-firmware/docs/shared/templates/ core/model/bundled/templates/` from the
-   repo root. Set `core/model/bundled/FIRMWARE_COMMIT` to the firmware commit copied, so CI checks
-   the copy against it with `FirmwareTemplatesTest`. If the derived default is not enough, add an
+   repo root. Set the firmware checkout `ref` in `.github/workflows/verify.yml` to the commit copied,
+   so CI checks the copy against it with `FirmwareTemplatesTest`. If the derived default is not enough, add an
    `AppProfile` for that `dict` under `core/model/bundled/profiles/`. `BundledCatalog` reads the
    templates through `index.json`, which gives each its `desc`. `BundledTemplateBytesTest` checks each
    file's SHA-256 against its `index.json` desc and pins the full SHA-256 of every copied json file,
