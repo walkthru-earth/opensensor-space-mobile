@@ -162,6 +162,24 @@ class OwnThingsTest {
         assertEquals(cellB, OwnThingGeoJson.build(IndexGrid, listOf(moving), mapOf("m" to phone)).pins.single().cell)
     }
 
+    /** cellA straddles the antimeridian, and cellB has no boundary. */
+    private object AntimeridianGrid : H3Grid {
+        override fun latLngToCell(lat: Double, lng: Double, res: Int) = 0L
+        override fun cellToLatLng(cell: Long) = LatLng(0.0, 179.5)
+        override fun cellToBoundary(cell: Long) =
+            if (cell == 0x8828308281fffffL) listOf(LatLng(1.0, 179.5), LatLng(2.0, -179.5), LatLng(1.0, -179.25)) else emptyList()
+        override fun polygonToCells(ring: List<LatLng>, res: Int) = emptyList<Long>()
+    }
+
+    @Test
+    fun aTrackCellAcrossTheAntimeridianStaysContinuous() {
+        val moving = OwnThing("m", "Boat", "", updatedEpochMs = 0L, moving = true)
+        val route = track(TrackRow(1 * ms, cellA, 2), TrackRow(2 * ms, cellB, 2))
+        val json = OwnThingGeoJson.build(AntimeridianGrid, listOf(moving), mapOf("m" to route)).trackGeoJson
+        assertTrue(json.contains("[[[179.5,1.0],[180.5,2.0],[180.75,1.0],[179.5,1.0]]]"), json)
+        assertEquals(1, Regex("\"Polygon\"").findAll(json).count(), "a cell with no boundary is left out")
+    }
+
     @Test
     fun aFixedThingDrawsNoTrackEvenWhenGivenOne() {
         val fixed = OwnThing("f", "Roof", H3Index.toHex(cellA), updatedEpochMs = 0L)

@@ -14,6 +14,7 @@ import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.HistoryTiers
 import space.opensensor.data.history.LatestReading
 import space.opensensor.data.history.LatestReadings
+import space.opensensor.publicfeed.CellGeoJson
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.H3Grid
 import space.opensensor.publicfeed.H3Index
@@ -187,14 +188,17 @@ internal object OwnThingGeoJson {
         return if (read == null || fix.lastNs / 1_000_000 > t.updatedEpochMs) fixCell else read
     }
 
-    /** One polygon per cell, its outline closed, with no properties. Empty with no cell. */
+    /**
+     * One polygon per cell, its outline closed and kept continuous across the antimeridian as the
+     * public cells are, with no properties. A cell with no boundary is left out. Empty with no cell.
+     */
     private fun trackGeoJson(h3: H3Grid, cells: List<Long>): String {
-        if (cells.isEmpty()) return DiscoverUiState.EMPTY_GEOJSON
+        val rings = cells.map { CellGeoJson.ring(h3, it) }.filter { it.isNotEmpty() }
+        if (rings.isEmpty()) return DiscoverUiState.EMPTY_GEOJSON
         return buildString {
             append("{\"type\":\"FeatureCollection\",\"features\":[")
-            cells.forEachIndexed { i, cell ->
+            rings.forEachIndexed { i, ring ->
                 if (i > 0) append(',')
-                val ring = h3.cellToBoundary(cell)
                 append("{\"type\":\"Feature\",\"properties\":{},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[")
                 (ring + ring.take(1)).forEachIndexed { j, p ->
                     if (j > 0) append(',')

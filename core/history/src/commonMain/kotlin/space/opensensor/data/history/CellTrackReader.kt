@@ -83,7 +83,7 @@ class CellTrackReader(
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // A damaged or missing file leaves its rows out. The track never fills them in.
         }
     }
