@@ -32,8 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.getPluralString
@@ -42,6 +40,7 @@ import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.FitText
+import space.opensensor.designsystem.headingSemantics
 import space.opensensor.today.resources.Res
 import space.opensensor.today.resources.action_cancel
 import space.opensensor.today.resources.action_reconnect
@@ -159,7 +158,7 @@ internal fun TodayDialogs(
         TodayDialog.Flush -> AlertDialog(
             onDismissRequest = onDismiss,
             icon = { Icon(AppIcons.Storage, contentDescription = null) },
-            title = { BodyText(stringResource(Res.string.flush), modifier = Modifier.semantics { heading() }, heading = true) },
+            title = { BodyText(stringResource(Res.string.flush), modifier = Modifier.headingSemantics(), heading = true) },
             text = { BodyText(stringResource(Res.string.flush_confirm)) },
             confirmButton = { TextButton(onClick = onConfirm) { FitText(stringResource(Res.string.flush_button)) } },
             dismissButton = { TextButton(onClick = onDismiss) { FitText(stringResource(Res.string.action_cancel)) } },
@@ -169,7 +168,7 @@ internal fun TodayDialogs(
             title = {
                 BodyText(
                     stringResource(Res.string.today_forget_title, name ?: stringResource(Res.string.today_forget_unnamed)),
-                    modifier = Modifier.semantics { heading() },
+                    modifier = Modifier.headingSemantics(),
                     heading = true,
                 )
             },
@@ -243,7 +242,7 @@ fun TodayContent(
                                 FitText(
                                     snapshot.name ?: stringResource(Res.string.device_unnamed),
                                     style = MaterialTheme.typography.titleLarge,
-                                    modifier = Modifier.semantics { heading() },
+                                    modifier = Modifier.headingSemantics(),
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.

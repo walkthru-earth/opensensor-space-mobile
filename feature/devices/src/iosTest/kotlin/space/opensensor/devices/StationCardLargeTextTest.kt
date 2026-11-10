@@ -13,7 +13,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.TextLayoutResult
@@ -21,6 +23,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import space.opensensor.data.history.LatestDay
+import space.opensensor.designsystem.nowEpochMillis
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.settings.DetailLevel
@@ -29,9 +32,12 @@ import kotlin.test.assertTrue
 
 /**
  * At 200 percent font on a 320 dp phone a station card with its archive day line, its mood, value,
- * unit, date and file count, and the Finish setup chip keeps every text whole, inside the card and
- * apart from the others (#117). A failed link keeps its error words whole too. Rendered headless on
- * the iOS simulator.
+ * unit, date, file count and synced age, its seen line and the Finish setup chip keeps every text
+ * whole, inside the card and apart from the others (#117). A failed link keeps its error words whole
+ * too. Rendered headless on the iOS simulator.
+ *
+ * The ages tick from the system clock, so both sit 45 minutes back from the test start. That is the
+ * middle of a minute and two digits wide, so the text is the same for the whole run.
  */
 @OptIn(ExperimentalTestApi::class)
 class StationCardLargeTextTest {
@@ -41,7 +47,8 @@ class StationCardLargeTextTest {
 
     // 2026-11-09 UTC, an unhealthy day so the mood word is one of the longest.
     private val day = LatestDay(startEpochS = 1_794_182_400, mean = 148.9f, coverage = 0.92f, metric = AirMetrics.PM25_CORRECTED, displayStep = 0.1)
-    private val glance = ArchiveGlance(files = 124, lastSyncedMs = null, lastDataUtcNs = 1_794_200_000_000_000_000, lastDay = day)
+    private val agoMs = nowEpochMillis() - 45 * 60_000L - 30_000L
+    private val glance = ArchiveGlance(files = 124, lastSyncedMs = agoMs, lastDataUtcNs = 1_794_200_000_000_000_000, lastDay = day)
     private val row = DeviceRow(
         id = "AA:BB:CC:DD:EE:01",
         name = "Balcony sensor in Accra",
@@ -50,7 +57,7 @@ class StationCardLargeTextTest {
         bonded = true,
         known = true,
         wifi = WifiTag.WITH_ACCESS,
-        lastSeenMs = null,
+        lastSeenMs = agoMs,
         archive = glance,
     )
 
@@ -98,12 +105,15 @@ class StationCardLargeTextTest {
     @Test
     fun aKnownCardKeepsItsDayLineAndSetupChipWholeAtDoubleText() = runComposeUiTest {
         show { KnownRow(row.copy(rssi = null, needsSetup = true), DetailLevel.DETAILED, onClick = {}) }
-        assertEveryTextFits(minTexts = 4)
+        // The seen line and the day line that ends with the synced age are both on the card.
+        onAllNodes(hasText("45 min ago", substring = true), useUnmergedTree = true).assertCountEquals(2)
+        assertEveryTextFits(minTexts = 5)
     }
 
     @Test
     fun aNearbyCardKeepsItsTagsAndDayLineWholeAtDoubleText() = runComposeUiTest {
         show { NearbyRow(row, DetailLevel.DETAILED, onClick = {}) }
+        onAllNodes(hasText("synced 45 min ago", substring = true), useUnmergedTree = true).assertCountEquals(1)
         assertEveryTextFits(minTexts = 4)
     }
 
