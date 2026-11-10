@@ -30,8 +30,10 @@ concern you are changing in `docs/README.md`.
 - The phone archive is local and works without internet. BLE is always available;
   LAN connects only to devices found through `_ossync._tcp` mDNS, using a token
   obtained over bonded BLE. The only other network use is anonymous, read-only
-  GETs of the public discover feed and basemap, which a Settings switch turns off
-  (`docs/devices-and-discovery.md`). Uploading a device's data is off by default
+  GETs of the public discover feed and basemap, and of a file's board template from
+  its footer href on the firmware template host when nothing on the phone resolves it
+  (`TemplateHrefs`, accepted only when its SHA-256 is the footer desc). One Settings
+  switch turns all of them off (`docs/devices-and-discovery.md`). Uploading a device's data is off by default
   and is enabled only per device, from that device's settings, with
   confirmation, under CC BY 4.0. No analytics or accounts. Location permission is foreground and approximate only, asked from "Near me" on
   Discover or on the area map of setup and Device settings. The coarse fix only moves

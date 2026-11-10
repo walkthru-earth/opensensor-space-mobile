@@ -23,6 +23,9 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * 4. Beside it [rederive], the one gate for template changes. It derives again only the things whose
  *    files resolve to another template, settled and with a cooldown, see [TemplateRederive]. A failed
  *    template derive stays pending and tries again after the cooldown.
+ * 5. Beside them [templateHrefs], when the platform gives one. It fetches the template of an indexed
+ *    file whose desc nothing resolves from the footer href, under the network switch (#260). A fetched
+ *    template reaches the served ones, so step 4 derives its things again.
  *
  * [log] gets step names, counts and class names only, never paths or thing ids.
  */
@@ -33,6 +36,7 @@ class HistoryStartup(
     private val blocks: BlockCache,
     private val log: (String) -> Unit = {},
     val rederive: TemplateRederive = TemplateRederive(orchestrator.index, log = log),
+    private val templateHrefs: TemplateHrefs? = null,
 ) {
     private val job = AtomicReference<Job?>(null)
 
@@ -55,6 +59,7 @@ class HistoryStartup(
             }
             coroutineScope {
                 launch { orchestrator.run(deriveAll) }
+                templateHrefs?.let { hrefs -> launch { step("template hrefs") { hrefs.run(orchestrator::unresolvedTemplateLinks) } } }
                 // Compares with the templates held when the gate was made, so one that landed during the janitor derives once more.
                 rederive.run { things -> step("template derive") { deriveThings?.invoke(things) ?: deriveAll() } }
             }

@@ -46,17 +46,33 @@ class ArchiveIndexRepair(
      * app. Its failure is logged and never fails the index.
      */
     private val onTemplateDigest: suspend (String) -> Unit = {},
+    /**
+     * Gets the [TemplateLink] of each file that indexes while [templates] resolves nothing for its desc,
+     * [TemplateHrefs.request] in the app (#260). It only queues, and its failure is logged and never fails
+     * the index.
+     */
+    private val onTemplateLink: (TemplateLink) -> Unit = {},
 ) {
     private val mutex = Mutex()
 
     /**
      * [record] with its index columns filled from [reader]. Hands the footer `template.sha256` of a file
-     * that indexes to [onTemplateDigest]. Never throws, except to cancel.
+     * that indexes to [onTemplateDigest], and its [TemplateLink] to [onTemplateLink] when no template
+     * resolves that desc. Never throws, except to cancel.
      */
     suspend fun indexed(record: ArchiveRecord, reader: () -> ByteReader, nowEpochMs: Long = this.nowEpochMs()): ArchiveRecord {
-        var templateDigest: String? = null
-        val indexed = indexRecord(record, reader, nowEpochMs) { templateDigest = it }
-        templateDigest?.let { digest ->
+        var footer: OpenSensorFooter? = null
+        val indexed = indexRecord(record, reader, nowEpochMs) { footer = it }
+        footer?.let(::unresolvedLink)?.let { link ->
+            try {
+                onTemplateLink(link)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log("template link request failed: ${e::class.simpleName}")
+            }
+        }
+        footer?.templateSha256?.let { digest ->
             try {
                 onTemplateDigest(digest)
             } catch (e: CancellationException) {
@@ -68,7 +84,11 @@ class ArchiveIndexRepair(
         return indexed
     }
 
-    private fun indexRecord(record: ArchiveRecord, reader: () -> ByteReader, nowEpochMs: Long, digest: (String) -> Unit): ArchiveRecord = try {
+    /** The link of [footer] when it names a desc no template resolves, else null. */
+    private fun unresolvedLink(footer: OpenSensorFooter): TemplateLink? =
+        TemplateLink.of(footer)?.takeIf { templates.template(footer.dictionarySha256, footer.templateSha256) == null }
+
+    private fun indexRecord(record: ArchiveRecord, reader: () -> ByteReader, nowEpochMs: Long, seen: (OpenSensorFooter) -> Unit): ArchiveRecord = try {
         val producer = producerThing(record.name)
         if (producer != null && producer != record.thing) {
             record.copy(
@@ -79,7 +99,7 @@ class ArchiveIndexRepair(
             val index = ParquetFile.open(reader(), record.name).use { file ->
                 val footer = file.metadata.footer
                 require(footer == null || footer.thingId == record.thing) { "file metadata belongs to another thing" }
-                ParquetIndexer.index(file, templates).also { footer?.templateSha256?.let(digest) }
+                ParquetIndexer.index(file, templates).also { footer?.let(seen) }
             }
             record.copy(
                 indexedAtEpochMs = nowEpochMs,
@@ -191,7 +211,50 @@ class ArchiveIndexRepair(
         }
     }
 
+    /**
+     * The [TemplateLink]s of indexed files whose footer desc no template resolves, one per desc and at
+     * most [limit], read from one footer each. Only links on the firmware template host
+     * ([TemplateHrefs.isFirmwareTemplate]) count, so other hrefs never crowd one out. A sweep opens at
+     * most [MAX_FOOTER_OPENS] footers whatever they hold, so a board writing many unresolved descs
+     * with other hrefs cannot make it read without end. A file that fails to read is skipped. For
+     * [TemplateHrefs.run].
+     */
+    suspend fun unresolvedTemplateLinks(limit: Int = MAX_LINKS): List<TemplateLink> = withContext(io) {
+        val links = LinkedHashMap<String, TemplateLink>()
+        val skipped = HashSet<String>()
+        var opened = 0
+        for (thing in index.things()) {
+            for (record in index.indexedForThing(thing)) {
+                if (links.size >= limit) return@withContext links.values.toList()
+                val desc = record.templateSha256?.lowercase() ?: continue
+                if (desc in links || desc in skipped || templates.template(record.dictionarySha256, desc) != null) continue
+                if (opened >= MAX_FOOTER_OPENS) return@withContext links.values.toList()
+                opened++
+                val link = try {
+                    if (store.exists(record.key)) {
+                        ParquetFile.open(store.reader(record.key), record.name).use { TemplateLink.of(it.metadata.footer) }
+                    } else {
+                        null
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+                // Only an href TemplateHrefs would fetch counts toward the limit.
+                if (link != null && link.desc == desc && TemplateHrefs.isFirmwareTemplate(link.href)) links[desc] = link else skipped += desc
+            }
+        }
+        links.values.toList()
+    }
+
     companion object {
+        /** The most links one [unresolvedTemplateLinks] sweep returns. */
+        const val MAX_LINKS = 16
+
+        /** The most footers one [unresolvedTemplateLinks] sweep opens, as many as one run may fetch descs. */
+        const val MAX_FOOTER_OPENS = TemplateHrefs.MAX_DESCS
+
         /** The thing inside the Hive path, which can differ from the archive namespace the file was saved under. */
         fun producerThing(name: String): String? = when (val partition = HivePartition.of(name)) {
             is HivePartition.Dated -> partition.thing

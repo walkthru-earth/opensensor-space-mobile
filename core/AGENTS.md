@@ -40,7 +40,10 @@ the template a board serves over `GET_DESCRIPTOR` (`DeviceSession.downloadDescri
 `StorageRole.Templates` and adds it to `ServedTemplates`, which resolves ahead of the bundled ones. Both
 keep at most 16 templates, oldest out first. `ArchiveIndexRepair` hands each indexed file's footer
 `template.sha256` to `BoardDescriptors.confirm`, which evicts a served template with the same 16 hex
-prefix and another full digest. Bundled templates are never evicted. All Kotlin code lives under `space.opensensor`.
+prefix and another full digest. Bundled templates are never evicted. `TemplateHrefs` in `history/`
+GETs the template of a file whose desc nothing resolves from its footer `template.href`, only under
+the `showPublicSensors` switch, only on the firmware template host, with no redirect, and binds it
+through `BoardDescriptors.adopt` only when its SHA-256 is the desc (#260). All Kotlin code lives under `space.opensensor`.
 `stac/` regenerates the STAC File Item of a synced device file (`FileItems.build`, #190). The board
 writes the Item, a sidecar JSON at `thing=<uuid>/year=YYYY/month=MM/day=DD/<file>.json` beside the
 file, and the phone is its transport and validator. An Item the phone builds must equal the board's

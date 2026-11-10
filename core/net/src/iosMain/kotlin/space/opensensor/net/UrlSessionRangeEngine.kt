@@ -10,6 +10,7 @@ import platform.Foundation.NSError
 import platform.Foundation.NSHTTPURLResponse
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
+import platform.Foundation.NSURLRequest
 import platform.Foundation.NSURLRequestReloadIgnoringLocalCacheData
 import platform.Foundation.NSURLResponse
 import platform.Foundation.NSURLSession
@@ -37,9 +38,10 @@ import kotlin.coroutines.resumeWithException
  *
  * Each task gets its own delegate ([BodyCollector]) instead of a completion handler, so the body is
  * copied once, chunk by chunk, into the array the response carries, and the task is cancelled as soon as
- * the body passes its [BodyLimit].
+ * the body passes its [BodyLimit]. With [followRedirects] false a 3xx answer comes back as it is, its
+ * target never requested.
  */
-class UrlSessionRangeEngine(private val session: NSURLSession) : HttpRangeEngine {
+class UrlSessionRangeEngine(private val session: NSURLSession, private val followRedirects: Boolean = true) : HttpRangeEngine {
     override suspend fun get(url: String, range: String?, ifRange: String?, ifNoneMatch: String?, limit: BodyLimit): HttpRangeResponse {
         val target = NSURL.URLWithString(url) ?: throw IllegalArgumentException("not a URL ${redact(url)}")
         val request = NSMutableURLRequest.requestWithURL(target).apply {
@@ -52,7 +54,7 @@ class UrlSessionRangeEngine(private val session: NSURLSession) : HttpRangeEngine
         }
         return suspendCancellableCoroutine { continuation ->
             val task = session.dataTaskWithRequest(request)
-            task.setDelegate(BodyCollector(url, limit, continuation))
+            task.setDelegate(BodyCollector(url, limit, followRedirects, continuation))
             continuation.invokeOnCancellation { task.cancel() }
             task.resume()
         }
@@ -61,10 +63,11 @@ class UrlSessionRangeEngine(private val session: NSURLSession) : HttpRangeEngine
     companion object {
         /**
          * An engine on an ephemeral session with no URL cache. [allowsExpensive] and [allowsConstrained]
-         * follow the user's setting for cellular or hotspot data and for Low Data Mode.
+         * follow the user's setting for cellular or hotspot data and for Low Data Mode. With
+         * [followRedirects] false a 3xx answer comes back as it is.
          */
-        fun create(allowsExpensive: Boolean, allowsConstrained: Boolean): UrlSessionRangeEngine =
-            UrlSessionRangeEngine(NSURLSession.sessionWithConfiguration(configuration(allowsExpensive, allowsConstrained)))
+        fun create(allowsExpensive: Boolean, allowsConstrained: Boolean, followRedirects: Boolean = true): UrlSessionRangeEngine =
+            UrlSessionRangeEngine(NSURLSession.sessionWithConfiguration(configuration(allowsExpensive, allowsConstrained)), followRedirects)
 
         /** The configuration [create] uses. Tests add a stub protocol class to it. */
         internal fun configuration(allowsExpensive: Boolean, allowsConstrained: Boolean): NSURLSessionConfiguration =
@@ -91,6 +94,7 @@ class UrlSessionRangeEngine(private val session: NSURLSession) : HttpRangeEngine
 private class BodyCollector(
     private val url: String,
     private val limit: BodyLimit,
+    private val followRedirects: Boolean,
     private val continuation: CancellableContinuation<HttpRangeResponse>,
 ) : NSObject(),
     NSURLSessionDataDelegateProtocol {
@@ -122,6 +126,17 @@ private class BodyCollector(
         head = http
         body = ByteArray(if (expected >= 0) expected.toInt() else minOf(max, INITIAL_BYTES).toInt())
         completionHandler(NSURLSessionResponseAllow)
+    }
+
+    /** Without [followRedirects] the 3xx answer itself becomes the response, its target never requested. */
+    override fun URLSession(
+        session: NSURLSession,
+        task: NSURLSessionTask,
+        willPerformHTTPRedirection: NSHTTPURLResponse,
+        newRequest: NSURLRequest,
+        completionHandler: (NSURLRequest?) -> Unit,
+    ) {
+        completionHandler(if (followRedirects) newRequest else null)
     }
 
     override fun URLSession(session: NSURLSession, dataTask: NSURLSessionDataTask, didReceiveData: NSData) {

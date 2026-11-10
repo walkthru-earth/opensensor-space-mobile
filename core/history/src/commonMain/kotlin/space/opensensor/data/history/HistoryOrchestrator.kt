@@ -58,6 +58,9 @@ class HistoryOrchestrator(
      */
     suspend fun estimateTimes(): Int = passes.withLock { repair.estimateTimes() }
 
+    /** [ArchiveIndexRepair.unresolvedTemplateLinks], read only, so it takes no pass. */
+    suspend fun unresolvedTemplateLinks(): List<TemplateLink> = repair.unresolvedTemplateLinks()
+
     /**
      * The follow-up to a saved clock receipt. The time estimates as one pass, so they never change
      * under a derive or a backfill, then [derive], which takes [derivePass] itself.

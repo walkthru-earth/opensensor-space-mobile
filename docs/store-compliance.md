@@ -24,6 +24,14 @@ State as of 2026-10-09. Re-check the linked store pages before each submission. 
   See [device-location.md](device-location.md).
 - No server today. The planned Discover feed (anonymous read-only GETs) and per-device opt-in
   uploads change the answers below. See "Before Discover or uploads ship".
+- Under the same "Show public sensors" switch, the app may make an anonymous, read-only GET for a
+  board template a synced file names and the phone lacks, from the firmware template host on
+  `raw.githubusercontent.com`, and keeps it only when its SHA-256 matches the file footer. Each
+  template is tried at most once per app run, so a later run may retry a failed GET or fetch a
+  template whose cached copy is gone. The URL path names the board model, the firmware commit and
+  the template dict, all public firmware values, so the host sees the sensor kind with the IP
+  address. It sends no device identifier and no user data (`TemplateHrefs`,
+  `docs/history-pipeline.md`).
 
 ## Google Play
 

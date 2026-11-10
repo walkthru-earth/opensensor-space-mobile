@@ -582,8 +582,12 @@ misleading. Revisit if public values ever become finer than hourly.
 ### Network boundary
 
 This feature changes the offline-only stance in one narrow way. The app may make anonymous,
-read-only GET requests to the public feed and the basemap. No cookies, accounts, identifiers or
-analytics. A Settings switch, "Show public sensors", turns them off. When it is off, Discover
+read-only GET requests to the public feed and the basemap. Under the same switch it may also GET a
+synced file's board template from its footer `template.href`, only an https link on the firmware
+template host with no redirect, and only when nothing on the phone resolves that template. The
+bytes are kept only when their SHA-256 is the footer desc (`TemplateHrefs`, see
+`history-pipeline.md`). No cookies, accounts, identifiers or analytics. A Settings switch, "Show
+public sensors", turns them all off. When it is off, Discover
 shows the bundled sample on the bundled basemap. When the network fails, Real shows the last kept
 index and its cells from the block cache, labelled cached with its age, and with nothing kept it
 shows the failed load with Retry. Own pins, their readings and Live read only the phone. Pairing
@@ -798,7 +802,8 @@ starts with the target layout from the producer guidance.
   credit and GeoNames (CC BY 4.0) sit in the map info. Apple 5.2.2 expects
   permission for third-party content, which the licences give with attribution.
 - **Privacy policy.** Required by both stores for every app, as a public URL in the console and
-  inside the app (Settings, About). It names the feed and basemap hosts, says each request
+  inside the app (Settings, About). It names the feed and basemap hosts and the firmware template
+  host (`raw.githubusercontent.com`), says each request
   carries the phone's IP address as any web request does, and says we keep no request logs.
 - **Data safety and privacy label.** Reading the feed sends no identifier, and we receive no
   request logs, so nothing is collected. Play Data safety declares no data collected or shared.

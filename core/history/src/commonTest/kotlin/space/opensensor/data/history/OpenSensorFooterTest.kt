@@ -9,8 +9,10 @@ import kotlinx.serialization.json.jsonObject
 import space.opensensor.family.air.AirFamily
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class OpenSensorFooterTest {
     init {
@@ -46,7 +48,30 @@ class OpenSensorFooterTest {
     private fun JsonObject.with(key: String, value: JsonElement?): String =
         JsonObject(if (value == null) this - key else this + (key to value)).toString()
 
-    private val thingA = OpenSensorFooter(10_000, dict, desc, thingId = "thing-a", mobility = OpenSensorFooter.Mobility.FIXED, purpose = "telemetry", rotationIntervalS = 3600)
+    private val thingA = OpenSensorFooter(
+        10_000,
+        dict,
+        desc,
+        templateHref = "https://example.invalid/templates/m5stack-cores3/$desc.json",
+        thingId = "thing-a",
+        mobility = OpenSensorFooter.Mobility.FIXED,
+        purpose = "telemetry",
+        rotationIntervalS = 3600,
+    )
+
+    @Test
+    fun aTemplateHrefOfTheWrongKindIsLeftOut() {
+        fun href(value: String) = parse(full().with("template", "href", Json.parseToJsonElement(value)))
+        assertEquals("https://example.invalid/t.json", href("\"https://example.invalid/t.json\"")?.templateHref)
+        // REQUIRED checks presence and non null only. A href of the wrong kind leaves the field null and
+        // keeps the rest of the footer.
+        for (bad in listOf("\"\"", "7", "true", "{}", "[\"x\"]")) {
+            assertEquals(bad, thingA.copy(templateHref = null), href(bad))
+        }
+        // Left out or JSON null, the required member is missing, so there is no footer.
+        assertNull(href("null"))
+        assertNull(parse(full().with("template", "href", null)))
+    }
 
     @Test
     fun theRotationWindowIsOneTheProfileAllows() {
@@ -76,6 +101,7 @@ class OpenSensorFooterTest {
             10_000,
             "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9",
             "4dd6c4b1ef19187ed2c011ab86018e43be0f28edc3af63a0f6a27b70ff203ef3",
+            templateHref = "https://raw.githubusercontent.com/walkthru-earth/opensensor-space-firmware/bb618f32a8a9bfe6a633a22ad5e99d319d55d46b/docs/shared/templates/m5stack-cores3/3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9.json",
             thingId = "3f2b9c1e-6a7d-4e58-9b1c-2d4f6a8e0c13",
             mobility = OpenSensorFooter.Mobility.FIXED,
             purpose = "telemetry",
@@ -83,6 +109,8 @@ class OpenSensorFooterTest {
         )
         assertEquals(footer, parse(example))
         assertSame(coreS3Template, FileTemplates.BUNDLED.of(footer).template)
+        // The href a CoreS3 board writes is one TemplateHrefs would fetch.
+        assertTrue(TemplateHrefs.isFirmwareTemplate(assertNotNull(footer.templateHref)))
     }
 
     @Test
@@ -177,7 +205,6 @@ class OpenSensorFooterTest {
         assertEquals(thingA, parse(footer.toString()))
         // A required member the app does not read is only checked for presence, whatever its value.
         assertEquals(thingA, parse(full().with("firmware", "schema", Json.parseToJsonElement("""["v5"]"""))))
-        assertEquals(thingA, parse(full().with("template", "href", JsonPrimitive(7))))
         // A non-positive interval is unknown, so the template default applies.
         assertEquals(thingA.copy(sampleIntervalMs = null), parse(full().with("acquisition", "sample_interval_ms", JsonPrimitive(0))))
     }

@@ -35,6 +35,7 @@ import space.opensensor.data.history.HistoryStartup
 import space.opensensor.data.history.IosDailyDerivedStore
 import space.opensensor.data.history.IosFileTierStore
 import space.opensensor.data.history.LegacyFileCleanup
+import space.opensensor.data.history.TemplateHrefs
 import space.opensensor.data.history.TemplateRederive
 import space.opensensor.data.history.TimeEstimate
 import space.opensensor.data.history.UtcDayRange
@@ -46,6 +47,7 @@ import space.opensensor.data.sync.ThingSources
 import space.opensensor.map.MapCache
 import space.opensensor.net.BlockCache
 import space.opensensor.net.DiskBlockStore
+import space.opensensor.net.UrlSessionRangeEngine
 import space.opensensor.settings.OldFilesPlan
 import space.opensensor.settings.OldFilesRange
 import space.opensensor.settings.OldFilesResult
@@ -143,7 +145,32 @@ internal object IosArchive {
      * index repair, so no backfill or time estimate here runs outside a pass.
      */
     private val history by lazy {
-        HistoryOrchestrator(ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, coordinator = coordinator, onTemplateDigest = boardDescriptors::confirm), index, log = ::println)
+        HistoryOrchestrator(
+            ArchiveIndexRepair(
+                store,
+                index,
+                clockAnchors = clockAnchors,
+                coordinator = coordinator,
+                onTemplateDigest = boardDescriptors::confirm,
+                onTemplateLink = templateHrefs::request,
+            ),
+            index,
+            log = ::println,
+        )
+    }
+
+    /**
+     * Fetches the template an indexed file's footer href names when nothing resolves its desc (#260).
+     * One anonymous, read only GET per desc, only on the firmware template host, never a redirect, and
+     * only while the Settings switch for public data is on.
+     */
+    private val templateHrefs by lazy {
+        TemplateHrefs(
+            engine = UrlSessionRangeEngine.create(allowsExpensive = true, allowsConstrained = true, followRedirects = false),
+            descriptors = boardDescriptors,
+            allowed = settingsRepository.showPublicSensors,
+            log = ::println,
+        )
     }
 
     /**
@@ -151,7 +178,7 @@ internal object IosArchive {
      * then [rebuildDerived], and again whenever a record waits for its index. [startIndexRepair]
      * starts it once.
      */
-    val historyStartup by lazy { HistoryStartup(history, janitor, feedBlocks, log = ::println, rederive = templateRederive) }
+    val historyStartup by lazy { HistoryStartup(history, janitor, feedBlocks, log = ::println, rederive = templateRederive, templateHrefs = templateHrefs) }
 
     /** The one template gate of the process, shared by [tiers] and [historyStartup]. */
     private val templateRederive by lazy { TemplateRederive(index, log = ::println) }

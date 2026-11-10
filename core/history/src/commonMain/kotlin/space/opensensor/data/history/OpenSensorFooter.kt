@@ -23,6 +23,14 @@ data class OpenSensorFooter(
     val dictionarySha256: String? = null,
     /** `template.sha256`, the SHA-256 of the exact board template bytes. Always set on a parsed footer. */
     val templateSha256: String? = null,
+    /**
+     * `template.href`, where the exact template bytes can be fetched. [REQUIRED] makes it present and
+     * not JSON null on a parsed footer, and it is null here only when it is not a non empty string, a
+     * number or an empty string for example. Only a hint, [TemplateHrefs] fetches it and keeps the bytes
+     * only when they hash to [templateSha256], so a value of the wrong kind never drops the rest of the
+     * footer.
+     */
+    val templateHref: String? = null,
     /** `thing.id`, the thing that wrote the file. Always set on a parsed footer. */
     val thingId: String? = null,
     /** `thing.mobility`. Always set on a parsed footer. */
@@ -56,6 +64,7 @@ data class OpenSensorFooter(
         private const val ID = "id"
         private const val PURPOSE = "purpose"
         private const val SHA256 = "sha256"
+        private const val HREF = "href"
         private const val SAMPLE_INTERVAL_MS = "sample_interval_ms"
         private const val ROTATION_INTERVAL_S = "rotation_interval_s"
 
@@ -63,12 +72,17 @@ data class OpenSensorFooter(
          * Every member stac-opensensor v0.1.0 `footer.json` requires below the top level, object by
          * object. Each object must be a JSON object, and a footer without one of these members, or with
          * JSON null in its place, is not trusted. The top level `version` is checked on its own.
+         *
+         * This check enforces presence and non null only, never the types `footer.json` gives. A member
+         * the app reads is checked for its kind where [parse] reads it. One that holds only a hint, like
+         * `template.href` or `file.rotation_interval_s`, is left out when of the wrong kind and the
+         * footer still parses. Members the app does not read are not checked further.
          */
         val REQUIRED: Map<String, List<String>> = mapOf(
             THING to listOf(ID, "device_id", "board", MOBILITY),
             "firmware" to listOf(VERSION, "schema", "boot_id"),
             DICTIONARY to listOf(SHA256),
-            TEMPLATE to listOf("href", SHA256),
+            TEMPLATE to listOf(HREF, SHA256),
             ACQUISITION to listOf(SAMPLE_INTERVAL_MS, "time_semantics"),
             FILE to listOf(ROTATION_INTERVAL_S, "row_groups", "row_group_rows_max", "compression", PURPOSE),
         )
@@ -102,6 +116,11 @@ data class OpenSensorFooter(
                 }?.takeIf { it > 0 },
                 dictionarySha256 = root.member(DICTIONARY, SHA256)?.let(::sha256),
                 templateSha256 = root.member(TEMPLATE, SHA256)?.let(::sha256),
+                templateHref = (root[TEMPLATE] as? JsonObject)?.get(HREF)
+                    ?.let { it as? JsonPrimitive }
+                    ?.takeIf { it.isString }
+                    ?.content
+                    ?.takeIf { it.isNotEmpty() },
                 thingId = text(root.member(THING, ID) ?: throw Malformed()),
                 mobility = Mobility.of(text(root.member(THING, MOBILITY) ?: throw Malformed())) ?: throw Malformed(),
                 purpose = text(root.member(FILE, PURPOSE) ?: throw Malformed()),

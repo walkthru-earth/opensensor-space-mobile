@@ -20,11 +20,13 @@ import space.opensensor.data.history.BoardDescriptors
 import space.opensensor.data.history.HistoryIndexer
 import space.opensensor.data.history.HistoryOrchestrator
 import space.opensensor.data.history.HistoryStartup
+import space.opensensor.data.history.TemplateHrefs
 import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.net.BlockCache
 import space.opensensor.net.DiskBlockStore
+import space.opensensor.net.OkHttpRangeEngine
 import space.opensensor.settings.SettingsRepository
 import space.opensensor.storage.AtomicFiles
 import space.opensensor.storage.DerivedQuota
@@ -150,6 +152,20 @@ object StorageModule {
         @IoDispatcher io: CoroutineDispatcher,
     ): BoardDescriptors = BoardDescriptors(DiskBlockStore(roots.rootOf(StorageRole.Templates), atomic, tree), io = io)
 
+    /**
+     * Fetches the template an indexed file's footer href names when nothing resolves its desc (#260).
+     * One anonymous, read only GET per desc, only on the firmware template host, never a redirect, and
+     * only while the Settings switch for public data is on.
+     */
+    @Provides
+    @Singleton
+    fun provideTemplateHrefs(boardDescriptors: BoardDescriptors, settings: SettingsRepository): TemplateHrefs = TemplateHrefs(
+        engine = OkHttpRangeEngine(OkHttpRangeEngine.newClient(followRedirects = false)),
+        descriptors = boardDescriptors,
+        allowed = settings.showPublicSensors,
+        log = { Log.i("TemplateHrefs", it) },
+    )
+
     @Provides
     fun provideStorageJanitor(
         roots: StorageRoots,
@@ -185,10 +201,11 @@ object StorageModule {
 
     /**
      * The shared History start (#125). The janitor sweeps once per process start, then the feed block
-     * quota applies even when the sweep failed, then the backfill and the derive the app start hands in.
+     * quota applies even when the sweep failed, then the backfill and the derive the app start hands in,
+     * with the template gate and the template href fetch beside them.
      */
     @Provides
     @Singleton
-    fun provideHistoryStartup(orchestrator: HistoryOrchestrator, janitor: StorageJanitor, blocks: BlockCache): HistoryStartup =
-        HistoryStartup(orchestrator, janitor, blocks, log = { Log.i("HistoryStartup", it) })
+    fun provideHistoryStartup(orchestrator: HistoryOrchestrator, janitor: StorageJanitor, blocks: BlockCache, templateHrefs: TemplateHrefs): HistoryStartup =
+        HistoryStartup(orchestrator, janitor, blocks, log = { Log.i("HistoryStartup", it) }, templateHrefs = templateHrefs)
 }

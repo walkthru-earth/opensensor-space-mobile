@@ -31,6 +31,16 @@ When the public map is on, the app downloads public map data anonymously. Like a
 request this reaches the host, source.coop, with your IP address. We do not receive access logs
 and do not use it to identify you. You can turn the public map off in Settings.
 
+With the same setting on, when a file synced from your sensor names a sensor description the app
+does not have, the app downloads that description anonymously from raw.githubusercontent.com,
+where the sensor software is published. It tries each description at most once each time the app
+runs. A later run may try again after a failed download, or download it again if the saved copy is
+gone. The request carries your IP address like any other, and its address names the sensor model,
+the published software version and the description's fingerprint, so the host can tell which kind
+of sensor it is for. It carries no device name, nothing about you and none of your readings. The
+app keeps the description only when it matches the fingerprint the file carries. With the public
+map off, nothing is downloaded.
+
 ## Sharing a sensor publicly (optional, off by default)
 
 You can choose to share one sensor's readings on the public map from that sensor's settings. Only

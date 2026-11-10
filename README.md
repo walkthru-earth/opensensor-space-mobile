@@ -21,7 +21,8 @@ The app does three things.
 **Private by design.** The archive lives on the phone and works without internet. LAN
 connects only to devices found through `_ossync._tcp` mDNS, with a token obtained over bonded
 BLE. The only other network use is anonymous, read-only downloads of the public map feed and
-basemap, which a Settings switch turns off. Sharing a device's own data is off by default and
+basemap, and of a board template a file names when the app has none for it. One Settings switch
+turns them off. Sharing a device's own data is off by default and
 is turned on per device, in that device's settings, with confirmation. No accounts, no
 analytics. Approximate foreground location is asked only on the Near me or Use phone
 location tap. Device settings can save a privacy-limited H3 area to your sensor,
