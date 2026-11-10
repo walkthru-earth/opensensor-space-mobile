@@ -12,7 +12,8 @@ flowchart LR
   P[push] --> V["pre-push: ./gradlew verify"]
   V --> T[":app lintDebug + assembleDebug + testDebugUnitTest<br/>+ every shared module's host tests<br/>+ verifyIos on a Mac"]
   GH[GitHub PR or push to main] --> W["verify.yml: pre-commit --all-files + ./gradlew verify → debug APK + reports"]
-  GH --> I["verify.yml: macOS → Kotlin iOS tests + one simulator Debug build for app and Swift tests · device Release build on main only"]
+  GH --> I["verify.yml: macOS → Kotlin iOS tests + one simulator Debug build for app and Swift tests"]
+  GH --> D["verify.yml: macOS device Release build job, main and by hand only"]
   GH --> R["release.yml: apk job (read-only, R8 + signing) → publish job (contents: write) · main → rolling 'latest' · v* tag → permanent release"]
 ```
 
@@ -38,7 +39,12 @@ checks, recorded separately in [status.md](status.md) and the firmware repo's `b
 CI minutes cost money and macOS minutes cost the most, so `verify.yml` runs once per change.
 Pull requests run on `pull_request` only, not again on the branch push. `main` runs on push.
 Changes to `docs/` or Markdown alone skip the gate. A branch without a PR runs it with
-`workflow_dispatch`. The device Release build runs on `main` and by hand, not on pull requests.
+`workflow_dispatch`. The device Release build runs on `main` and by hand, not on pull requests, in
+its own job ("iOS device Release build", 45 minute timeout) beside "iOS native validation" (60
+minutes). As one step after the simulator tests it took about 17 minutes and pushed that job past
+60 minutes on every `main` run from a6aea84a on, and a cancelled job also skips saving the `main`
+caches. A slow macOS runner can still cancel "iOS native validation" at 60 minutes. That is
+infrastructure, rerun the job.
 CI runs ktlint on every file, while the local hook checks only staged files, so run
 `pre-commit run --all-files` before a merge that touches many Kotlin files.
 
@@ -144,9 +150,10 @@ current feature scope and simulator versus phone qualification.
 
 ### GitHub Actions iOS validation (researched 2026-10-08)
 
-Keep one `iOS native validation` job in `verify.yml`, alongside the Linux checks.
-It runs on pushes, pull requests and manual dispatch, including documentation changes,
-so its check is always present if made required in a branch ruleset. The workflow
+Keep one `iOS native validation` job in `verify.yml`, alongside the Linux checks, plus the
+`iOS device Release build` job that runs off pull requests only. The validation job runs on
+pushes, pull requests and manual dispatch, so its check is present if made required in a
+branch ruleset. Changes to `docs/` or Markdown alone start no run. The workflow
 uses read-only repository permissions and cancels obsolete runs. Validation needs
 no Apple account, provisioning profile or signing secret.
 
@@ -170,7 +177,7 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | `ios/tests/verify-native.sh` | Compiles native archive export, LAN framing/policy, RunSlot cancellation and Bluetooth GATT queue checks in Swift 6 with complete concurrency checking and warnings as errors. Shared transfer checks run in Kotlin tests. No radio or UI qualification. |
 | `verifyIos` | Runs the simulator tests of every shared module (each `:core` module, `:ui:designsystem`, `:ui:map`, `:feature:discover`, `:ios:shared`), compiles the `iosMain`, `appleMain` and `nativeMain` metadata, and links the Debug framework. |
 | Xcode Debug simulator build | Compiles Swift adapters, app entry point and the Compose framework through the existing direct-integration build phase. |
-| Xcode Release device build, signing disabled | Checks optimized Kotlin and Swift for device ARM64. Catches failures hidden by Debug/simulator builds; produces no distributable IPA. |
+| Xcode Release device build, signing disabled, own job off pull requests | Checks optimized Kotlin and Swift for device ARM64. Catches failures hidden by Debug/simulator builds; produces no distributable IPA. |
 
 The shared Xcode scheme has one hostless Swift Testing target, `OpenSensorTests`, which runs the
 `verify-native.sh` checks on a simulator. Do not substitute `xcodebuild test` for the Kotlin

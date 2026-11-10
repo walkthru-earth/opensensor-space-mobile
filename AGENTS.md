@@ -112,6 +112,7 @@ secrets and ktlint; the pre-push hook runs `verify`. For setup and CI details se
 
 CI (`.github/workflows/verify.yml`) runs the same gates. The "iOS native validation" job has a
 60 minute timeout, and under macOS runner contention it hits it and shows as cancelled. That is
-infrastructure, not a code failure. A change that only touches `docs/**` or Markdown starts no
-CI run (`paths-ignore`). Rerun the job, or run `./gradlew --no-daemon verify` and
+infrastructure, not a code failure. The unsigned device Release build is its own job, "iOS device
+Release build", with a 45 minute timeout. It runs on `main` and by hand, never on a pull request.
+A change that only touches `docs/**` or Markdown starts no CI run (`paths-ignore`). Rerun the job, or run `./gradlew --no-daemon verify` and
 `verifyIos` locally before calling a change broken.
