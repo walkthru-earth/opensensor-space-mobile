@@ -98,6 +98,7 @@ import space.opensensor.designsystem.MoodStrip
 import space.opensensor.designsystem.Peacock
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockIcon
+import space.opensensor.designsystem.QcFlagLine
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.metricLabel
 import space.opensensor.designsystem.moodLine
@@ -726,7 +727,7 @@ internal fun SheetContent(
             SheetBody.FIRST_RUN -> FirstRunCard(strings, state.isSample, onAddSensor, onExplore)
             SheetBody.IN_VIEW -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
         }
-        if (body.listsOwn) OwnList(state.own, state.ownStatus, now, strings, onPickOwn)
+        if (body.listsOwn) OwnList(state.own, state.ownStatus, now, strings, simple, onPickOwn)
     }
 }
 
@@ -893,10 +894,12 @@ private fun InView(
 /**
  * The user's own fixed Things, the list alternative to their pins for TalkBack and VoiceOver (#226).
  * Each row names the Thing, its newest reading on this phone and Live or the reading's age (#273),
- * read as one item. A tap moves the map to its cell. Nothing shows without own Things.
+ * read as one item. A tap moves the map to its cell. Nothing shows without own Things. Above [simple] a
+ * reading with rows flagged by the stored checks gets one flag line with an info icon, and Simple shows
+ * the mean of the rows that passed, no value when none did (#91).
  */
 @Composable
-private fun OwnList(own: List<OwnPin>, status: Map<String, OwnStatus>, now: Long, strings: DiscoverStrings, onPick: (OwnPin) -> Unit) {
+private fun OwnList(own: List<OwnPin>, status: Map<String, OwnStatus>, now: Long, strings: DiscoverStrings, simple: Boolean, onPick: (OwnPin) -> Unit) {
     if (own.isEmpty()) return
     val ink = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -907,9 +910,12 @@ private fun OwnList(own: List<OwnPin>, status: Map<String, OwnStatus>, now: Long
         val name = pin.thing.name.ifBlank { strings.ownUnnamed }
         val label = strings.ownShow(name)
         val thingStatus = status[pin.thing.key]
-        val reading = thingStatus?.reading?.let { r ->
-            "${metricLabel(r.metric)} ${units.format(r.mean.toDouble(), r.metric.unit, r.displayStep, AppProfile.decimalsOf(r.displayStep))} ${units.unit(r.metric.unit)}".trimEnd()
+        val latest = thingStatus?.reading
+        val reading = latest?.let { r ->
+            val mean = (if (simple) r.passedMean else r.mean) ?: return@let null
+            "${metricLabel(r.metric)} ${units.format(mean.toDouble(), r.metric.unit, r.displayStep, AppProfile.decimalsOf(r.displayStep))} ${units.unit(r.metric.unit)}".trimEnd()
         }
+        val flags = if (!simple && latest != null && latest.flaggedRows > 0) latest.flags else 0
         val freshness = ownFreshness(thingStatus, now)
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp)
@@ -924,6 +930,7 @@ private fun OwnList(own: List<OwnPin>, status: Map<String, OwnStatus>, now: Long
             Column(Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.bodyLarge)
                 if (reading != null) Text(reading, style = MaterialTheme.typography.bodyMedium, color = muted)
+                if (flags != 0) QcFlagLine(flags, color = muted)
             }
             when (freshness) {
                 // Live in ink with a solid dot, never the brand blue, which marks a selection.

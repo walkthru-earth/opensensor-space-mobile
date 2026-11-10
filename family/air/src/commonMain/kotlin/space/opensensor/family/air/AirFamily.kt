@@ -9,6 +9,7 @@ import space.opensensor.model.DerivedMetricProvider
 import space.opensensor.model.Family
 import space.opensensor.model.HealthScale
 import space.opensensor.model.Role
+import space.opensensor.model.RowCheck
 import space.opensensor.model.RowFormula
 import space.opensensor.model.Thing
 import space.opensensor.publicfeed.DiscoverCollection
@@ -71,6 +72,15 @@ object AirFamily : DerivedMetricProvider {
     }
 
     override val scales: Map<String, HealthScale> = mapOf(PM25_SCALE to WhoGuidelines.PM25, PM10_SCALE to WhoGuidelines.PM10)
+
+    /**
+     * The stored quality checks ([AirQc], #91) for a template that writes the atmospheric PM2.5, with
+     * the count bins it declares. Every other template gets none.
+     */
+    override fun rowCheck(template: BoardTemplate): RowCheck? {
+        if (template.datastream(PM25_ATMOSPHERIC) == null) return null
+        return AirQc(PARTICLE_BINS.filter { template.datastream(it) != null })
+    }
 
     override fun capabilitiesOf(thing: Thing): Set<Capability> = buildSet {
         if (thing.datastream(AirMetrics.BATCH_ESTIMATE_COLUMN) != null) add(BATCH_ESTIMATE)

@@ -94,19 +94,21 @@ class HistorySeriesReader(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeTier(thing: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow, tier: Resolution): Flow<HistorySeries> =
-        tiers.observe(thing, metric.id, tier, tier.bucketStart(window.fromS), window.toS).mapLatest { buckets ->
+        CheckedTiers.observe(tiers, thing, metric, tier, tier.bucketStart(window.fromS), window.toS).mapLatest { buckets ->
             fromBuckets(thing, metric, range, window.fromS, window.toS, tier, buckets)
         }.flowOn(io)
 
-    private suspend fun fromBuckets(thing: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, buckets: List<TierBucket>): HistorySeries {
+    private suspend fun fromBuckets(thing: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, checked: List<CheckedBucket>): HistorySeries {
         // A local midnight can cut through a UTC tier bucket (India at :30). Read only those two
         // partial edges from verified rows, whole interior buckets stay cheap.
         val firstWhole = if (tier.bucketStart(fromS) == fromS) fromS else tier.bucketStart(fromS) + tier.seconds
         val lastWholeEnd = tier.bucketStart(toS)
         val leading = if (fromS < firstWhole) fromRows(thing, metric, range, fromS, minOf(firstWhole, toS)) else null
         val trailing = if (lastWholeEnd < toS && lastWholeEnd >= firstWhole) fromRows(thing, metric, range, lastWholeEnd, toS) else null
-        val whole = buckets.filter { it.startEpochS >= firstWhole && it.startEpochS + tier.seconds <= toS }
-        val points = leading?.points.orEmpty() + whole.map { b ->
+        val wholeChecked = checked.filter { it.bucket.startEpochS >= firstWhole && it.bucket.startEpochS + tier.seconds <= toS }
+        val whole = wholeChecked.map { it.bucket }
+        val points = leading?.points.orEmpty() + wholeChecked.map { c ->
+            val b = c.bucket
             HistoryPoint(
                 b.startEpochS,
                 b.startEpochS + tier.seconds,
@@ -115,11 +117,24 @@ class HistorySeriesReader(
                 if (metric.envelope) b.max else null,
                 b.coverage(tier),
                 estimated = b.estimatedRows * 2 >= b.rows && b.estimatedRows > 0,
+                flaggedRows = c.flaggedRows,
+                flags = c.flags,
+                cleanMean = c.cleanMean,
             )
         } + trailing?.points.orEmpty()
         val edges = listOfNotNull(leading, trailing)
         val parts = whole.map { Partial(it.mean, it.validRows.toLong(), it.startEpochS) } +
             edges.mapNotNull { e -> e.mean?.let { Partial(it, e.validRows, e.fromS) } }
+        val flagged = wholeChecked.sumOf { it.flaggedRows.toLong() } + edges.sumOf { it.flaggedRows }
+        // The rows that passed, from each bucket's clean mean and the edges' own, only when any was flagged.
+        val cleanParts = if (flagged == 0L) {
+            emptyList()
+        } else {
+            wholeChecked.mapNotNull { c ->
+                val b = c.bucket
+                if (c.flaggedRows == 0) Partial(b.mean, b.validRows.toLong(), b.startEpochS) else c.cleanMean?.let { Partial(it, (b.validRows - c.flaggedRows).toLong(), b.startEpochS) }
+            } + edges.mapNotNull { e -> (if (e.flaggedRows == 0L) e.mean else e.cleanMean)?.let { Partial(it, e.validRows - e.flaggedRows, e.fromS) } }
+        }
         var max: Float? = null
         for (b in whole) {
             val hi = if (metric.envelope) b.max else b.mean
@@ -138,6 +153,9 @@ class HistorySeriesReader(
             estimatedRows = whole.sumOf { it.estimatedRows.toLong() } + edges.sumOf { it.estimatedRows },
             unreadableSources = edges.sumOf { it.unreadableSources },
             sampleIntervalMs = interval,
+            flaggedRows = flagged,
+            flags = wholeChecked.fold(0) { acc, c -> acc or c.flags } or edges.fold(0) { acc, e -> acc or e.flags },
+            cleanMean = if (flagged == 0L) null else combine(metric.aggregate, cleanParts),
         )
     }
 
@@ -179,20 +197,41 @@ class HistorySeriesReader(
         DailyParquetBuilder.sortByTimeline(order, times)
         val values = rows.values
         val estimatedFlags = rows.estimated
+        val rowFlags = rows.flags
         val binned = order.size > RAW_POINT_CAP
         val interval = rows.sampleIntervalMs
         val rowS = if (interval > 0) maxOf(1L, interval / MS_PER_S) else 1L
         val points = ArrayList<HistoryPoint>(if (binned) 1_440 else order.size)
         val total = Rollup(metric.aggregate)
+        // The valid rows that passed every stored check (#91), and the flagged ones.
+        val clean = Rollup(metric.aggregate)
+        var flagged = 0L
+        var mask = 0
         var max: Float? = null
         if (!binned) {
             for (i in order) {
                 val v = values[i]
                 val valid = !v.isNaN()
-                points += HistoryPoint(times[i], times[i] + rowS, if (valid) v else null, null, null, if (valid) 1f else 0f, estimated = estimatedFlags[i])
+                val f = if (valid) rowFlags[i] else 0
+                points += HistoryPoint(
+                    times[i],
+                    times[i] + rowS,
+                    if (valid) v else null,
+                    null,
+                    null,
+                    if (valid) 1f else 0f,
+                    estimated = estimatedFlags[i],
+                    flaggedRows = if (f != 0) 1 else 0,
+                    flags = f,
+                )
                 if (valid) {
                     total.add(v.toDouble(), times[i])
+                    if (f == 0) clean.add(v.toDouble(), times[i])
                     if (max == null || v > max) max = v
+                }
+                if (f != 0) {
+                    flagged++
+                    mask = mask or f
                 }
             }
         } else {
@@ -200,6 +239,9 @@ class HistorySeriesReader(
             val perMinute = if (interval > 0) MINUTE_S * MS_PER_S.toFloat() / interval else 0f
             var bucket = Long.MIN_VALUE
             var bin = Rollup(metric.aggregate)
+            var bClean = Rollup(metric.aggregate)
+            var bFlagged = 0
+            var bMask = 0
             var bEst = 0
             var bAll = 0
             var bMin = Float.MAX_VALUE
@@ -215,6 +257,9 @@ class HistorySeriesReader(
                         if (n > 0 && metric.envelope) bMax else null,
                         if (perMinute > 0f) (n / perMinute).coerceIn(0f, 1f) else 0f,
                         estimated = bEst * 2 >= bAll && bEst > 0,
+                        flaggedRows = bFlagged,
+                        flags = bMask,
+                        cleanMean = if (bFlagged > 0) bClean.value else null,
                     )
                 }
             }
@@ -224,6 +269,9 @@ class HistorySeriesReader(
                     flush()
                     bucket = b
                     bin = Rollup(metric.aggregate)
+                    bClean = Rollup(metric.aggregate)
+                    bFlagged = 0
+                    bMask = 0
                     bEst = 0
                     bAll = 0
                     bMin = Float.MAX_VALUE
@@ -238,6 +286,16 @@ class HistorySeriesReader(
                     if (v > bMax) bMax = v
                     total.add(v.toDouble(), times[i])
                     if (max == null || v > max) max = v
+                    val f = rowFlags[i]
+                    if (f == 0) {
+                        bClean.add(v.toDouble(), times[i])
+                        clean.add(v.toDouble(), times[i])
+                    } else {
+                        bFlagged++
+                        bMask = bMask or f
+                        flagged++
+                        mask = mask or f
+                    }
                 }
             }
             flush()
@@ -253,6 +311,9 @@ class HistorySeriesReader(
             estimatedRows = rows.estimatedValid,
             unreadableSources = unreadable.size,
             sampleIntervalMs = interval,
+            flaggedRows = flagged,
+            flags = mask,
+            cleanMean = if (flagged > 0) clean.value else null,
         )
     }
 
@@ -297,7 +358,7 @@ class HistorySeriesReader(
                 } else {
                     null
                 }
-                staged.add(bootHi.at(i), bootLo.at(i), bySeq, if (bySeq) seq!!.values[i] else ns, ns >= fromNs && ns < toNs, ns.floorDiv(NS), v ?: Float.NaN, est)
+                staged.add(bootHi.at(i), bootLo.at(i), bySeq, if (bySeq) seq!!.values[i] else ns, ns >= fromNs && ns < toNs, ns.floorDiv(NS), v ?: Float.NaN, est, 0)
             }
             staged
         }
@@ -337,7 +398,9 @@ class HistorySeriesReader(
                 // Both scales come from the TIMESTAMP unit, so a file in another unit is read right or refused.
                 val utcScale = UtcColumns.nanosPerUnit(utcLeaf)
                 val estScale = estLeaf?.let(UtcColumns::nanosPerUnit) ?: 1L
-                val wanted = listOfNotNull(utcLeaf.name, estLeaf?.name, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, spec?.gate?.column, spec?.column, spec?.auxColumn).filter { it in names }
+                // The stored check flags of each row (#91), for a metric whose clean values leave flagged rows out.
+                val flagsName = RowChecks.FLAGS_COLUMN.takeIf { metric.cleanable }
+                val wanted = listOfNotNull(utcLeaf.name, estLeaf?.name, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, spec?.gate?.column, spec?.column, spec?.auxColumn, flagsName).filter { it in names }
                 // Rows dated by an estimate have a null UTC, so only a file without them can prune by UTC.
                 val range = UtcColumns.nsToUnit(fromNs, utcScale) until UtcColumns.nsToUnitCeil(toNs, utcScale)
                 val batch = reader.scan(
@@ -351,6 +414,7 @@ class HistorySeriesReader(
                 val gate = spec?.gate?.let { g -> GateColumn(g, batch[g.column]?.toColumnValues()) }
                 val col = spec?.let { batch[it.column] }
                 val rh = spec?.auxColumn?.let { batch[it] }
+                val qc = flagsName?.let { batch[it] }
                 val staged = StagedRows(batch.rowCount, file.sampleIntervalMs, derivedDay = true)
                 for (i in 0 until batch.rowCount) {
                     val real = !utc.isNull(i)
@@ -365,7 +429,7 @@ class HistorySeriesReader(
                     val bySeq = seq != null && !seq.isNull(i)
                     val ok = gate == null || gate.passes(i)
                     val v = if (ok) col?.asDouble(i)?.let { spec.valueOf(it, rh?.asDouble(i)) }?.toFloat()?.takeIf { it.isFinite() } else null
-                    staged.add(bootHi.longOrZero(i), bootLo.longOrZero(i), bySeq, if (bySeq) seq!!.long(i) else ns, true, ns.floorDiv(NS), v ?: Float.NaN, !real)
+                    staged.add(bootHi.longOrZero(i), bootLo.longOrZero(i), bySeq, if (bySeq) seq!!.long(i) else ns, true, ns.floorDiv(NS), v ?: Float.NaN, !real, qc.longOrZero(i).toInt())
                 }
                 staged
             } ?: return false
@@ -414,14 +478,14 @@ class HistorySeriesReader(
         private val bySequence = BooleanArray(capacity)
         private val inWindow = BooleanArray(capacity)
 
-        fun add(bootHi: Long, bootLo: Long, bySeq: Boolean, rowKey: Long, shown: Boolean, second: Long, value: Float, isEstimate: Boolean) {
+        fun add(bootHi: Long, bootLo: Long, bySeq: Boolean, rowKey: Long, shown: Boolean, second: Long, value: Float, isEstimate: Boolean, flags: Int) {
             val at = rows.size
             hi[at] = bootHi
             lo[at] = bootLo
             bySequence[at] = bySeq
             key[at] = rowKey
             inWindow[at] = shown
-            rows.add(second, value, isEstimate)
+            rows.add(second, value, isEstimate, flags)
         }
 
         /**
@@ -434,16 +498,17 @@ class HistorySeriesReader(
                 if (daySeen != null && !daySeen.firstSight(hi[i], lo[i], bySequence[i], key[i])) continue
                 if (!inWindow[i]) continue
                 if (!seen.firstSight(hi[i], lo[i], bySequence[i], key[i])) continue
-                out.add(rows.times[i], rows.values[i], rows.estimated[i])
+                out.add(rows.times[i], rows.values[i], rows.estimated[i], rows.flags[i])
             }
         }
     }
 
-    /** Day view rows in primitive arrays: second, value (NaN for invalid or null) and estimate flag. */
+    /** Day view rows in primitive arrays: second, value (NaN for invalid or null), estimate flag and stored check flags (0 for none). */
     private class Rows {
         var times = LongArray(1_024)
         var values = FloatArray(1_024)
         var estimated = BooleanArray(1_024)
+        var flags = IntArray(1_024)
         var size = 0
 
         /** Estimated rows that hold a value. */
@@ -452,15 +517,17 @@ class HistorySeriesReader(
         /** The shortest footer interval of the committed sources, 0 when none said. */
         var sampleIntervalMs = 0L
 
-        fun add(second: Long, value: Float, isEstimate: Boolean) {
+        fun add(second: Long, value: Float, isEstimate: Boolean, flag: Int) {
             if (size == times.size) {
                 times = times.copyOf(size * 2)
                 values = values.copyOf(size * 2)
                 estimated = estimated.copyOf(size * 2)
+                flags = flags.copyOf(size * 2)
             }
             times[size] = second
             values[size] = value
             estimated[size] = isEstimate
+            flags[size] = flag
             size++
             if (isEstimate && !value.isNaN()) estimatedValid++
         }

@@ -289,6 +289,28 @@ shared key, `RowKey` in `:core:history`: `(boot_id_hi, boot_id_lo, sequence)`, o
 counting as 0. The tiers, the day chart and the daily file all use it, so their row counts agree.
 Means over a span are weighted by valid rows, never averages of averages.
 
+### Stored row checks (#91)
+
+A family can name a `RowCheck` for a template through `DerivedMetricProvider.rowCheck`. It is a
+pure `commonMain` function of one thing-day of rows that returns a flag bitmask per row and never
+changes a value. The air family returns `AirQc`, the same `QcRules` the live hero runs through
+`LiveQc`, over the atmospheric PM1, PM2.5 and PM10, the humidity and the particle bins the template
+declares. `RowChecks.INSTALLED` picks the first provider with a check, and `:core` names no check
+itself. `DayPass` captures the check columns while it times the rows (`RowCheckPass`), runs each check
+once over its rows in timeline order and stores the flags beside the values. The tiers keep every
+row as measured. Each slot with a flagged row also gets two companions in the same tier table, so
+Room needs no schema change.
+
+| Tier id | `validRows` | `mean`, `min`, `max` |
+| --- | --- | --- |
+| `~qc` (`RowChecks.FLAGS_ID`) | flagged rows of the slot | the OR of their flags |
+| `<metric>~clean` (`RowChecks.cleanId`) | valid rows that passed | the mean of those rows, 0 when none passed |
+
+Only a `MetricSpec.cleanable` metric, one with a health scale and a mean rollup, gets a clean
+companion. A slot with no flagged row has neither. `CheckedTiers` joins a metric's buckets with
+its companions for History and Discover on both phones. The flag bits of `QcFlags` never change
+meaning, and a new check takes the next free bit.
+
 ## Derived daily Parquet (`DailyParquetBuilder`)
 
 `derived/v1/<thing>/day=YYYY-MM-DD.parquet` + `.manifest.json` on both platforms, in the OS cache
@@ -308,8 +330,10 @@ written as `event_time_utc_us` and `clock_anchor_utc_us`, `TIMESTAMP(MICROS, UTC
 source stored, so a day that mixes older NANOS files and current MICROS files still has one
 `event_time_utc_us` column in microseconds (`UtcColumns`). Device columns keep their `field_id`. An
 older source without ids takes the id of the same name from a newer source. An id two sources
-disagree on, or one that two names share, is dropped. `source_file_index` and
-the estimate column have no id. **No thing
+disagree on, or one that two names share, is dropped. A day whose rows a `RowCheck` read
+also has a nullable INT32 `qc_flags` column, null for a row no check read and 0 for one that
+passed, and the `qc_checks` key that lists the check ids. The raw columns are written as read.
+`source_file_index`, `qc_flags` and the estimate column have no id. **No thing
 string column** (deviation from the evaluation). It stays flat numeric so our reader reads it back,
 and the thing is in the path. Metadata: the `app_day` key above, `derived_by`
 (`opensensor.space shared derived-v4`), `derived_version` (4), `source_count`, `coverage_rows`, `complete`
@@ -349,7 +373,9 @@ picker of the old format cleanup offers the same span plus one day (`StorageCont
 `derived_day.sourceSignature` = SHA-256 over `derive-v<DERIVE_VERSION>` + the day's sorted
 `ArchiveHistoryTiers.sourceLine`s, `name:crc32`, the anchor of an estimated file and `t<template>`,
 the full desc (or `dict:<dict>` for a bundled one without) that `FileTemplates.digestOf` resolves now,
-`-` for none. iOS tiers and day files use the same lines. `deriveStale()` rebuilds exactly the days
+`-` for none, then `q<check id>` when a row check reads the file. A rule change bumps
+`QcRules.VERSION`, so the check id changes and only the checked days rebuild, with no
+`DERIVE_VERSION` change. iOS tiers and day files use the same lines. `deriveStale()` rebuilds exactly the days
 whose set changed (late file, re-synced mismatch, deleted file, new anchor, a template that starts or
 stops resolving) and drops days with no sources. `ArchiveHistoryTiers` checks a thing's days again when
 `TemplateRederive` finds a template change that touched one of its files, and the Android derived day reader (`RoomDerivedDayFiles`) uses the deriver's
@@ -458,6 +484,13 @@ use one `expect` seam (`formatEpoch`, `DateTimeFormatter` on Android, `NSDateFor
 `:core:archive`, plus two flows, the thing History opens on and the thing generations its
 chips offer. It owns thing, metric, range and paging, follows "now" across local midnight until
 the user pages back, and opens on the last local day with readings.
+
+Stored checks (#91). `HistorySeries` and each `HistoryPoint` carry `flaggedRows`, `flags` and
+`cleanMean` for a cleanable metric, from the tier companions on Week, Month and Year and from the
+`qc_flags` column of a derived day file on Day. A Day read from raw files, today for example,
+carries no flags. Detailed and Developer chart every row as measured and show one flag line with an
+info icon that lists the reasons (`QcFlagLine` in `:ui:designsystem`). Simple charts
+`HistorySeries.withoutFlagged()`, so a flagged row never sets a WHO step, and shows no flag.
 
 | | Android | iOS |
 | --- | --- | --- |

@@ -62,12 +62,6 @@
     <string name="now_nowcast_note_simple">A mean of the last 12 hours that leans on the latest ones.</string>
     <string name="now_live_value">Live %1$s</string>
     <string name="now_unrated_simple">This reading looks off, so it is not rated.</string>
-    <string name="qc_flagged">Flagged as suspect</string>
-    <string name="qc_pm25_above_pm10">PM2.5 is above PM10, which cannot happen.</string>
-    <string name="qc_flatline">The particle counts have not changed for 30 readings.</string>
-    <string name="qc_spike">A sudden jump that the particle counts do not show.</string>
-    <string name="qc_high_humidity">Humidity is above 85 percent, which makes the sensor read high.</string>
-    <string name="qc_note">The value is shown as measured.</string>
     <string name="now_waiting">Waiting for a reading…</string>
     <string name="now_sample_number">sample %1$d</string>
     <string name="mood_fresh_advice">Within the WHO guideline. Enjoy it.</string>

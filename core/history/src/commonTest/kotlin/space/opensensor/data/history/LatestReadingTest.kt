@@ -57,7 +57,9 @@ class LatestReadingTest {
         val out = LatestReadings.observe(tiers, "t").first()
         assertEquals(raw to 10 * 86_400L + 1_800, out?.let { it.metric.id to it.endEpochS })
         val window = 9 * 86_400L to 11 * 86_400L
-        assertEquals(setOf(Triple(corrected, Resolution.MIN15, window), Triple(raw, Resolution.MIN15, window)), tiers.asked.toSet())
+        // Each banded mean also reads its clean companion, and the flag companion once (#91).
+        val ids = listOf(corrected, raw, RowChecks.FLAGS_ID, RowChecks.cleanId(corrected), RowChecks.cleanId(raw))
+        assertEquals(ids.map { Triple(it, Resolution.MIN15, window) }.toSet(), tiers.asked.toSet())
     }
 
     @Test
@@ -80,7 +82,31 @@ class LatestReadingTest {
         val out = LatestReadings.observe(tiers, "t").first()
         assertEquals(raw to 6 * day + 1_800, out?.let { it.metric.id to it.endEpochS })
         assertEquals(Triple(raw, Resolution.DAY, 4 * day to 9 * day), tiers.asked.first { it.second == Resolution.DAY })
-        assertEquals(Triple(raw, Resolution.MIN15, 6 * day to 7 * day), tiers.asked.last())
+        assertEquals(Triple(raw, Resolution.MIN15, 6 * day to 7 * day), tiers.asked.last { it.first == raw })
+    }
+
+    @Test
+    fun `a quarter with flagged rows carries their flags and the mean of the rows that passed`() = runTest {
+        val start = 10 * 86_400L + 900
+        val tiers = object : HistoryTiers {
+            override fun observe(thing: String, metricId: String, tier: Resolution, fromS: Long, toS: Long): Flow<List<TierBucket>> = flowOf(
+                when (metricId) {
+                    raw -> listOf(quarter(start, 20f))
+                    // 9 of the 90 rows were flagged with bits 1 and 8, the other 81 average 12.
+                    RowChecks.FLAGS_ID -> listOf(TierBucket(start, 90, 9, 0, 9f, 9f, 9f))
+                    RowChecks.cleanId(raw) -> listOf(TierBucket(start, 90, 81, 0, 12f, 12f, 12f))
+                    else -> emptyList()
+                },
+            )
+            override fun observeDays(thing: String) = flowOf(DaySpan(1, 10 * 86_400L, 10 * 86_400L))
+            override fun observeMetricsWithData(thing: String) = flowOf(setOf(raw))
+        }
+        val out = LatestReadings.observe(tiers, "t").first()
+        assertEquals(20f, out?.mean)
+        assertEquals(listOf(9, 9), listOf(out?.flaggedRows, out?.flags))
+        assertEquals(12f, out?.passedMean)
+        // Without flagged rows the reading passes as measured.
+        assertEquals(7f, LatestReadings.latest(mapOf(raw to listOf(quarter(900, 7f))))?.passedMean)
     }
 
     @Test

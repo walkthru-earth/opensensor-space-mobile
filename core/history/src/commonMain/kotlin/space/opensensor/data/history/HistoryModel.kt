@@ -15,8 +15,25 @@ enum class HistoryRange(val days: Long, val tier: Resolution?, val label: String
 /**
  * One plotted element: a bucket (its rolled value, with a min and max envelope for a mean) or a raw row.
  * [estimated]: the time axis for this point comes from a §4.6 estimate (drawn dashed), not a UTC stamp.
+ * [flaggedRows] of its valid rows failed a stored row check (#91), with the OR of their [flags], and
+ * [cleanMean] is the mean of the others, null when none passed. Only a [MetricSpec.cleanable] metric
+ * carries them. [mean] always holds every row as measured.
  */
-data class HistoryPoint(val startS: Long, val endS: Long, val mean: Float?, val min: Float?, val max: Float?, val coverage: Float, val estimated: Boolean = false)
+data class HistoryPoint(
+    val startS: Long,
+    val endS: Long,
+    val mean: Float?,
+    val min: Float?,
+    val max: Float?,
+    val coverage: Float,
+    val estimated: Boolean = false,
+    val flaggedRows: Int = 0,
+    val flags: Int = 0,
+    val cleanMean: Float? = null,
+) {
+    /** This point without its flagged rows, the clean mean and no envelope, which held them too. */
+    fun withoutFlagged(): HistoryPoint = if (flaggedRows == 0) this else copy(mean = cleanMean, min = null, max = null, flaggedRows = 0, flags = 0, cleanMean = null)
+}
 
 data class HistorySeries(
     val metric: MetricSpec,
@@ -38,7 +55,26 @@ data class HistorySeries(
     val unreadableSources: Int = 0,
     /** The shortest footer `acquisition.sample_interval_ms` behind the series, 0 when no file said. */
     val sampleIntervalMs: Long = 0,
+    /** Valid rows that failed a stored row check (#91), the OR of their flags, and [mean] over the others. */
+    val flaggedRows: Long = 0,
+    val flags: Int = 0,
+    val cleanMean: Float? = null,
 ) {
+    /**
+     * The series without its flagged rows, for Simple, which judges the step on the rows that passed
+     * and shows no flag (#91). The rows stay as measured in storage and export.
+     */
+    fun withoutFlagged(): HistorySeries {
+        if (flaggedRows == 0L) return this
+        val clean = points.map(HistoryPoint::withoutFlagged)
+        var top: Float? = null
+        for (p in clean) {
+            val hi = p.max ?: p.mean ?: continue
+            if (top == null || hi > top) top = hi
+        }
+        return copy(points = clean, validRows = validRows - flaggedRows, mean = cleanMean, max = top, flaggedRows = 0, flags = 0, cleanMean = null)
+    }
+
     val hasEstimated: Boolean get() = estimatedRows > 0
     val coverage: Float get() = if (expectedRows == 0L) 0f else (validRows.toFloat() / expectedRows).coerceIn(0f, 1f)
     val isEmpty: Boolean get() = points.none { it.mean != null }

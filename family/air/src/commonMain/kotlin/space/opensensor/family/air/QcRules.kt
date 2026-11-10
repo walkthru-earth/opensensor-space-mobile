@@ -101,46 +101,96 @@ object QcRules {
     const val GAP_FACTOR: Long = 3
 
     /**
+     * The version of these rules. Any change to a constant or a check bumps it, so the stored flags
+     * of every checked day are rebuilt ([AirQc.id]).
+     */
+    const val VERSION: Int = 1
+
+    /**
      * One flag bitmask of [QcFlags] per row of [rows], in the same order.
      *
      * [maxStepMs] defaults to [GAP_FACTOR] times the median positive step between rows, so it
      * follows the board's own sampling interval.
      */
     fun flags(rows: List<QcRow>, maxStepMs: Long = GAP_FACTOR * typicalStepMs(rows)): IntArray {
-        val out = IntArray(rows.size)
-        val linked = BooleanArray(rows.size) { i ->
-            i > 0 && (rows[i].timeMs - rows[i - 1].timeMs).let { it in 1..maxStepMs }
-        }
-        for ((i, row) in rows.withIndex()) {
-            if (row.pm25.isFinite() && row.pm10.isFinite() && row.pm25 - row.pm10 > PM25_ABOVE_PM10_TOLERANCE) {
-                out[i] = out[i] or QcFlags.PM25_ABOVE_PM10
-            }
-            if (row.rh.isFinite() && row.rh > HIGH_HUMIDITY_PERCENT) out[i] = out[i] or QcFlags.HIGH_HUMIDITY
-        }
-        markFlatlines(rows, linked, out)
-        markSpikes(rows, linked, out, QcRow::pm1)
-        markSpikes(rows, linked, out, QcRow::pm25)
-        markSpikes(rows, linked, out, QcRow::pm10)
-        return out
+        val bins = rows.maxOfOrNull { it.counts?.size ?: 0 } ?: 0
+        val columns = Columns(
+            timeMs = LongArray(rows.size) { rows[it].timeMs },
+            pm1 = DoubleArray(rows.size) { rows[it].pm1 },
+            pm25 = DoubleArray(rows.size) { rows[it].pm25 },
+            pm10 = DoubleArray(rows.size) { rows[it].pm10 },
+            rh = DoubleArray(rows.size) { rows[it].rh },
+            counts = List(bins) { b -> DoubleArray(rows.size) { i -> rows[i].counts?.getOrNull(b)?.toDouble() ?: Double.NaN } },
+            countWidth = IntArray(rows.size) { rows[it].counts?.size ?: -1 },
+        )
+        return flags(columns, maxStepMs)
     }
 
     /** The median positive step between consecutive rows, or 0 when there is none. */
-    fun typicalStepMs(rows: List<QcRow>): Long {
-        val steps = (1 until rows.size).map { rows[it].timeMs - rows[it - 1].timeMs }.filter { it > 0 }.sorted()
+    fun typicalStepMs(rows: List<QcRow>): Long = typicalStepMs(LongArray(rows.size) { rows[it].timeMs })
+
+    /** The median positive step between consecutive [timeMs], or 0 when there is none. */
+    fun typicalStepMs(timeMs: LongArray): Long {
+        val steps = (1 until timeMs.size).map { timeMs[it] - timeMs[it - 1] }.filter { it > 0 }.sorted()
         return if (steps.isEmpty()) 0 else steps[steps.size / 2]
     }
 
-    private fun markFlatlines(rows: List<QcRow>, linked: BooleanArray, out: IntArray) {
+    /**
+     * The rows of [flags] as columns, so a day of rows needs no object per row. A missing value is
+     * `NaN`. [countWidth] is how many bins of [counts] row `i` has, -1 when it has no counts, and two
+     * rows' counts compare only at the same width.
+     */
+    class Columns(
+        val timeMs: LongArray,
+        val pm1: DoubleArray,
+        val pm25: DoubleArray,
+        val pm10: DoubleArray,
+        val rh: DoubleArray,
+        val counts: List<DoubleArray>,
+        val countWidth: IntArray,
+    ) {
+        val size: Int get() = timeMs.size
+
+        fun hasCounts(i: Int): Boolean = countWidth[i] >= 0
+
+        fun sameCounts(a: Int, b: Int): Boolean {
+            if (countWidth[a] != countWidth[b]) return false
+            for (k in 0 until countWidth[a]) if (counts[k][a] != counts[k][b]) return false
+            return true
+        }
+    }
+
+    /** [flags] of rows given as [Columns], the form the daily builder runs them in. */
+    fun flags(rows: Columns, maxStepMs: Long = GAP_FACTOR * typicalStepMs(rows.timeMs)): IntArray {
+        val out = IntArray(rows.size)
+        val linked = BooleanArray(rows.size) { i ->
+            i > 0 && (rows.timeMs[i] - rows.timeMs[i - 1]).let { it in 1..maxStepMs }
+        }
+        for (i in 0 until rows.size) {
+            val pm25 = rows.pm25[i]
+            val pm10 = rows.pm10[i]
+            if (pm25.isFinite() && pm10.isFinite() && pm25 - pm10 > PM25_ABOVE_PM10_TOLERANCE) {
+                out[i] = out[i] or QcFlags.PM25_ABOVE_PM10
+            }
+            if (rows.rh[i].isFinite() && rows.rh[i] > HIGH_HUMIDITY_PERCENT) out[i] = out[i] or QcFlags.HIGH_HUMIDITY
+        }
+        markFlatlines(rows, linked, out)
+        markSpikes(rows, linked, out, rows.pm1)
+        markSpikes(rows, linked, out, rows.pm25)
+        markSpikes(rows, linked, out, rows.pm10)
+        return out
+    }
+
+    private fun markFlatlines(rows: Columns, linked: BooleanArray, out: IntArray) {
         var start = 0
         fun close(end: Int) {
             if (end - start >= FLATLINE_ROWS) for (k in start until end) out[k] = out[k] or QcFlags.FLATLINE
         }
-        for (i in rows.indices) {
-            val counts = rows[i].counts
-            if (counts == null) {
+        for (i in 0 until rows.size) {
+            if (!rows.hasCounts(i)) {
                 close(i)
                 start = i + 1
-            } else if (i > start && !(linked[i] && counts.contentEquals(rows[i - 1].counts))) {
+            } else if (i > start && !(linked[i] && rows.sameCounts(i, i - 1))) {
                 close(i)
                 start = i
             }
@@ -148,12 +198,12 @@ object QcRules {
         close(rows.size)
     }
 
-    private fun markSpikes(rows: List<QcRow>, linked: BooleanArray, out: IntArray, mass: (QcRow) -> Double) {
+    private fun markSpikes(rows: Columns, linked: BooleanArray, out: IntArray, mass: DoubleArray) {
         for (i in 1 until rows.size - 1) {
             if (!linked[i] || !linked[i + 1]) continue
-            val before = mass(rows[i - 1])
-            val at = mass(rows[i])
-            val after = mass(rows[i + 1])
+            val before = mass[i - 1]
+            val at = mass[i]
+            val after = mass[i + 1]
             if (!before.isFinite() || !at.isFinite() || !after.isFinite()) continue
             val up = at - before
             val back = at - after
@@ -161,21 +211,24 @@ object QcRules {
             val threshold = max(SPIKE_MIN_STEP, SPIKE_MIN_RATIO * max(before, after))
             if (min(abs(up), abs(back)) <= threshold) continue
             val massChange = abs(up) / max(abs(before), abs(at))
-            if (countsMatch(rows[i - 1].counts, rows[i].counts, up > 0, massChange)) continue
+            if (countsMatch(rows, i - 1, i, up > 0, massChange)) continue
             out[i] = out[i] or QcFlags.SPIKE
         }
     }
 
     /**
-     * Whether a count bin moves with the mass from [from] to [to]. Without counts on both rows the
-     * check cannot tell, so it treats them as matching and does not flag.
+     * Whether a count bin moves with the mass from row [from] to row [to]. Without counts on both rows
+     * the check cannot tell, so it treats them as matching and does not flag.
      */
-    private fun countsMatch(from: IntArray?, to: IntArray?, rising: Boolean, massChange: Double): Boolean {
-        if (from == null || to == null || from.size != to.size) return true
-        for (k in from.indices) {
-            val step = to[k] - from[k]
-            if (step == 0 || (step > 0) != rising) continue
-            val change = abs(step).toDouble() / max(max(from[k], to[k]), 1)
+    private fun countsMatch(rows: Columns, from: Int, to: Int, rising: Boolean, massChange: Double): Boolean {
+        val width = rows.countWidth[from]
+        if (width < 0 || rows.countWidth[to] != width) return true
+        for (k in 0 until width) {
+            val a = rows.counts[k][from]
+            val b = rows.counts[k][to]
+            val step = b - a
+            if (step == 0.0 || (step > 0) != rising) continue
+            val change = abs(step) / max(max(a, b), 1.0)
             if (change >= SPIKE_COUNT_MATCH * massChange) return true
         }
         return false

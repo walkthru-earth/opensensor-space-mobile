@@ -27,6 +27,7 @@ import space.opensensor.data.history.parquet.RangeSource
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.family.air.EpaPm25Correction
+import space.opensensor.model.RowCheck
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -357,6 +358,45 @@ class DerivedDayViewTest {
         // The raw view of the same daily file stays the stored atmospheric value.
         val raw = derivedReader.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first()
         assertEquals(listOf(9f, 170f, 30f, 31f), raw.points.mapNotNull { it.mean })
+    }
+
+    @Test
+    fun aPastDayReadFromItsDayFileGivesSimpleTheMeanOfTheRowsThatPassed() = runTest {
+        // #91. The day file stores each row's check flags. A Day view read from it carries them, so
+        // Simple judges a past day on the rows that passed, as the tiers do.
+        val above100 = object : RowCheck {
+            override val id = "test-above-100-v1"
+            override val columns = listOf(AirMetrics.PM25.column)
+            override fun flags(timeMs: LongArray, values: List<DoubleArray>) = IntArray(timeMs.size) { if (values[0][it] > 100.0) 4 else 0 }
+        }
+        val thing = "humid-thing"
+        val humidDay = HUMID_HOUR_S / 86_400
+        val bytes = humidPm25Parquet(thing)
+        val store = Store()
+        val index = Index()
+        val r = ArchiveRecord(thing, "humid.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        store.files[r.key] = bytes
+        index.put(r)
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }, templates = CoreS3Files).backfillAll()
+        val sink = MemorySink()
+        val sources = index.rows.value.map { s -> DailyParquetSource(s) { ParquetFile.wrap(store.files.getValue(s.key)) } }
+        assertNotNull(DayPass.run(thing, humidDay, sources, sink, emptyMap(), (humidDay + 2) * 86_400, tiers = false, templates = CoreS3Files, checks = RowChecks { above100 }).daily)
+        val derivedBytes = sink.toByteArray()
+        val derived = DerivedDayFiles { _, epochDay, _, _ -> if (epochDay == humidDay) MemoryRangeSource(derivedBytes, "humid-checked") else null }
+        val window = HistoryWindow(humidDay * 86_400, (humidDay + 1) * 86_400, TimeZone.UTC)
+        val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index, templates = CoreS3Files), derived = derived, templates = CoreS3Files)
+        store.reads = 0
+        val series = reader.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window).first()
+        assertEquals(0, store.reads, "the day comes from its day file")
+        // Every row as measured, the flagged 170 included.
+        assertEquals(listOf(9f, 170f, 30f, 31f), series.points.mapNotNull { it.mean })
+        assertEquals(4L, series.validRows)
+        assertEquals(1L, series.flaggedRows)
+        assertEquals(4, series.flags)
+        val simple = series.withoutFlagged()
+        assertEquals(3L, simple.validRows)
+        assertEquals((9f + 30f + 31f) / 3f, simple.mean!!, 1e-4f)
+        assertEquals(31f, simple.max)
     }
 
     @Test

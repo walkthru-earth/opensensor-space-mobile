@@ -36,6 +36,7 @@ import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.AirQc
 import space.opensensor.model.BoardTemplate
 import space.opensensor.storage.AtomicFiles
 import space.opensensor.storage.DerivedQuota
@@ -109,6 +110,48 @@ class HistoryDeriverTest {
             space.opensensor.data.history.parquet.ParquetFile.open(daily).use { assertEquals(105L, it.numRows) }
             assertEquals(originalSources, files.rows)
             assertTrue(originalBytes.contentEquals(raw.readBytes()))
+            assertEquals(0, deriver.deriveStale().daysRebuilt)
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    /** #91. The air check id is in the signature of a day it reads, so a day derived before the check rebuilds once. */
+    @Test
+    fun `a day the air check reads rebuilds once from a signature without the check`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-derive-check").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val files = InMemoryFiles()
+            val days = InMemoryDays()
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator(), CoreS3Files)
+            val store = DerivedStore(tmp)
+            val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, store, indexer, derivedQuota(tmp), indexer.passes(files))
+            val name = "thing=$thing/day=2026-09-17/raw.parquet"
+            val raw = archive.fileFor(thing, name).apply {
+                parentFile!!.mkdirs()
+                writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
+            }
+            files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            assertEquals(1, deriver.deriveStale().daysRebuilt)
+            val sources = files.rows.map { it.toRecord() }
+            val checkId = AirQc(AirFamily.PARTICLE_BINS).id
+            assertTrue(sources.all { ArchiveHistoryTiers.sourceLine(it, CoreS3Files).endsWith(":q$checkId") })
+            // The signature an install wrote before the check, the same source lines without their check id.
+            val unchecked = MessageDigest.getInstance("SHA-256").run {
+                update("derive-v${HistoryDeriver.DERIVE_VERSION}\n".toByteArray())
+                sources.map { ArchiveHistoryTiers.sourceLine(it, CoreS3Files, RowChecks.NONE) }.sorted().forEach { update(it.toByteArray()); update('\n'.code.toByte()) }
+                HistoryDeriver.hex(digest())
+            }
+            val current = days.rows.single()
+            assertEquals(HistoryDeriver.signatureOf(sources, CoreS3Files), current.sourceSignature)
+            assertFalse(unchecked == current.sourceSignature)
+            days.upsert(current.copy(sourceSignature = unchecked))
+            val manifest = store.manifestFile(thing, current.epochDay)
+            manifest.writeText(Json.encodeToString(Json.decodeFromString<DailyManifest>(manifest.readText()).copy(sourceSignature = unchecked)))
+
+            assertEquals(1, deriver.deriveStale().daysRebuilt)
+            assertEquals(current.sourceSignature, days.rows.single().sourceSignature)
             assertEquals(0, deriver.deriveStale().daysRebuilt)
         } finally {
             tmp.deleteRecursively()
@@ -311,7 +354,10 @@ class HistoryDeriverTest {
         val daily = space.opensensor.data.history.parquet.ParquetFile.open(dayFile)
         assertEquals(105L, daily.numRows)
         assertEquals(1, daily.rowGroupCount) // 09:42–09:59Z is one UTC hour
-        assertEquals(78, daily.leaves.size) // 77 + source_file_index
+        assertEquals(79, daily.leaves.size) // 77 + source_file_index + qc_flags
+        // The air check of #91 read the rows, its flags sit beside the raw columns.
+        assertEquals(105, daily.readColumn(RowChecks.FLAGS_COLUMN).size)
+        assertEquals(AirQc(AirFamily.PARTICLE_BINS).id, daily.metadata.keyValueMetadata[RowChecks.CHECKS_KEY])
         assertEquals(ParquetLogicalType.TimeUnit.MICROS, daily.leaf("event_time_utc_us").timestampUtcUnit)
         // A day file never carries the contract key an indexer reads.
         assertTrue(OpenSensorFooter.KEY !in daily.metadata.keyValueMetadata)

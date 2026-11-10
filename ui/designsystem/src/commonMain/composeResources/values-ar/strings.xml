@@ -28,4 +28,21 @@
     <string name="pm25_corrected">PM2.5 مصحح</string>
     <string name="pm25_raw">PM2.5 خام</string>
     <string name="pm25_correction_info">القيمة المصححة تستخدم تصحيح الرطوبة من وكالة حماية البيئة الأمريكية لهذا المستشعر. القيمة الخام هي قيمة المستشعر كما حُفظت، وتظهر عند غياب قراءة الرطوبة، ودائما في مستوى مفصّل. البيانات المحفوظة لا تتغير أبدا.</string>
+    <!-- Quality checks of stored and live readings (#91), at the Detailed and Developer levels. -->
+    <string name="qc_flagged">مُعلَّمة كقراءة مشكوك فيها</string>
+    <plurals name="qc_flagged_readings">
+        <item quantity="zero">%1$d قراءة معلَّمة</item>
+        <item quantity="one">%1$d قراءة معلَّمة</item>
+        <item quantity="two">%1$d قراءتان معلَّمتان</item>
+        <item quantity="few">%1$d قراءات معلَّمة</item>
+        <item quantity="many">%1$d قراءة معلَّمة</item>
+        <item quantity="other">%1$d قراءة معلَّمة</item>
+    </plurals>
+    <string name="qc_pm25_above_pm10">PM2.5 أعلى من PM10، وهذا غير ممكن.</string>
+    <!-- The argument is QcRules.FLATLINE_ROWS. -->
+    <string name="qc_flatline">لم تتغير أعداد الجسيمات منذ %1$d قراءة.</string>
+    <string name="qc_spike">قفزة مفاجئة لا تظهر في أعداد الجسيمات.</string>
+    <!-- The argument is QcRules.HIGH_HUMIDITY_PERCENT. -->
+    <string name="qc_high_humidity">الرطوبة أعلى من %1$d بالمئة، مما يرفع قراءة المستشعر.</string>
+    <string name="qc_note">تُعرض القيمة كما قيست.</string>
 </resources>

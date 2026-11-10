@@ -92,6 +92,12 @@ data class MetricSpec(
 
     val banded: Boolean get() = healthScale != null
 
+    /**
+     * True when stored row checks leave flagged rows out of this metric's clean values (#91), a metric
+     * with a health scale rolled up as a mean, so Simple judges its step on the rows that passed.
+     */
+    val cleanable: Boolean get() = banded && aggregate == Aggregate.MEAN
+
     /** The label in [language], else the English one. */
     fun label(language: String): String = labels?.get(language) ?: label
 

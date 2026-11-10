@@ -160,6 +160,9 @@ PLAIN, RLE definition levels, LZ4_RAW, per-chunk `min_value`/`max_value` + exact
 row-group `file_offset`/`ordinal`, key/value metadata; since D11 also `BYTE_ARRAY`/`DOUBLE`,
 `GEOMETRY`/`GEOGRAPHY` logical types with `geospatial_statistics` (bbox + WKB type codes) and the
 `geo` key. Used by `DailyDerivedBuilder` ([history-pipeline.md](history-pipeline.md#derived-daily-parquet-dailyparquetbuilder)).
+A derived day file may add the nullable INT32 `qc_flags` column and the `qc_checks` key of the
+stored row checks (#91). Raw columns are never rewritten, so an export of a day file holds the
+values as measured with their flags beside them.
 Output is accepted by PyArrow 25 and DuckDB 1.5.5 (`tools/validate_parquet_samples.py`: every
 statistic matches the values, `TIMESTAMPTZ` read, range pruning, `time_bucket`).
 

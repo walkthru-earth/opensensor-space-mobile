@@ -69,6 +69,7 @@ object DayPass {
         nowEpochS: Long,
         tiers: Boolean = true,
         templates: FileTemplates = FileTemplates.SERVED,
+        checks: RowChecks = RowChecks.INSTALLED,
     ): DayPassResult = DailyParquetBuilder.pass(
         thing,
         epochDay,
@@ -78,6 +79,8 @@ object DayPass {
         nowEpochS,
         if (tiers) Aggregator(thing, templates = templates) else null,
         strict = false,
+        templates = templates,
+        checks = checks,
     )
 }
 
@@ -98,7 +101,9 @@ object DailyParquetBuilder {
         sink: ParquetSink,
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long,
-    ): DailyParquetResult? = pass(thing, epochDay, sources, sink, anchors, nowEpochS, aggregator = null, strict = true).daily
+        templates: FileTemplates = FileTemplates.SERVED,
+        checks: RowChecks = RowChecks.INSTALLED,
+    ): DailyParquetResult? = pass(thing, epochDay, sources, sink, anchors, nowEpochS, aggregator = null, strict = true, templates, checks).daily
 
     /**
      * The estimated instant of each of [rows] rows from [mono] and [anchor]. A row without a monotonic
@@ -135,6 +140,8 @@ object DailyParquetBuilder {
     /**
      * The shared pass. [strict] throws the first source or schema failure, as the daily builder always
      * did. Otherwise a failing source is skipped for the tiers and recorded, and the daily file is dropped.
+     * [checks] picks the [RowChecks] of each source by its template under [templates]. Their flags go to
+     * the [RowChecks.FLAGS_COLUMN] of the daily file and to the tier companions, never into a value.
      */
     internal fun pass(
         thing: String,
@@ -145,6 +152,8 @@ object DailyParquetBuilder {
         nowEpochS: Long,
         aggregator: Aggregator?,
         strict: Boolean,
+        templates: FileTemplates,
+        checks: RowChecks,
     ): DayPassResult {
         require(ArchiveLayout.isSafeThing(thing)) { "unsafe thing id" }
         val dayStartNs = epochDay * ThingDays.DAY_NS
@@ -173,6 +182,7 @@ object DailyParquetBuilder {
         var keptRow = IntArray(256)
         var kept = 0
         val starts = ArrayList<Int>()
+        val qc = RowCheckPass(aggregator)
         for (source in sources.sortedWith(compareBy(SOURCE_ORDER) { it.record })) {
             val src = source.record
             val first = kept
@@ -193,6 +203,8 @@ object DailyParquetBuilder {
                     val mono = if (anchor != null) col(ParquetIndexer.MONO)?.let(LongColumn::of) else null
                     val estimated = if (anchor != null && mono != null) estimates(utc.size, mono, anchor) else null
                     val tierColumns = aggregator?.columns(::col, md.keyValueMetadata)
+                    val check = if (checks === RowChecks.NONE) null else checks.of(templates.of(footer).template)
+                    val checked = qc.source(check) { name -> col(name)?.let(DoubleColumn::of) }
                     for (i in 0 until utc.size) {
                         val real = utc.has(i)
                         val ns = if (real) utc.values[i] else estimated?.takeIf { it.has(i) }?.values?.get(i) ?: continue
@@ -206,6 +218,7 @@ object DailyParquetBuilder {
                         }
                         keptUtc[kept] = ns
                         keptRow[kept] = i
+                        if (checked != null) qc.add(checked, kept, i, tierColumns)
                         kept++
                     }
                     val keepCount = kept - first
@@ -247,14 +260,18 @@ object DailyParquetBuilder {
                     writing = false
                 }
                 kept = first
+                qc.truncate(first)
                 null
             } ?: run {
                 kept = first
+                qc.truncate(first)
                 null
             } ?: continue
             starts += first
             opened += one
         }
+        // The checks run on the kept rows in timeline order, and flag them in the tiers before these roll up.
+        val rowFlags = qc.flags(keptUtc, kept)
         val buckets = aggregator?.buckets().orEmpty()
         if (!writing || opened.isEmpty() || kept == 0) return DayPassResult(buckets, null, rowsRead, failed, dailyError)
         starts += kept
@@ -267,6 +284,8 @@ object DailyParquetBuilder {
         // UTC instants are TIMESTAMP(MICROS, UTC) like current device files, and every device column keeps
         // its field_id. The two columns the phone adds have no device id.
         // An id is also dropped when two names carry it, a field id must name one column.
+        // A source column of that name, which no board writes, keeps its values and the flags go unwritten.
+        val flags = rowFlags?.takeIf { RowChecks.FLAGS_COLUMN !in columnOrder }
         fieldIds.entries.groupBy({ it.value }, { it.key }).values.filter { it.size > 1 }.forEach { conflictingIds += it }
         val columns = columnOrder.map { (name, type) ->
             ParquetWriter.Column(
@@ -277,6 +296,7 @@ object DailyParquetBuilder {
             )
         } +
             ParquetWriter.Column(SOURCE_INDEX, ParquetType.INT32) +
+            (if (flags != null) listOf(ParquetWriter.Column(RowChecks.FLAGS_COLUMN, ParquetType.INT32)) else emptyList()) +
             (if (anyEstimated) listOf(ParquetWriter.Column(ESTIMATED_UTC, ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.MICROS)) else emptyList())
         val utcIndex = columns.indexOfFirst { it.name == UtcColumns.EVENT_US }
         val startsArray = starts.toIntArray()
@@ -292,6 +312,7 @@ object DailyParquetBuilder {
             put("source_count", opened.size.toString())
             put("coverage_rows", kept.toString())
             put("complete", complete.toString())
+            if (flags != null) put(RowChecks.CHECKS_KEY, qc.checks.joinToString(",") { it.id })
             if (anyEstimated) {
                 put("estimated_rows", opened.filter { it.estimated != null }.sumOf { it.keepCount }.toString())
                 put("time_estimate", "rows with null ${UtcColumns.EVENT_US} carry $ESTIMATED_UTC = anchor_utc_ns / 1000 + (monotonic_us - anchor_mono_us) from a same-boot UTC anchor; source/transport error unmeasured; drift not corrected (assume ±${TimeEstimate.DRIFT_PPM.toInt()} ppm)")
@@ -332,7 +353,7 @@ object DailyParquetBuilder {
                     val s = rows.source(j)
                     if (live[s] == null) live[s] = decode(opened[s])
                 }
-                writer.rowGroup(gather(columns, opened, live, rows, from, to))
+                writer.rowGroup(gather(columns, opened, live, rows, flags, from, to))
                 groups++
                 for (s in opened.indices) if (lastGroup[s] == g) live[s] = null
             }
@@ -424,13 +445,26 @@ object DailyParquetBuilder {
     }
 
     /** Builds one row group's columns by gathering output rows [from] until [to] from the [live] decoded sources. */
-    private fun gather(columns: List<ParquetWriter.Column>, opened: List<Src>, live: Array<Map<String, ColumnValues>?>, rows: Rows, from: Int, to: Int): List<ColumnValues> {
+    private fun gather(
+        columns: List<ParquetWriter.Column>,
+        opened: List<Src>,
+        live: Array<Map<String, ColumnValues>?>,
+        rows: Rows,
+        flags: IntArray?,
+        from: Int,
+        to: Int,
+    ): List<ColumnValues> {
         val n = to - from
         val src = IntArray(n) { rows.source(from + it) }
         val row = IntArray(n) { rows.row(from + it) }
         return columns.map { c ->
             if (c.name == SOURCE_INDEX) {
                 ColumnValues.Int32(src.copyOf(), null)
+            } else if (flags != null && c.name == RowChecks.FLAGS_COLUMN) {
+                val v = IntArray(n) { flags[rows.order[from + it]] }
+                val valid = BooleanArray(n) { v[it] >= 0 }
+                for (k in 0 until n) if (!valid[k]) v[k] = 0
+                ColumnValues.Int32(v, valid.takeIf { it.any { b -> !b } })
             } else if (c.name == ESTIMATED_UTC) {
                 val v = LongArray(n); val valid = BooleanArray(n)
                 for (k in 0 until n) {
@@ -486,7 +520,12 @@ object DailyParquetBuilder {
 
     const val BUILDER = "opensensor.space shared derived-v4"
 
-    /** The `derived_version` of a day file. A change to the day metadata bumps it, with [BUILDER]. */
+    /**
+     * The `derived_version` of a day file, in step with [BUILDER]. A change a reader of the day file
+     * must know about bumps both. An optional key or column, such as the [RowChecks.CHECKS_KEY] and
+     * [RowChecks.FLAGS_COLUMN] of #91, does not, because a reader without it reads every row as before.
+     * The day signature, not this value, decides which days rebuild.
+     */
     const val DERIVED_VERSION = "4"
     const val SOURCE_INDEX = "source_file_index"
     const val ESTIMATED_UTC = "event_time_utc_estimated_us"

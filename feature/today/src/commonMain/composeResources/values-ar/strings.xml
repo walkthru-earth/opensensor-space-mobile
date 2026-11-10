@@ -66,12 +66,6 @@
     <string name="now_nowcast_note_simple">متوسط آخر 12 ساعة يعتمد أكثر على الساعات الأحدث.</string>
     <string name="now_live_value">مباشر %1$s</string>
     <string name="now_unrated_simple">تبدو هذه القراءة غير سليمة، لذا لا تُقيَّم.</string>
-    <string name="qc_flagged">مُعلَّمة كقراءة مشكوك فيها</string>
-    <string name="qc_pm25_above_pm10">PM2.5 أعلى من PM10، وهذا غير ممكن.</string>
-    <string name="qc_flatline">لم تتغير أعداد الجسيمات منذ 30 قراءة.</string>
-    <string name="qc_spike">قفزة مفاجئة لا تظهر في أعداد الجسيمات.</string>
-    <string name="qc_high_humidity">الرطوبة أعلى من 85 بالمئة، مما يرفع قراءة المستشعر.</string>
-    <string name="qc_note">تُعرض القيمة كما قيست.</string>
     <string name="now_waiting">في انتظار قراءة…</string>
     <string name="now_sample_number">العيّنة %1$d</string>
     <string name="mood_fresh_advice">ضمن إرشاد منظمة الصحة العالمية. استمتع به.</string>

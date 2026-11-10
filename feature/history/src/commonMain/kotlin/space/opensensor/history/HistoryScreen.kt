@@ -66,6 +66,7 @@ import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.InfoNote
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockIcon
+import space.opensensor.designsystem.QcFlagLine
 import space.opensensor.designsystem.SectionCard
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.metricLabel
@@ -349,7 +350,8 @@ internal fun colourInfoRes(level: DetailLevel): StringResource = if (level.detai
  */
 @Composable
 private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, level: DetailLevel, onOpenDay: (Long) -> Unit) {
-    val s = state.series
+    // Simple charts and judges the step on the rows that passed the stored checks, and names no flag (#91).
+    val s = remember(state.series, level.detailed) { if (level.detailed) state.series else state.series?.withoutFlagged() }
     val zone = state.zone
     var selected by remember(state.range, state.toS, state.metric) { mutableStateOf<HistoryColumn?>(null) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
@@ -423,6 +425,7 @@ private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, l
                     SelectedColumn(selected, state, units, level.detailed)
                     Spacer(Modifier.height(8.dp))
                     Summary(s, units, level.detailed)
+                    if (level.detailed && s.flaggedRows > 0) QcFlagLine(s.flags, Modifier.padding(top = 4.dp), rows = s.flaggedRows)
                 }
             }
         }

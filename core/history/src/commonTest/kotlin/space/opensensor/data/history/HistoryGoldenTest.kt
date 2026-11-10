@@ -113,7 +113,7 @@ class HistoryGoldenTest {
                 val legacyDaily = LegacyDailyParquetBuilder.build(thing, day, dayEntries.map { it.source() }, legacySink, anchors, now)
 
                 val sink = MemorySink()
-                val pass = DayPass.run(thing, day, dayEntries.map { it.source() }, sink, anchors, now, templates = CoreS3Files)
+                val pass = DayPass.run(thing, day, dayEntries.map { it.source() }, sink, anchors, now, templates = CoreS3Files, checks = RowChecks.NONE)
                 assertEquals(legacyBuckets, pass.buckets, "tiers of $thing day $day")
                 assertEquals(emptyList(), pass.failedSources)
                 if (legacyDaily == null) {
@@ -152,7 +152,7 @@ class HistoryGoldenTest {
                 val oldSink = MemorySink()
                 val old = PreStreamingDailyParquetBuilder.pass(thing, day, dayEntries.map { it.source() }, oldSink, anchors, now, Aggregator(thing, templates = CoreS3Files), strict = false)
                 val newSink = MemorySink()
-                val new = DayPass.run(thing, day, dayEntries.map { it.source() }, newSink, anchors, now, templates = CoreS3Files)
+                val new = DayPass.run(thing, day, dayEntries.map { it.source() }, newSink, anchors, now, templates = CoreS3Files, checks = RowChecks.NONE)
                 assertEquals(old.buckets, new.buckets, "tiers of $thing day $day")
                 assertEquals(old.rowsRead, new.rowsRead)
                 assertEquals(old.failedSources, new.failedSources)
@@ -166,7 +166,7 @@ class HistoryGoldenTest {
                 val strictNew = MemorySink()
                 assertEquals(
                     PreStreamingDailyParquetBuilder.build(thing, day, dayEntries.map { it.source() }, strictOld, anchors, now),
-                    DailyParquetBuilder.build(thing, day, dayEntries.map { it.source() }, strictNew, anchors, now),
+                    DailyParquetBuilder.build(thing, day, dayEntries.map { it.source() }, strictNew, anchors, now, checks = RowChecks.NONE),
                 )
                 assertContentEquals(strictOld.toByteArray(), strictNew.toByteArray(), "strict daily bytes of $thing day $day")
                 if (new.daily != null) days++

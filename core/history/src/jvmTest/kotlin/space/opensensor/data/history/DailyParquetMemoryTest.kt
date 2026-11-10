@@ -99,7 +99,7 @@ class DailyParquetMemoryTest {
         val baseline = if (probed) probe.used() else 0L
         val start = System.nanoTime()
         if (streaming) {
-            DailyParquetBuilder.build(thing, epochDay, sources, out, emptyMap(), 0)
+            DailyParquetBuilder.build(thing, epochDay, sources, out, emptyMap(), 0, checks = RowChecks.NONE)
         } else {
             PreStreamingDailyParquetBuilder.build(thing, epochDay, sources, out, emptyMap(), 0)
         }

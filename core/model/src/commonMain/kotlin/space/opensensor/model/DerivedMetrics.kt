@@ -4,8 +4,9 @@ package space.opensensor.model
  * What one device family (`:family:*`) adds to the generic core. Its phone derived datastreams, each
  * named as data, a [Datastream] with [Datastream.derived] set, plus its per row [RowFormula], so
  * History builds it like a stored column and holds no family code. Its health [scales], which a
- * profile's `scales` id picks. And the [capabilitiesOf] a Thing of the family. The app lists its
- * providers once where it builds the metric catalog, never from static registration.
+ * profile's `scales` id picks. The [capabilitiesOf] a Thing of the family. And the [rowCheck] that
+ * flags its suspect rows. The app lists its providers once where it builds the metric catalog, never
+ * from static registration.
  */
 fun interface DerivedMetricProvider {
     /** The datastreams the phone derives for [template], empty when it lacks their source columns. */
@@ -16,6 +17,30 @@ fun interface DerivedMetricProvider {
 
     /** The family capabilities [thing] has, beyond the generic ones core reads from any template. */
     fun capabilitiesOf(thing: Thing): Set<Capability> = emptySet()
+
+    /** The quality check this family runs on the rows of [template], or null when it has none for them. */
+    fun rowCheck(template: BoardTemplate): RowCheck? = null
+}
+
+/**
+ * A family's quality check, a pure function of one thing-day of rows. It returns a flag bitmask per
+ * row and never changes a value, so the daily builder stores the flags beside the raw columns and a
+ * rule change needs only a rebuild of the derived tier. Two checks with the same [id] give the same
+ * flags for the same rows on both phones.
+ */
+interface RowCheck {
+    /** Names the rules and their version. A new id rebuilds every day this check reads. */
+    val id: String
+
+    /** The stored columns [flags] reads, in order. A column a template lacks reads as missing. */
+    val columns: List<String>
+
+    /**
+     * One flag bitmask per row, 0 for a row that passed. Rows come in time order. [timeMs] holds each
+     * row's event time in epoch milliseconds and [values] one array per [columns] entry, `NaN` for a
+     * missing value.
+     */
+    fun flags(timeMs: LongArray, values: List<DoubleArray>): IntArray
 }
 
 /** One row's value of a derived datastream from its source columns. */
