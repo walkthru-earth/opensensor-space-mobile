@@ -1,8 +1,11 @@
 # The gate from AGENTS.md, enforced: `./gradlew verify` = :app lintDebug + assembleDebug +
 # testDebugUnitTest + every shared module's host tests (each convention plugin adds its module),
 # plus the same pre-commit hooks a developer runs. On Linux `verify` skips iOS. The iOS job runs
-# `verifyIos` (every shared module's simulator tests) and unsigned simulator/device builds.
+# `verifyIos` (every shared module's simulator tests) and an unsigned simulator build. Off pull
+# requests a separate job builds the unsigned device Release app.
 # Real BLE, mDNS, permissions and background behavior still need dated phone evidence.
+# The gradle job also checks out opensensor-space-firmware at the pinned commit, so the bundled
+# templates test runs instead of skipping.
 # Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
 name: verify
 
@@ -31,6 +34,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
       - id: jdk
         uses: ./.github/actions/build-jdk-version
@@ -54,6 +59,19 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # FirmwareTemplatesTest compares core/model/bundled/templates with the firmware templates at the
+      # commit pinned in `ref` below, the commit the bundle was copied from (#261). Bump it with each
+      # copy. OPENSENSOR_FIRMWARE_DIR on the verify step makes a missing checkout fail the test
+      # instead of skipping it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: walkthru-earth/opensensor-space-firmware
+          ref: 5a7bb7a13bf9405125fe51e0c5f7fdfb3c95298e
+          path: opensensor-space-firmware
+          persist-credentials: false
+          sparse-checkout: docs/shared/templates
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
       - id: jdk
         uses: ./.github/actions/build-jdk-version
@@ -70,6 +88,8 @@ jobs:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'build-logic/src/**', 'core/*/build.gradle.kts', 'feature/*/build.gradle.kts', 'ui/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
       - run: ./gradlew --no-daemon verify
+        env:
+          OPENSENSOR_FIRMWARE_DIR: ${{ github.workspace }}/opensensor-space-firmware
       - name: Check the APK native ABIs
         run: python3 tools/check_apk_abis.py app/build/outputs/apk/debug/app-debug.apk
       - name: Upload debug APK
@@ -108,6 +128,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
       - id: jdk
         uses: ./.github/actions/build-jdk-version
@@ -157,15 +179,6 @@ jobs:
             -derivedDataPath ios/build/DerivedData-simulator \
             -resultBundlePath ios/build/ci/swift-tests.xcresult \
             CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 | tee ios/build/ci/swift-tests.log
-      # The device Release build only guards distribution, so it runs on main and by hand.
-      - name: Build unsigned device Release app
-        if: github.event_name != 'pull_request'
-        run: |
-          xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
-            -configuration Release -destination 'generic/platform=iOS' \
-            -derivedDataPath ios/build/DerivedData-device \
-            -resultBundlePath ios/build/ci/device-release.xcresult \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ios/build/ci/device-release-build.log
       - name: Package simulator app
         run: |
           ditto -c -k --sequesterRsrc --keepParent \
@@ -202,5 +215,72 @@ jobs:
             ui/*/build/test-results/iosSimulatorArm64Test/
             ios/shared/build/reports/tests/iosSimulatorArm64Test/
             ios/shared/build/test-results/iosSimulatorArm64Test/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # The device Release build only guards distribution, so it runs on main and by hand, never on a
+  # pull request. It has its own job because after the simulator tests it pushed the iOS job past
+  # 60 minutes, and a cancelled job also skips saving the main caches. Here it runs in parallel.
+  ios-device-release:
+    name: iOS device Release build
+    if: github.event_name != 'pull_request'
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      XCODE_VERSION: "27.0"
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+      GRADLE_OPTS: -Dorg.gradle.workers.max=2
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
+      - id: jdk
+        uses: ./.github/actions/build-jdk-version
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ steps.jdk.outputs.version }}
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
+          # iOS native validation saves these caches. This job only reads them, so its smaller
+          # device build never wins the save and leaves validation without simulator outputs.
+          cache-read-only: true
+      - name: Restore Kotlin Native toolchain
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ runner.arch }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'build-logic/src/**', 'core/*/build.gradle.kts', 'feature/*/build.gradle.kts', 'ui/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
+      - name: Check Apple toolchain
+        run: |
+          test "$(uname -m)" = arm64
+          test -d "$DEVELOPER_DIR"
+          mkdir -p ios/build/ci
+          xcodebuild -version 2>&1 | tee ios/build/ci/toolchain.log
+      - name: Build unsigned device Release app
+        run: |
+          xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath ios/build/DerivedData-device \
+            -resultBundlePath ios/build/ci/device-release.xcresult \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ios/build/ci/device-release-build.log
+      - name: Package Xcode result bundle
+        if: always()
+        run: |
+          if [ -d ios/build/ci/device-release.xcresult ]; then
+            ditto -c -k --sequesterRsrc --keepParent ios/build/ci/device-release.xcresult ios/build/ci/device-release.xcresult.zip
+          fi
+      - name: Upload device Release logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-device-release-xcode-${{ env.XCODE_VERSION }}-${{ github.sha }}
+          path: |
+            ios/build/ci/*.log
+            ios/build/ci/*.xcresult.zip
           retention-days: 14
           if-no-files-found: ignore

@@ -12,7 +12,8 @@ flowchart LR
   P[push] --> V["pre-push: ./gradlew verify"]
   V --> T[":app lintDebug + assembleDebug + testDebugUnitTest<br/>+ every shared module's host tests<br/>+ verifyIos on a Mac"]
   GH[GitHub PR or push to main] --> W["verify.yml: pre-commit --all-files + ./gradlew verify → debug APK + reports"]
-  GH --> I["verify.yml: macOS → Kotlin iOS tests + one simulator Debug build for app and Swift tests · device Release build on main only"]
+  GH --> I["verify.yml: macOS → Kotlin iOS tests + one simulator Debug build for app and Swift tests"]
+  GH --> D["verify.yml: macOS device Release build job, main and by hand only"]
   GH --> R["release.yml: apk job (read-only, R8 + signing) → publish job (contents: write) · main → rolling 'latest' · v* tag → permanent release"]
 ```
 
@@ -38,7 +39,13 @@ checks, recorded separately in [status.md](status.md) and the firmware repo's `b
 CI minutes cost money and macOS minutes cost the most, so `verify.yml` runs once per change.
 Pull requests run on `pull_request` only, not again on the branch push. `main` runs on push.
 Changes to `docs/` or Markdown alone skip the gate. A branch without a PR runs it with
-`workflow_dispatch`. The device Release build runs on `main` and by hand, not on pull requests.
+`workflow_dispatch`. The device Release build runs on `main` and by hand, not on pull requests, in
+its own job ("iOS device Release build", 45 minute timeout) beside "iOS native validation" (60
+minutes). As one step after the simulator tests it took about 17 minutes and pushed that job near
+or over its 60 minute limit on `main`, and a cancelled job also skips saving the `main` caches. The
+Release job only reads the Gradle and Kotlin/Native caches, so it never saves over the ones the
+validation job writes. A slow macOS runner can still cancel "iOS native validation" at 60 minutes. That is
+infrastructure, rerun the job.
 CI runs ktlint on every file, while the local hook checks only staged files, so run
 `pre-commit run --all-files` before a merge that touches many Kotlin files.
 
@@ -49,8 +56,20 @@ the audits even when `:ui:strings` compiled classes have not changed, so a previ
 cannot hide new untranslated copy or missing semantics. The release workflow runs the same host
 audits through `verify`; release-only APK optimization and signer checks remain additional steps.
 
-GitHub Actions currently does not run because of account billing. The workflow descriptions
-below describe configured jobs, not completed CI. Local gates are the acceptance evidence.
+`FirmwareTemplatesTest` (`:core:model`) compares `core/model/bundled/templates` with
+opensensor-space-firmware `docs/shared/templates` byte for byte (#261). The `verify.yml` gradle job
+checks the firmware out at the commit the bundle was copied from, a literal `ref` in the workflow, and
+sets `OPENSENSOR_FIRMWARE_DIR`. The `ref` stays a literal because CodeQL reports a checkout ref read
+from a repository file as cache poisoning. With that variable set, a missing checkout fails the test. Locally the
+test finds an `opensensor-space-firmware` folder beside the repository and skips without one. The
+weekly `live-key-drift.yml` `templates` job runs the same test against firmware `main`, so a
+template the app has not bundled yet turns that run red. The firmware folders are inputs of the
+`:core:model` test task, so a cached result never stands in for other firmware bytes.
+
+GitHub Actions runs `verify.yml` on pull requests, on pushes to `main` and by hand, never on a
+schedule. `live-key-drift.yml` runs weekly and by hand only, so a green pull request run says nothing
+about the firmware `main` check. `release.yml` runs on pushes to `main`, on `v*` tags and by hand.
+A green run and the local gates are the acceptance evidence.
 Mobile CodeRabbit provides summaries only, so use a scoped source review before opening a PR.
 Run `./ios/tests/verify-native.sh` for the native host checks. No host or simulator gate qualifies
 phone radio, screen-off collection or board behavior.
@@ -134,9 +153,10 @@ current feature scope and simulator versus phone qualification.
 
 ### GitHub Actions iOS validation (researched 2026-10-08)
 
-Keep one `iOS native validation` job in `verify.yml`, alongside the Linux checks.
-It runs on pushes, pull requests and manual dispatch, including documentation changes,
-so its check is always present if made required in a branch ruleset. The workflow
+Keep one `iOS native validation` job in `verify.yml`, alongside the Linux checks, plus the
+`iOS device Release build` job that runs off pull requests only. The validation job runs on
+pushes, pull requests and manual dispatch, so its check is present if made required in a
+branch ruleset. Changes to `docs/` or Markdown alone start no run. The workflow
 uses read-only repository permissions and cancels obsolete runs. Validation needs
 no Apple account, provisioning profile or signing secret.
 
@@ -160,7 +180,7 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | `ios/tests/verify-native.sh` | Compiles native archive export, LAN framing/policy, RunSlot cancellation and Bluetooth GATT queue checks in Swift 6 with complete concurrency checking and warnings as errors. Shared transfer checks run in Kotlin tests. No radio or UI qualification. |
 | `verifyIos` | Runs the simulator tests of every shared module (each `:core` module, `:ui:designsystem`, `:ui:map`, `:feature:discover`, `:ios:shared`), compiles the `iosMain`, `appleMain` and `nativeMain` metadata, and links the Debug framework. |
 | Xcode Debug simulator build | Compiles Swift adapters, app entry point and the Compose framework through the existing direct-integration build phase. |
-| Xcode Release device build, signing disabled | Checks optimized Kotlin and Swift for device ARM64. Catches failures hidden by Debug/simulator builds; produces no distributable IPA. |
+| Xcode Release device build, signing disabled, own job off pull requests | Checks optimized Kotlin and Swift for device ARM64. Catches failures hidden by Debug/simulator builds; produces no distributable IPA. |
 
 The shared Xcode scheme has one hostless Swift Testing target, `OpenSensorTests`, which runs the
 `verify-native.sh` checks on a simulator. Do not substitute `xcodebuild test` for the Kotlin
@@ -385,8 +405,9 @@ seven day cooldown. Each update must pass `verify.yml`. Real BLE, LAN and backgr
 an update still needs a phone run before a release.
 
 Gradle jobs restore `~/.konan` (Kotlin/Native compiler and dependencies) keyed by OS, architecture
-and the build definitions. The iOS job adds the Xcode version to the key. The verify workflow writes
-the Gradle cache only on `main`. Release builds only read it.
+and the build definitions. Both iOS jobs add the Xcode version to the key. The verify workflow
+writes the Gradle cache only on `main`, from the Linux gradle job and "iOS native validation". The
+iOS device Release build and release builds only read it.
 
 ### Rolling tag failure (2026-10-08)
 
