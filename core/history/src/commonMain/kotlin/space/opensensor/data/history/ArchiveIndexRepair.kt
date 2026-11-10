@@ -214,17 +214,22 @@ class ArchiveIndexRepair(
     /**
      * The [TemplateLink]s of indexed files whose footer desc no template resolves, one per desc and at
      * most [limit], read from one footer each. Only links on the firmware template host
-     * ([TemplateHrefs.isFirmwareTemplate]) count, so other hrefs never crowd one out. A file that fails
-     * to read is skipped. For [TemplateHrefs.run].
+     * ([TemplateHrefs.isFirmwareTemplate]) count, so other hrefs never crowd one out. A sweep opens at
+     * most [MAX_FOOTER_OPENS] footers whatever they hold, so a board writing many unresolved descs
+     * with other hrefs cannot make it read without end. A file that fails to read is skipped. For
+     * [TemplateHrefs.run].
      */
     suspend fun unresolvedTemplateLinks(limit: Int = MAX_LINKS): List<TemplateLink> = withContext(io) {
         val links = LinkedHashMap<String, TemplateLink>()
         val skipped = HashSet<String>()
+        var opened = 0
         for (thing in index.things()) {
             for (record in index.indexedForThing(thing)) {
                 if (links.size >= limit) return@withContext links.values.toList()
                 val desc = record.templateSha256?.lowercase() ?: continue
                 if (desc in links || desc in skipped || templates.template(record.dictionarySha256, desc) != null) continue
+                if (opened >= MAX_FOOTER_OPENS) return@withContext links.values.toList()
+                opened++
                 val link = try {
                     if (store.exists(record.key)) {
                         ParquetFile.open(store.reader(record.key), record.name).use { TemplateLink.of(it.metadata.footer) }
@@ -246,6 +251,9 @@ class ArchiveIndexRepair(
     companion object {
         /** The most links one [unresolvedTemplateLinks] sweep returns. */
         const val MAX_LINKS = 16
+
+        /** The most footers one [unresolvedTemplateLinks] sweep opens, as many as one run may fetch descs. */
+        const val MAX_FOOTER_OPENS = TemplateHrefs.MAX_DESCS
 
         /** The thing inside the Hive path, which can differ from the archive namespace the file was saved under. */
         fun producerThing(name: String): String? = when (val partition = HivePartition.of(name)) {

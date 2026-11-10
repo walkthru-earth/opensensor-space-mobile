@@ -318,11 +318,17 @@ class TemplateHrefsTest {
 
     private class Store : ArchiveStore {
         val files = HashMap<ArchiveKey, ByteArray>()
+
+        /** How many files were opened for reading. */
+        var opens = 0
         override suspend fun partialLengths(thing: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = key in files
-        override fun reader(key: ArchiveKey, partial: Boolean): ByteReader = ByteArrayReader(files.getValue(key))
+        override fun reader(key: ArchiveKey, partial: Boolean): ByteReader {
+            opens++
+            return ByteArrayReader(files.getValue(key))
+        }
         override suspend fun commit(key: ArchiveKey) = Unit
         override suspend fun listFinal(thing: String?): List<ArchiveKey> = files.keys.filter { thing == null || it.thing == thing }
     }
@@ -373,6 +379,22 @@ class TemplateHrefsTest {
         repair.backfillAll()
         assertEquals(listOf(other, desc), index.rows.value.map { it.templateSha256 })
         assertEquals(listOf(link), repair.unresolvedTemplateLinks(limit = 1))
+    }
+
+    @Test
+    fun aSweepOpensAtMostMaxFooterOpensFooters() = runTest {
+        val h = harness()
+        val cap = ArchiveIndexRepair.MAX_FOOTER_OPENS
+        // More unresolved descs on another host than one sweep may open, then a firmware link.
+        val others = List(cap + 1) { i -> soilFile("https://example.invalid/t/$i.json", i.toString(16).padStart(64, '0')) }
+        val (store, index) = h.archive(*(others + soilFile()).toTypedArray())
+        val repair = ArchiveIndexRepair(store, index, io = h.io, nowEpochMs = { 42L }, templates = h.templates)
+        repair.backfillAll()
+        assertEquals(cap + 2, index.rows.value.mapNotNull { it.templateSha256 }.toSet().size)
+        store.opens = 0
+        // The sweep stops at the cap, before the firmware link it never reaches.
+        assertTrue(repair.unresolvedTemplateLinks().isEmpty())
+        assertEquals(cap, store.opens)
     }
 
     @Test
