@@ -6,12 +6,14 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import space.opensensor.data.DeviceConnectionManager
 import space.opensensor.data.ble.TransportKind
+import space.opensensor.data.history.CellTrackReader
 import space.opensensor.data.history.HistoryRepository
 import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.local.database.ThingEpochDao
@@ -45,6 +47,7 @@ class HistoryViewModel @AssistedInject constructor(
         index = history.index,
         currentThing = knownDeviceDao.observeAll().map { list -> list.firstOrNull { it.address == deviceAddress }?.thing },
         things = epochDao.observeForDevice(deviceAddress).map { epochs -> epochs.map { it.thing } },
+        cellTracks = CellTrackReader(history.store, history.index, Dispatchers.IO),
     )
 
     val transport: StateFlow<TransportKind?> = manager.controller(deviceAddress).activeTransport

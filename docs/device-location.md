@@ -82,7 +82,22 @@ Only GNSS (2) and phone (3) fixes place a moving Thing. Rows from its fixed hour
 configured cell (1), which is never where it is now. Those fixes are outlined with an ink fill and
 line in their own map source with no Thing UUID, and the pin stands at the newer of the stored GNSS
 cell and the last such fix. With neither it shows no pin. The 24 hour window is read again when a
-file is synced and every quarter hour, so old cells leave the map with no new file.
+file is synced and every quarter hour, so old cells leave the map with no new file. A moving pin
+says under it how old its place is, as in "12 min ago", from the time of that fix or of the stored
+cell. The words are map text in the basemap's font, so the offline paper map shows the pin without
+them. The point source carries only its index and those words.
+
+History shows the same rows as a Track card for the Day and Week on screen (`HistoryTrack`). It
+draws once a row reported a GNSS or phone fix, or the rows name more than one cell, so a fixed
+Thing in its one configured cell shows none. The map fills each distinct cell with the colour of
+its newest source, a muted ink for a picked area (1), teal for sensor GPS (2) and ochre for phone
+(3), never the brand blue or purple, and outlines the newest fix thickly. It fits the cells once
+per span and stays still inside the list. Across the antimeridian it opens on the newest cell
+instead. A strip below runs left to right through the span, each stretch in its source colour and
+rows with no location outlined, never filled in. A legend names only the sources present. Month
+and Year show no track, since they would read every row of up to a year of files. The cells come
+from the Thing's own verified files on this phone, are drawn only on screen, and are never stored,
+logged or sent.
 
 ## Site
 
@@ -153,7 +168,13 @@ because it clears the key.
 - `ui/map` `CellPicker` draws the cells, takes the tap and emits only the cell id. `CellPickerGrid`
   holds its grid maths apart from Compose. `PlaceSearchField` searches the bundled GeoNames
   cities15000 list (`PlaceSearch`), written by `tools/places/make_places.py`. `LocalMapNetwork`
-  carries the Settings network switch from each app root.
+  carries the Settings network switch from each app root. `BaseMap(movable = false)` is a map that
+  takes no pan or zoom, and `MapCredits` with `basemapInfo()` credits the basemap on any map.
+- `core/history` `CellTrackReader.observeWindow` reads one fixed window of a Thing's rows again on
+  each new file, for the History track. `feature/history` `HistoryTrack` builds its cells, strip
+  and legend, `HistoryTrackMap` its outlines and fit, and `HistoryTrackCard` draws it.
+- `feature/discover` `OwnPin.placedEpochMs` dates a moving pin's place, and `ownGeoJsonWithAges`
+  adds its age to the point source.
 - `feature/device` owns shared draft/readback behavior and permission-triggered UI.
   `DeviceLocationForm` is the card of Device settings and of the setup Location page, and opens the
   picker full screen. `DeviceSiteForm` is the site part of that card and the setup Site page.

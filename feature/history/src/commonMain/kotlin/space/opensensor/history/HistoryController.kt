@@ -1,23 +1,28 @@
 package space.opensensor.history
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.data.history.ArchiveSeriesQuery
+import space.opensensor.data.history.CellTrackReader
 import space.opensensor.data.history.DaySpan
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeries
@@ -67,6 +72,7 @@ data class HistoryUiState(
  *
  * [currentThing] is the thing History opens on (Android, the known device's thing, iOS, the
  * archived thing with the latest reading). [things] are the generations its chips offer.
+ * [cellTracks] reads the rows' own cells for [track], and without it History shows no track.
  */
 class HistoryController(
     private val scope: CoroutineScope,
@@ -78,6 +84,7 @@ class HistoryController(
     private val zone: TimeZone = TimeZone.currentSystemDefault(),
     private val clock: Clock = Clock.System,
     tickMs: Long = 60_000,
+    private val cellTracks: CellTrackReader? = null,
 ) {
     private val selectedThing = MutableStateFlow<String?>(null)
     private val metric = MutableStateFlow(Metrics.default)
@@ -131,6 +138,30 @@ class HistoryController(
     private val fileCounts = thing.archiveQueryResults { s ->
         if (s == null) flowOf(HistoryFileCounts()) else index.observeThing(s).map(::countHistoryFiles)
     }
+
+    /**
+     * The places the rows of the visible Day or Week put the thing (#263), read again on a new file.
+     * Null while it loads, for Month and Year, and when there is nothing to draw ([HistoryTrack.of]).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val track: StateFlow<HistoryTrack?> = combine(thing, range, toS) { s, r, t ->
+        if (s == null || cellTracks == null || r !in HistoryTrack.RANGES) null else s to HistoryWindow.endingAt(t, r, zone)
+    }
+        .distinctUntilChanged()
+        .flatMapLatest { key ->
+            val reader = cellTracks
+            if (key == null || reader == null) {
+                flowOf(null)
+            } else {
+                val (s, w) = key
+                reader.observeWindow(s, w.fromS * NS_PER_S, w.toS * NS_PER_S)
+                    .map { HistoryTrack.of(s, w, it) }
+                    .onStart { emit(null) }
+                    // An index that fails to read hides the track. The archive card reports the files.
+                    .catch { emit(null) }
+            }
+        }
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     private val days = thing.archiveQueryResults { s -> if (s == null) flowOf(DaySpan()) else tiers.observeDays(s) }
 
@@ -213,4 +244,8 @@ class HistoryController(
 
     /** The current time in epoch seconds, for the day ring's now tick. */
     fun nowS(): Long = clock.now().epochSeconds
+
+    private companion object {
+        const val NS_PER_S = 1_000_000_000L
+    }
 }

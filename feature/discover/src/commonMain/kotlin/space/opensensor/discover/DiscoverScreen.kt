@@ -286,7 +286,7 @@ private fun DiscoverContent(
                     ink,
                     nearMe,
                     highlight,
-                    ownGeoJson = state.ownGeoJson,
+                    ownGeoJson = ownGeoJsonWithAges(state.own, state.ownGeoJson, now, strings),
                     ownTrackGeoJson = state.ownTrackGeoJson,
                     paper = paper,
                     onOwnCluster = { centre -> ownMove = centre to null },

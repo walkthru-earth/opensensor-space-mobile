@@ -58,7 +58,9 @@ fun rememberBaseMapState(
  * [ZoomControls] agree. [fitOnce] is an area the camera fits the first time the map is ready, never
  * again after a rotation, so a rebuilt map keeps the person's view. [onCameraRest] runs each time
  * the camera settles, [onMoved] on every rest after the first. [onMapClick] runs for a tap that no
- * layer of the caller consumed. Attribution is the caller's, drawn over the map.
+ * layer of the caller consumed. Attribution is the caller's, drawn over the map. With [movable]
+ * false the camera stays where the caller put it, so a map inside a scrolling list leaves drags to
+ * the list.
  */
 @Composable
 fun BaseMap(
@@ -69,6 +71,7 @@ fun BaseMap(
     onCameraRest: (CameraRest) -> Unit = {},
     onMoved: () -> Unit = {},
     onMapClick: () -> Unit = {},
+    movable: Boolean = true,
 ) {
     val onRest by rememberUpdatedState(onCameraRest)
     val onMove by rememberUpdatedState(onMoved)
@@ -103,6 +106,10 @@ fun BaseMap(
             camera {
                 rotate { enabled = false }
                 pitch { enabled = false }
+                if (!movable) {
+                    pan { enabled = false }
+                    zoom { enabled = false }
+                }
             }
             callbacks {
                 click {

@@ -145,6 +145,22 @@ class CellTrackReaderTest {
         assertEquals(listOf(listOf(away), emptyList()), seen)
     }
 
+    @Test
+    fun aFixedWindowReadsAgainOnANewFile() = runTest {
+        val store = Store()
+        val index = Index()
+        val gnss = LocationSource.GNSS.wire
+        put(store, index, "thing=$thing/year=2026/month=09/day=21/a.parquet", file(startS, listOf(home), listOf(gnss)), startS, 1)
+        val reader = CellTrackReader(store, index, io = StandardTestDispatcher(testScheduler))
+        val window = reader.observeWindow(thing, startS * NS_PER_S, (startS + 100) * NS_PER_S)
+        assertEquals(listOf(home), window.first().cells)
+        put(store, index, "thing=$thing/year=2026/month=09/day=21/b.parquet", file(startS + 50, listOf(away), listOf(gnss)), startS + 50, 1)
+        assertEquals(listOf(home, away), window.first().cells)
+        // A row past the window's end stays out.
+        put(store, index, "thing=$thing/year=2026/month=09/day=21/c.parquet", file(startS + 200, listOf(home), listOf(gnss)), startS + 200, 1)
+        assertEquals(2, window.first().spans.size)
+    }
+
     private companion object {
         const val NS_PER_S = 1_000_000_000L
     }

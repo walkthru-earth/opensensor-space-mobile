@@ -108,4 +108,22 @@
     <string name="chart_guideline_short">24 ساعة</string>
     <string name="chart_guideline_note_simple">الخط المتقطع هو الحد الصحي الإرشادي لمدة 24 ساعة.</string>
     <string name="info_history_body5_simple">ألوان PM2.5 وPM10 هي حالات الهواء. اللون يعني الشيء نفسه في كل مكان وكل عرض.</string>
+    <string name="history_track">المسار</string>
+    <string name="history_track_map">خريطة المسار</string>
+    <string name="history_track_picked">المنطقة المختارة</string>
+    <string name="history_track_gps">GPS المستشعر</string>
+    <string name="history_track_phone">الهاتف</string>
+    <string name="history_track_no_fix">بلا موقع</string>
+    <string name="info_history_track1">كل منطقة خلية H3 ذكرتها قراءات المستشعر نفسها، من الملفات المحفوظة على هذا الهاتف. لا تُحفظ أي إحداثيات.</string>
+    <string name="info_history_track2">يبيّن اللون مصدر المنطقة كما يسمّيه دليل الألوان. الحدّ السميك هو أحدث منطقة.</string>
+    <string name="info_history_track3">«بلا موقع» تعني قراءات لم يكن لها موقع. لا يملأ المسار مكانها أبدًا.</string>
+    <string name="info_history_track4">يمتد الشريط من بداية الفترة على اليسار إلى نهايتها على اليمين. يظهر المسار في اليوم والأسبوع.</string>
+    <plurals name="history_track_areas">
+        <item quantity="zero">%1$d منطقة</item>
+        <item quantity="one">منطقة واحدة (%1$d)</item>
+        <item quantity="two">منطقتان (%1$d)</item>
+        <item quantity="few">%1$d مناطق</item>
+        <item quantity="many">%1$d منطقة</item>
+        <item quantity="other">%1$d منطقة</item>
+    </plurals>
 </resources>

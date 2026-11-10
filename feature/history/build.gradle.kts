@@ -19,6 +19,8 @@ kotlin {
             api(project(":core:settings"))
             api(project(":core:units"))
             api(project(":ui:designsystem"))
+            // The track card's map (#263), on the shared basemap and H3 outlines.
+            implementation(project(":ui:map"))
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {

@@ -517,6 +517,7 @@ private class HistoryHolder(address: String, devices: DevicesBridge) : ViewModel
         index = IosArchive.index,
         currentThing = if (wholePhone) things.map { it.lastOrNull() } else devices.known.map { devices.thingFor(address) },
         things = things,
+        cellTracks = CellTrackReader(IosArchive.store, IosArchive.index, Dispatchers.Default),
     )
 }
 
