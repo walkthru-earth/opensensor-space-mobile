@@ -23,9 +23,11 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request replaces its run. A run on main always finishes, so every commit
+# there gets its iOS jobs and saves the caches.
 concurrency:
   group: verify-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   hooks:
@@ -106,10 +108,7 @@ jobs:
           name: reports-${{ github.sha }}
           path: |
             app/build/reports/lint-results-debug.html
-            app/build/reports/tests/
-            core/*/build/reports/tests/
-            feature/*/build/reports/tests/
-            ui/*/build/reports/tests/
+            **/build/reports/tests/
           retention-days: 14
           if-no-files-found: ignore
 
@@ -207,14 +206,8 @@ jobs:
           path: |
             ios/build/ci/*.log
             ios/build/ci/*.xcresult.zip
-            core/*/build/reports/tests/iosSimulatorArm64Test/
-            core/*/build/test-results/iosSimulatorArm64Test/
-            feature/*/build/reports/tests/iosSimulatorArm64Test/
-            feature/*/build/test-results/iosSimulatorArm64Test/
-            ui/*/build/reports/tests/iosSimulatorArm64Test/
-            ui/*/build/test-results/iosSimulatorArm64Test/
-            ios/shared/build/reports/tests/iosSimulatorArm64Test/
-            ios/shared/build/test-results/iosSimulatorArm64Test/
+            **/build/reports/tests/iosSimulatorArm64Test/
+            **/build/test-results/iosSimulatorArm64Test/
           retention-days: 14
           if-no-files-found: ignore
 
