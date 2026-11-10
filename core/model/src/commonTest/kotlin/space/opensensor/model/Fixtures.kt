@@ -1,6 +1,10 @@
 package space.opensensor.model
 
-/** `templates/cores3-telemetry-v5.json` from walkthru-earth/stac-opensensor main at a017edf, verbatim. */
+/**
+ * `templates/cores3-telemetry-v5.json` from walkthru-earth/stac-opensensor main at a017edf. Only the
+ * dictionary href differs, the raw opensensor-space-firmware URL at the same pinned commit, whose bytes
+ * hash to the link's `file:checksum`.
+ */
 internal val CORES3_TEMPLATE = """
 {
   "type": "OpenSensorTemplate",
@@ -241,7 +245,7 @@ internal val CORES3_TEMPLATE = """
   "links": [
     {
       "rel": "describedby",
-      "href": "https://github.com/walkthru-earth/aq-parquet/blob/ca0397ff9aa7b955f9dd444a95b65a5db44dea9a/firmware/esp-idf-cores3/bringup/telemetry_fields.inc",
+      "href": "https://raw.githubusercontent.com/walkthru-earth/opensensor-space-firmware/ca0397ff9aa7b955f9dd444a95b65a5db44dea9a/firmware/esp-idf-cores3/bringup/telemetry_fields.inc",
       "type": "text/plain",
       "title": "Firmware column dictionary",
       "file:checksum": "1220e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b"

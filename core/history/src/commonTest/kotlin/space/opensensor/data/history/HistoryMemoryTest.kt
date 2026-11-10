@@ -204,8 +204,9 @@ class HistoryMemoryTest {
         assertNull(repair.indexed(record("a.parquet", board), { ByteArrayReader(withCoreS3Dict(board)) }).indexError)
         assertEquals(listOf(desc), digests)
 
-        // A footer without template.sha256 reports nothing.
-        assertNull(repair.indexed(record("b.parquet", board), { ByteArrayReader(withCoreS3Dict(board, desc = null)) }).indexError)
+        // A footer without its template member is not trusted and reports nothing.
+        val noTemplate = withCoreS3Dict(board) { it.replace(Regex(""""template":\{[^}]*\},"""), "") }
+        assertNull(repair.indexed(record("b.parquet", board), { ByteArrayReader(noTemplate) }).indexError)
         assertEquals(listOf(desc), digests)
 
         // A file refused for another thing reports nothing either.

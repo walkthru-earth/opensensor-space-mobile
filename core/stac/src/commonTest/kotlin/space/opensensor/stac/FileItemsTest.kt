@@ -320,6 +320,17 @@ class FileItemsTest {
     }
 
     @Test
+    fun onlyTelemetryFilesGetAnItem() {
+        // A benchmark copy repeats rows of a telemetry file, so even a dated name and a located row give none.
+        val bytes = deviceFile(rowsIn(OSU_CELL))
+        fun purpose(value: String?) = FileItems.build(FILE_NAME, ByteArrayReader(bytes), footer(Mobility.FIXED).copy(purpose = value), coreS3Template, PUBLISHED_RES, h3)
+        assertIs<FileItemResult.Item>(purpose("telemetry"))
+        assertEquals(FileItemResult.NotTelemetry("codec-comparison-duplicate-rows"), purpose("codec-comparison-duplicate-rows"))
+        assertEquals(FileItemResult.NotTelemetry("Telemetry"), purpose("Telemetry"))
+        assertEquals(FileItemResult.NotTelemetry(null), purpose(null))
+    }
+
+    @Test
     fun statisticsCountOnlyRowsThatPassTheGate() {
         val rows = listOf(
             Row(HOUR_S * 1_000_000L, OSU_CELL, pmsStatus = 4, pm25 = 9, temperature = 27.25f),

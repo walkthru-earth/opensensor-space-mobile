@@ -13,7 +13,7 @@ internal fun thingParquetFixture(bytes: ByteArray, thing: String): ByteArray {
     val source = ParquetFile.wrap(bytes)
     val kv = source.metadata.keyValueMetadata
     val own = OpenSensorFooter.of(kv)
-    val footer = opensensorFooterJson(own?.dictionarySha256, own?.templateSha256, own?.sampleIntervalMs, thing = thing, purpose = own?.purpose ?: "telemetry")
+    val footer = opensensorFooterJson(own?.dictionarySha256, own?.templateSha256, own?.sampleIntervalMs ?: 10_000, thing = thing, purpose = own?.purpose ?: "telemetry")
     val output = ByteArrayOutputStream()
     val writer = ParquetWriter(
         output,

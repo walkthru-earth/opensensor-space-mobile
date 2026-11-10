@@ -193,12 +193,16 @@ specs and never name a column. A spec whose column a file lacks yields **no valu
 
 **Each file is read by its own template (`FileTemplates`).** A file carries one footer key of ours,
 `opensensor`, whose value is compact JSON (stac-opensensor `PROFILE.md` "Parquet footer", version
-`0.1.0`, in the style of GeoParquet `geo`). `OpenSensorFooter` reads only `template.sha256`,
-`dictionary.sha256`, `acquisition.sample_interval_ms`, `thing.id`, `thing.mobility` and `file.purpose`
-from it and ignores every other member. The standard GeoParquet 2.0 `geo` key may sit beside it and is
-ignored. A missing key, JSON that is not an object, an unknown major version, a missing
-`thing.id` or `thing.mobility` (so an old `station` footer), a digest that is not 64 lowercase hex, an interval that is not an integer, a mobility other than `fixed`
-or `moving`, or a Thing id or purpose that is not a non-empty string means the file has no footer. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
+`0.1.0`, in the style of GeoParquet `geo`). `OpenSensorFooter` trusts it only at version 0.1 with
+any patch, since a minor bump breaks readers while the profile is 0.x, and only when every member
+`footer.json` requires is present and not null (`OpenSensorFooter.REQUIRED`, which `FooterSchemaTest`
+checks against the schema). It reads only `template.sha256`, `dictionary.sha256`,
+`acquisition.sample_interval_ms`, `file.rotation_interval_s`, `thing.id`, `thing.mobility` and
+`file.purpose` and ignores every other value. The standard GeoParquet 2.0 `geo` key may sit beside it
+and is ignored. A missing key, JSON that is not an object, another major or minor version, a missing
+required member (so an old `station` footer), a digest that is not 64 lowercase hex, an interval that
+is not an integer, a mobility other than `fixed` or `moving`, or a Thing id or purpose that is not a
+non-empty string means the file has no footer. A sample interval that is not positive reads as none. No unprefixed footer key is read (stac-opensensor decision 25). A file with only the old
 unprefixed keys has no footer, so it keeps its rows and has no
 metrics. A file with no `opensensor` key is not checked against its Thing. A rebuilt partial file carries no `opensensor` key either
 (stac-opensensor question 30), so it reads the same way. Such files are wiped after the matched reflash (decision 14). The repair checks a file's
@@ -210,15 +214,16 @@ The template (`FileTemplates.SERVED`) is the one whose exact bytes hash to `temp
 template a board served and the app verified (`ServedTemplates`) first, then the bundled one (the build
 precomputes that digest for every bundled file). A template digest whose dict disagrees with the footer's is
 not used, and a digest no template has resolves to nothing, so the file keeps its rows without metrics
-until its template is known. Only a footer without `template.sha256` resolves by `dictionary.sha256`,
-the newest served one first, then the bundled one. LIVE joins a device by the same rule
+until its template is known. Every trusted footer names `template.sha256`, so only a day file whose
+`app_day` carries a dict and no desc resolves by `dictionary.sha256`, the newest served one first, then
+the bundled one. LIVE joins a device by the same rule
 (`TemplateIndex.resolve`, #259). History resolves a file's template from its stored footer digests at each derive, and the
 result is part of the day signature, so a file indexed before its board served a template it needs
 gains its metrics at the next derive, with no index pass. An app update that bundles a new desc for
 the same dict leaves files of the older firmware without metrics until a board serves their template
 (#260), and their rows stay. The bundled bytes are the firmware's own, so a
-real footer resolves by `template.sha256` alone, with no dictionary member needed. The catalog refuses
-to load when an `index.json` desc is not the build digest of its file. The footer interval wins. Without it
+real footer resolves by its `template.sha256`. The catalog refuses to load when an `index.json` desc
+is not the build digest of its file. A positive footer interval wins. Otherwise
 the template's default interval is used, and without both the interval is 0 and expected rows are 0.
 A tier bucket fed by files at different intervals keeps the shortest.
 

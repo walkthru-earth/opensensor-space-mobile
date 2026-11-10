@@ -5,33 +5,35 @@ package space.opensensor.data.history
 
 /**
  * A full stac-opensensor v0.1.0 `opensensor` footer value, shaped member for member like the footer
- * firmware writes (opensensor-space-firmware#105), naming [dict], [desc], [intervalMs], [thing], [mobility], [purpose] and [boot]. A null
- * leaves that member out. [thing] and [mobility] are required by the contract, so they are always written. The firmware version is a placeholder, so no test pins a release string.
- * Every member the app does not read is there so the reader is shown to ignore it.
+ * firmware writes (opensensor-space-firmware#105), naming [dict], [desc], [intervalMs], [thing],
+ * [mobility], [purpose] and [boot]. Every member `footer.json` requires is written, so the reader trusts
+ * it. Firmware always names both digests, so a null [dict] or [desc] is [UNKNOWN_DIGEST], which no
+ * template carries. The firmware version is a placeholder, so no test pins a release string. Every
+ * member the app does not read is there so the reader is shown to ignore it.
  */
 fun opensensorFooterJson(
     dict: String?,
     desc: String?,
-    intervalMs: Long?,
+    intervalMs: Long,
     board: String = "m5stack-cores3",
     schema: String = "cores3-telemetry-v5",
     thing: String = "thing-a",
     mobility: String = "fixed",
-    purpose: String? = "telemetry",
+    purpose: String = "telemetry",
     boot: String = "0123456789abcdef0123456789abcdef",
 ): String {
-    val dictionary = dict?.let {
-        """"dictionary":{"sha256":"$it","version":"$schema","uri":"https://example.invalid/dictionaries/$schema.inc"},"""
-    }.orEmpty()
-    val template = desc?.let { """"template":{"href":"https://example.invalid/templates/$board/$it.json","sha256":"$it"},""" }.orEmpty()
-    val interval = intervalMs?.let { """"sample_interval_ms":$it,""" }.orEmpty()
-    val filePurpose = purpose?.let { ""","purpose":"$it"""" }.orEmpty()
+    val dictionary = dict ?: UNKNOWN_DIGEST
+    val template = desc ?: UNKNOWN_DIGEST
     return """{"version":"0.1.0","thing":{"id":"$thing","device_id":"0123456789ab","board":"$board","deployment_id":"unknown","mobility":"$mobility"},""" +
         """"firmware":{"version":"test-firmware","schema":"$schema","boot_id":"$boot"},""" +
-        dictionary + template +
-        """"acquisition":{$interval"time_semantics":"sample instant, UTC","config_id":"default","config":"{}","calibration_id":"unknown"},""" +
-        """"file":{"rotation_interval_s":3600,"row_groups":4,"row_group_rows_max":90,"compression":"LZ4_RAW"$filePurpose}}"""
+        """"dictionary":{"sha256":"$dictionary","version":"$schema","uri":"https://example.invalid/dictionaries/$schema.inc"},""" +
+        """"template":{"href":"https://example.invalid/templates/$board/$template.json","sha256":"$template"},""" +
+        """"acquisition":{"sample_interval_ms":$intervalMs,"time_semantics":"sample instant, UTC","config_id":"default","config":"{}","calibration_id":"unknown"},""" +
+        """"file":{"rotation_interval_s":3600,"row_groups":4,"row_group_rows_max":90,"compression":"LZ4_RAW","purpose":"$purpose"}}"""
 }
+
+/** The digest a fixture gets for a dict or template it does not name. */
+const val UNKNOWN_DIGEST = "0000000000000000000000000000000000000000000000000000000000000000"
 
 /**
  * An `opensensor` footer in the shape firmware wrote before the Thing rename, naming a `station` and

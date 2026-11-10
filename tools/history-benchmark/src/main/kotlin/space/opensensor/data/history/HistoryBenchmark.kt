@@ -54,7 +54,7 @@ open class HistoryBenchmark {
                     ParquetWriter.Column(AirMetrics.PM25.column, ParquetType.INT32),
                     ParquetWriter.Column(AirMetrics.BOARD_TEMP.column, ParquetType.FLOAT),
                 ),
-                keyValueMetadata = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = null, intervalMs = null, thing = thing))
+                keyValueMetadata = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = null, intervalMs = 10_000, thing = thing))
             )
             writer.begin()
             writer.rowGroup(

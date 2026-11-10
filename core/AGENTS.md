@@ -51,10 +51,12 @@ geometry is H3 cells only, `ColumnStatistics` gives each measurement column `sta
 row under `FileItems.ITEM_NEEDS_LOCATION`, a fixed Thing in two cells, a cell not at its required
 `publishedRes`, a cell H3 rejects as `InvalidCell`, a footer with no allowed `rotation_interval_s` as
 `NoRotationWindow`, a name whose `HHMM` is not the rotation window of its first row as
-`WindowMismatch`). It never coarsens. It follows the canonical form of stac-opensensor v0.1.0
+`WindowMismatch`, a `file.purpose` other than `telemetry` as `NotTelemetry`). It never coarsens. It follows the canonical form of stac-opensensor v0.1.0
 (83787768cc8451109d48a03d4ef5493ffcd403dd). `ProfileExampleTest` in `commonTest` proves on the JVM
 and on iOS that an Item rebuilt from the profile's row fixtures equals its examples, and
-`FileItemSchemaTest` validates it against the schemas. The copied files live in
+`FileItemSchemaTest` validates it against the schemas. `FooterSchemaTest` runs `footer.json` over the
+profile's footer fixtures and checks that `OpenSensorFooter` refuses what the schema refuses for a
+missing member or another version. The copied files live in
 `stac/src/commonTest/fixtures/stac-opensensor`. `PublishGate` in `thing/` is its only caller. Once upload exists, the
 phone uploads the board's sidecar `.json` together with its `.parquet`.
 `thing/` (`:core:thing`, #219) holds the `ThingKind` contract, its `DataSource` and `PublishPolicy`,

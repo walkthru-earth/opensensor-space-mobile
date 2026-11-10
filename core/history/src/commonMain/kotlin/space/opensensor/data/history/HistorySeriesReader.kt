@@ -351,7 +351,7 @@ class HistorySeriesReader(
                 val gate = spec?.gate?.let { g -> GateColumn(g, batch[g.column]?.toColumnValues()) }
                 val col = spec?.let { batch[it.column] }
                 val rh = spec?.auxColumn?.let { batch[it] }
-                val staged = StagedRows(batch.rowCount, file.sampleIntervalMs)
+                val staged = StagedRows(batch.rowCount, file.sampleIntervalMs, derivedDay = true)
                 for (i in 0 until batch.rowCount) {
                     val real = !utc.isNull(i)
                     val ns = if (real) {
@@ -403,8 +403,10 @@ class HistorySeriesReader(
     /**
      * The rows of one source, raw or derived, staged until both extraction and closing succeeded, with
      * their row keys. [inWindow] marks the rows inside the chart window, the others only claim their key.
+     * A raw file gives its [sampleIntervalMs] when it has rows. A derived day file always gives it, because
+     * its scan holds only the window's rows and the day's raw files it stands for have rows.
      */
-    private class StagedRows(capacity: Int, private val sampleIntervalMs: Long = 0) {
+    private class StagedRows(capacity: Int, private val sampleIntervalMs: Long = 0, private val derivedDay: Boolean = false) {
         private val rows = Rows()
         private val hi = LongArray(capacity)
         private val lo = LongArray(capacity)
@@ -427,7 +429,7 @@ class HistorySeriesReader(
          * day before the window applies, then [seen] keeps each row once across sources.
          */
         fun commitTo(daySeen: RowKeys?, seen: RowKeys, out: Rows) {
-            if (rows.size > 0) out.sampleIntervalMs = shorterInterval(out.sampleIntervalMs, sampleIntervalMs)
+            if (rows.size > 0 || derivedDay) out.sampleIntervalMs = shorterInterval(out.sampleIntervalMs, sampleIntervalMs)
             for (i in 0 until rows.size) {
                 if (daySeen != null && !daySeen.firstSight(hi[i], lo[i], bySequence[i], key[i])) continue
                 if (!inWindow[i]) continue
