@@ -19,7 +19,7 @@ jsonSchemaValidator = "3.0.8"
 # Android framework on the host for :ui:designsystem window and font scale tests (#170, #115).
 robolectric = "4.17"
 kotlin = "2.4.21"
-ksp = "2.3.12"
+ksp = "2.3.13"
 # Must equal the runtime that the JetBrains navigation3-ui POM names (docs/adr/0001-shared-navigation.md).
 nav3Core = "1.2.0"
 # Multiplatform Navigation 3 UI. CMP 1.12.2 release notes name 1.2.0-rc01, this is its stable release. Pins nav3Core 1.2.0.
