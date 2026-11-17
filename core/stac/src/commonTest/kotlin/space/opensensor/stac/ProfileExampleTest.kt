@@ -26,8 +26,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 /**
- * A phone Item rebuilt from each row fixture of stac-opensensor v0.1.0 (tag v0.1.0, commit
- * 83787768cc8451109d48a03d4ef5493ffcd403dd) equals the board's example Item as JSON values, the
+ * A phone Item rebuilt from each row fixture of stac-opensensor v0.1.0 (commit
+ * e9981360c2229a98d5659ef0038a3b6114953f73) equals the board's example Item as JSON values, the
  * canonical form of PROFILE.md. It runs on the JVM and on iOS, so both H3 bindings and both ways of
  * printing a double are checked against the examples. The JVM test also validates the rebuilt Items
  * against the schemas.

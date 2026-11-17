@@ -29,7 +29,20 @@ one phone-derived stream with its own id and `sourceColumns`, referencing a boar
 derived from the template when none is bundled), `ThingCollection`, `Scale`, `ValidityGate`, and
 `Thing.join`, which joins them. A thing keeps every datastream whatever its role, the profile
 picks what shows first. `Aggregate`, `Role` and `Family` are open value classes, so an unknown value
-parses (an unknown aggregate rolls up as `point`). The template sample interval is a default, the
+parses (an unknown aggregate rolls up as `point`). A template column also carries display hints,
+`title` with `opensensor:title_i18n`, `description` with `opensensor:description_i18n`,
+`opensensor:decimals` (0 to 9), `opensensor:group` (`DisplayGroup`, open), `opensensor:scale` and
+`classification:bitfields` (`BitField`). A missing hint stays null, and the caller falls back to the
+property registry, then to 0 digits for an integer column and 2 otherwise. `BoardTemplate.primary` is
+the top level `opensensor:primary` when it names a column, `BoardTemplate.scales` the top level
+`opensensor:scales`, and `BoardTemplate.setup` (`SetupManifest`) the `firmware` block's `setup`,
+`settings` and typed `config_keys` (firmware decision 0003). The manifest parses tolerantly, keeps
+an unknown step id as data (`StepId.isKnown`) and drops a malformed entry, never the template.
+`BundledCatalog.properties` (`PropertyRegistry`, by `opensensor:property` URI) and
+`BundledCatalog.scales` (`ScaleRegistry`, by id) read `bundled/registry/`, stac-opensensor
+`registry/properties.json` and `registry/scales.json` copied byte for byte (marked `-text`), which
+`BundledRegistryBytesTest` pins by SHA-256. An unknown URI returns null, and a registry `scale` of
+`null` (`RegistryScale.None`) or a missing one (`Unset`) is no scale. The template sample interval is a default, the
 runtime interval and a file footer `acquisition.sample_interval_ms` win (`Thing.sampleIntervalFor`). `LiveColumns`
 maps a template's columns to LIVE keys and picks the temperature and humidity keys, and
 `BundledCatalog.live` reads it for a bundled `dict`. `LiveReading` in `protocol/` reads a LIVE
@@ -55,7 +68,7 @@ row under `FileItems.ITEM_NEEDS_LOCATION`, a fixed Thing in two cells, a cell no
 `publishedRes`, a cell H3 rejects as `InvalidCell`, a footer with no allowed `rotation_interval_s` as
 `NoRotationWindow`, a name whose `HHMM` is not the rotation window of its first row as
 `WindowMismatch`, a `file.purpose` other than `telemetry` as `NotTelemetry`). It never coarsens. It follows the canonical form of stac-opensensor v0.1.0
-(83787768cc8451109d48a03d4ef5493ffcd403dd). `ProfileExampleTest` in `commonTest` proves on the JVM
+(e9981360c2229a98d5659ef0038a3b6114953f73). `ProfileExampleTest` in `commonTest` proves on the JVM
 and on iOS that an Item rebuilt from the profile's row fixtures equals its examples, and
 `FileItemSchemaTest` validates it against the schemas. `FooterSchemaTest` runs `footer.json` over the
 profile's footer fixtures and checks that `OpenSensorFooter` refuses what the schema refuses for a

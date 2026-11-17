@@ -45,7 +45,7 @@ data class ColumnLabel(val title: String? = null, val scale: String? = null) {
 /**
  * The owner config of one Thing, the `owner` input of `buildCollection` in stac-opensensor
  * `scripts/canonical.mjs` and the shape of `fixtures/thing=<uuid>/owner.json` (v0.1.0, commit
- * 83787768cc8451109d48a03d4ef5493ffcd403dd). Everything in a Thing Collection that is not fixed by the
+ * e9981360c2229a98d5659ef0038a3b6114953f73). Everything in a Thing Collection that is not fixed by the
  * profile, its template or its footer comes from here.
  *
  * [title], [description] and the producer in [providers] come from the owner site the board keeps

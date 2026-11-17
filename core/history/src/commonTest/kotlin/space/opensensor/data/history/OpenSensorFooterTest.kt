@@ -87,7 +87,7 @@ class OpenSensorFooterTest {
 
     @Test
     fun theSpecExampleParses() {
-        // stac-opensensor v0.1.0 (83787768) footers/m5stack-cores3.json, compacted, with the pinned
+        // stac-opensensor v0.1.0 (e9981360) footers/m5stack-cores3.json, compacted, with the pinned
         // opensensor-space-firmware raw URLs a CoreS3 board writes. Its long free text members are cut short.
         val example = """{"version":"0.1.0","thing":{"id":"3f2b9c1e-6a7d-4e58-9b1c-2d4f6a8e0c13","device_id":"441bf6e26b40","board":"m5stack-cores3","deployment_id":"unknown","mobility":"fixed"},""" +
             """"firmware":{"version":"idf-cores3-parquet-v6.23","schema":"cores3-telemetry-v6","boot_id":"0f3a9c2e5b7d41e8a6c3f0b2d9e4a713"},""" +

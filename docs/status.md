@@ -52,7 +52,7 @@ Host tests and the iOS simulator only. No phone run is recorded. Owner decisions
 - The File Item data href is `./<file>.parquet`, relative to the sidecar beside it.
 - The board writes the Item. `FileItems` regenerates it and must equal the board's Item.
 - `FileItems` follows the canonical form of stac-opensensor v0.1.0
-  (83787768cc8451109d48a03d4ef5493ffcd403dd). A file with a cell that is not res 8 gets no Item,
+  (e9981360c2229a98d5659ef0038a3b6114953f73). A file with a cell that is not res 8 gets no Item,
   `anon:size` is 0.01, a moving Item does not list Grid, and the extension and link order, geometry,
   times and `statistics` match the profile. The partition comes from the rotation window of the first
   row. A file whose `HHMM` names another window gets `WindowMismatch`, a footer with no allowed

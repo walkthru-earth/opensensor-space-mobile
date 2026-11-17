@@ -76,7 +76,7 @@ data class CollectionLedger(val start: String, val bbox: List<Double>) {
 
 /**
  * The Thing Collection, `thing=<uuid>/collection.json`, in the canonical form of the stac-opensensor
- * v0.1.0 profile (tag v0.1.0, commit 83787768cc8451109d48a03d4ef5493ffcd403dd), as `buildCollection`
+ * v0.1.0 profile (main commit e9981360c2229a98d5659ef0038a3b6114953f73), as `buildCollection`
  * in its `scripts/canonical.mjs` writes it. The writer of a Thing's files writes its Collection, so the
  * board writes a board Thing's Collection and the phone checks it, and the phone writes one only for a
  * Thing it records itself. A Collection built here must equal the writer's as JSON values

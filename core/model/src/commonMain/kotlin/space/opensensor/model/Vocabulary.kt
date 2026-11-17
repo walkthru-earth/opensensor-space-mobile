@@ -128,8 +128,68 @@ data class Derivation(val from: List<String>, val method: String) {
     }
 }
 
-/** One `classification:classes` entry, the meaning of a code value. [nodata] marks the missing value. */
-data class CodeClass(val value: Long, val name: String, val colorHint: String? = null, val nodata: Boolean = false)
+/**
+ * One `classification:classes` entry, the meaning of a code value. [nodata] marks the missing value.
+ * [name] is the machine id, [title] and [description] the optional plain text a client shows.
+ */
+data class CodeClass(
+    val value: Long,
+    val name: String,
+    val colorHint: String? = null,
+    val nodata: Boolean = false,
+    val title: String? = null,
+    val description: String? = null,
+)
+
+/**
+ * One `classification:bitfields` entry of a `{bitmask}` column (Classification v2.0.0). The field is
+ * [length] bits starting at bit [offset], and [classes] name its values, such as `0` `ok` and `1` `set`.
+ */
+data class BitField(
+    val offset: Int,
+    val length: Int,
+    val classes: List<CodeClass>,
+    val name: String? = null,
+    val description: String? = null,
+) {
+    init {
+        require(offset >= 0 && length >= 1 && offset + length <= Long.SIZE_BITS) { "bit field $name spans bits $offset to ${offset + length - 1}" }
+    }
+
+    /** The value of this field in [raw], the bits shifted down to start at 0. */
+    fun valueIn(raw: Long): Long {
+        val shifted = raw ushr offset
+        return if (length == Long.SIZE_BITS) shifted else shifted and ((1L shl length) - 1)
+    }
+
+    /** The class of this field's value in [raw], or null for a value the field does not list. */
+    fun classIn(raw: Long): CodeClass? = valueIn(raw).let { v -> classes.firstOrNull { it.value == v } }
+}
+
+/**
+ * The display group of a column, `opensensor:group`, which places an unknown column next to its kin.
+ * Open, so a group a newer profile adds still parses and keeps its id. See [isKnown].
+ */
+@JvmInline
+value class DisplayGroup(val id: String) {
+    /** True for a group of the stac-opensensor v0.1.0 vocabulary. */
+    val isKnown: Boolean get() = this in KNOWN
+
+    companion object {
+        val PARTICULATE = DisplayGroup("particulate")
+        val GAS = DisplayGroup("gas")
+        val CLIMATE = DisplayGroup("climate")
+        val LIGHT = DisplayGroup("light")
+        val MOTION = DisplayGroup("motion")
+        val LOCATION = DisplayGroup("location")
+        val POWER = DisplayGroup("power")
+        val TIME = DisplayGroup("time")
+        val DEVICE = DisplayGroup("device")
+
+        /** The stac-opensensor v0.1.0 groups, in profile order. */
+        val KNOWN: List<DisplayGroup> = listOf(PARTICULATE, GAS, CLIMATE, LIGHT, MOTION, LOCATION, POWER, TIME, DEVICE)
+    }
+}
 
 /**
  * A label as a plain string or a map from language code to string. A plain string is kept under

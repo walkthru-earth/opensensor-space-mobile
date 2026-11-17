@@ -22,8 +22,8 @@ import kotlin.test.assertTrue
 
 /**
  * The Collection rebuilt from each Thing's owner config, board template, footer and example Item equals
- * the example Collection of stac-opensensor v0.1.0 (tag v0.1.0, commit
- * 83787768cc8451109d48a03d4ef5493ffcd403dd) as JSON values, as `scripts/check-profile.mjs` rebuilds it.
+ * the example Collection of stac-opensensor v0.1.0 (commit
+ * e9981360c2229a98d5659ef0038a3b6114953f73) as JSON values, as `scripts/check-profile.mjs` rebuilds it.
  * The fixtures and their source paths are listed in `fixtures/stac-opensensor/README.md`.
  */
 class ThingCollectionsTest {
