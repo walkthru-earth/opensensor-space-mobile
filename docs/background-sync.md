@@ -125,7 +125,7 @@ fell ~60 → ~12 files/min with the screen locked, then TCP stalled > 5 s.
 The test phone is a **OnePlus 7 Pro**; OxygenOS/ColorOS are the worst on dontkillmyapp.com:
 "Don't optimize" is often not enough; may need "Allow background activity" and exclusion from
 deep-optimization / sleep-standby lists; a swiped-away app may still be killed. WorkManager survives
-(re-scheduled), a bare thread would not. **Nothing measured yet**, see [status.md](status.md#next).
+(re-scheduled), a bare thread would not. **Nothing measured yet**, see [status.md](status.md#open-phone-runs).
 
 ## iOS Auto-sync
 
