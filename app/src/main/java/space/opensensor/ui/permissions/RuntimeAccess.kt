@@ -60,7 +60,7 @@ fun rememberBluetoothAccess(): RuntimeAccess {
     return access
 }
 
-/** `ACCESS_LOCAL_NETWORK` (API 37+). Asked only from a Wi-Fi action. Always ready below API 37. */
+/** `ACCESS_LOCAL_NETWORK` (API 37+). Asked only from a Scan tap or a Wi-Fi action. Always ready below API 37. */
 @Composable
 fun rememberLocalNetworkAccess(): RuntimeAccess {
     val access = remember { RuntimeAccess(AccessKind.LOCAL_NETWORK) }

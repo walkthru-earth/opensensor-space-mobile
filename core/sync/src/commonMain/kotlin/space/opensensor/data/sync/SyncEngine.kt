@@ -48,7 +48,8 @@ fun interface ArchiveRecordIndexer {
 }
 
 /**
- * The per-file half of the phone sync algorithm in docs/ble-sync-protocol.md, shared by Android and iOS:
+ * The per-file half of the phone sync algorithm in the firmware repository's
+ * `docs/shared/ble-sync-protocol.md`, shared by Android and iOS:
  *
  * ```
  * OPEN name → OPENED handle,size,crc32

@@ -31,12 +31,12 @@ import java.nio.ByteOrder
 import kotlin.random.Random
 
 /**
- * An in-process CoreS3 that speaks protocol v2 over the [DeviceTransport] interface, so every screen
+ * An in-process CoreS3 that speaks protocol 3 over the [DeviceTransport] interface, so every screen
  * and the whole sync path can be exercised without hardware.
  *
  * It serves three small `PAR1…PAR1` files plus one 1 MiB benchmark file, all with correct CRC-32s, emits `live` JSON every 10 s and
  * `status` after every sample, honours `max_read`, and answers `SET_TIME` / `FLUSH` like the
- * firmware would. v2: a fake config (pairing mode, Wi-Fi, LAN), a fake Wi-Fi scan list, a fake
+ * firmware would. It also has a fake config (pairing mode, Wi-Fi, LAN), a fake Wi-Fi scan list, a fake
  * token, a fake serial log ring, and `REBOOT` that drops the link and resets boot state. Enabled
  * from the debug-only menu entry on the scan screen.
  *
@@ -90,7 +90,7 @@ class FakeTransport(
     private var clockGen = 0
     private var finalized: Long
 
-    // ---- v2 configuration state (mirrors config::Settings in the firmware)
+    // ---- configuration state (mirrors config::Settings in the firmware)
     private var pairMode = "random"
     private var pin = 123_456
     private var pendingPairMode: String? = null
@@ -335,7 +335,7 @@ class FakeTransport(
             }
             Opcode.STATUS -> _status.tryEmit(statusJson().encodeToByteArray())
 
-            // ------------------------------------------------------------ v2
+            // ---------------------------------------------- config, Wi-Fi, log, token
             Opcode.GET_CONFIG -> send(Frame.Config(configFlags(), if (buf.hasRemaining() && buf.get().toInt() == 1) locationJson() else configJson()))
             Opcode.SET_CONFIG -> {
                 val text = String(ByteArray(buf.remaining()).also { buf.get(it) }, Charsets.UTF_8)
@@ -403,7 +403,7 @@ class FakeTransport(
         }
     }
 
-    // ------------------------------------------------------------- v2 helpers
+    // ---------------------------------------------------------- config helpers
 
     private fun configFlags(): Int = if (pendingPairMode != null || pendingPin != null) 1 else 0
 

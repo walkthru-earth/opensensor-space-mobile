@@ -36,7 +36,7 @@ class RequestSpec(
     override fun toString(): String = "RequestSpec(${Opcode.name(op)}, ${body.size} bytes)"
 
     companion object {
-        /** Proto 3 contract: a reply never pauses longer than this between frames. */
+        /** The app's own bound on a pause between two frames of one reply. The contract states none. */
         val INTER_FRAME: Duration = 20.seconds
         val DEFAULT_FIRST_FRAME: Duration = 15.seconds
 

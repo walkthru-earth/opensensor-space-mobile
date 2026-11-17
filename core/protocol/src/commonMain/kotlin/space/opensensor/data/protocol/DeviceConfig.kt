@@ -169,7 +169,7 @@ data class LanConfig(
     val port: Int? = null,
     /** mDNS host label such as `os-6b40`. */
     val host: String? = null,
-    /** Authenticated TCP clients right now (0 or 1). */
+    /** Authenticated TCP clients right now (0 to 3). */
     val clients: Int? = null,
 ) {
     val isOn: Boolean get() = on == 1
@@ -340,8 +340,8 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
         const val KEY_WIFI_PSK = ConfigFields.WIFI_PSK
 
         /**
-         * Reserved. The H3 cell hex of the phone's own fix, which the board keeps in RAM and writes
-         * with `location_source` 3. No released firmware accepts it yet, so no builder sends it.
+         * The H3 cell hex of the phone's own fix, which the board keeps in RAM for 300 s after the
+         * last request that sent it and writes with `location_source` 3 on a moving Thing. The firmware accepts it. No builder here sends it (#264).
          */
         const val KEY_LOCATION_PHONE_CELL = "location.phone_cell"
 

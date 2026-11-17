@@ -80,7 +80,7 @@ class AuthFailedException(frame: Frame.Error) : DeviceErrorException(frame)
 /** `ERROR` 15: the radio cannot scan right now. */
 class WifiUnavailableException(frame: Frame.Error) : DeviceErrorException(frame)
 
-/** `ERROR` 7: command queue full, transfer in progress, or a second LAN client. */
+/** `ERROR` 7: the sensor is busy and asks for a later try. Its detail names why, such as `queue-full`, `list`, `remount`, `preempted`, `count`, `mtu` or `ota-owner`. */
 class DeviceBusyException(frame: Frame.Error) : DeviceErrorException(frame)
 
 /** `GET_CONFIG` / `SET_CONFIG` answer: the parsed document plus the raw JSON for the debug view. */
@@ -131,8 +131,8 @@ data class ReplyLimits(val listFiles: Int = 1_000_000, val logBytes: Int = Devic
  * them. A view keeps only [latestStatus], the last status it asked for, so a view made per run starts
  * without one and asks again.
  *
- * [transport] still supplies identity, connection state, the GATT reads and the push flows until
- * the Android and iOS drivers land (#57, #58). It is never read for replies. [frames] records raw
+ * [transport] supplies identity, connection state, the GATT reads and the push flows. It is
+ * never read for replies. [frames] records raw
  * frames for Advanced, Debug, filled by the driver ([TransportLinkDriver]) with secrets redacted.
  */
 class DeviceSession(
@@ -643,8 +643,8 @@ class DeviceSession(
         val RAW_COMMAND_DENYLIST: Set<Int> get() = RawCommandPolicy.DENYLIST
 
         /**
-         * A view over [transport] with its own unopened [LinkSession], until the platform drivers
-         * land (#57, #58). Call [LinkSession.open] once the transport may connect. [info] stands in
+         * A view over [transport] with its own unopened [LinkSession], run by a
+         * [TransportLinkDriver]. Call [LinkSession.open] once the transport may connect. [info] stands in
          * for the `info` read on a transport that cannot read it. The link runs in [scope] until it
          * closes, and [LinkSession.close] disconnects the transport. [openTimeout] covers a Bluetooth
          * connect plus the bond, where the user types the PIN, so it outlasts the transport's own.

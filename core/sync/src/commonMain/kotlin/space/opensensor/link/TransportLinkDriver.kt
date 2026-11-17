@@ -18,8 +18,9 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration
 
 /**
- * Runs a [LinkSession] over an existing [DeviceTransport] until the Android and iOS drivers land
- * (#57, #58). It pumps `responseFrames` into the sink as they arrive, so the transport's own
+ * Runs a [LinkSession] over a [DeviceTransport] that has no driver of its own, the Android debug
+ * fake and the test transports. The Android Bluetooth and LAN links and iOS `IosLink` have their
+ * own drivers. It pumps `responseFrames` into the sink as they arrive, so the transport's own
  * queue never fills. The session must be the transport's only reader.
  *
  * [recorder] keeps the raw frames for Advanced, Debug. [info] stands in for the `info` read on a

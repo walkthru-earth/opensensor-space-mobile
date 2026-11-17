@@ -1,7 +1,8 @@
 package space.opensensor.data.protocol
 
 /**
- * Binary `control` requests and `response` frames from docs/ble-sync-protocol.md (protocol v3).
+ * Binary `control` requests and `response` frames from the firmware repository's
+ * `docs/shared/ble-sync-protocol.md` (protocol v3).
  * Protocol 3 widens `LIST_END.count` to u32 and adds `GET_DIAG`, `ABORT`, `BYE`, `DIAG` and
  * `ABORTED`. A proto 2 `LIST_END` is rejected. `GET_DESCRIPTOR` and `DESCRIPTOR_CHUNK` serve the
  * board template. `LIST_SINCE` and `LIST_SINCE_END` list only the files new since a saved cursor.
@@ -142,7 +143,7 @@ enum class ProtocolError(val code: Int, val label: String) {
     OPEN_FAILED(4, "open failed"),
     BAD_HANDLE(5, "bad handle"),
     RANGE_OUTSIDE_FILE(6, "range outside file"),
-    BUSY(7, "busy (command queue full or transfer in progress)"),
+    BUSY(7, "busy (queue full, a transfer, a listing, a card remount or an update in progress)"),
     STORAGE_UNAVAILABLE(8, "storage unavailable"),
     INVALID_EPOCH(9, "invalid epoch (outside 2020–2100)"),
     NOTHING_TO_FLUSH(10, "nothing to flush"),
