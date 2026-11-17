@@ -251,6 +251,13 @@ sealed interface Request {
 
             /** `owner.description` (firmware #148). */
             const val SITE_DESCRIPTION = 6
+
+            /**
+             * The board keys a template declares in `firmware.config_keys`, read by [BoardSettings].
+             * Decision 0003 places them on one new page after page 6 and leaves the number to the
+             * firmware PR that builds it. The app reads page 7, the number the contract sketch uses.
+             */
+            const val BOARD_SETTINGS = 7
         }
     }
 

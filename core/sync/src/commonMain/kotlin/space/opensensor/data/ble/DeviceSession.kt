@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.withTimeoutOrNull
 import space.opensensor.data.lan.LanAutoEnable
+import space.opensensor.data.protocol.BoardSettings
 import space.opensensor.data.protocol.ConfigChunkAccumulator
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.DeviceConfig
@@ -456,6 +457,16 @@ class DeviceSession(
         require(!patch.isEmpty) { "empty config patch" }
         if (patch.carriesSecret && !link.kind.carriesSecrets) throw SecretNeedsBluetoothException(link.kind)
         return config(Request.SetConfig(patch), "SET_CONFIG")
+    }
+
+    /**
+     * The board keys a template declares, from `GET_CONFIG` page
+     * [Request.GetConfigPage.BOARD_SETTINGS], keyed by `SET_CONFIG` key. An `ERROR` is thrown, a
+     * board that declares no key answers an empty object.
+     */
+    suspend fun getBoardSettings(): BoardSettings {
+        val page = config(Request.GetConfigPage(Request.GetConfigPage.BOARD_SETTINGS), "GET_CONFIG board settings")
+        return BoardSettings.parse(page.rawJson)
     }
 
     /** One `CONFIG`, or `CONFIG_CHUNK` slices that end the reply once they add up. */
