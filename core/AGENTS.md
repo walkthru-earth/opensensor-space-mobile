@@ -4,7 +4,7 @@
 `docs/shared/ble-sync-protocol.md`; `parquet/`
 implements the reader/writer and codec SPI; `history/` owns metrics, indexing,
 aggregation and presentation-ready analysis; `publicfeed/` owns the Discover feed
-port, H3 and the viewport cover; `units/` owns display units. No core module
+port, H3 and the viewport cover; `units/` owns display units and the UCUM symbols (`UcumDisplay`). No core module
 names air quality. The WHO 2021 scales, the EPA correction, the moods and the air metrics live in
 `:family:air` (`family/air/`, pinned by `CoreStaysAirFreeTest`). `net/` owns HTTP range reads (`HttpRangeSource`, OkHttp
 on Android and the JVM, `NSURLSession` on iOS) and the disk block cache (`CachedRangeSource`,

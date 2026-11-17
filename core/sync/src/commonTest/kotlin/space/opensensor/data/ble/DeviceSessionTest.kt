@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import space.opensensor.data.protocol.BoardSettings
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
@@ -30,6 +31,7 @@ import space.opensensor.data.protocol.ListCursor
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ProtocolError
 import space.opensensor.data.protocol.Request
+import space.opensensor.data.protocol.SetupAck
 import space.opensensor.data.protocol.toHex
 import space.opensensor.data.sync.SmartSyncPolicy
 import space.opensensor.link.DisconnectCause
@@ -530,6 +532,36 @@ class DeviceSessionTest {
         assertFailsWith<DeviceErrorException> { p.view().getSite() }
         p.answerPages(mapOf(5 to page5, 6 to Frame.Config(0, """{"ble":{"pair":"random"}}""")))
         assertFailsWith<ProtocolViolationException> { p.view().getSite() }
+    }
+
+    // ------------------------------------------------------------------ board settings and setup record (decision 0003)
+
+    @Test
+    fun boardSettingsReadPage7ByKey() = runTest {
+        val p = peer()
+        p.answerPages(mapOf(7 to Frame.Config(0, """{"panel":{"theme":"dark","sleep_s":300},"sen6x":{"co2_asc":1}}""")))
+        val settings = p.view().getBoardSettings()
+        assertEquals(mapOf("panel.theme" to "dark", "panel.sleep_s" to "300", "sen6x.co2_asc" to "1"), settings.values)
+        assertEquals(listOf(listOf(Opcode.GET_CONFIG.toByte(), 7)), p.bodies.map { it.toList() })
+    }
+
+    @Test
+    fun boardSettingsNeverCarryAppKeysAndErrorsAreThrown() = runTest {
+        val p = peer()
+        p.answerPages(mapOf(7 to Frame.Config(0, """{"ble":{"pair":"random"},"wifi":{"ssid":"home"}}""")))
+        assertEquals(BoardSettings.EMPTY, p.view().getBoardSettings())
+        p.answerPages(mapOf(7 to Frame.Error(Opcode.GET_CONFIG, ProtocolError.MALFORMED_REQUEST.code, "")))
+        assertFailsWith<DeviceErrorException> { p.view().getBoardSettings() }
+    }
+
+    @Test
+    fun locationPageCarriesTheSetupRecordAndAStaleVersionIsNothingDone() = runTest {
+        val p = peer()
+        val v = SetupAck.version(listOf("name", "location", "wifi"))
+        p.answerPages(mapOf(1 to Frame.Config(0, """{"location":{"cell":""},"thing":{"mobility":"fixed","setup":1,"setup_ack":3,"setup_v":$v}}""")))
+        val thing = p.view().getLocationPage()?.thing
+        assertEquals(3, SetupAck.done(thing, v))
+        assertEquals(0, SetupAck.done(thing, SetupAck.version(listOf("name", "wifi", "location"))))
     }
 
     // ------------------------------------------------------------------ clock
