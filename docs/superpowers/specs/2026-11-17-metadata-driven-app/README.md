@@ -64,7 +64,7 @@ Paths from the repo root. Line numbers are for ff9ae37d.
 
 ## 4. Contract dependencies
 
-Opened in parallel, 2026-11-17. The app work starts after both merge.
+Both merged on 2026-11-17. stac-opensensor #16 as e9981360, firmware #183 as 85a0e77c. The app work can start.
 
 | Repo | PR | Carries |
 | --- | --- | --- |
@@ -74,7 +74,7 @@ Opened in parallel, 2026-11-17. The app work starts after both merge.
 ## 5. Order
 
 1. Clean state. Open PRs land or close, docs match code.
-2. Contracts. The two PRs above, reviewed together.
+2. Contracts. The two PRs above, merged.
 3. App. [metrics.md](metrics.md) work packages M0 to M10, then [setup-manifest.md](setup-manifest.md) S1 to S8. M0 to M3 and S1 can run in parallel.
 
 Each package passes `./gradlew --no-daemon verify` on its own. A host or simulator pass does not qualify a phone. The CrowPanel needs a dated phone run in `docs/status.md` before it counts as supported.

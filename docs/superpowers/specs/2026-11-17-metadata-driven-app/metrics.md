@@ -34,7 +34,7 @@ flowchart LR
 | Label (by language) | Column `opensensor:title_i18n` for the language, then column `title` | Registry `label` by `opensensor:property` | Column name with `_` as spaces (`soil_moisture_percent` gives "soil moisture percent") |
 | Short label | Registry short label | Column `title` | Label |
 | Description | Column `opensensor:description_i18n`, then `description` | Registry `definition` | none |
-| Decimals | `opensensor:decimals` | Registry `decimals` | 0 for an integer column, else 2. Replaces the `AppProfile.displayStepOf` rule (integer 0, else 1) |
+| Decimals | `opensensor:decimals` | Registry `decimals` | 0 for an integer column, else 1. Keeps today's `AppProfile.displayStepOf` rule |
 | Group | `opensensor:group` | Registry `group` | Role |
 | Display unit | `UcumDisplay.of(unit)` in `:core:units` | Firmware `unit_labels` | Raw UCUM |
 
@@ -54,6 +54,7 @@ Scale for a column, first hit wins.
 - `HealthScale.propertyId` becomes the scale id from the registry. No PM name enters `:core`, so `CoreStaysAirFreeTest` still passes.
 - A column with no `opensensor:property` match in the registry gets no scale. Nothing is guessed from its name or `cf:standard_name`.
 - PM1, PM4, CF=1 and CO2 have no scale in the registry. They stay neutral.
+- Every scale has a required `period`, an ISO 8601 duration. The WHO PM2.5 and PM10 scales are `P1D`, 24-hour, as in `WhoGuidelines.kt`. The app reads `period` and the chart caption names it. `P1D` gives "compared with the WHO 24-hour guideline". A scale whose period the app cannot caption still colours values and shows its period in plain words.
 
 Main metric, first hit wins. Collection `opensensor:primary`, template `opensensor:primary`, the first `physicalMeasurement` column with a scale, the first `physicalMeasurement` column.
 
