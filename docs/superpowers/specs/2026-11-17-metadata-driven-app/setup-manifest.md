@@ -44,7 +44,6 @@ In the template `firmware` block, generated from `board.json`, hashed with the t
 
 ```json
 "firmware": {
-  "primary": "pm25_mass_ug_m3",
   "setup": [
     { "id": "name", "req": false },
     { "id": "location", "req": true },
@@ -65,6 +64,7 @@ In the template `firmware` block, generated from `board.json`, hashed with the t
 ```
 
 - Each contract type maps to one `FieldType`. `enum` to `Choice`, a range to `IntBetween`, `boolean` to `Toggle`, `applies: action` to `Action`, a string to `Text`. A decimal key either gets a new `FieldType.Decimal(min, max, step)` or stays an int in scaled units, as `sen6x.temp_offset_dc` does.
+- The main metric is not part of this block. It is `opensensor:primary` at template top level, see [metrics.md 2.3](metrics.md#23-scales-and-main-metric).
 - `page` is the `GET_CONFIG` page that reads the key back. Board keys live on one new page after page 6, within the 480 byte page limit. Pages 1 to 6 keep their keys.
 - The template carries names, types and limits. Never a value, never a default secret.
 - The first board keys are the CrowPanel ones, today knob-only in NVS `ospanel`. Theme, refresh, start page, sleep, fan cleaning, CO2 ASC, altitude and temperature offset.
@@ -126,7 +126,7 @@ All UI is shared Compose in `commonMain`, one implementation for both phones. Pl
 
 | # | Package | Modules | Tests to add |
 | --- | --- | --- | --- |
-| S1 | Parse `setup`, `settings`, `config_keys` and `primary` from the template `firmware` block into `SetupManifest` | `core/model` | Parse of the CrowPanel and fake board manifests, unknown step ids kept as data |
+| S1 | Parse `setup`, `settings` and `config_keys` from the template `firmware` block into `SetupManifest` | `core/model` | Parse of the CrowPanel and fake board manifests, unknown step ids kept as data |
 | S2 | `ConfigFields.merge` rule of section 6, `ConfigPatch.Builder.field`. Decimal type if the contract adds it | `core/protocol` | Reserved prefix refused, secret refused, action gets confirm, out of range refused |
 | S3 | Page 1 `thing.setup_ack` and `setup_v`, the new board settings page | `core/protocol` (`DeviceConfig`), `core/sync` (`DeviceSession`) | Parse, stale `setup_v` reads as nothing done |
 | S4 | `SetupPlan.of(manifest, config)` in shared code. Steps, required set, done set, pending | `core/sync` beside `ThingSetupPolicy` | Unknown required step leaves pending. Unknown optional step with typed keys is generic. Without typed keys it is dropped and setup still reaches Done. A fixed Thing with no cell gets a `location` step when the manifest omits it |
