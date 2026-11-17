@@ -15,14 +15,17 @@ class BundledCatalogTest {
     // The current digests, opensensor-space-firmware docs/shared/templates (#86). A desc move keeps them.
     private val cores3Dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
     private val waveshareDict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809"
+
+    // CrowPanel is bundled with no reviewed profile, so it renders with a derived one.
+    private val crowpanelDict = "e7279c4edbe87071e4a51889124a43d7ffcd1977c79c8575887ae35bdee10903"
     private val unknownDict = "a".repeat(64)
     private val cores3File = "templates/m5stack-cores3/$cores3Dict.json"
     private val waveshareFile = "templates/waveshare-esp32-s3-sim7670g/$waveshareDict.json"
 
     @Test
     fun bundlesOnlyTheCurrentDigestOfEachBoard() {
-        assertEquals(setOf(cores3Dict, waveshareDict), BundledCatalog.templates.map { it.dict }.toSet())
-        assertEquals(2, BundledCatalog.templates.size)
+        assertEquals(setOf(cores3Dict, waveshareDict, crowpanelDict), BundledCatalog.templates.map { it.dict }.toSet())
+        assertEquals(3, BundledCatalog.templates.size)
         assertEquals(setOf(cores3Dict, waveshareDict), BundledCatalog.profiles.map { it.dict }.toSet())
         BundledCatalog.profiles.forEach { assertFalse(it.isDerived, it.dict) }
     }
@@ -34,7 +37,9 @@ class BundledCatalogTest {
             assertNotNull(BundledCatalog.template(profile.dict), "no bundled template for profile ${profile.dict}")
             assertSame(profile, BundledCatalog.thing("s1", profile.dict)?.profile, profile.dict)
         }
-        BundledCatalog.templates.forEach { assertNotNull(BundledCatalog.profile(it.dict), "no reviewed profile for ${it.id} ${it.dict}") }
+        val unreviewed = BundledCatalog.templates.filter { BundledCatalog.profile(it.dict) == null }
+        assertEquals(setOf(crowpanelDict), unreviewed.map { it.dict }.toSet())
+        unreviewed.forEach { assertTrue(assertNotNull(BundledCatalog.thing("s1", it.dict), it.dict).profile.isDerived, it.dict) }
     }
 
     @Test
@@ -184,7 +189,7 @@ class BundledCatalogTest {
         val index = ModelJson.parseTemplateIndex(BundledFiles.files.getValue("templates/index.json")).associate { it.dict to it.desc }
         assertEquals(index.getValue(cores3Dict), BundledCatalog.template(cores3Dict)?.key?.desc)
         assertEquals(index.getValue(waveshareDict), BundledCatalog.template(waveshareDict)?.key?.desc)
-        assertEquals(listOf("cores3-telemetry-v6", "waveshare-sim7670g-telemetry-v6"), BundledCatalog.templates.map { it.schema })
+        assertEquals(listOf("cores3-telemetry-v6", "waveshare-sim7670g-telemetry-v6", "crowpanel-epaper-telemetry-v1"), BundledCatalog.templates.map { it.schema })
     }
 
     @Test
