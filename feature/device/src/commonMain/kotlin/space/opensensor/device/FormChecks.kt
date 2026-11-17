@@ -10,15 +10,12 @@ import space.opensensor.family.air.SensorLabel
 /** Why a typed Wi-Fi passphrase cannot be saved. WPA2 counts bytes, not letters. */
 enum class PskProblem { SHORT, LONG }
 
-/** Smallest WPA2 passphrase, in UTF-8 bytes. */
-const val PSK_MIN_BYTES = 8
-
-/** Null when [psk] is empty (nothing typed yet) or fits [PSK_MIN_BYTES] to [ConfigPatch.PSK_MAX_BYTES]. */
+/** Null when [psk] is empty (nothing typed yet) or fits [ConfigPatch.PSK_MIN_BYTES] to [ConfigPatch.PSK_MAX_BYTES]. */
 fun pskProblem(psk: String): PskProblem? {
     if (psk.isEmpty()) return null
     val bytes = psk.encodeToByteArray().size
     return when {
-        bytes < PSK_MIN_BYTES -> PskProblem.SHORT
+        bytes < ConfigPatch.PSK_MIN_BYTES -> PskProblem.SHORT
         bytes > ConfigPatch.PSK_MAX_BYTES -> PskProblem.LONG
         else -> null
     }

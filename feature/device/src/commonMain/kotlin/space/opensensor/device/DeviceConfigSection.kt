@@ -45,6 +45,7 @@ import space.opensensor.device.resources.bonds_forget_button
 import space.opensensor.device.resources.config_problem_line_break
 import space.opensensor.device.resources.config_problem_pin
 import space.opensensor.device.resources.config_problem_psk_long
+import space.opensensor.device.resources.config_problem_psk_short
 import space.opensensor.device.resources.config_problem_site
 import space.opensensor.device.resources.config_problem_ssid_empty
 import space.opensensor.device.resources.config_problem_ssid_long
@@ -296,6 +297,7 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
             ConfigProblem.PIN_FORMAT -> Res.string.config_problem_pin
             ConfigProblem.SSID_EMPTY -> Res.string.config_problem_ssid_empty
             ConfigProblem.SSID_TOO_LONG -> Res.string.config_problem_ssid_long
+            ConfigProblem.PSK_TOO_SHORT -> Res.string.config_problem_psk_short
             ConfigProblem.PSK_TOO_LONG -> Res.string.config_problem_psk_long
             ConfigProblem.STICKER_FORMAT -> Res.string.msg_sticker_invalid
             ConfigProblem.LINE_BREAK -> Res.string.config_problem_line_break

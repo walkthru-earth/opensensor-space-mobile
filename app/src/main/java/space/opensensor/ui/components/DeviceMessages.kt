@@ -207,6 +207,7 @@ fun ConfigProblem.toStringRes(): Int = when (this) {
     ConfigProblem.PIN_FORMAT -> R.string.config_problem_pin
     ConfigProblem.SSID_EMPTY -> R.string.config_problem_ssid_empty
     ConfigProblem.SSID_TOO_LONG -> R.string.config_problem_ssid_long
+    ConfigProblem.PSK_TOO_SHORT -> R.string.config_problem_psk_short
     ConfigProblem.PSK_TOO_LONG -> R.string.config_problem_psk_long
     ConfigProblem.STICKER_FORMAT -> R.string.msg_sticker_invalid
     ConfigProblem.LINE_BREAK -> R.string.config_problem_line_break

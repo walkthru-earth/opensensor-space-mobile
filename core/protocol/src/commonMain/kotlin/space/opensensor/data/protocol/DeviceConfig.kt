@@ -176,7 +176,7 @@ data class LanConfig(
 }
 
 /** Which local check a [ConfigPatch] value failed. Apps map it to their own copy. */
-enum class ConfigProblem { PIN_FORMAT, SSID_EMPTY, SSID_TOO_LONG, PSK_TOO_LONG, STICKER_FORMAT, LINE_BREAK, SITE_VALUE }
+enum class ConfigProblem { PIN_FORMAT, SSID_EMPTY, SSID_TOO_LONG, PSK_TOO_SHORT, PSK_TOO_LONG, STICKER_FORMAT, LINE_BREAK, SITE_VALUE }
 
 /**
  * GET_CONFIG pages 5 and 6 as one [ThingSite]. Page 5 gives `owner.title`, `owner.provider`,
@@ -258,20 +258,27 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
 
         fun wifiOn(on: Boolean): Builder = add(ConfigFields.WIFI_ON, if (on) "1" else "0")
 
-        /** ≤ 32 bytes UTF-8, no line breaks (the wire format is line-based). */
+        /**
+         * 1 to [SSID_MAX_BYTES] bytes UTF-8, no control character (below 0x20, or 0x7F). The wire
+         * format is line based and the firmware refuses the same characters.
+         */
         fun wifiSsid(ssid: String): Builder {
             val bytes = ssid.encodeToByteArray().size
             if (bytes == 0) throw ConfigValidationException(ConfigProblem.SSID_EMPTY, "SSID is empty")
             if (bytes > SSID_MAX_BYTES) throw ConfigValidationException(ConfigProblem.SSID_TOO_LONG, "SSID is $bytes bytes, max $SSID_MAX_BYTES")
-            requireSingleLine(ssid, "SSID")
+            requireNoControl(ssid, "SSID")
             return add(ConfigFields.WIFI_SSID, ssid)
         }
 
-        /** ≤ 63 bytes UTF-8; empty for an open network. */
+        /**
+         * Empty for an open network, else [PSK_MIN_BYTES] to [PSK_MAX_BYTES] bytes UTF-8 with no
+         * control character, the WPA2 rule the firmware applies.
+         */
         fun wifiPsk(psk: String): Builder {
             val bytes = psk.encodeToByteArray().size
+            if (bytes in 1 until PSK_MIN_BYTES) throw ConfigValidationException(ConfigProblem.PSK_TOO_SHORT, "passphrase is $bytes bytes, min $PSK_MIN_BYTES")
             if (bytes > PSK_MAX_BYTES) throw ConfigValidationException(ConfigProblem.PSK_TOO_LONG, "passphrase is $bytes bytes, max $PSK_MAX_BYTES")
-            requireSingleLine(psk, "passphrase")
+            requireNoControl(psk, "passphrase")
             return add(KEY_WIFI_PSK, psk)
         }
 
@@ -332,6 +339,13 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
                 throw ConfigValidationException(ConfigProblem.LINE_BREAK, "$what must not contain line breaks")
             }
         }
+
+        /** Wi-Fi values carry no control character, the firmware rule. Reported as [ConfigProblem.LINE_BREAK]. */
+        private fun requireNoControl(value: String, what: String) {
+            if (value.any { it < ' ' || it == '\u007F' }) {
+                throw ConfigValidationException(ConfigProblem.LINE_BREAK, "$what must not contain control characters")
+            }
+        }
     }
 
     companion object {
@@ -348,6 +362,7 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
         /** Keys whose values are secrets, from the [ConfigFields] table. See [carriesSecret]. */
         val SECRET_KEYS: Set<String> get() = ConfigFields.SECRET_KEYS
         const val SSID_MAX_BYTES = 32
+        const val PSK_MIN_BYTES = 8
         const val PSK_MAX_BYTES = 63
 
         fun build(block: Builder.() -> Unit): ConfigPatch = Builder().apply(block).build()

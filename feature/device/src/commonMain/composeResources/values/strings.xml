@@ -172,8 +172,9 @@
     <string name="config_problem_pin">The PIN is exactly 6 digits.</string>
     <string name="config_problem_ssid_empty">Enter the network name.</string>
     <string name="config_problem_ssid_long">The network name is too long. The limit is 32 bytes.</string>
+    <string name="config_problem_psk_short">The password is too short. The minimum is 8 bytes.</string>
     <string name="config_problem_psk_long">The password is too long. The limit is 63 bytes.</string>
-    <string name="config_problem_line_break">Line breaks are not allowed here.</string>
+    <string name="config_problem_line_break">Line breaks and control characters are not allowed here.</string>
     <string name="device_back">Back</string>
     <string name="device_not_ready">Connect to the sensor to read and change its settings.</string>
     <string name="location_title">Device location</string>
