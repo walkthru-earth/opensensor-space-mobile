@@ -201,6 +201,7 @@
     <string name="location_stop">إيقاف</string>
     <string name="location_country">رمز البلد</string>
     <string name="location_country_info">اختياري. حرفان، مثل GH.</string>
+    <string name="wifi_psk_control">بدون مسافات جدولة أو فواصل أسطر أو رموز تحكم أخرى</string>
     <string name="wifi_psk_long">طويلة جدًا. استخدم كلمة مرور أقصر.</string>
     <string name="wifi_psk_short">8 أحرف على الأقل</string>
     <string name="location_fresh_required">اختر المنطقة مجددًا قبل الحفظ</string>

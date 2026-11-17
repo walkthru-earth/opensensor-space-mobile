@@ -521,7 +521,8 @@ class DeviceSession(
                     if (received > limits.logBytes) {
                         throw ProtocolViolationException("LOG_TAIL sent more than ${limits.logBytes} bytes")
                     }
-                    slices += frame.bytes
+                    // An empty slice adds nothing, so it is not kept and cannot grow the list.
+                    if (frame.bytes.isNotEmpty()) slices += frame.bytes
                     null
                 }
                 is Frame.LogEnd -> frame

@@ -197,6 +197,7 @@
     <string name="location_stop">Stop</string>
     <string name="location_country">Country code</string>
     <string name="location_country_info">Optional. Two letters, such as GH.</string>
+    <string name="wifi_psk_control">No tabs, line breaks or other control characters</string>
     <string name="wifi_psk_long">Too long. Use a shorter passphrase.</string>
     <string name="wifi_psk_short">At least 8 characters</string>
     <string name="location_fresh_required">Pick the area again before saving</string>
