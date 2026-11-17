@@ -5,6 +5,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import space.opensensor.data.protocol.Advertisement
 import space.opensensor.data.protocol.DeviceConfig
+import space.opensensor.data.protocol.SetupAck
+import space.opensensor.model.ManifestStep
+import space.opensensor.model.SetupManifest
+import space.opensensor.model.StepId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -63,6 +67,15 @@ class ThingSetupWatchTest {
     }
 
     @Test
+    fun `a page read with a declared step asks until the device holds its bit`() {
+        val manifest = SetupManifest(setup = listOf(ManifestStep(StepId.WIFI)))
+        val v = SetupAck.version(listOf("wifi"))
+        val acked = page("""{"location":{"cell":"$cell","resolution":8},"thing":{"mobility":"fixed","setup":0,"setup_v":$v,"setup_ack":1}}""")
+        assertEquals(listOf(SetupNeed("AA", opened = false)), ThingSetupWatch.decide(emptyList(), listOf(ThingSetupWatch.Page("AA", done, 1, manifest)), emptySet()))
+        assertEquals(emptyList(), ThingSetupWatch.decide(emptyList(), listOf(ThingSetupWatch.Page("AA", acked, 1, manifest)), emptySet()))
+    }
+
+    @Test
     fun `opened spends the automatic open until the session ends`() = runTest {
         val watch = ThingSetupWatch()
         val scan = MutableStateFlow(listOf(SetupSighting("AA:BB", Advertisement.FLAG_SETUP, 5)))
@@ -77,7 +90,7 @@ class ThingSetupWatchTest {
     fun `a page read that says done clears the need and the session end forgets it`() = runTest {
         val watch = ThingSetupWatch()
         val scan = MutableStateFlow(listOf(SetupSighting("AA", Advertisement.FLAG_SETUP, 5)))
-        watch.pageRead("AA", done, 6)
+        watch.pageRead("AA", done, 6, SetupManifest.NONE)
         assertEquals(emptyList(), watch.needs(scan).first())
         watch.endSession(4)
         assertEquals(listOf(SetupNeed("AA", false)), watch.needs(scan).first())

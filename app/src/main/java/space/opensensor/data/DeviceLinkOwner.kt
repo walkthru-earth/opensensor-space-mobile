@@ -62,6 +62,7 @@ import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.history.BoardDescriptors
 import space.opensensor.data.history.DescriptorOutcome
 import space.opensensor.data.history.HistoryRefresher
+import space.opensensor.data.history.ServedTemplates
 import space.opensensor.data.lan.LanConnectException
 import space.opensensor.data.lan.LanDevice
 import space.opensensor.data.lan.LanFailure
@@ -86,6 +87,7 @@ import space.opensensor.data.settings.DeveloperLevel
 import space.opensensor.data.settings.SensorSettings
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.data.sync.ReadWindow
+import space.opensensor.data.sync.SetupPlan
 import space.opensensor.data.sync.SyncListing
 import space.opensensor.data.sync.SyncPlan
 import space.opensensor.data.sync.ThingPlaces
@@ -1605,7 +1607,7 @@ class DeviceLinkOwner @Inject constructor(
         val now = clock.nowEpochMs()
         if (page != null && thing != null) places.recordFrom(thing, page, now)
         val id = boundAddress
-        if (page != null && id != null) setupWatch.pageRead(id, page, now)
+        if (page != null && id != null) setupWatch.pageRead(id, page, now, SetupPlan.manifestOf(_info.value, ServedTemplates.shared.all.value))
         return page?.takeIf { it.location != null }
     }
 

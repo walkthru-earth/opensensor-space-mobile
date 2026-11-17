@@ -2,43 +2,30 @@ package space.opensensor.data.sync
 
 import space.opensensor.data.protocol.Advertisement
 import space.opensensor.data.protocol.DeviceConfig
-import space.opensensor.data.protocol.ThingMobility
-import space.opensensor.model.H3Cell
+import space.opensensor.model.SetupManifest
 
 /**
- * The one rule both phones use to decide that a Thing still needs setup (#272). The board derives the
- * same state (firmware #147), a fixed Thing with an empty `location.cell`.
+ * The one rule both phones use to decide that a Thing still needs setup (#272).
  *
- * - Advert flags bit 6 `setup` set means setup is needed. CoreS3 `v6.24` and Waveshare `v2.18` set it.
- *   Older firmware leaves it at 0.
- * - Otherwise CONFIG page 1 decides. When it carries `thing.setup`, that value is the answer, so 0 means
- *   no setup even with an empty cell.
- * - Without `thing.setup` (older firmware) the rule is derived. A Thing that says `fixed`, or says no
- *   mobility while the page reports a `location` object, needs setup until `location.cell` holds an H3
- *   cell. Any valid cell counts, at any resolution, as the board clears the bit for any stored cell.
- * - A `moving` Thing never needs a cell. A mobility this build does not know claims nothing.
- * - Without bit 6 and without page 1 (not read yet, or firmware without page 1) nothing is claimed.
+ * - Advert flags bit 6 `setup` set means setup is needed. The board's own answer is trusted.
+ * - Otherwise CONFIG page 1 decides. `thing.setup` 1 means setup is needed.
+ * - Then the [SetupPlan] of the board's [SetupManifest] and page 1. Setup is needed while a planned
+ *   step is not done, a fixed Thing without a cell or a declared step whose `thing.setup_ack` bit is
+ *   clear. A board that never writes the bits stays pending until a phone writes them.
+ * - Without bit 6 and without page 1 (not read yet) nothing is claimed.
  *
  * A caller passes advert flags only from an advert newer than its last page 1 read. Right after a
- * save, a cached advert can still carry bit 6 while a fresh page 1 already says setup is done. The
- * wizard confirms completion by reading page 1 `thing.setup` = 0 after its SET_CONFIG.
+ * save, a cached advert can still carry bit 6 while a fresh page 1 already says setup is done.
  */
 object ThingSetupPolicy {
     /**
-     * Whether the Thing needs setup, from its advert [advertFlags] byte and its page 1 [config]. Either
-     * may be null when the phone has not seen it.
+     * Whether the Thing needs setup, from its advert [advertFlags] byte, its page 1 [config] and the
+     * [manifest] of its template. Either of the first two may be null when the phone has not seen it.
      */
-    fun needsSetup(advertFlags: Int?, config: DeviceConfig?): Boolean {
+    fun needsSetup(advertFlags: Int?, config: DeviceConfig?, manifest: SetupManifest): Boolean {
         if (advertFlags != null && advertFlags and Advertisement.FLAG_SETUP != 0) return true
         if (config == null) return false
-        config.thing?.needsSetup?.let { return it }
-        val mobility = config.thing?.mobility
-        val fixed = when {
-            mobility == null -> config.location != null
-            else -> ThingMobility.fromWire(mobility) == ThingMobility.FIXED
-        }
-        return fixed && !hasCell(config)
+        if (config.thing?.needsSetup == true) return true
+        return SetupPlan.of(manifest, config).pending
     }
-
-    private fun hasCell(config: DeviceConfig): Boolean = config.location?.cell?.let { H3Cell.isCellHex(it) } == true
 }

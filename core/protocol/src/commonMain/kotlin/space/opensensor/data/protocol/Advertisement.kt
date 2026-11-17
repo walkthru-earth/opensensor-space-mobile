@@ -31,9 +31,8 @@ data class Advertisement(
     val clockRestored: Boolean get() = flags and FLAG_CLOCK_RESTORED != 0
 
     /**
-     * The board needs setup, a fixed Thing with no `location.cell`. CoreS3 `v6.24` and Waveshare `v2.18`
-     * set bit 6 (firmware #147). Older firmware leaves it at 0, so `ThingSetupPolicy` also reads
-     * CONFIG page 1.
+     * The board needs setup, a fixed Thing with no `location.cell` (firmware #147). `ThingSetupPolicy`
+     * also reads CONFIG page 1 and the template's setup steps.
      */
     val needsSetup: Boolean get() = flags and FLAG_SETUP != 0
 

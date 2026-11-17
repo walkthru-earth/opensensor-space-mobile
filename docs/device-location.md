@@ -164,7 +164,8 @@ because it clears the key.
   firmware character rules.
 - `core/model` `H3Cell` checks a cell index and its hex form in pure Kotlin. `core/publicfeed`
   `H3Grid.gridDisk` lists a cell and its rings on the platform binding.
-- `core/sync` `ThingSetupPolicy.needsSetup` is the one rule for a Thing that still needs setup.
+- `core/sync` `ThingSetupPolicy.needsSetup` is the one rule for a Thing that still needs setup, and
+  `SetupPlan` keeps location required on a fixed Thing whatever the template says.
   `ThingSetupWatch` applies it to the foreground scan and to each page 1 read, and My devices opens
   the setup wizard from it. It reads only the cell, never a fix. See
   [sync-engine.md](sync-engine.md#thing-setup).
