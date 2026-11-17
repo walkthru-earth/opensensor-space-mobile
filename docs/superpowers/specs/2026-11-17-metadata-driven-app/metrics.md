@@ -52,7 +52,7 @@ Scale for a column, first hit wins.
 
 - A scale is data. Steps, English and Arabic labels and `color_hint` come from the scale entry, so `WhoGuidelines` stops defining PM2.5 and PM10 steps in code. The family keeps the WHO wording and the guideline line on charts.
 - `HealthScale.propertyId` becomes the scale id from the registry. No PM name enters `:core`, so `CoreStaysAirFreeTest` still passes.
-- A column with no `opensensor:property` match in the registry gets no scale. Nothing is guessed from its name or `cf:standard_name`.
+- Rule 1 holds for any column, with or without a registry match. Only the registry fallback needs the column's `opensensor:property` in the registry. Nothing is guessed from a name or `cf:standard_name`.
 - PM1, PM4, CF=1 and CO2 have no scale in the registry. They stay neutral.
 - Every scale has a required `period`, an ISO 8601 duration. The WHO PM2.5 and PM10 scales are `P1D`, 24-hour, as in `WhoGuidelines.kt`. The app reads `period` and the chart caption names it. `P1D` gives "compared with the WHO 24-hour guideline". A scale whose period the app cannot caption still colours values and shows its period in plain words.
 
@@ -73,6 +73,7 @@ A status column is a `qualityInformation` column with `classification:classes` t
 | Valid | The class whose value equals the gate's `equals` |
 | Absent | The class with `nodata: true` |
 | Other | Any other class, shown by its title, else its `name` with `_` as spaces |
+| No classes | The gate target lists no `classification:classes`. `cls` is null, `valid` is the gate's `equals` test, and LIVE shows the raw value at Developer only |
 
 - A generic `SensorState(column, value, cls, valid)` replaces `PmsStatus` for gating. LIVE hides gated values while the state is not valid. This already holds for History through `valid_when`.
 - Family hints stay in the family, keyed by class `name` (`warming`, `stale`, `sensor-error`, `sleeping`, `model-mismatch`), with a generic line for any other name.

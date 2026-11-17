@@ -26,7 +26,7 @@ The app keeps a fixed catalog. The manifest picks from it by id and orders the d
 | `find` | Find | App | Always first page | none |
 | `pair` | Pair | App | Always, not a page | none |
 | `name` | Nickname form, phone only | Board declares | Never | none |
-| `location` | `DeviceLocationForm` | Board declares | Fixed Thing without a cell, app floor | `location` |
+| `location` | `DeviceLocationForm` | Board declares, app adds | Fixed Thing without a cell, app floor. Added after Find when the manifest omits it | `location` |
 | `mobility` | Fixed or moving choice | Board declares | When the board offers both | `location` |
 | `site` | `DeviceSiteForm` | Board declares | Never | `site` |
 | `wifi` | Wi-Fi join form | Board declares | Never | `wifi` |
@@ -74,8 +74,9 @@ In the template `firmware` block, generated from `board.json`, hashed with the t
 - Page 1 gains `thing.setup_ack`, a bitmask with bit `i` for `setup[i]`, and `thing.setup_v`, which names the step list the bits refer to.
 - A `setup_v` that does not match the resolved template's step list means no step is done. The exact rule is open in firmware #183.
 - The app sets a step's bit with its own `SET_CONFIG` after the step's save reads back. Skip also sets the bit of a skippable step.
-- Required steps stay derived from config, never from the bitmask alone. Location is done only while a fixed Thing has a valid `location.cell`.
-- Setup is needed when a required step is not satisfied, or when a declared step's bit is clear. Advert bit 6 and page 1 `thing.setup` report the board's own answer, and the app trusts them.
+- Required steps stay derived from config, never from the bitmask alone. Location is done only while a fixed Thing has a valid `location.cell`. When the manifest omits `location` and a fixed Thing has no cell, the plan adds the app `location` step, which has no ack bit.
+- An unknown optional step without typed keys is dropped from the plan. It never counts as pending, and its bit is not written.
+- Setup is needed when a required step is not satisfied, or when the bit of a step left in the plan is clear. Advert bit 6 and page 1 `thing.setup` report the board's own answer, and the app trusts them.
 - A required step whose id the app does not know leaves setup pending. The wizard says to update the app and offers Leave.
 
 ## 5. Safety floors
@@ -128,7 +129,7 @@ All UI is shared Compose in `commonMain`, one implementation for both phones. Pl
 | S1 | Parse `setup`, `settings`, `config_keys` and `primary` from the template `firmware` block into `SetupManifest` | `core/model` | Parse of the CrowPanel and fake board manifests, unknown step ids kept as data |
 | S2 | `ConfigFields.merge` rule of section 6, `ConfigPatch.Builder.field`. Decimal type if the contract adds it | `core/protocol` | Reserved prefix refused, secret refused, action gets confirm, out of range refused |
 | S3 | Page 1 `thing.setup_ack` and `setup_v`, the new board settings page | `core/protocol` (`DeviceConfig`), `core/sync` (`DeviceSession`) | Parse, stale `setup_v` reads as nothing done |
-| S4 | `SetupPlan.of(manifest, config)` in shared code. Steps, required set, done set, pending | `core/sync` beside `ThingSetupPolicy` | Unknown required step leaves pending. Unknown optional step with typed keys is generic. Without typed keys it is skipped. Location floor holds when the manifest omits it |
+| S4 | `SetupPlan.of(manifest, config)` in shared code. Steps, required set, done set, pending | `core/sync` beside `ThingSetupPolicy` | Unknown required step leaves pending. Unknown optional step with typed keys is generic. Without typed keys it is dropped and setup still reaches Done. A fixed Thing with no cell gets a `location` step when the manifest omits it |
 | S5 | Wizard walks `SetupPlan`, sets ack bits, `GenericFieldsForm` | `feature/setup` | Controller tests for each step kind, Skip sets the bit, Done waits for required steps |
 | S6 | Remove `SETUP_PENDING`, `setPending`, the Site probe and the derived fallback | `core/settings`, `feature/setup`, `app` (`SetupViewModel`), `ios/shared` (`SetupIos`), `core/sync` | Existing setup watch tests rewritten on device state |
 | S7 | Device settings from manifest `settings`, generic sections reuse `GenericFieldsForm` | `feature/device` | Order follows the manifest, LAN stays Developer, bonds and pairing stay Detailed |
