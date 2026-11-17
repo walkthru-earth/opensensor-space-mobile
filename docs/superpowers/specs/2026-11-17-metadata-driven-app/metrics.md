@@ -1,6 +1,6 @@
 # Metrics from metadata
 
-Part of [Metadata-driven app](README.md). 2026-11-17. Proposal.
+Part of [Metadata-driven app](README.md). 2026-11-17. Proposal. Field names and fallbacks follow stac-opensensor [#16](https://github.com/walkthru-earth/stac-opensensor/pull/16).
 
 ## 1. Target
 
@@ -9,7 +9,7 @@ Every metric a screen shows comes from the Thing's resolved template, the proper
 ```mermaid
 flowchart LR
   T[resolved template<br/>served, href, bundled] --> C[MetricCatalog per Thing]
-  R[property registry<br/>bundled copy] --> C
+  R[property and scale registries<br/>bundled copies] --> C
   F[DerivedMetricProvider<br/>family science] --> C
   P[AppProfile overlay<br/>optional] --> C
   C --> L[LIVE]
@@ -31,30 +31,31 @@ flowchart LR
 
 | Field | First source | Then | Last |
 | --- | --- | --- | --- |
-| Label (by language) | Column `title` and its i18n | Registry label by `opensensor:property` | Prettified column name (`soil_moisture_percent` gives "Soil moisture percent") |
+| Label (by language) | Column `opensensor:title_i18n` for the language, then column `title` | Registry `label` by `opensensor:property` | Column name with `_` as spaces (`soil_moisture_percent` gives "soil moisture percent") |
 | Short label | Registry short label | Column `title` | Label |
-| Description | Column `description` | Registry definition | none |
-| Decimals | `opensensor:decimals` | Registry default decimals | `AppProfile.displayStepOf` rule (integer 0, else 1) |
-| Group | `opensensor:group` | Registry group | Role |
+| Description | Column `opensensor:description_i18n`, then `description` | Registry `definition` | none |
+| Decimals | `opensensor:decimals` | Registry `decimals` | 0 for an integer column, else 2. Replaces the `AppProfile.displayStepOf` rule (integer 0, else 1) |
+| Group | `opensensor:group` | Registry `group` | Role |
 | Display unit | `UcumDisplay.of(unit)` in `:core:units` | Firmware `unit_labels` | Raw UCUM |
 
 - `UcumDisplay` maps the UCUM codes the templates use, `ug/m3` to µg/m³, `Cel` to °C, `[ppm]` to ppm, `%` to %, `{count}` and other annotations to an empty unit. An unknown code passes through.
 - `UnitConversion` gains `Cel` beside `°C`, `℃` and `degC`, so imperial works on a template unit.
 - A label from the app's own strings (`:ui:strings`) is an overlay, used only when it exists in the user's language. The PM2.5 raw and corrected labels stay app strings.
 
-### 2.3 Scales
+### 2.3 Scales and main metric
 
-Lookup order for a column, first hit wins.
+Scale for a column, first hit wins.
 
-1. Template column `opensensor:scale` (a scale id).
-2. Registry default scale for its `opensensor:property` URI.
-3. A family scale published for that property URI.
-4. A family scale published for its `cf:standard_name`.
-5. None, neutral colour.
+1. Column `opensensor:scale`, an id in the template's (or Collection's) `opensensor:scales`.
+2. Registry `scale` for its `opensensor:property` URI, from the bundled `registry/scales.json`. A registry `null` means none on purpose.
+3. None, neutral colour.
 
-- A scale id or URI no installed family publishes leaves the column neutral. Nothing is guessed.
-- `HealthScale.propertyId` becomes the property URI. `AirFamily.scales` keys WHO PM2.5 and PM10 by their URIs. The URIs live in `:family:air`, so `CoreStaysAirFreeTest` still passes.
-- CO2 has no scale anywhere. It stays neutral until the registry publishes one.
+- A scale is data. Steps, English and Arabic labels and `color_hint` come from the scale entry, so `WhoGuidelines` stops defining PM2.5 and PM10 steps in code. The family keeps the WHO wording and the guideline line on charts.
+- `HealthScale.propertyId` becomes the scale id from the registry. No PM name enters `:core`, so `CoreStaysAirFreeTest` still passes.
+- A column with no `opensensor:property` match in the registry gets no scale. Nothing is guessed from its name or `cf:standard_name`.
+- PM1, PM4, CF=1 and CO2 have no scale in the registry. They stay neutral.
+
+Main metric, first hit wins. Collection `opensensor:primary`, template `opensensor:primary`, the first `physicalMeasurement` column with a scale, the first `physicalMeasurement` column.
 
 ### 2.4 LIVE
 
@@ -70,11 +71,11 @@ A status column is a `qualityInformation` column with `classification:classes` t
 | --- | --- |
 | Valid | The class whose value equals the gate's `equals` |
 | Absent | The class with `nodata: true` |
-| Other | Any other class, shown by its title, else the registry, else its prettified `name` |
+| Other | Any other class, shown by its title, else its `name` with `_` as spaces |
 
 - A generic `SensorState(column, value, cls, valid)` replaces `PmsStatus` for gating. LIVE hides gated values while the state is not valid. This already holds for History through `valid_when`.
 - Family hints stay in the family, keyed by class `name` (`warming`, `stale`, `sensor-error`, `sleeping`, `model-mismatch`), with a generic line for any other name.
-- A bitmask column (`sen6x_device_status`) shows raw at Developer only, until `classification:bitfields` is adopted.
+- A bitmask column (`sen6x_device_status`) names its set bits from `classification:bitfields`. Without bitfields it shows raw, at Developer only.
 
 ### 2.6 Air family by property and procedure
 
@@ -99,12 +100,12 @@ Ordered. Each passes `./gradlew --no-daemon verify`. Tests are `commonTest` unle
 
 | # | Package | Modules | Tests to add |
 | --- | --- | --- | --- |
-| M0 | Re-copy firmware templates with CrowPanel. Add a fake unknown board template (`acme-soil-probe`, soil moisture, a status column with classes, an unknown property URN, a `firmware` block with `live_keys`) as a test fixture only | `core/model` bundled, `.github/workflows/verify.yml` ref, `core/model` commonTest fixtures | `BundledTemplateBytesTest` pins, `FirmwareTemplatesTest`, fixture parse test |
+| M0 | CrowPanel bundled by [#321](https://github.com/walkthru-earth/opensensor-space-mobile/pull/321), re-copied when the firmware regenerates templates with display hints. Add a fake unknown board template (`acme-soil-probe`, soil moisture, a status column with classes, an unknown property URN, a `firmware` block with `live_keys`) as a test fixture only | `core/model` bundled, `.github/workflows/verify.yml` ref, `core/model` commonTest fixtures | `BundledTemplateBytesTest` pins, `FirmwareTemplatesTest`, fixture parse test |
 | M1 | `UcumDisplay` and the `Cel` imperial rule | `core/units` | `UcumDisplayTest` for each unit in the three bundled templates, imperial `Cel` |
-| M2 | Parse the new template fields. `Datastream` gains `title`, `description`, `decimals`, `group`, `scale`. `BoardTemplate` gains `primary` | `core/model` (`ModelJson`, `Datastream`, `BoardTemplate`) | Parse of each field, unknown fields ignored, i18n titles |
-| M3 | `PropertyRegistry`, bundled byte for byte from stac-opensensor with a pinned SHA-256, lookup by URI then `cf:standard_name` | `core/model` | Pin test, lookup order, unknown URI returns null |
-| M4 | `AppProfile.derive` from M1 to M3. Labels, decimals, primary, display unit. `select` merges an overlay | `core/model` | Derived profile of CrowPanel shows PM2.5 in µg/m³ with registry label. Fake board shows prettified names |
-| M5 | Scales by property URI, lookup order of 2.3. `HealthScale.propertyId` holds the URI | `core/model`, `core/history` (`Metrics.of`), `family/air` (`AirFamily.scales`, `WhoGuidelines`), `ui/designsystem` (`metricLabelRes`) | CrowPanel PM2.5 gets the WHO scale, CO2 and PM4 stay neutral, CF=1 stays neutral. `CoreStaysAirFreeTest` unchanged |
+| M2 | Parse the new template fields. `Datastream` gains `title`, `titleI18n`, `description`, `descriptionI18n`, `decimals`, `group`, `scale` and bitfields. `BoardTemplate` gains `primary` and `scales` | `core/model` (`ModelJson`, `Datastream`, `BoardTemplate`) | Parse of each field, unknown fields ignored, i18n titles, CrowPanel bitfields |
+| M3 | `PropertyRegistry` and `ScaleRegistry`, `registry/properties.json` and `registry/scales.json` bundled byte for byte from stac-opensensor with pinned SHA-256 | `core/model` | Pin test, lookup by URI, unknown URI returns null, a `null` scale stays none |
+| M4 | `AppProfile.derive` from M1 to M3. Labels, decimals, primary, display unit. `select` merges an overlay | `core/model` | Derived profile of CrowPanel shows PM2.5 in µg/m³ with its registry label and opens on `opensensor:primary`. Fake board shows names with spaces |
+| M5 | Scales from data, lookup order of 2.3. `HealthScale` built from a scale entry | `core/model`, `core/history` (`Metrics.of`), `family/air` (`AirFamily.scales`, `WhoGuidelines`), `ui/designsystem` (`metricLabelRes`) | CrowPanel PM2.5 gets the WHO scale from the registry, CO2, PM4 and CF=1 stay neutral, a column `opensensor:scale` wins. `CoreStaysAirFreeTest` unchanged |
 | M6 | `MetricCatalog` per Thing and the union flow. Remove `Metrics.all` and `Metrics.default` defaults | `core/history` (Aggregation, FileSummary, LatestReading, LatestDay, `Metrics`), `feature/history` (`HistoryController`), `app` (`RoomHistoryTiers`, `FilesViewModel`, `ScanViewModel`), `ios/shared` | Catalog of a served template appears in the union. A tier of the fake board aggregates. History opens on `opensensor:primary` |
 | M7 | LIVE for verified templates. Drop the gates at `DeviceCapabilities.kt:72` and `:82` | `core/history` | Fake board and CrowPanel get `Capability.LIVE` from a served template. An unresolved desc gets none |
 | M8 | `SensorState` from `valid_when` and `classification:classes`. `PmsStatus` removed. Hints keyed by class name | `core/model` or `core/history` (generic), `family/air` (`AirMood`, `LiveQc`, `AirSurfaces`, `PlantowerBatchCandidate`), `feature/today` (`TodayCards`, `TodayText`), `app` (`MoodText`) | `sen6x_status` 4 is valid, 1 is warming. Waveshare `pms_status` 5 still reads model mismatch, CoreS3 declares only 0 to 4. Fake board status renders its class title |
@@ -113,8 +114,8 @@ Ordered. Each passes `./gradlew --no-daemon verify`. Tests are `commonTest` unle
 
 ### Acceptance fixtures
 
-- CrowPanel SEN63C (bundled after M0). Today shows PM2.5 with the WHO scale, PM1, PM4, PM10, temperature, RH and CO2 in display units. LIVE works. `sen6x_status` gates PM. History opens on its primary.
-- Fake unknown board (test fixture, never bundled). Served through `ServedTemplates` in the test. Every screen model builds with no app change, labels come from titles or prettified names, LIVE works, status renders, no air term appears.
+- CrowPanel SEN63C (bundled by #321). Today shows PM2.5 with the WHO scale, PM1, PM4, PM10, temperature, RH and CO2 in display units. LIVE works. `sen6x_status` gates PM. History opens on its primary.
+- Fake unknown board (test fixture, never bundled). Served through `ServedTemplates` in the test. Every screen model builds with no app change, labels come from titles or the column name with spaces, LIVE works, status renders, no air term appears.
 
 ## 4. Docs to update with the code
 

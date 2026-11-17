@@ -1,6 +1,6 @@
 # Setup and settings from a board manifest
 
-Part of [Metadata-driven app](README.md). 2026-11-17. Proposal. Field names below are the app's reading of the contract. The firmware `docs/shared` PR owns the final spelling.
+Part of [Metadata-driven app](README.md). 2026-11-17. Proposal. Field names follow firmware [#183](https://github.com/walkthru-earth/opensensor-space-firmware/pull/183), which owns the final spelling.
 
 ## 1. Target
 
@@ -18,7 +18,7 @@ flowchart LR
 
 ## 2. Step catalog
 
-The app keeps a fixed catalog. The manifest picks from it by id and orders the declared part.
+The app keeps a fixed catalog. The manifest picks from it by id and orders the declared part. An id outside the catalog is a generic step when it lists `keys`.
 
 | Id | Component | Owner | Required rule | Settings section |
 | --- | --- | --- | --- | --- |
@@ -33,7 +33,7 @@ The app keeps a fixed catalog. The manifest picks from it by id and orders the d
 | `pairing` | Pairing form | Board declares | Never | `pairing`, Detailed |
 | `lan` | LAN card | Board declares | Never | `lan`, Developer |
 | `bonds` | Bonds card | Board declares | Never | `bonds`, Detailed |
-| `fields:<id>` | Generic `ConfigField` form | Board declares | From the manifest | `fields:<id>` |
+| Any other id with `keys` | Generic `ConfigField` form | Board declares | From `req` | Same id |
 | `done` | Done | App | Always last page | none |
 
 Level gates on settings sections stay app rules. A manifest cannot show LAN below Developer.
@@ -44,36 +44,35 @@ In the template `firmware` block, generated from `board.json`, hashed with the t
 
 ```json
 "firmware": {
-  "setup": {
-    "version": 2,
-    "steps": [
-      { "id": "name" },
-      { "id": "location", "required": true },
-      { "id": "site" },
-      { "id": "wifi" },
-      { "id": "fields:display", "keys": ["panel.theme", "panel.refresh_s"] }
-    ]
-  },
-  "settings": ["location", "site", "wifi", "fields:display", "fields:sensor", "pairing", "lan", "bonds"],
+  "primary": "pm25_mass_ug_m3",
+  "setup": [
+    { "id": "name", "req": false },
+    { "id": "location", "req": true },
+    { "id": "wifi", "req": false },
+    { "id": "panel", "req": false, "keys": ["panel.theme", "panel.start_page"] }
+  ],
+  "settings": [
+    { "id": "location" },
+    { "id": "wifi" },
+    { "id": "panel", "keys": ["panel.theme", "panel.refresh_s", "panel.start_page", "panel.sleep_s"] },
+    { "id": "sensor", "keys": ["sen6x.altitude_m", "sen6x.co2_asc", "sen6x.temp_offset_dc", "sen6x.fan_clean"] }
+  ],
   "config_keys": {
-    "panel.theme": {
-      "type": "choice", "values": ["light", "dark"], "applies": "immediately", "page": 7,
-      "label": { "en": "Theme", "ar": "السمة" }
-    },
-    "panel.refresh_s": { "type": "int", "min": 60, "max": 3600, "applies": "next_sample", "page": 7, "label": { "en": "Screen refresh" } }
+    "panel.theme": { "type": "enum", "values": ["light", "dark"], "applies": "immediately", "page": 7, "label": "Theme", "label_i18n": { "ar": "المظهر" } },
+    "sen6x.fan_clean": { "type": "boolean", "applies": "action", "page": 7, "label": "Clean the fan" }
   }
 }
 ```
 
-- Types map one to one to `FieldType`. `text` (`min_bytes`, `max_bytes`), `digits`, `int` (`min`, `max`), `choice`, `toggle`, `action`. A decimal key (temperature offset, altitude) needs either a new `FieldType.Decimal(min, max, step)` or an int in scaled units. The firmware PR picks one.
-- `page` is the `GET_CONFIG` page that reads the key back. Board keys live on one new page. Pages 1 to 6 keep their keys.
+- Each contract type maps to one `FieldType`. `enum` to `Choice`, a range to `IntBetween`, `boolean` to `Toggle`, `applies: action` to `Action`, a string to `Text`. A decimal key either gets a new `FieldType.Decimal(min, max, step)` or stays an int in scaled units, as `sen6x.temp_offset_dc` does.
+- `page` is the `GET_CONFIG` page that reads the key back. Board keys live on one new page after page 6, within the 480 byte page limit. Pages 1 to 6 keep their keys.
 - The template carries names, types and limits. Never a value, never a default secret.
-- Candidates for the first board keys, today knob-only in NVS `ospanel` on the CrowPanel. Theme, refresh, start page, fan cleaning, CO2 ASC, altitude, temperature offset, sleep.
+- The first board keys are the CrowPanel ones, today knob-only in NVS `ospanel`. Theme, refresh, start page, sleep, fan cleaning, CO2 ASC, altitude and temperature offset.
 
 ## 4. Completion on the device
 
-- Page 1 gains `thing.setup_ack`, a bitmask with bit `i` for `steps[i]`, and `setup_v`, the manifest version it was written under.
-- `setup_v` different from the template's `setup.version` means no step is done.
+- Page 1 gains `thing.setup_ack`, a bitmask with bit `i` for `setup[i]`, and `thing.setup_v`, which names the step list the bits refer to.
+- A `setup_v` that does not match the resolved template's step list means no step is done. The exact rule is open in firmware #183.
 - The app sets a step's bit with its own `SET_CONFIG` after the step's save reads back. Skip also sets the bit of a skippable step.
 - Required steps stay derived from config, never from the bitmask alone. Location is done only while a fixed Thing has a valid `location.cell`.
 - Setup is needed when a required step is not satisfied, or when a declared step's bit is clear. Advert bit 6 and page 1 `thing.setup` report the board's own answer, and the app trusts them.
@@ -111,12 +110,12 @@ New rule.
 | Today | After |
 | --- | --- |
 | `SetupFlows.BOARD` fixed list ([SetupStep.kt:95](../../../../feature/setup/src/commonMain/kotlin/space/opensensor/setup/SetupStep.kt#L95)) | App steps around the manifest steps |
-| `Fields` always draws `WifiForm` ([SetupScreen.kt:179](../../../../feature/setup/src/commonMain/kotlin/space/opensensor/setup/SetupScreen.kt#L179)) | `wifi` draws `WifiForm`, `fields:<id>` draws `GenericFieldsForm` |
+| `Fields` always draws `WifiForm` ([SetupScreen.kt:179](../../../../feature/setup/src/commonMain/kotlin/space/opensensor/setup/SetupScreen.kt#L179)) | `wifi` draws `WifiForm`, a generic id draws `GenericFieldsForm` |
 | Phone `SETUP_PENDING` ([SettingsKeys.kt:47](../../../../core/settings/src/commonMain/kotlin/space/opensensor/settings/SettingsKeys.kt#L47)), `SetupPort.setPending` on both phones | Device `thing.setup_ack`. The key, `setSetupPending` and both adapters are removed |
 | Site probe, page 5 `ERROR` 1 hides Site (`SetupController.siteSupported`) | Site shows when the manifest lists it |
 | `ThingSetupPolicy` derived fallback for firmware without `thing.setup` ([ThingSetupPolicy.kt:35](../../../../core/sync/src/commonMain/kotlin/space/opensensor/data/sync/ThingSetupPolicy.kt#L35)) | Bit 6 and page 1 only, plus the ack rule of section 4 |
 | Fixed settings order ([DeviceConfigSection.kt:207](../../../../feature/device/src/commonMain/kotlin/space/opensensor/device/DeviceConfigSection.kt#L207)) | Manifest `settings` order, app level gates kept |
-| Sensor card gated by `sensor_serial_code` | `fields:sensor` declared by boards that have a sticker |
+| Sensor card gated by the `sensor_serial_code` column | A `sensor` section the board declares |
 
 Between pairing and the first page 1 read nothing is claimed, as today.
 
@@ -126,10 +125,10 @@ All UI is shared Compose in `commonMain`, one implementation for both phones. Pl
 
 | # | Package | Modules | Tests to add |
 | --- | --- | --- | --- |
-| S1 | Parse `setup`, `settings` and `config_keys` from the template `firmware` block into `SetupManifest` | `core/model` | Parse of the CrowPanel and fake board manifests, unknown step ids kept as data |
+| S1 | Parse `setup`, `settings`, `config_keys` and `primary` from the template `firmware` block into `SetupManifest` | `core/model` | Parse of the CrowPanel and fake board manifests, unknown step ids kept as data |
 | S2 | `ConfigFields.merge` rule of section 6, `ConfigPatch.Builder.field`. Decimal type if the contract adds it | `core/protocol` | Reserved prefix refused, secret refused, action gets confirm, out of range refused |
 | S3 | Page 1 `thing.setup_ack` and `setup_v`, the new board settings page | `core/protocol` (`DeviceConfig`), `core/sync` (`DeviceSession`) | Parse, stale `setup_v` reads as nothing done |
-| S4 | `SetupPlan.of(manifest, config)` in shared code. Steps, required set, done set, pending | `core/sync` beside `ThingSetupPolicy` | Unknown required step leaves pending. Unknown optional step with typed keys becomes `fields:<id>`. Without typed keys it is skipped. Location floor holds when the manifest omits it |
+| S4 | `SetupPlan.of(manifest, config)` in shared code. Steps, required set, done set, pending | `core/sync` beside `ThingSetupPolicy` | Unknown required step leaves pending. Unknown optional step with typed keys is generic. Without typed keys it is skipped. Location floor holds when the manifest omits it |
 | S5 | Wizard walks `SetupPlan`, sets ack bits, `GenericFieldsForm` | `feature/setup` | Controller tests for each step kind, Skip sets the bit, Done waits for required steps |
 | S6 | Remove `SETUP_PENDING`, `setPending`, the Site probe and the derived fallback | `core/settings`, `feature/setup`, `app` (`SetupViewModel`), `ios/shared` (`SetupIos`), `core/sync` | Existing setup watch tests rewritten on device state |
 | S7 | Device settings from manifest `settings`, generic sections reuse `GenericFieldsForm` | `feature/device` | Order follows the manifest, LAN stays Developer, bonds and pairing stay Detailed |

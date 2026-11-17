@@ -14,7 +14,7 @@ This continues [Thing plugins](../2026-10-27-thing-plugins/README.md) (epic [#21
 
 ## 1. Owner decisions, 2026-11-17
 
-1. Display hints go into published metadata. A template column may carry `title` (with i18n), `description`, `opensensor:decimals` and `opensensor:group`. A template may carry its main metric (`opensensor:primary`) and a default `opensensor:scale` per column. stac-opensensor gets a shared property registry keyed by `opensensor:property` URI, with label, short label, symbol, definition, group, default decimals and default scale, like STAC Browser's `@radiantearth/stac-fields`. This reverses the rule that the app profile never reaches published STAC.
+1. Display hints go into published metadata. A template column may carry `title` and `description` (other languages in `opensensor:title_i18n` and `opensensor:description_i18n`), `opensensor:decimals`, `opensensor:group` and `opensensor:scale`. A template or Collection may carry its main metric (`opensensor:primary`) and its `opensensor:scales`. stac-opensensor gets a property registry keyed by `opensensor:property` URI (label, short label, symbol, definition, group, unit, default decimals, default scale) and a scale registry, like STAC Browser's `@radiantearth/stac-fields`. This reverses the rule that the app profile never reaches published STAC.
 2. LIVE shows for any template whose SHA-256 is verified. No reviewed profile is needed. Plausible range and `valid_when` still filter values.
 3. Setup steps and Device settings sections are declared by the board in the template `firmware` block, generated from `board.json` and hashed with the template. The app keeps a fixed catalog of step components. The device stores which steps are done. Board-specific settings move to `SET_CONFIG` keys on a new page. Setup lives in BLE and the template, never in STAC Collections or Items. The template declares names and types, never values.
 4. App safety floors the manifest can never lower. See [setup-manifest.md section 5](setup-manifest.md#5-safety-floors).
@@ -60,7 +60,7 @@ Paths from the repo root. Line numbers are for ff9ae37d.
 | Setup pending held on the phone | [SettingsKeys.kt:47](../../../../core/settings/src/commonMain/kotlin/space/opensensor/settings/SettingsKeys.kt#L47), [SetupController.kt:199](../../../../feature/setup/src/commonMain/kotlin/space/opensensor/setup/SetupController.kt#L199), [:271](../../../../feature/setup/src/commonMain/kotlin/space/opensensor/setup/SetupController.kt#L271) | A second phone does not know |
 | `SET_CONFIG` allowlist | [ConfigField.kt:117](../../../../core/protocol/src/commonMain/kotlin/space/opensensor/data/protocol/ConfigField.kt#L117), merge at [:169](../../../../core/protocol/src/commonMain/kotlin/space/opensensor/data/protocol/ConfigField.kt#L169) | A board key the app does not list is dropped |
 | Device settings order | [DeviceConfigSection.kt:207](../../../../feature/device/src/commonMain/kotlin/space/opensensor/device/DeviceConfigSection.kt#L207) | |
-| CrowPanel template not bundled | [core/model/bundled/templates](../../../../core/model/bundled/templates) | Firmware `docs/shared/templates` has it since #182, the app copy does not |
+| CrowPanel template not bundled | [core/model/bundled/templates](../../../../core/model/bundled/templates) | Firmware `docs/shared/templates` has it since #182. Open PR [#321](https://github.com/walkthru-earth/opensensor-space-mobile/pull/321) bundles it and moves the pin to e2eb30b |
 
 ## 4. Contract dependencies
 
@@ -68,8 +68,8 @@ Opened in parallel, 2026-11-17. The app work starts after both merge.
 
 | Repo | PR | Carries |
 | --- | --- | --- |
-| opensensor-space-firmware | pending | `docs/shared` changes. Template display hints, setup manifest in the `firmware` block, typed `config_keys`, `thing.setup_ack` and `setup_v` on page 1, a page for board settings, LIVE without a reviewed profile, status class titles |
-| stac-opensensor | pending | Property registry, schema for the new column and template fields, CrowPanel template example, `PROFILE.md` reversal |
+| opensensor-space-firmware | [#183](https://github.com/walkthru-earth/opensensor-space-firmware/pull/183) | `docs/shared` changes. Decision 0003, LIVE for any verified template, planned `primary`, `setup`, `settings` and typed `config_keys` in the `firmware` block, `thing.setup_ack` and `setup_v` on page 1, a board settings page after page 6, CrowPanel in the templates table |
+| stac-opensensor | [#16](https://github.com/walkthru-earth/stac-opensensor/pull/16) | Property and scale registries, display hint fields and their fallback order, `classification:bitfields`, CrowPanel template and example Thing, `PROFILE.md` reversal |
 
 ## 5. Order
 
@@ -82,6 +82,7 @@ Each package passes `./gradlew --no-daemon verify` on its own. A host or simulat
 ## 6. Open points for the owner
 
 - The CrowPanel screen colours PM2.5 with US EPA 2024 AQI bands (`firmware/esp-idf-crowpanel-epaper/display/air_band.h`). The app and the spec use WHO 2021. Flagged only, no firmware change here.
-- No CO2 scale exists. CO2 stays neutral until a scale is published in the registry.
-- `sen6x_device_status` is a bitmask without bit definitions. The app shows it raw at Developer level until `classification:bitfields` is adopted.
-- The PM4 property is a local URN with no CF name. It gets a registry entry, never a guessed CF name.
+- No CO2 scale exists. CO2 stays neutral until the scale registry gets one (a TODO in stac-opensensor #16).
+- `sen6x_device_status` has no `classification:bitfields` yet. stac-opensensor #16 defines the field, and the firmware template must add the bits before the app can name them.
+- The PM4 property is a local URN with no CF name. Its label comes from the registry, never a guessed CF name.
+- The `setup_v` rule and the board settings page number are open in firmware #183.
