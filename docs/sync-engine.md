@@ -516,7 +516,7 @@ confirmation dialog. Automatic `SET_TIME` requires no user action.
 `DeviceFacade.rebootAndReconnect()` through `DeviceLinkOwner` ← the Device screen's confirmation dialog. It is
 refused while `sync.running`, takes the operation gate synchronously so a re-fired confirm cannot
 send a second one, and the dialog checks its own flag too. `DeviceSession.rawCommand` itself refuses
-`REBOOT`, `SET_CONFIG` and manual `SET_TIME` (`RAW_COMMAND_DENYLIST`, `RawCommandRefusedException`) before anything is
+`REBOOT`, `SET_CONFIG` and manual `SET_TIME` (`RawCommandPolicy.DENYLIST`, `RawCommandRefusedException`) before anything is
 written, and the Debug raw-command box keeps its own check as a second guard.
 
 **Atomic command and collection admission.** `DeviceLinkOwner.tryBeginCommand` and

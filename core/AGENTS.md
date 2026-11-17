@@ -49,7 +49,9 @@ Rules that hold across modules.
   a code branch or a schema string check in a screen. `:core:model` holds
   the data model (#183) and the bundled board templates and app profiles under
   `core/model/bundled/` (#184). `bundled/templates/` is opensensor-space-firmware `docs/shared/templates` copied
-  byte for byte (marked `-text`, excluded from the whitespace hooks), and `BundledTemplateBytesTest`
+  byte for byte at `e2eb30b`, three boards (M5Stack CoreS3, Waveshare ESP32-S3 SIM7670G and ELECROW
+  CrowPanel e-paper SEN63C, `elecrow-crowpanel-epaper-42`), and `bundled/profiles/` holds the
+  CoreS3 and Waveshare profiles (marked `-text`, excluded from the whitespace hooks), and `BundledTemplateBytesTest`
   checks each file's SHA-256 against its `index.json` desc and its pinned hash, `index.json`
   included, so never reformat it and update the pins with each copy. A re-copy is
   `rsync -a --delete ../opensensor-space-firmware/docs/shared/templates/ core/model/bundled/templates/`,
@@ -60,7 +62,9 @@ Rules that hold across modules.
   `DerivedMetricProvider` (`AirFamily` for corrected PM2.5), and reads each file by the template of its
   `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by
   `TemplateIndex.resolve`, the same rule LIVE uses (#259).
-  LIVE shows only for a dict with a reviewed profile. The old unprefixed footer
+  LIVE shows only for a dict with a reviewed profile. CoreS3 and Waveshare have one, the bundled
+  CrowPanel e-paper SEN63C template has none. The 2026-11-17 plan to show LIVE for any verified
+  template is in `docs/superpowers/specs/2026-11-17-metadata-driven-app/`, not built. The old unprefixed footer
   keys are not read. A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading` or `GenericMetricHero`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and

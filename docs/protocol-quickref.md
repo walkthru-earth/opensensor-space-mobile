@@ -207,15 +207,19 @@ from the column and its label from the app profile. The thing joins the bundled 
 under `core/model/bundled/templates/` with the app profile under `core/model/bundled/profiles/`
 (`BundledCatalog.thing`). The templates are opensensor-space-firmware `docs/shared/templates` copied byte for
 byte, `<board>/<dict>.json` and `index.json`, and their `live_keys` list the keys in board LIVE order.
-Only the current digest of each board is bundled, at the firmware version the bundled templates name. CoreS3 (`3b4d8500…`)
+Only the current digest of each board is bundled, copied from opensensor-space-firmware `e2eb30b`. CoreS3 (`3b4d8500…`)
 sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
 because they are always null on CoreS3. Waveshare (`a8605aaf…`) sends `t`, ambient air
-temperature, `rh` and `bstate`, the battery health code. A new firmware digest is a copy of the
+temperature, `rh` and `bstate`, the battery health code. CrowPanel e-paper SEN63C (`e7279c4e…`) sends
+`sen`, `m1`, `m25`, `m4`, `m10`, `t`, `rh` and `co2`, but no profile is bundled for it, so it has no
+LIVE view yet. A new firmware digest is a copy of the
 published templates, a profile file swap and a fixture refresh, with no code change. Any other digest, older ones included,
 has no LIVE view, and Today says so only after `INFO` arrived. A board whose template it served
 but whose dict has no reviewed profile has no LIVE view either, because the derived profile only
 names raw columns (`DeviceCapabilities.from`). History still reads its files through the served
-template. `LiveKeyFixturesTest`
+template. The owner decided on 2026-11-17 that LIVE will show for any template whose SHA-256 is
+verified. That is planned and not built, see
+`docs/superpowers/specs/2026-11-17-metadata-driven-app/`. `LiveKeyFixturesTest`
 holds every digest from opensensor-space-firmware `tools/fixtures/live_keys/`, checks the bundled template live keys
 against the current ones and lists the retired ones, and the weekly `live-key-drift` workflow fails
 when opensensor-space-firmware main has a digest missing there. LIVE is a snapshot, not archive data.
@@ -231,9 +235,10 @@ object with cell, maximum `resolution`, actual `cell_resolution`, derived
 center `lat`/`lon` and declared `country`, plus the `thing` object with
 `mobility` (`fixed` or `moving`, default `fixed`) and, from CoreS3 `v6.24` and Waveshare `v2.18`,
 `setup` (1 or 0, matching advert bit 6, read as `ThingConfig.needsSetup`). It uses the same CONFIG/CONFIG_CHUNK
-framing and 480-byte JSON limit. `Request.GetLocation` and `DeviceSession.getLocation`
-return unsupported when older firmware returns the legacy object or rejects
-that selector. A missing location object is not an unset supported location.
+framing and 480-byte JSON limit. `DeviceSession.getLocationPage` sends
+`Request.GetConfigPage(LOCATION)` and returns null when older firmware rejects that selector. When
+it returns the legacy object the page has no `location`, which reads as unsupported. A missing
+location object is not an unset supported location.
 
 Waveshare `v2.18` adds `location.gnss_cell` (firmware #147), the receiver's fix from the last 15 s as a
 resolution 8 cell, or `""` without a fresh fix. CoreS3 has no receiver and omits it.

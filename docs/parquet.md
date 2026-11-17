@@ -150,8 +150,11 @@ backstop for crashes nobody thought of. The unit tests prove each guard.
 | **GZIP** | `builtIn`, `java.util.zip` (JVM), system zlib (iOS) | `expect fun gunzip` |
 | **ZSTD** | `AppParquetCodecs` in `:app` registers `zstd-jni` (`@aar`) | the **one native library**, kept out of `:core:*`, `AppParquetCodecsTest`. Android only |
 
-`PageDecompressor.decompress(input: ByteArray, uncompressedSize)` receives exactly the compressed page
-bytes.
+`PageDecompressor.decompress(src, srcOffset, srcLength, dst, dstOffset, dstLength)`
+(`ParquetCodecs.kt`) reads only the compressed page `src[srcOffset, srcOffset + srcLength)`, a window
+of the bytes the reader fetched that may hold other pages, and never changes or keeps `src`. It writes
+exactly `dstLength` bytes into `dst[dstOffset, dstOffset + dstLength)` and returns the count. Any other
+count is a `ParquetFormatException`.
 
 ## Writer (`ParquetWriter`), the mirror of the reader
 

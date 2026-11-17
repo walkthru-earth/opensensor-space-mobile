@@ -45,7 +45,8 @@ result and its run saves the `main` caches. The device Release build runs on `ma
 not on pull requests, in its own job ("iOS device Release build", 45 minute timeout) beside "iOS
 native validation" (60 minutes). The Release job only reads the Gradle and Kotlin/Native caches, so
 it never saves over the ones the validation job writes. A slow macOS runner can still end "iOS
-native validation" at its timeout. That is infrastructure, rerun the job.
+native validation" at its timeout, and so can a hung test. Read the log of the last step that ran,
+then rerun the job when it shows a slow runner.
 CI runs ktlint on every file, while the local hook checks only staged files, so run
 `pre-commit run --all-files` before a merge that touches many Kotlin files.
 
@@ -59,7 +60,8 @@ audits through `verify`; release-only APK optimization and signer checks remain 
 `FirmwareTemplatesTest` (`:core:model`) compares `core/model/bundled/templates` with
 opensensor-space-firmware `docs/shared/templates` byte for byte (#261). The `verify.yml` gradle job
 and the `release.yml` `apk` job check the firmware out at the commit the bundle was copied from, a
-literal `ref` in each workflow, and set `OPENSENSOR_FIRMWARE_DIR`. The `ref` stays a literal because CodeQL reports a checkout ref read
+literal `ref` in each workflow (opensensor-space-firmware `e2eb30b`, the CrowPanel merge), and set
+`OPENSENSOR_FIRMWARE_DIR`. The `ref` stays a literal because CodeQL reports a checkout ref read
 from a repository file as cache poisoning. With that variable set, a missing checkout fails the test. Locally the
 test finds an `opensensor-space-firmware` folder beside the repository and skips without one. The
 weekly `live-key-drift.yml` `templates` job runs the same test against firmware `main`, so a

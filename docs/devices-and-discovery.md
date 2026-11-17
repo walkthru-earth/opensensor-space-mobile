@@ -59,9 +59,14 @@ Rules.
    `sensorIdentity` and the `Capability` set). Only `ThingKind.recognize` and
    `DeviceCapabilities` read adverts, `INFO` or the protocol version. No screen checks a schema
    or dictionary string.
-5. **A new board is a template.** A board line is one template, plus an `AppProfile` when the
-   derived default is not enough. A new source of Things is one `ThingKind`. Neither needs a
-   change to the sync engine, the screens or the design system.
+5. **A new board is a template and a reviewed profile.** A board line is one template, which is
+   enough for sync, history and the archive. LIVE, the hero and the metrics card also need a
+   reviewed `AppProfile` for its `dict` under `core/model/bundled/profiles/`, because
+   `DeviceCapabilities.from` drops the `thing` of a derived profile and `capabilitiesOf` adds no
+   `LIVE` for it. A new source of Things is one `ThingKind`. Neither needs a change to the sync
+   engine, the screens or the design system. The owner decided on 2026-11-17 to make the app
+   metadata driven, so a verified template alone will be enough. The plan is in
+   `docs/superpowers/specs/2026-11-17-metadata-driven-app/` and is not built.
 6. **Keep wire names.** Opcodes, UUIDs and archive
    paths stay. New shared types use generic names (`Reading`, `GenericMetricHero`), never `Air*`.
 
@@ -74,16 +79,19 @@ Rules.
    `core/model/bundled/templates/`, byte for byte, with
    `rsync -a --delete ../opensensor-space-firmware/docs/shared/templates/ core/model/bundled/templates/` from the
    repo root. Set the firmware checkout `ref` in `.github/workflows/verify.yml` to the commit copied,
-   so CI checks the copy against it with `FirmwareTemplatesTest`. If the derived default is not enough, add an
-   `AppProfile` for that `dict` under `core/model/bundled/profiles/`. `BundledCatalog` reads the
+   so CI checks the copy against it with `FirmwareTemplatesTest`. The bundle is at `e2eb30b` and holds
+   three boards, M5Stack CoreS3, Waveshare ESP32-S3 SIM7670G and ELECROW CrowPanel e-paper SEN63C
+   (`elecrow-crowpanel-epaper-42`). Only CoreS3 and Waveshare have a profile. Add a reviewed `AppProfile` for that
+   `dict` under `core/model/bundled/profiles/`, or the board has no LIVE, hero or metrics card. `BundledCatalog` reads the
    templates through `index.json`, which gives each its `desc`. `BundledTemplateBytesTest` checks each
    file's SHA-256 against its `index.json` desc and pins the full SHA-256 of every copied json file,
    so update its `pinned` map with the copy. `BundledCatalogTest` checks the profiles. The template
    links point at fixed firmware commits. The app trusts only the digests, and follows a link only
    through `TemplateHrefs`, for a file whose desc nothing on the phone resolves.
    A board whose firmware serves its template over `GET_DESCRIPTOR` works without a bundled one,
-   the app fetches and caches it on connect (`BoardDescriptors`). It then renders with a profile
-   derived from that template. A synced file whose footer `template.sha256` differs from the cached
+   the app fetches and caches it on connect (`BoardDescriptors`). Without a reviewed profile it gets
+   a profile derived from that template, which names the columns for History and Files but gives no
+   LIVE, hero or metrics card. A synced file whose footer `template.sha256` differs from the cached
    template's full digest evicts it, and the next connect fetches it again.
 3. If it uses a new transport, follow "Adding a transport" in the cross-platform guide.
 4. Optional. A family may provide a `FamilyPresenter` with its own hero, registered in

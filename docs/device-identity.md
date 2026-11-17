@@ -65,7 +65,9 @@ deduplicating old copies needs a firmware contract change first.
 Interpretation comes from a board template. The app resolves it from the template the board
 served over `GET_DESCRIPTOR`, from a file's footer href when its SHA-256 is the footer desc
 (`TemplateHrefs`), or from the bundled copy (`TemplateIndex`). CoreS3 sends `imu_t`, shown as board
-temperature. Waveshare sends `t`, ambient temperature, and `rh`. A dict with no reviewed profile
-has no LIVE view, and nothing shows guessed labels or units. History availability comes from the file's columns and validity gates,
+temperature. Waveshare sends `t`, ambient temperature, and `rh`. A dict with no reviewed profile,
+CrowPanel e-paper SEN63C included, has no LIVE view, and nothing shows guessed labels or units. LIVE
+for any verified template is the 2026-11-17 plan, not built
+(`docs/superpowers/specs/2026-11-17-metadata-driven-app/`). History availability comes from the file's columns and validity gates,
 not from a dictionary entry. Only PM values get health bands. The metric model is in
 [devices-and-discovery.md](devices-and-discovery.md).

@@ -295,8 +295,9 @@ without humidity has no `pm25_epa` buckets and every screen falls back to `pm25`
 Both PM2.5 specs carry `property = "pm25"` for the WHO scale and a `basis` (`CORRECTED` or `RAW`)
 for the label. Daily files keep the raw `pm25_cf1_ug_m3` and RH columns, so they need no change.
 A change to what a day holds bumps `HistoryDeriver.DERIVE_VERSION` on Android and `TierCodec.VERSION`
-on iOS, and a change to the day file bumps `DailyParquetBuilder.BUILDER`, which both platforms check,
-so cached days rebuild once.
+on iOS. A change to the day file that its readers must know about bumps `DailyParquetBuilder.BUILDER`
+and `DERIVED_VERSION` together, and both platforms check `BUILDER`, so cached days rebuild once. An
+optional key or column, such as the #91 checks, bumps neither.
 
 ### Sensor warm-up and settling
 
