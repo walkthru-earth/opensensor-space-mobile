@@ -62,8 +62,8 @@ device, and nothing is asked at launch.
   the wizard's own scan hears it.
 - My devices opens the wizard by itself when exactly one sensor asks for setup (#272), at most once
   per foreground session. The shared `ThingSetupWatch` in `:core:sync` applies `ThingSetupPolicy` to
-  the advert flags of the foreground Bluetooth scan (bit 6) and, for firmware without the flag, to
-  the last page 1 the phone read from that sensor. The automatic open lands on Find with the sensor
+  the advert flags of the foreground Bluetooth scan (bit 6) and to the last page 1 the phone read
+  from that sensor, with the board template's setup steps. The automatic open lands on Find with the sensor
   offered at the top, and nothing connects until the user taps it. Backing out spends the open, and
   the row keeps a compact "Finish setup" chip (added) or a "needs setup" tag (not added). A tap on
   "Finish setup" resumes an added sensor at Location. When two or more sensors ask, My devices shows
