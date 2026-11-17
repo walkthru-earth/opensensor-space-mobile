@@ -559,7 +559,8 @@ discover-sample/v1/
 - **What a feed file must be.** SNAPPY or LZ4_RAW compression, not ZSTD, because iOS has no
   zstd in its system libraries and the reader keeps native code out of `:core:*`. Flat columns
   in the encodings [parquet.md](parquet.md) lists as accepted. Min and max statistics on every
-  column, and column and offset indexes so pages prune.
+  column. Column and offset indexes are optional. With them the reader prunes pages, without them
+  it reads every page of each row group it keeps (`ParquetReader`).
 
 Reading on the phone.
 
