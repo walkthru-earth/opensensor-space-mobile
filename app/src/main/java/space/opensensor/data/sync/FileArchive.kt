@@ -2,6 +2,9 @@ package space.opensensor.data.sync
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import space.opensensor.archive.ArchiveKey
+import space.opensensor.archive.ArchiveLayout
+import space.opensensor.archive.PartialMeta
 import space.opensensor.storage.AlreadyCommitted
 import space.opensensor.storage.AtomicFiles
 import space.opensensor.storage.JvmAtomicFiles
@@ -14,17 +17,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * App-private on-disk layout for synced Parquet files.
- *
- * ```
- * filesDir/archive/<thing>/<relative hive name>          verified, immutable copies
- * filesDir/archive-partial/<thing>/<name>.partial         in-progress download, absolute offsets
- * filesDir/archive-partial/<thing>/<name>.partial.meta    "<size> <crc32>" from the OPENED frame
- * ```
- *
- * The Hive path is kept verbatim below the thing directory so the archive is a drop-in mirror
- * of the microSD card and of `tools/export_parquet.py` output. Files land in `archive/` only via
- * [commit], an atomic no-replace move after verification, synced to disk (#60).
+ * Android's file I/O for the [ArchiveLayout] paths under `filesDir`. Every path, name check and the
+ * resume decision come from [ArchiveLayout]. Files land in `archive/` only via [commit], an atomic
+ * no-replace move after verification, synced to disk (#60).
  */
 @Singleton
 class FileArchive(
@@ -34,10 +29,11 @@ class FileArchive(
     @Inject
     constructor(@ApplicationContext context: Context) : this(context.filesDir)
 
-    val root: File = File(baseDir, "archive")
-    val partialRoot: File = File(baseDir, "archive-partial")
+    private val base: File = baseDir
+    val root: File = File(baseDir, ArchiveLayout.ARCHIVE)
+    val partialRoot: File = File(baseDir, ArchiveLayout.PARTIAL)
 
-    fun fileFor(thing: String, name: String): File = File(File(root, safeThing(thing)), name)
+    fun fileFor(thing: String, name: String): File = File(File(base, ArchiveLayout.thingDir(thing)), name)
 
     fun exists(thing: String, name: String): Boolean = fileFor(thing, name).isFile
 
@@ -53,44 +49,42 @@ class FileArchive(
 
     // ------------------------------------------------------------------ partials
 
-    private fun partialFor(thing: String, name: String) = File(File(partialRoot, safeThing(thing)), "$name.partial")
-    private fun metaFor(thing: String, name: String) = File(File(partialRoot, safeThing(thing)), "$name.partial.meta")
+    private fun partialFor(key: ArchiveKey) = File(base, ArchiveLayout.partialPath(key))
+    private fun metaFor(key: ArchiveKey) = File(base, ArchiveLayout.partialMetaPath(key))
 
-    /** Byte counts of resumable partials for [thing], keyed by relative name, for the planner. */
+    /** Byte counts of resumable partials for [thing], keyed by Hive name, for the planner. */
     fun partialLengths(thing: String): Map<String, Long> {
-        val dir = File(partialRoot, safeThing(thing))
+        val dir = File(base, ArchiveLayout.partialThingDir(thing))
         if (!dir.isDirectory) return emptyMap()
-        return dir.walkTopDown().filter { it.isFile && it.name.endsWith(".partial") }.associate { f ->
-            f.relativeTo(dir).path.removeSuffix(".partial") to f.length()
-        }
+        return dir.walkTopDown().filter { it.isFile }.mapNotNull { f ->
+            ArchiveLayout.nameOfPartial(f.relativeTo(dir).invariantSeparatorsPath)?.let { it to f.length() }
+        }.toMap()
     }
 
     /**
-     * Open (or resume) the partial for a file the device just `OPENED`. If a partial exists but was
-     * written against a different `size`/`crc32`, the file on the card is not the one we started
-     * (impossible for an immutable file, but the contract says check), so it is discarded.
+     * Open (or resume) the partial for a file the device just `OPENED`. [ArchiveLayout.resumeFrom]
+     * decides the offset. When it says 0, the partial and its meta are discarded and start again.
      *
      * @return the partial and the offset to continue from.
      */
-    fun openPartial(thing: String, name: String, size: Long, crc32: Long): Pair<PartialWriter, Long> {
-        val file = partialFor(thing, name)
-        val meta = metaFor(thing, name)
+    fun openPartial(key: ArchiveKey, meta: PartialMeta): Pair<PartialWriter, Long> {
+        val file = partialFor(key)
+        val metaFile = metaFor(key)
         file.parentFile?.mkdirs()
-        val expectedMeta = "$size $crc32"
-        var resumeFrom = 0L
-        if (file.isFile && meta.isFile && meta.readText().trim() == expectedMeta && file.length() <= size) {
-            resumeFrom = file.length()
-        } else {
+        val existing = file.takeIf { it.isFile }?.length()
+        val stored = metaFile.takeIf { it.isFile }?.readText()
+        val resumeFrom = ArchiveLayout.resumeFrom(existing, stored, meta)
+        if (resumeFrom == 0L) {
             file.delete()
-            meta.delete()
+            metaFile.delete()
         }
-        atomic.writeAtomically(meta.path, expectedMeta.encodeToByteArray(), StorageClass.Scratch)
+        atomic.writeAtomically(metaFile.path, ArchiveLayout.encodeMeta(meta).encodeToByteArray(), StorageClass.Scratch)
         return PartialWriter(file) to resumeFrom
     }
 
-    fun discardPartial(thing: String, name: String) {
-        partialFor(thing, name).delete()
-        metaFor(thing, name).delete()
+    fun discardPartial(key: ArchiveKey) {
+        partialFor(key).delete()
+        metaFor(key).delete()
     }
 
     /**
@@ -100,18 +94,12 @@ class FileArchive(
      * @throws AlreadyCommitted when the final already exists. The partial is left in place.
      */
     @Throws(StorageException::class)
-    fun commit(thing: String, name: String): File {
-        val src = partialFor(thing, name)
-        val dst = fileFor(thing, name)
+    fun commit(key: ArchiveKey): File {
+        val src = partialFor(key)
+        val dst = File(base, ArchiveLayout.finalPath(key))
         atomic.commitNoReplace(src.path, dst.path, StorageClass.Durable)
-        metaFor(thing, name).delete()
+        metaFor(key).delete()
         return dst
-    }
-
-    /** Thing UUIDs are `[0-9a-f-]`; anything else is refused rather than used as a path. */
-    private fun safeThing(thing: String): String {
-        require(thing !in setOf(".", "..") && thing.isNotEmpty() && thing.matches(Regex("[0-9A-Za-z._-]+"))) { "unsafe thing id" }
-        return thing
     }
 
     /** Writes CHUNK payloads at their absolute offsets. */

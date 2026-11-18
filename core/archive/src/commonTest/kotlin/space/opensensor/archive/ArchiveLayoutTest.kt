@@ -77,4 +77,19 @@ class ArchiveLayoutTest {
             assertNull(ArchiveLayout.decodeMeta(bad), bad)
         }
     }
+
+    @Test
+    fun `a partial resumes only against the same meta and within the promised size`() {
+        val meta = PartialMeta(100, 0xABCDL)
+        val text = ArchiveLayout.encodeMeta(meta)
+        assertEquals(40, ArchiveLayout.resumeFrom(40, text, meta), "matching meta")
+        assertEquals(100, ArchiveLayout.resumeFrom(100, text, meta), "a complete partial resumes at its end")
+        assertEquals(0, ArchiveLayout.resumeFrom(0, text, meta), "an empty partial")
+        assertEquals(0, ArchiveLayout.resumeFrom(40, text, meta.copy(size = 120)), "changed size")
+        assertEquals(0, ArchiveLayout.resumeFrom(40, text, meta.copy(crc32 = 0xABCEL)), "changed CRC")
+        assertEquals(0, ArchiveLayout.resumeFrom(101, text, meta), "partial longer than the file")
+        assertEquals(0, ArchiveLayout.resumeFrom(40, null, meta), "missing meta")
+        assertEquals(0, ArchiveLayout.resumeFrom(40, "garbage", meta), "malformed meta")
+        assertEquals(0, ArchiveLayout.resumeFrom(null, text, meta), "missing partial")
+    }
 }
