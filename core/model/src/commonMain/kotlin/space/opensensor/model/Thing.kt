@@ -16,6 +16,8 @@ data class ThingCollection(
     val columnTitles: Map<String, String> = emptyMap(),
     /** Column name to the id of its scale in [scales]. */
     val columnScales: Map<String, String> = emptyMap(),
+    /** Column name to its `opensensor:property` URI. */
+    val columnProperties: Map<String, String> = emptyMap(),
     val dict: String? = null,
     val desc: String? = null,
 ) {

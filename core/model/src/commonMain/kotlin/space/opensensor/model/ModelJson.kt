@@ -126,6 +126,7 @@ internal object ModelJson {
             scales = dto.scales.mapValues { (id, scale) -> scale.toScale(id) },
             columnTitles = columns.mapNotNull { c -> c.title?.let { c.name to it } }.toMap(),
             columnScales = columns.mapNotNull { c -> c.scale?.let { c.name to it } }.toMap(),
+            columnProperties = columns.mapNotNull { c -> c.property?.takeIf { it.isNotEmpty() }?.let { c.name to it } }.toMap(),
             dict = describedBy.firstOrNull { it.type != JSON_TYPE }?.checksum?.let(FileChecksum::sha256Of),
             desc = describedBy.firstOrNull { it.type == JSON_TYPE }?.checksum?.let(FileChecksum::sha256Of),
         )

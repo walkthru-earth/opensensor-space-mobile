@@ -5,6 +5,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
+import space.opensensor.model.BundledCatalog
 import space.opensensor.model.H3Cell
 import space.opensensor.model.Scale
 import space.opensensor.model.ThingCollection
@@ -41,15 +42,23 @@ class DiscoverCollection private constructor(
     /** The column title of [propertyId]'s mean, or null when the Collection gives none. */
     fun title(propertyId: String): String? = stac.columnTitles[mean(propertyId)]
 
-    /** The scale of [propertyId]'s mean, or null when the Collection gives none. */
-    fun scale(propertyId: String): Scale? = stac.columnScales[mean(propertyId)]?.let { stac.scales[it] }
+    /**
+     * The scale of [propertyId]'s mean, or null when the Collection gives none. The column's
+     * `opensensor:scale` names a scale of the Collection's `opensensor:scales`, else one of the
+     * bundled scale registry ([BundledCatalog.scales]).
+     */
+    fun scale(propertyId: String): Scale? = stac.columnScales[mean(propertyId)]?.let { stac.scales[it] ?: BundledCatalog.scales[it] }
+
+    /** The `opensensor:property` URI of [propertyId]'s mean, or null when the Collection gives none. */
+    fun property(propertyId: String): String? = stac.columnProperties[mean(propertyId)]
 
     /**
-     * [properties] with the Collection's title as the label when it has one, and its scale. A property
-     * the Collection does not describe keeps its dictionary label and has no scale.
+     * [properties] with the Collection's title as the label when it has one, its scale and its
+     * `opensensor:property`. A property the Collection does not describe keeps its dictionary label
+     * and has no scale.
      */
     fun describe(properties: List<FeedProperty>): List<FeedProperty> =
-        properties.map { p -> p.copy(label = title(p.id) ?: p.label, scale = scale(p.id)) }
+        properties.map { p -> p.copy(label = title(p.id) ?: p.label, scale = scale(p.id), property = property(p.id)) }
 
     @Serializable
     private class Dto(
@@ -192,7 +201,7 @@ class DiscoverCollection private constructor(
         private const val ISO_DATE_LENGTH = 10
 
         /**
-         * The scales the app's families ship, for a feed that has no Collection yet (the bundled
+         * The Collection the app's families ship, for a feed that has no Collection yet (the bundled
          * sample and the OpenAQ manifest feed). It names no scale until an app entry point installs
          * the families' collection ([installBundled]).
          */

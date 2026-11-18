@@ -1,6 +1,7 @@
 package space.opensensor.ui.components
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
 import space.opensensor.data.history.DeviceCapabilities
@@ -8,6 +9,8 @@ import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.NowReading
+import space.opensensor.model.BundledCatalog
+import space.opensensor.publicfeed.DiscoverCollection
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -53,6 +56,21 @@ class CopyRulesTest {
             }
         }
         return out
+    }
+
+    /**
+     * Discover names WHO steps from the registry's WHO scales, which the PM columns of the bundled
+     * Collection name, so the app keeps no copy of their words. Each step is named in English and Arabic.
+     */
+    @Test
+    fun `Discover names WHO steps from the registry scales`() {
+        for (id in listOf("pm25", "pm10")) {
+            val scale = checkNotNull(DiscoverCollection.BUNDLED.scale(id)) { "$id has no bundled scale" }
+            assertEquals(id, BundledCatalog.scales["who-2021-$id"], scale)
+            for (lang in listOf("en", "ar")) {
+                assertTrue("$id $lang", scale.steps.all { it.label.byLanguage[lang]?.isNotBlank() == true })
+            }
+        }
     }
 
     @Test
