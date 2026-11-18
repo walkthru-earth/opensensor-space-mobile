@@ -100,6 +100,7 @@ import space.opensensor.shell.SettingsKey
 import space.opensensor.shell.SetupKey
 import space.opensensor.shell.ShellBottomBar
 import space.opensensor.shell.TodayKey
+import space.opensensor.today.ConnectionBanner
 import space.opensensor.today.TodayAction
 import space.opensensor.units.UnitFormatter
 import space.opensensor.units.UnitSystem
@@ -336,6 +337,7 @@ internal fun AppRoot(
                             address = key.address,
                             developer = prefs?.detailLevel?.developer,
                             onBack = { nav.popIfTop { it is DebugKey } },
+                            connectionBanner = { ConnectionBanner(it, reconnecting = null, technical = true, pairingRepair = false, onOpenBluetoothSettings = ::openAppSettings) },
                         )
                     }
                     entry<SettingsKey> {
@@ -577,6 +579,8 @@ private fun FilesEntry(
 ) {
     val holder = viewModel(key = "files-$address") { FilesHolder(address, devices, actions) }
     val device by holder.sensor?.state?.collectAsState() ?: remember { mutableStateOf(null) }
+    val chrome by holder.sensor?.chrome?.collectAsState() ?: remember { mutableStateOf(null) }
+    val status = chrome?.status
     FilesScreen(
         controller = holder.controller,
         level = level,
@@ -584,6 +588,21 @@ private fun FilesEntry(
         onBack = onBack,
         device = device,
         onDeviceAction = { holder.sensor?.onAction(it) },
+        transport = chrome?.transport,
+        banner = if (status?.showsBanner == true) {
+            {
+                ConnectionBanner(
+                    status.connection,
+                    reconnecting = null,
+                    technical = level.developer,
+                    pairingRepair = false,
+                    onOpenBluetoothSettings = ::openAppSettings,
+                    heldInBackground = status.heldInBackground,
+                )
+            }
+        } else {
+            null
+        },
     )
 }
 

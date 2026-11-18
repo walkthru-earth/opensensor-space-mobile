@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,8 +19,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -30,7 +27,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -40,6 +36,7 @@ import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.FitText
+import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.headingSemantics
 import space.opensensor.today.resources.Res
 import space.opensensor.today.resources.action_cancel
@@ -236,34 +233,30 @@ fun TodayContent(
             topBar = {
                 // The Station page is the hub of one sensor. History, Files, Device settings and Debug
                 // are plain pushes over it, so Back always returns here. There is no section tab row.
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                    navigationIcon = {
-                        IconButton(onClick = { onAction(TodayAction.OpenDevices) }) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.nav_back)) }
-                    },
+                ThingTopBar(
+                    onBack = { onAction(TodayAction.OpenDevices) },
+                    backLabel = stringResource(Res.string.nav_back),
                     title = {
-                        Column {
-                            // The device name titles the page (TalkBack headings list, VoiceOver rotor).
-                            // Fits to one line, then wraps only between words, so "OS-7500" never splits (#143).
-                            FitText(
-                                snapshot.name ?: stringResource(Res.string.device_unnamed),
-                                style = MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.headingSemantics(),
-                            )
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.
-                                if (level.detailed) TransportChip(snapshot.transport)
-                                if (level.developer) {
-                                    snapshot.info?.thing?.let {
-                                        FitText(
-                                            stringResource(Res.string.today_thing_short, it.take(8)),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                        )
-                                    }
-                                }
+                        // The device name titles the page (TalkBack headings list, VoiceOver rotor).
+                        // Fits to one line, then wraps only between words, so "OS-7500" never splits (#143).
+                        FitText(
+                            snapshot.name ?: stringResource(Res.string.device_unnamed),
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.headingSemantics(),
+                        )
+                    },
+                    // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.
+                    transport = snapshot.transport.takeIf { level.detailed },
+                    subtitle = {
+                        if (level.developer) {
+                            snapshot.info?.thing?.let {
+                                FitText(
+                                    stringResource(Res.string.today_thing_short, it.take(8)),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
                             }
                         }
                     },

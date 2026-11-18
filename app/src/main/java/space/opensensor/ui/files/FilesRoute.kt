@@ -16,7 +16,6 @@ import space.opensensor.designsystem.AppIcons
 import space.opensensor.files.DeviceFilesAction
 import space.opensensor.files.FileMetricsScreen
 import space.opensensor.files.FilesScreen
-import space.opensensor.today.TransportChip
 import space.opensensor.ui.components.CollectEvents
 import space.opensensor.ui.components.ConnectionBanner
 import space.opensensor.ui.components.showScreenMessage
@@ -66,7 +65,7 @@ fun FilesRoute(
         },
         guard = { action -> notificationPermission.ensureThen(action) },
         snackbar = snackbar,
-        subtitleLead = { if (state.detailLevel.detailed) TransportChip(state.transport) },
+        transport = state.transport,
         banner = if (state.thing.showsBanner) {
             { ConnectionBanner(state.connection, reconnecting = state.reconnecting, technical = level.developer, heldInBackground = state.heldInBackground) }
         } else {

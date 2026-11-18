@@ -47,4 +47,7 @@
     <!-- The argument is QcRules.HIGH_HUMIDITY_PERCENT. -->
     <string name="qc_high_humidity">Humidity is above %1$d percent, which makes the sensor read high.</string>
     <string name="qc_note">The value is shown as measured.</string>
+    <string name="transport_ble">Bluetooth</string>
+    <string name="transport_lan">Wi-Fi LAN</string>
+    <string name="transport_fake">Fake device</string>
 </resources>

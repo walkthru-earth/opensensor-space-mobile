@@ -320,10 +320,15 @@ the Smart Sync trace card from `IosSyncDiagnostics`, and reads the config on req
 
 ## The transport chip
 
-Top bar of Today, Files, Device and Debug shows **Bluetooth** or **Wi-Fi LAN**. Single source:
-`DeviceFacade.activeTransport` (re-evaluated on every session swap *and* connection
-state change, de-duplicated). Never derive it per screen from the session object
-([lesson](lessons-learned.md#ui--compose)).
+Today, Files, the file inspector, Device and Debug share one top bar, `ThingTopBar` in
+`:ui:designsystem`, with one container colour on both phones. Its subtitle row starts with
+`TransportChip`, **Bluetooth** or **Wi-Fi LAN**, from Detailed on Today, Files and Device and always
+on Debug. Simple never names the pipe. On Android the single source is
+`DeviceFacade.activeTransport` (re-evaluated on every session swap *and* connection state change,
+de-duplicated). Never derive it per screen from the session object
+([lesson](lessons-learned.md#ui--compose)). On iOS Files reads it from `IosDeviceFiles.chrome`, Debug
+from `IosDebugSource`, Device from `DeviceConfigBridge`, and Files and Debug show the shared
+`ConnectionBanner` while the link is not ready, as Android does. History keeps its own bar for now.
 
 ## Uses → affects
 
