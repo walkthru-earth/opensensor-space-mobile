@@ -81,10 +81,10 @@ class NonAirBoardTest {
     fun `installed providers build the catalog`() {
         try {
             Metrics.install(emptyList())
-            assertTrue(Metrics.catalog.none { it.derived })
-            assertEquals(null, Metrics.byId(AirFamily.PM25_CORRECTED_ID))
+            assertTrue(MetricCatalog.shared.union.value.none { it.derived })
+            assertEquals(null, MetricCatalog.shared.byId(AirFamily.PM25_CORRECTED_ID))
             AirFamily.install()
-            assertNotNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
+            assertNotNull(MetricCatalog.shared.byId(AirFamily.PM25_CORRECTED_ID))
         } finally {
             AirFamily.install()
         }

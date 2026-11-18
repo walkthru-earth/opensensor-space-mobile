@@ -33,20 +33,14 @@ object LatestReadings {
     private const val DAY_S = 86_400L
 
     /**
-     * The newest reading of one thing from its 15 minute [buckets] by metric id. The candidates are
+     * The newest reading of one thing from its 15 minute [buckets] by metric id, among [metrics]. The candidates are
      * [LatestDays.candidatesOf] the metrics with valid rows. The newest bucket with valid rows and a
      * finite mean wins, and at the same time the earlier candidate wins. Null when no candidate has one.
      */
-    fun latest(
-        buckets: Map<String, List<TierBucket>>,
-        metrics: List<MetricSpec> = Metrics.all,
-    ): LatestReading? = latestChecked(buckets.mapValues { (_, list) -> list.map(::CheckedBucket) }, metrics)
+    fun latest(buckets: Map<String, List<TierBucket>>, metrics: List<MetricSpec>): LatestReading? = latestChecked(buckets.mapValues { (_, list) -> list.map(::CheckedBucket) }, metrics)
 
     /** [latest] of buckets that carry their stored checks ([CheckedTiers]). */
-    fun latestChecked(
-        buckets: Map<String, List<CheckedBucket>>,
-        metrics: List<MetricSpec> = Metrics.all,
-    ): LatestReading? {
+    fun latestChecked(buckets: Map<String, List<CheckedBucket>>, metrics: List<MetricSpec>): LatestReading? {
         val available = metrics.filter { m -> buckets[m.id].orEmpty().any { it.bucket.validRows > 0 } }
         var best: LatestReading? = null
         for (metric in LatestDays.candidatesOf(available)) {
@@ -66,11 +60,12 @@ object LatestReadings {
      * thing's last two days, so a phone that builds tiers on demand decodes only those days. When those
      * days hold no candidate reading, as when the main metric fails its gate while other columns still
      * record, the day tier finds the newest older day with one and its quarters are read instead.
+     * [metrics] is the catalog to pick from ([MetricCatalog.union]), read again as it grows.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observe(tiers: HistoryTiers, thing: String, metrics: List<MetricSpec> = Metrics.all): Flow<LatestReading?> =
-        combine(tiers.observeMetricsWithData(thing), tiers.observeDays(thing)) { ids, span ->
-            LatestDays.candidatesOf(metrics.filter { it.id in ids }) to span
+    fun observe(tiers: HistoryTiers, thing: String, metrics: Flow<List<MetricSpec>>): Flow<LatestReading?> =
+        combine(tiers.observeMetricsWithData(thing), tiers.observeDays(thing), metrics) { ids, span, known ->
+            LatestDays.candidatesOf(known.filter { it.id in ids }) to span
         }.distinctUntilChanged().flatMapLatest { (candidates, span) ->
             val lastDayS = span.lastDayS
             val firstDayS = span.firstDayS ?: lastDayS

@@ -21,14 +21,17 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import space.opensensor.archive.ArchiveIndex
+import space.opensensor.archive.ArchiveRecord
 import space.opensensor.data.history.ArchiveSeriesQuery
 import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.DaySpan
+import space.opensensor.data.history.FileTemplates
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistorySeriesReader
 import space.opensensor.data.history.HistoryTiers
 import space.opensensor.data.history.HistoryWindow
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.archiveQueryResults
@@ -41,7 +44,8 @@ data class HistoryUiState(
     val thing: String? = null,
     /** Thing generations to choose from, oldest first. The last one is the current thing. */
     val things: List<String> = emptyList(),
-    val metric: MetricSpec = Metrics.default,
+    /** The charted metric. History opens on the thing's `opensensor:primary` ([openingMetric]). */
+    val metric: MetricSpec,
     val availableMetrics: List<MetricSpec> = emptyList(),
     val range: HistoryRange = HistoryRange.DAY,
     val zone: TimeZone = TimeZone.UTC,
@@ -74,12 +78,17 @@ data class HistoryUiState(
  * archived thing with the latest reading). [things] are the generations its chips offer.
  * [trackWindow] reads the rows' own cells of one thing between two instants in ns, again on each
  * new file (`CellTrackReader.observeWindow`), for [track]. Without it History shows no track.
+ * [catalog] gives the metrics the tiers hold, and its union of every known template grows as boards
+ * serve theirs. [templates] resolves a thing's files to their template, so History opens on that
+ * template's `opensensor:primary` until the user picks another metric.
  */
 class HistoryController(
     private val scope: CoroutineScope,
     private val reader: HistorySeriesReader,
     private val tiers: HistoryTiers,
     private val index: ArchiveIndex,
+    private val catalog: MetricCatalog,
+    private val templates: FileTemplates,
     currentThing: Flow<String?>,
     things: Flow<List<String>>,
     private val zone: TimeZone = TimeZone.currentSystemDefault(),
@@ -88,7 +97,10 @@ class HistoryController(
     private val trackWindow: ((thing: String, fromNs: Long, toNs: Long) -> Flow<CellTrack>)? = null,
 ) {
     private val selectedThing = MutableStateFlow<String?>(null)
-    private val metric = MutableStateFlow(Metrics.default)
+    private val metric = MutableStateFlow(checkNotNull(Metrics.defaultOf(catalog.union.value)) { "no template is known" })
+
+    /** True once the user picks a metric. Until then History follows the thing's primary. */
+    private var userPicked = false
     private val range = MutableStateFlow(HistoryRange.DAY)
     private val toS = MutableStateFlow(nowRounded(HistoryRange.DAY))
     private val nowToS = MutableStateFlow(toS.value)
@@ -126,10 +138,19 @@ class HistoryController(
     }
 
     private val availableMetrics = thing.archiveQueryResults { s ->
-        if (s == null) flowOf(emptyList()) else tiers.observeMetricsWithData(s).map { ids -> Metrics.all.filter { it.id in ids } }
+        if (s == null) {
+            flowOf(ThingMetrics())
+        } else {
+            combine(tiers.observeMetricsWithData(s), index.observeThing(s), catalog.union) { ids, records, union ->
+                val available = union.filter { it.id in ids }
+                ThingMetrics(available, openingMetric(available, records, templates))
+            }
+        }
     }.onEach { result ->
-        val available = result.value.orEmpty()
-        if (available.isNotEmpty() && metric.value !in available) metric.value = Metrics.defaultOf(available) ?: available.first()
+        val metrics = result.value ?: return@onEach
+        val opening = metrics.opening ?: return@onEach
+        val available = metrics.available
+        if (!userPicked || metric.value !in available) metric.value = opening
     }
 
     private val series = combine(thing, metric, range, toS) { s, m, r, t -> ArchiveSeriesQuery(s, m, r, HistoryWindow.endingAt(t, r, zone)) }
@@ -180,7 +201,7 @@ class HistoryController(
         val result = seriesResult.forQuery(query)
         val counts = countsResult.forQuery(sel.thing)
         val dayResult = daysResult.forQuery(sel.thing)
-        val available = availableResult.forQuery(sel.thing)
+        val available = availableResult.forQuery(sel.thing)?.available
         HistoryUiState(
             initializing = sel.thing != null && (result == null || counts == null || dayResult == null || available == null),
             thing = sel.thing,
@@ -195,13 +216,14 @@ class HistoryController(
             files = counts ?: HistoryFileCounts(),
             days = dayResult ?: DaySpan(),
         )
-    }.stateIn(scope, SharingStarted.Eagerly, HistoryUiState(zone = zone, toS = toS.value, nowToS = nowToS.value))
+    }.stateIn(scope, SharingStarted.Eagerly, HistoryUiState(metric = metric.value, zone = zone, toS = toS.value, nowToS = nowToS.value))
 
     fun selectThing(thing: String) {
         selectedThing.value = thing
     }
 
     fun setMetric(m: MetricSpec) {
+        userPicked = true
         metric.value = m
     }
 
@@ -249,4 +271,21 @@ class HistoryController(
     private companion object {
         const val NS_PER_S = 1_000_000_000L
     }
+}
+
+/** The metrics with tier data for one thing, and the one History opens on, null while there are none. */
+private data class ThingMetrics(val available: List<MetricSpec> = emptyList(), val opening: MetricSpec? = null)
+
+/**
+ * The metric History opens on among [available], the `opensensor:primary` of the template the newest
+ * resolvable of [records] names ([Metrics.defaultOf], the corrected view where the template derives one),
+ * else the first primary of [available]. Null when [available] is empty.
+ */
+internal fun openingMetric(available: List<MetricSpec>, records: List<ArchiveRecord>, templates: FileTemplates): MetricSpec? {
+    if (available.isEmpty()) return null
+    val ids = available.mapTo(HashSet()) { it.id }
+    val template = records.sortedWith(compareByDescending<ArchiveRecord> { it.lastUtcNs ?: Long.MIN_VALUE }.thenByDescending { it.syncedAtEpochMs })
+        .firstNotNullOfOrNull { templates.template(it.dictionarySha256, it.templateSha256) }
+    val own = template?.let { t -> Metrics.defaultOf(Metrics.of(t).filter { it.id in ids }) }
+    return own?.let { o -> available.firstOrNull { it.id == o.id } } ?: Metrics.defaultOf(available) ?: available.first()
 }

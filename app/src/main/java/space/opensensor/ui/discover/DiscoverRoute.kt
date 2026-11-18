@@ -26,6 +26,7 @@ import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.coroutines.IoDispatcher
 import space.opensensor.data.history.CellTrackReader
 import space.opensensor.data.history.HistoryRepository
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.settings.AppSettings
 import space.opensensor.data.settings.DetailLevel
@@ -102,7 +103,7 @@ class DiscoverViewModel @Inject constructor(
             devices.filter { it.address in ready }.mapNotNullTo(mutableSetOf()) { it.thing }
         }.distinctUntilChanged()
         val things = places.observeAll().map { saved -> saved.mapTo(mutableSetOf()) { it.thing } }
-        observeOwnStatus(history.tiers, things, linked, index.observeUploadedThings())
+        observeOwnStatus(history.tiers, things, linked, index.observeUploadedThings(), MetricCatalog.shared.union)
             .onEach(controller::showOwnStatus)
             .launchIn(viewModelScope)
     }

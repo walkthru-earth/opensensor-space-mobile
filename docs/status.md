@@ -14,6 +14,8 @@ Host tests and the iOS simulator only. No phone or board run is recorded.
   column name.
 - LIVE shows for any template whose SHA-256 verifies, CrowPanel and served templates included.
 - Board temperature and battery are auxiliary columns, so History and Files no longer chart them.
+- A served template joins the metric union (`MetricCatalog`), so its columns aggregate into tiers
+  and show in Files and Stations with no app change. History opens on the Thing's own primary.
 - To check on phones. CrowPanel LIVE and Today, and the History default metric of each board.
 
 ## 2026-11-17, CrowPanel template at opensensor-space-firmware e2eb30b (code only)

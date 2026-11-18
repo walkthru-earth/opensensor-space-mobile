@@ -14,7 +14,9 @@ import kotlinx.coroutines.flow.stateIn
 import space.opensensor.data.DeviceConnectionManager
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.history.CellTrackReader
+import space.opensensor.data.history.FileTemplates
 import space.opensensor.data.history.HistoryRepository
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.local.database.ThingEpochDao
 import space.opensensor.data.settings.AppSettings
@@ -45,6 +47,8 @@ class HistoryViewModel @AssistedInject constructor(
         reader = history.reader,
         tiers = history.tiers,
         index = history.index,
+        catalog = MetricCatalog.shared,
+        templates = FileTemplates.SERVED,
         currentThing = knownDeviceDao.observeAll().map { list -> list.firstOrNull { it.address == deviceAddress }?.thing },
         things = epochDao.observeForDevice(deviceAddress).map { epochs -> epochs.map { it.thing } },
         trackWindow = CellTrackReader(history.store, history.index, Dispatchers.IO)::observeWindow,

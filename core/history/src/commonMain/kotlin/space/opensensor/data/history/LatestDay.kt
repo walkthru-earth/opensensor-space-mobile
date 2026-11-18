@@ -38,14 +38,11 @@ object LatestDays {
     }
 
     /**
-     * The latest day of one thing from its day [buckets] by metric id. The newest day with valid rows
+     * The latest day of one thing from its day [buckets] by metric id, among [metrics]. The newest day with valid rows
      * and a finite mean of a [candidatesOf] metric wins, and on the same day the earlier candidate wins. Null when no
      * candidate has a valid day.
      */
-    fun latest(
-        buckets: Map<String, List<TierBucket>>,
-        metrics: List<MetricSpec> = Metrics.all,
-    ): LatestDay? {
+    fun latest(buckets: Map<String, List<TierBucket>>, metrics: List<MetricSpec>): LatestDay? {
         // Candidates come from the metrics with valid rows, as [observe] picks them, and a day still
         // needs a finite mean to show. So a NaN day of the main metric falls back to its stored column.
         val available = metrics.filter { m -> buckets[m.id].orEmpty().any { it.validRows > 0 } }
@@ -66,12 +63,12 @@ object LatestDays {
     /**
      * [latest] of one [thing] from [tiers], reading the day buckets of the candidates over the
      * [lookbackDays] up to the thing's last day, so a phone that builds tiers on demand decodes only
-     * those days.
+     * those days. [metrics] is the catalog to pick from ([MetricCatalog.union]), read again as it grows.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observe(tiers: HistoryTiers, thing: String, metrics: List<MetricSpec> = Metrics.all, lookbackDays: Int = 7): Flow<LatestDay?> =
-        combine(tiers.observeMetricsWithData(thing), tiers.observeDays(thing)) { ids, span ->
-            candidatesOf(metrics.filter { it.id in ids }) to span.lastDayS
+    fun observe(tiers: HistoryTiers, thing: String, metrics: Flow<List<MetricSpec>>, lookbackDays: Int = 7): Flow<LatestDay?> =
+        combine(tiers.observeMetricsWithData(thing), tiers.observeDays(thing), metrics) { ids, span, known ->
+            candidatesOf(known.filter { it.id in ids }) to span.lastDayS
         }.distinctUntilChanged().flatMapLatest { (candidates, lastDayS) ->
             if (candidates.isEmpty() || lastDayS == null) {
                 flowOf(null)

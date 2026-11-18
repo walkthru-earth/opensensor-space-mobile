@@ -54,8 +54,8 @@ data class FileSummary(
             name: String,
             file: ParquetFile,
             anchor: TimeEstimate.Anchor? = null,
-            metrics: List<MetricSpec> = Metrics.all,
             templates: FileTemplates = FileTemplates.SERVED,
+            metrics: List<MetricSpec> = templates.metrics,
         ): FileSummary {
             val md = file.metadata
             fun col(colName: String): ColumnValues? = md.leaf(colName)?.let { file.readColumn(it) }
