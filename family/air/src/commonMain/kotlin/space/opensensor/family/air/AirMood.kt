@@ -2,6 +2,7 @@ package space.opensensor.family.air
 
 import space.opensensor.data.protocol.LiveReading
 import space.opensensor.model.HealthScale
+import space.opensensor.model.SensorState
 
 /**
  * The friendly layer, as pure data: one mood per step of the WHO 2021 PM2.5 scale
@@ -62,10 +63,11 @@ sealed interface NowReading {
     data object Waiting : NowReading
 
     /**
-     * The sensor reports any [PmsStatus] but [PmsStatus.VALID], so its numbers are not shown. That is
-     * absent, warming up, stale, error, model mismatch or sleeping, each with its own [hint].
+     * The particle sensor reports a state that is not valid ([pmState]), so its numbers are not shown.
+     * That is absent, warming up, stale, error, model mismatch, sleeping or a class this app does not
+     * know, each with its own [hint].
      */
-    data class SensorNotReady(val status: PmsStatus, val hint: String) : NowReading
+    data class SensorNotReady(val state: SensorState, val hint: String) : NowReading
 
     /**
      * A valid PM2.5 reading and its mood. [primary] is the value shown and judged, the NowCast when
@@ -101,8 +103,8 @@ sealed interface NowReading {
          */
         fun of(live: LiveReading?, nowCast: Pm25NowCast? = null, flags: Int = QcFlags.NONE): NowReading {
             if (live == null) return Waiting
-            val status = live.pmsStatus ?: return Waiting
-            if (status != PmsStatus.VALID) return SensorNotReady(status, hint(status))
+            val state = live.pmState ?: return Waiting
+            if (!state.valid) return SensorNotReady(state, hint(state))
             val raw = live.value(AirFamily.PM25_ATMOSPHERIC)
             // The correction reads the CF=1 PM2.5 and the sensor's RH, the inputs it was fitted on.
             val corrected = EpaPm25Correction.correct(live.value(AirFamily.PM25_CF1), live.value(AirFamily.RELATIVE_HUMIDITY))
@@ -116,14 +118,17 @@ sealed interface NowReading {
             return Reading(pm, mood, liveBasis, raw, Averaging.LIVE, pm, liveBasis, flags)
         }
 
-        private fun hint(status: PmsStatus): String = when (status) {
-            PmsStatus.ABSENT -> "No particle sensor is answering. Check its cable."
-            PmsStatus.WARMING -> "The sensor is warming up. It takes about a minute after power on."
-            PmsStatus.STALE -> "The last sensor reading is old, so it is not trusted."
-            PmsStatus.ERROR -> "The sensor reports an error, so its numbers are not shown."
-            PmsStatus.MODEL_MISMATCH -> "The fitted sensor is not the model this board expects, so its numbers are not shown."
-            PmsStatus.SLEEPING -> "The sensor is resting between readings."
-            PmsStatus.VALID -> ""
+        /** The hint for [state], keyed by its class name, with one line for a class this app does not know. */
+        fun hint(state: SensorState): String = when {
+            state.absent -> "No particle sensor is answering. Check its cable."
+            else -> when (state.cls?.name) {
+                "warming" -> "The sensor is warming up. It takes about a minute after power on."
+                "stale" -> "The last sensor reading is old, so it is not trusted."
+                "sensor-error" -> "The sensor reports an error, so its numbers are not shown."
+                "model-mismatch" -> "The fitted sensor is not the model this board expects, so its numbers are not shown."
+                "sleeping" -> "The sensor is resting between readings."
+                else -> "The sensor is not ready, so its numbers are not shown."
+            }
         }
     }
 }

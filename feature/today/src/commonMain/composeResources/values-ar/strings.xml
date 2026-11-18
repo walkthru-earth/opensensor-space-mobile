@@ -93,6 +93,8 @@
     <string name="pms_error_hint">يبلّغ المستشعر عن خطأ، لذا لا تُعرض أرقامه.</string>
     <string name="pms_mismatch_hint">المستشعر المركّب ليس الطراز الذي تتوقعه اللوحة، لذا لا تُعرض أرقامه.</string>
     <string name="pms_sleeping_hint">المستشعر في استراحة بين القراءات.</string>
+    <string name="pms_other_title">غير جاهز</string>
+    <string name="pms_other_hint">المستشعر غير جاهز، لذا لا تُعرض أرقامه.</string>
     <string name="env_title">درجة الحرارة والرطوبة</string>
     <string name="env_unsupported">هذا الإصدار من التطبيق لا يقرأ القيم المباشرة من هذا المستشعر بعد. الملفات المتزامنة لا تزال تعمل.</string>
     <string name="today_so_far">اليوم حتى الآن</string>

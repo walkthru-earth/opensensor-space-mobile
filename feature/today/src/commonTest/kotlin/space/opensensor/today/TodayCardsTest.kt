@@ -9,7 +9,7 @@ import space.opensensor.data.protocol.LiveSample
 import space.opensensor.data.protocol.SensorConfig
 import space.opensensor.data.sync.FileOutcome
 import space.opensensor.family.air.AirFamily
-import space.opensensor.family.air.pmsStatus
+import space.opensensor.family.air.pmState
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.TodayCard.BATCH_ESTIMATE
 import space.opensensor.today.TodayCard.BOARD
@@ -196,7 +196,7 @@ class TodayCardsTest {
         assertEquals(14.9, before.reading?.value("pm25_atmospheric_ug_m3"))
         assertNull(after.reading?.value("pm25_atmospheric_ug_m3"))
         assertNull(after.reading?.value("ambient_temperature_c"))
-        assertNull(after.reading?.pmsStatus)
+        assertNull(after.reading?.pmState)
         assertEquals(before.cards, after.cards, "a null reading never hides a card")
     }
 }
