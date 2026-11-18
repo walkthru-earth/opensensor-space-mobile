@@ -67,8 +67,9 @@ Rules.
    `core/model/bundled/templates/`, byte for byte, with
    `rsync -a --delete ../opensensor-space-firmware/docs/shared/templates/ core/model/bundled/templates/` from the
    repo root. Set the firmware checkout `ref` in `.github/workflows/verify.yml` to the commit copied,
-   so CI checks the copy against it with `FirmwareTemplatesTest`. If the derived default is not enough, add an
-   `AppProfile` for that `dict` under `core/model/bundled/profiles/`. `BundledCatalog` reads the
+   so CI checks the copy against it with `FirmwareTemplatesTest`. Labels, decimals, scales and the primary come from the
+   template hints and the registry. Add an `AppProfile` overlay for that `dict` under
+   `core/model/bundled/profiles/` only for a family, a hero or hidden columns. `BundledCatalog` reads the
    templates through `index.json`, which gives each its `desc`. `BundledTemplateBytesTest` checks each
    file's SHA-256 against its `index.json` desc and pins the full SHA-256 of every copied json file,
    so update its `pinned` map with the copy. `BundledCatalogTest` checks the profiles. The template
@@ -79,7 +80,8 @@ Rules.
    then the column's own display hints label and round it.
    A board whose firmware serves its template over `GET_DESCRIPTOR` works without a bundled one,
    the app fetches and caches it on connect (`BoardDescriptors`). It then renders with a profile
-   derived from that template. A synced file whose footer `template.sha256` differs from the cached
+   derived from that template, with LIVE, labels, decimals and scales from its hints and the
+   registry. A synced file whose footer `template.sha256` differs from the cached
    template's full digest evicts it, and the next connect fetches it again.
 3. If it uses a new transport, follow "Adding a transport" in the cross-platform guide.
 4. Optional. A family may provide a `FamilyPresenter` with its own hero, registered in

@@ -122,6 +122,7 @@ internal object ModelJson {
             title = dto.title,
             license = dto.license,
             sampleIntervalS = dto.sampleIntervalS,
+            primary = dto.primary?.takeIf { it.isNotEmpty() },
             scales = dto.scales.mapValues { (id, scale) -> scale.toScale(id) },
             columnTitles = columns.mapNotNull { c -> c.title?.let { c.name to it } }.toMap(),
             columnScales = columns.mapNotNull { c -> c.scale?.let { c.name to it } }.toMap(),
@@ -139,17 +140,7 @@ internal object ModelJson {
     fun parseProfile(text: String): AppProfile {
         val dto = decode<ProfileDto>(text)
         require(FileChecksum.isSha256Hex(dto.dict)) { "app profile has a malformed dict digest" }
-        return AppProfile(
-            dict = dto.dict,
-            family = Family(dto.family),
-            primary = dto.primary,
-            hero = dto.hero,
-            displayStep = dto.displayStep,
-            labels = dto.labels.mapValues { (_, label) -> LocalizedText(label) },
-            displayUnit = dto.displayUnit,
-            scales = dto.scales,
-            hidden = dto.hidden.toSet(),
-        )
+        return AppProfile(dict = dto.dict, family = Family(dto.family), hero = dto.hero, hidden = dto.hidden.toSet())
     }
 
     private inline fun <reified T> decode(text: String): T = try {
@@ -396,6 +387,7 @@ internal class CollectionDto(
     val title: String? = null,
     val license: String? = null,
     @SerialName("opensensor:sample_interval_s") val sampleIntervalS: Double? = null,
+    @SerialName("opensensor:primary") val primary: String? = null,
     @SerialName("opensensor:scales") val scales: Map<String, ScaleDto> = emptyMap(),
     @SerialName("item_assets") val itemAssets: CollectionItemAssetsDto? = null,
     val links: List<LinkDto> = emptyList(),
@@ -424,12 +416,7 @@ internal class StepDto(
 internal class ProfileDto(
     val dict: String,
     val family: String,
-    val primary: List<String> = emptyList(),
     val hero: String? = null,
-    @SerialName("display_step") val displayStep: Map<String, Double> = emptyMap(),
-    val labels: Map<String, Map<String, String>> = emptyMap(),
-    @SerialName("display_unit") val displayUnit: Map<String, String> = emptyMap(),
-    val scales: Map<String, String> = emptyMap(),
     val hidden: List<String> = emptyList(),
 )
 

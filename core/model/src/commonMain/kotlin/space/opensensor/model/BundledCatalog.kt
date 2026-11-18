@@ -1,12 +1,12 @@
 package space.opensensor.model
 
 /**
- * The board templates and app profiles the app ships, read from the raw JSON files under
+ * The board templates and app profile overlays the app ships, read from the raw JSON files under
  * `core/model/bundled`. `templates/` is a verbatim copy of opensensor-space-firmware `docs/shared/templates`, one
  * `<board>/<dict>.json` per board and the `index.json` that maps each `dict` to its file and `desc`, so
  * a new digest is a folder copy and a fixture refresh with no code change. Only the current digest of
- * each board is bundled. An unknown digest resolves only through a served template, and then renders
- * with a profile [AppProfile.derive]d from it. Every lookup goes through [TemplateIndex.resolve].
+ * each board is bundled. An unknown digest resolves only through a served template, and every template
+ * renders with a profile [AppProfile.derive]d from it. Every lookup goes through [TemplateIndex.resolve].
  * `registry/` is a verbatim copy of the stac-opensensor property and scale registries, read as
  * [properties] and [scales].
  */
@@ -24,7 +24,7 @@ object BundledCatalog {
      */
     val templates: List<BoardTemplate> = templatesOf(BundledFiles.files)
 
-    /** Every bundled app profile. */
+    /** Every bundled app profile overlay, see [AppProfile.select]. */
     val profiles: List<AppProfile> = BundledFiles.files.filterKeys { it.startsWith(PROFILES) }.values.map { AppProfile.parse(it) }
 
     /**
@@ -76,7 +76,7 @@ object BundledCatalog {
     /** The bundled template whose exact bytes hash to [desc], or null when none does. */
     fun templateByDesc(desc: String): BoardTemplate? = templates.firstOrNull { it.key.desc == desc }
 
-    /** The bundled profile for [dict], or null when none is bundled. */
+    /** The bundled profile overlay for [dict], or null when none is bundled. */
     fun profile(dict: String): AppProfile? = profilesByDict[dict]
 
     /** What LIVE shows for [dict], or null when no bundled template has it. */

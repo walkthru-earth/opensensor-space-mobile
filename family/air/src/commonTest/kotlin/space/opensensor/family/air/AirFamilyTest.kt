@@ -1,6 +1,7 @@
 package space.opensensor.family.air
 
 import space.opensensor.model.AppProfile
+import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
 import space.opensensor.model.Family
 import space.opensensor.model.Thing
@@ -35,26 +36,28 @@ class AirFamilyTest {
         assertTrue(AirFamily.derive(noCf1).isEmpty())
     }
 
-    private val profile = assertNotNull(BundledCatalog.profile(waveshare.dict))
+    private val overlay = assertNotNull(BundledCatalog.profile(waveshare.dict))
 
-    private fun particles(profile: AppProfile): Boolean = AirFamily.PARTICLES in AirFamily.capabilitiesOf(Thing.join("t", waveshare, profile))
+    private fun particles(template: BoardTemplate = waveshare, profile: AppProfile = overlay): Boolean =
+        AirFamily.PARTICLES in AirFamily.capabilitiesOf(Thing.join("t", template, profile))
 
-    private val pm25Columns = profile.scales.filterValues { it == AirFamily.PM25_SCALE }.keys
+    private val pm25Columns = Thing.join("t", waveshare, overlay).datastreams.filter { it.scale?.id == WhoGuidelines.PM25.id }.map { it.name }.toSet()
 
     @Test
     fun `an air profile whose LIVE shows PM2_5 has the particle cards`() {
         assertTrue(pm25Columns.isNotEmpty())
-        assertTrue(particles(profile))
+        assertTrue(particles())
     }
 
     @Test
     fun `a profile of another family has no particle cards`() {
-        assertFalse(particles(profile.copy(family = Family.GENERIC)))
+        assertFalse(particles(profile = overlay.copy(family = Family.GENERIC)))
     }
 
     @Test
     fun `an air profile without a PM2_5 in LIVE has no particle cards`() {
-        assertFalse(particles(profile.copy(hidden = profile.hidden + pm25Columns)), "hidden PM2.5 columns are not in LIVE")
-        assertFalse(particles(profile.copy(scales = profile.scales - pm25Columns)), "no column on the PM2.5 scale")
+        assertFalse(particles(profile = overlay.copy(hidden = overlay.hidden + pm25Columns)), "hidden PM2.5 columns are not in LIVE")
+        val unscaled = waveshare.copy(datastreams = waveshare.datastreams.map { if (it.name in pm25Columns) it.copy(property = null) else it })
+        assertFalse(particles(template = unscaled), "no column on the PM2.5 scale")
     }
 }

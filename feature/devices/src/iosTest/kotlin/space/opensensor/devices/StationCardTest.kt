@@ -93,7 +93,7 @@ class StationCardTest {
     /** The archive line's shown text and what a screen reader gets for it. */
     private fun archiveLine(lastSyncedMs: Long?): Pair<String, String> {
         AirFamily.install()
-        val day = LatestDay(86_400, 12.34f, 1f, AirMetrics.PM25_CORRECTED, 0.1)
+        val day = LatestDay(86_400, 12.34f, 1f, AirMetrics.PM25_CORRECTED)
         val glance = ArchiveGlance(files = 1, lastSyncedMs = lastSyncedMs, lastDataUtcNs = 1L, lastDay = day)
         var result: Pair<String, String>? = null
         runComposeUiTest {

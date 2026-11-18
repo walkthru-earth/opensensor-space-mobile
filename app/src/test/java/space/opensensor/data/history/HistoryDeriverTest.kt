@@ -345,7 +345,7 @@ class HistoryDeriverTest {
         assertEquals(1, first.daysRebuilt)
         assertEquals(105L, first.rowsAggregated)
         assertEquals(4, buckets.rows.map { it.resolution to it.startEpochS }.distinct().size) // 2 × 15 min + 1 h + 1 day, one row per metric each
-        assertTrue(buckets.rows.any { it.metricId == AirMetrics.PM25.id } && buckets.rows.any { it.metricId == AirMetrics.BOARD_TEMP.id } && buckets.rows.none { it.metricId == AirMetrics.HUMIDITY.id })
+        assertTrue(buckets.rows.any { it.metricId == AirMetrics.PM25.id } && buckets.rows.any { it.metricId == "light_ch0_raw" } && buckets.rows.none { it.metricId == AirMetrics.HUMIDITY.id })
         assertEquals(1, days.rows.size)
         // The derived daily file exists, is read back by our own reader, and carries the manifest index column.
         val dayFile = store.dayFile(thing, 20713)

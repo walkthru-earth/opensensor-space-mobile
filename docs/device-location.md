@@ -188,7 +188,8 @@ because it clears the key.
 - `DeviceCapabilities` reads LIVE through the thing of the `info.desc` and `info.dict` digests,
   by `TemplateIndex.resolve`, from the templates boards served and then the bundled ones in
   `core/model/bundled`. Only the current digest of each board is bundled. An older or unknown
-  digest still syncs verified files but has no LIVE view until its board serves the template.
+  digest still syncs verified files but has no LIVE view until its board serves the template or
+  the app fetches it from a file footer href and its SHA-256 verifies.
 
 Cross-platform host and simulator gates verify parsing, old firmware behavior,
 coarsening, late-fix suppression and readback decisions. A phone run beside a

@@ -8,8 +8,8 @@ import space.opensensor.model.BoardTemplate
 import space.opensensor.model.Family
 
 /**
- * A soil board no bundled profile knows, served as a template. Served alone it has no LIVE view. With
- * [profile], a reviewed generic profile whose primary is soil moisture, Today shows soil cards.
+ * A soil board no bundled profile knows, served as a template. Its primary is soil moisture, the first
+ * measured column. [profile] is a bundled style overlay of its dictionary.
  */
 internal object SoilFixture {
     const val MOISTURE = "soil_moisture"
@@ -42,8 +42,8 @@ internal object SoilFixture {
 
     val info = DeviceInfo(proto = 3, schema = "soil-probe-v1", dict = DICT, desc = DESC.take(16), thing = "soil")
 
-    /** A reviewed profile of the soil dictionary, as a bundled one would be. */
-    val profile = AppProfile(dict = DICT, family = Family.GENERIC, primary = listOf(MOISTURE, TEMPERATURE))
+    /** An overlay of the soil dictionary, as a bundled one would be. */
+    val profile = AppProfile(dict = DICT, family = Family.GENERIC)
 
     /** The served soil template joined with [profile]. */
     fun capabilities(): DeviceCapabilities = DeviceCapabilities.from(info, served = listOf(template)) { profile.takeIf { p -> p.dict == it } }
