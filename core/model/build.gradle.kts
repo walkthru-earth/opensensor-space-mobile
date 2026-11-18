@@ -94,6 +94,10 @@ kotlin {
                 api(project(":core:units"))
             }
         }
+        commonTest {
+            // The Acme soil probe, a board no app code names, shared with the :feature:device tests.
+            kotlin.srcDir("src/acmeFixture/kotlin")
+        }
     }
 }
 

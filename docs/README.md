@@ -22,6 +22,7 @@ before planning new work. Use [architecture.md](architecture.md), [sync-engine.m
 | Know what is verified on Android, iOS simulator, and real devices | [status.md](status.md) | `../opensensor-space-firmware/docs/boards/*/bench-verified.md` |
 | Keep design and sync behaviour the same on iOS and Android, see what still differs and why, add a sensor family or transport | [cross-platform-guide.md](cross-platform-guide.md) | `core/*/src/commonMain/`, `ios/App/`, `app/` |
 | Understand the product direction, device families, the public H3 discover map and sharing rules | [devices-and-discovery.md](devices-and-discovery.md) | `core/publicfeed/`, `feature/discover/` |
+| Get a new board or sensor working with no app change, and know what still needs app code | [your-first-board.md](your-first-board.md) | `core/model/`, `core/protocol/`, `core/sync/`, `feature/device/` |
 | Know which values identify a sensor and how the app recovers after a reset or reflash | [device-identity.md](device-identity.md) | `data/DeviceLinkOwner.kt`, `data/ble/`, `core/database/` |
 | Build or extend the iOS app and shared Kotlin core | [ios.md](ios.md), `../ios/AGENTS.md` | `core/*/src/commonMain/`, `ios/` |
 | Understand modules, layers, who depends on whom, "what a change touches" | [architecture.md](architecture.md) | `core/*/build.gradle.kts`, `app/build.gradle.kts` |
