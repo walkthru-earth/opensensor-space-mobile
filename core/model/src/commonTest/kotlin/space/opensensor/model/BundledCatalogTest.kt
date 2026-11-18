@@ -27,7 +27,11 @@ class BundledCatalogTest {
         assertEquals(setOf(cores3Dict, waveshareDict, crowpanelDict), BundledCatalog.templates.map { it.dict }.toSet())
         assertEquals(3, BundledCatalog.templates.size)
         assertEquals(setOf(cores3Dict, waveshareDict), BundledCatalog.profiles.map { it.dict }.toSet())
-        BundledCatalog.profiles.forEach { assertFalse(it.isDerived, it.dict) }
+        // A bundled profile is only an overlay. Labels, units, decimals, scales and primary come from the template.
+        BundledCatalog.profiles.forEach {
+            assertTrue(it.labels.isEmpty() && it.displayUnit.isEmpty() && it.decimals.isEmpty() && it.scales.isEmpty(), it.dict)
+            assertNull(it.primary, it.dict)
+        }
     }
 
     @Test
@@ -35,19 +39,20 @@ class BundledCatalogTest {
         // A profile keyed on a dict no bundled template has leaves its board with no LIVE view (#182).
         BundledCatalog.profiles.forEach { profile ->
             assertNotNull(BundledCatalog.template(profile.dict), "no bundled template for profile ${profile.dict}")
-            assertSame(profile, BundledCatalog.thing("s1", profile.dict)?.profile, profile.dict)
+            val joined = assertNotNull(BundledCatalog.thing("s1", profile.dict), profile.dict).profile
+            assertEquals(profile.family, joined.family, profile.dict)
+            assertEquals(profile.hero, joined.hero, profile.dict)
+            assertEquals(profile.hidden, joined.hidden, profile.dict)
         }
         val unreviewed = BundledCatalog.templates.filter { BundledCatalog.profile(it.dict) == null }
         assertEquals(setOf(crowpanelDict), unreviewed.map { it.dict }.toSet())
-        unreviewed.forEach { assertTrue(assertNotNull(BundledCatalog.thing("s1", it.dict), it.dict).profile.isDerived, it.dict) }
     }
 
     @Test
     fun everyBundledProfileNamesOnlyColumnsOfItsTemplate() {
         BundledCatalog.profiles.forEach { profile ->
             val template = assertNotNull(BundledCatalog.template(profile.dict), profile.dict)
-            val named = profile.primary + profile.hidden + profile.labels.keys + profile.displayUnit.keys + profile.scales.keys + profile.displayStep.keys
-            named.forEach { assertNotNull(template.datastream(it), "${template.id} has no column $it") }
+            profile.hidden.forEach { assertNotNull(template.datastream(it), "${template.id} has no column $it") }
         }
     }
 
@@ -105,34 +110,62 @@ class BundledCatalogTest {
     }
 
     @Test
-    fun theBundledJoinUsesTheBundledProfile() {
+    fun theBundledJoinReadsTheRegistry() {
         val thing = assertNotNull(BundledCatalog.thing("s1", waveshareDict))
-        assertFalse(thing.profile.isDerived)
+        assertEquals(Family("air"), thing.profile.family)
+        assertEquals("pm25_atmospheric_ug_m3", thing.primary?.name)
         val pm25 = thing.datastream("pm25_atmospheric_ug_m3")!!
-        assertEquals("PM2.5 raw", pm25.label("en"))
-        assertEquals("PM2.5 خام", pm25.label("ar"))
+        assertEquals("PM2.5 mass concentration", pm25.label("en"))
+        assertEquals("تركيز كتلة الجسيمات PM2.5", pm25.label("ar"))
         assertEquals("µg/m³", pm25.displayUnit)
-        assertEquals("pm25", pm25.scaleId)
+        assertEquals("who-2021-pm25", pm25.scale?.id)
         assertEquals(PlausibleRange(0.0, 1000.0), pm25.datastream.plausibleRange)
         assertNull(BundledCatalog.thing("s1", unknownDict))
     }
 
     @Test
-    fun anUnknownDigestShowsRawColumnNamesAndRawUnits() {
+    fun theCrowPanelDerivesItsProfileFromTheRegistry() {
+        val thing = assertNotNull(BundledCatalog.thing("s1", crowpanelDict))
+        assertEquals(Family.GENERIC, thing.profile.family)
+        // No template primary, so the first measurement with a registry scale.
+        assertEquals("pm25_mass_ug_m3", thing.primary?.name)
+        val pm25 = thing.datastream("pm25_mass_ug_m3")!!
+        assertEquals("PM2.5 mass concentration", pm25.label("en"))
+        assertEquals("µg/m³", pm25.displayUnit)
+        assertEquals(1, pm25.decimals)
+        assertEquals("who-2021-pm25", pm25.scale?.id)
+        assertEquals("who-2021-pm10", thing.datastream("pm10_mass_ug_m3")!!.scale?.id)
+        listOf("pm1_mass_ug_m3", "pm4_mass_ug_m3", "co2_ppm").forEach { assertNull(thing.datastream(it)!!.scale, it) }
+        assertEquals("ppm", thing.datastream("co2_ppm")!!.displayUnit)
+        assertEquals(0, thing.datastream("co2_ppm")!!.decimals)
+        assertEquals("°C", thing.datastream("ambient_temperature_c")!!.displayUnit)
+    }
+
+    @Test
+    fun anUnknownDigestOfAKnownBoardReadsTheSameRegistry() {
         val json = BundledFiles.files.getValue(waveshareFile).replace(waveshareDict, unknownDict)
         val served = BoardTemplate.parse(json, desc = DESC_B)
         val thing = assertNotNull(BundledCatalog.thing("s1", unknownDict, desc = DESC_B, served = listOf(served)))
-        assertTrue(thing.profile.isDerived)
-        thing.datastreams.forEach { ds ->
-            assertEquals(ds.name, ds.label("en"), ds.name)
-            assertEquals(ds.name, ds.label("ar"), ds.name)
-            assertEquals(ds.datastream.unit, ds.displayUnit, ds.name)
-            assertNull(ds.scaleId, ds.name)
-        }
-        assertEquals("ug/m3", thing.datastream("pm25_atmospheric_ug_m3")!!.displayUnit)
-        assertEquals("Cel", thing.datastream("ambient_temperature_c")!!.displayUnit)
-        // Nothing is hidden, so LIVE shows every key the template maps.
+        assertEquals(Family.GENERIC, thing.profile.family)
+        assertEquals("PM2.5 mass concentration", thing.datastream("pm25_atmospheric_ug_m3")!!.label("en"))
+        assertEquals("µg/m³", thing.datastream("pm25_atmospheric_ug_m3")!!.displayUnit)
+        assertEquals("°C", thing.datastream("ambient_temperature_c")!!.displayUnit)
+        // Nothing is hidden, so LIVE carries every key the template maps.
         assertEquals(served.liveKeys.values.toSet(), thing.live.keys)
+    }
+
+    @Test
+    fun theLiveUtcKeyIsNeverAMeasurement() {
+        // `event_time_utc_us` (LIVE `utc`) is the time axis, never the primary nor a measurement a
+        // screen shows as a value.
+        for (dict in listOf(waveshareDict, cores3Dict)) {
+            val template = assertNotNull(BundledCatalog.template(dict))
+            val thing = assertNotNull(BundledCatalog.thing("s1", dict))
+            assertEquals("utc", template.liveKeys["event_time_utc_us"])
+            assertEquals("event_time_utc_us", template.primaryDatetime)
+            assertTrue(thing.primary?.name != template.primaryDatetime, dict)
+            assertTrue(template.datastream("event_time_utc_us")!!.role != Role.PHYSICAL_MEASUREMENT, dict)
+        }
     }
 
     @Test
@@ -156,12 +189,12 @@ class BundledCatalogTest {
 
     @Test
     fun propertyIsOptionalOnEveryColumn() {
-        // Every published column names a property today. A template that drops one still joins.
+        // Every published column names a property today. A template that drops one still joins, labelled by its title.
         val json = BundledFiles.files.getValue(cores3File).replace("\"opensensor:property\":\"urn:walkthru-earth:property:battery_state_of_charge\",", "")
         val thing = Thing.join("s1", BoardTemplate.parse(json), BundledCatalog.profile(cores3Dict))
         val battery = thing.datastream("battery_percent")!!
         assertNull(battery.datastream.property)
-        assertEquals("Battery", battery.label("en"))
+        assertEquals("Battery charge", battery.label("en"))
         assertEquals("%", battery.displayUnit)
     }
 
@@ -171,16 +204,6 @@ class BundledCatalogTest {
         val template = assertNotNull(BundledCatalog.template(cores3Dict))
         val live = LiveColumns.of(template, AppProfile.derive(template))
         assertEquals("t", live.temperature?.liveKey)
-    }
-
-    @Test
-    fun aHiddenColumnIsDroppedFromPrimaryEvenWhenTheProfileListsIt() {
-        val template = assertNotNull(BundledCatalog.template(cores3Dict))
-        val profile = AppProfile.parse(
-            """{"dict": "$cores3Dict", "family": "air", "primary": ["pm25_atmospheric_ug_m3", "ambient_temperature_c"], "hidden": ["ambient_temperature_c"]}""",
-        )
-        val thing = Thing.join("s1", template, profile)
-        assertEquals(listOf("pm25_atmospheric_ug_m3"), thing.primary.map { it.name })
     }
 
     @Test

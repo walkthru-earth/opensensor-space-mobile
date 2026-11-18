@@ -106,13 +106,13 @@ class FileChartStateTest {
     }
 
     @Test
-    fun `Simple offers only the profile primary metrics and Detailed every metric`() {
+    fun `Simple offers only the primary metric and Detailed every metric`() {
         val request = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
         val result = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, listOf(humid("one.parquet")))
         val simple = fileChartState(null, false, null, request, result).metrics
         assertTrue(simple.isNotEmpty() && simple.all { it.primary })
         assertFalse(AirMetrics.PARTICLES_GT03 in simple)
-        assertTrue(AirMetrics.PM10 in simple)
+        assertFalse(AirMetrics.PM10 in simple)
         val detailed = fileChartState(null, true, null, request, result).metrics
         assertEquals(Metrics.all, detailed)
     }

@@ -32,6 +32,6 @@ class ThingKindsIosTest {
         launchThingKinds()
         assertSame(kinds, iosThingKinds)
         assertNotNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
-        assertNotNull(DiscoverCollection.BUNDLED.scale(AirFamily.PM25_SCALE))
+        assertNotNull(DiscoverCollection.BUNDLED.scale("pm25"))
     }
 }

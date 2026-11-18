@@ -113,6 +113,12 @@ Other checks owed, with no issue of their own.
 
 No phone run of these changes is recorded.
 
+- 2026-11-18, metrics from template hints and the registry. `AppProfile.derive` builds labels,
+  decimals, display units, scales and the primary from the template hints, the Thing Collection and
+  the bundled property and scale registries. Bundled profiles only overlay the family, hero and
+  hidden columns. Scales come from the column or the registry, never a column name. LIVE shows for
+  any template whose SHA-256 verifies, CrowPanel and served templates included. Board temperature
+  and battery are auxiliary columns, so History and Files no longer chart them.
 - 2026-11-19, part of #350. The bundled templates are byte copies of opensensor-space-firmware
   a5545b4 `docs/shared/templates`, and CI checks out the firmware at that commit. The CoreS3
   dictionary is `f4f81218…`, which adds `lst` to LIVE, and its profile follows it. The templates

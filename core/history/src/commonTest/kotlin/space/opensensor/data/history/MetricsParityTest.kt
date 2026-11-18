@@ -13,19 +13,16 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The bundled board templates that have a reviewed app profile, joined with it, reproduce the reviewed [Metrics]
- * registry, so moving the screens onto them (#185, #186) changes no label, unit, gate, settle time or
- * health scale. Plausible ranges come only from the templates. A template with no reviewed profile,
- * such as CrowPanel, renders with a derived one and is not part of this parity.
+ * Every bundled board template, joined with its derived profile, reproduces the [Metrics] catalog, so
+ * a column two boards share has one label, unit, gate, settle time and health scale. Plausible ranges
+ * come only from the templates.
  */
 class MetricsParityTest {
     init {
         AirFamily.install()
     }
 
-    private val things: List<Thing> = BundledCatalog.templates
-        .filter { BundledCatalog.profile(it.dict) != null }
-        .map { assertNotNull(BundledCatalog.thing("parity", it.dict)) }
+    private val things: List<Thing> = BundledCatalog.templates.map { assertNotNull(BundledCatalog.thing("parity", it.dict)) }
 
     /** The things that show [column], a column a profile hides is never shown. */
     private fun showing(column: String): List<Pair<Thing, ThingDatastream>> = things.mapNotNull { thing ->
@@ -48,7 +45,8 @@ class MetricsParityTest {
                 assertEquals(spec.unit, ds.displayUnit, at)
                 assertTrue(gateMatches(spec, ds.datastream.validWhen), "$at gate ${ds.datastream.validWhen} is not ${spec.gate}")
                 assertEquals(spec.settleSeconds.toDouble(), ds.datastream.settleSeconds, at)
-                assertEquals(spec.healthScale?.propertyId, ds.scaleId, at)
+                assertEquals(spec.decimals, ds.decimals, at)
+                assertEquals(spec.healthScale?.id, ds.scale?.id, at)
                 assertNotNull(ds.datastream.plausibleRange, "$at has no plausible range in its template")
             }
         }
@@ -66,17 +64,14 @@ class MetricsParityTest {
     }
 
     @Test
-    fun thePrimaryReadingIsTheMetricsPrimaryOnEveryBoard() {
+    fun theFirstScaledMeasurementIsThePrimaryOnEveryBoard() {
+        // No bundled template names opensensor:primary yet, so PM2.5 wins as the first column with a scale.
         things.forEach { thing ->
-            assertEquals(AirMetrics.PM25.column, thing.primary.first().name, thing.template.id)
-            assertEquals(AirMetrics.PM25.label, thing.primary.first().label("en"), thing.template.id)
+            val primary = assertNotNull(thing.primary, thing.template.id)
+            assertEquals("who-2021-pm25", primary.scale?.id, thing.template.id)
+            assertTrue(primary.name !in thing.profile.hidden, "${thing.template.id} shows hidden ${primary.name}")
+            assertTrue(Metrics.of(thing.template, thing.profile).single { it.primary && !it.derived }.column == primary.name, thing.template.id)
         }
-    }
-
-    @Test
-    fun aHiddenColumnIsNeverPrimary() {
-        things.forEach { thing ->
-            thing.primary.forEach { assertTrue(it.name !in thing.profile.hidden, "${thing.template.id} shows hidden ${it.name}") }
-        }
+        assertEquals(AirMetrics.PM25.column, things.first { it.template.id.contains("cores3") }.primary?.name)
     }
 }

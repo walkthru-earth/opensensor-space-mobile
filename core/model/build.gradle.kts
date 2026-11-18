@@ -91,6 +91,7 @@ kotlin {
             kotlin.srcDir(bundleFiles.map { it.output })
             dependencies {
                 api(libs.kotlinx.serialization.json)
+                api(project(":core:units"))
             }
         }
     }

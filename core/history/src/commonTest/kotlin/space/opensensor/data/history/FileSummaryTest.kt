@@ -22,7 +22,7 @@ class FileSummaryTest {
         assertEquals(1_789_638_155L, s.firstS) // 2026-09-17T09:42:35Z
         assertEquals(1_789_639_195L, s.lastS) // 09:59:55Z
         assertEquals(27.9333, s.agg(AirMetrics.PM25)!!.mean.toDouble(), 0.001)
-        assertEquals(41.4009, s.agg(AirMetrics.BOARD_TEMP)!!.mean.toDouble(), 0.001)
+        assertEquals(2.0286, s.agg(LightMetric)!!.mean.toDouble(), 0.001)
         assertNull(s.agg(AirMetrics.HUMIDITY)) // column absent on this board: no aggregate, never zero
         val c = s.column(7, AirMetrics.PM25)
         assertEquals(7L, c.startS)
@@ -40,8 +40,8 @@ class FileSummaryTest {
         assertEquals(0, s.estimatedRows)
         assertTrue(s.untimed)
         assertNull(s.firstS)
-        assertNotNull(s.agg(AirMetrics.BOARD_TEMP))
-        val c = s.column(0, AirMetrics.BOARD_TEMP)
+        assertNotNull(s.agg(LightMetric))
+        val c = s.column(0, LightMetric)
         assertNotNull(c.mean)
         assertFalse(c.estimated)
     }

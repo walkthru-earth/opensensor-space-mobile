@@ -42,9 +42,9 @@ class AggregationTest {
         assertEquals(1, d.size)
         assertEquals(1_789_603_200L, d[0].startEpochS) // 2026-09-17T00:00Z
         assertEquals(105, d[0].rows)
-        // Means agree with PyArrow (pm25 mean 27.9333, imu temperature mean 41.4009 over the file).
+        // Means agree with DuckDB (pm25 mean 27.9333, light count mean 2.0286 over the file).
         assertEquals(27.9333, d[0].agg(AirMetrics.PM25)!!.mean.toDouble(), 0.001)
-        assertEquals(41.4009, d[0].agg(AirMetrics.BOARD_TEMP)!!.mean.toDouble(), 0.001)
+        assertEquals(2.0286, d[0].agg(LightMetric)!!.mean.toDouble(), 0.001)
         assertTrue(d[0].agg(AirMetrics.PM25)!!.min <= d[0].agg(AirMetrics.PM25)!!.max)
         assertEquals(105f / 8640f, d[0].coverage(AirMetrics.PM25), 1e-6f)
         assertEquals(1f, q[1].coverage(AirMetrics.PM25), 1e-6f)
@@ -53,10 +53,10 @@ class AggregationTest {
         // No RH on this board, so no corrected PM2.5. The cards fall back to raw, labelled raw.
         assertNull(d[0].agg(AirMetrics.PM25_CORRECTED))
         assertNull(d[0].agg(AirMetrics.AMBIENT_TEMP))
-        assertNotNull(d[0].agg(AirMetrics.BATTERY))
+        assertNotNull(d[0].agg(AirMetrics.PM10))
         // The board booted 38 s before its first row: the first 180 s of uptime are "settling" — 15 rows (38 s → 180 s).
         assertEquals(15, d[0].agg(AirMetrics.PM25)!!.settling)
-        assertEquals(0, d[0].agg(AirMetrics.BOARD_TEMP)!!.settling) // no settle window on the IMU
+        assertEquals(0, d[0].agg(LightMetric)!!.settling) // no settle window on the light sensor
     }
 
     @Test
@@ -69,7 +69,8 @@ class AggregationTest {
                 ParquetWriter.Column("event_time_utc_ns", ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.NANOS),
                 ParquetWriter.Column("pms_status", ParquetType.INT32),
                 ParquetWriter.Column("pm25_atmospheric_ug_m3", ParquetType.INT32),
-                ParquetWriter.Column("imu_temperature_c", ParquetType.FLOAT),
+                ParquetWriter.Column("light_ch0_raw", ParquetType.INT32),
+                ParquetWriter.Column("light_status", ParquetType.INT32),
             ),
             ParquetCodec.UNCOMPRESSED,
         )
@@ -79,7 +80,8 @@ class AggregationTest {
                 ColumnValues.Int64(longArrayOf(3_600_000_000_000L, 3_610_000_000_000L, 0L, 3_620_000_000_000L), booleanArrayOf(true, true, false, true)),
                 ColumnValues.Int32(intArrayOf(4, 2, 4, 4), null),
                 ColumnValues.Int32(intArrayOf(10, 99, 50, 20), null),
-                ColumnValues.Float32(floatArrayOf(40f, 41f, 42f, Float.NaN), null),
+                ColumnValues.Int32(intArrayOf(40, 41, 42, 0), booleanArrayOf(true, true, true, false)),
+                ColumnValues.Int32(intArrayOf(3, 3, 3, 3), null),
             ),
         )
         w.finish()
@@ -93,8 +95,8 @@ class AggregationTest {
         assertEquals(15f, pm.mean)
         assertEquals(10f, pm.min)
         assertEquals(20f, pm.max)
-        assertEquals(40.5f, b.agg(AirMetrics.BOARD_TEMP)!!.mean) // NaN skipped
-        assertNull(b.agg(AirMetrics.BATTERY)) // column absent from this file
+        assertEquals(40.5f, b.agg(LightMetric)!!.mean) // null skipped
+        assertNull(b.agg(AirMetrics.PM1)) // column absent from this file
     }
 
     @Test

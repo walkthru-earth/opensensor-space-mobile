@@ -63,9 +63,11 @@ Rules that hold across modules.
   `DerivedMetricProvider` (`AirFamily` for corrected PM2.5), and reads each file by the template of its
   `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by
   `TemplateIndex.resolve`, the same rule LIVE uses (#259).
-  LIVE shows only for a dict with a reviewed profile. CoreS3 and Waveshare have one, the bundled
-  CrowPanel e-paper SEN63C template has none. The 2026-11-17 plan to show LIVE for any verified
-  template is in `docs/superpowers/specs/2026-11-17-metadata-driven-app/`, not built. The old unprefixed footer
+  `AppProfile.derive` labels, rounds, scales and picks the primary of every column from the template
+  display hints, the Thing Collection and the bundled property and scale registries. A bundled profile
+  only overlays the family, hero and hidden columns. LIVE shows for any template whose SHA-256 is
+  verified, bundled, served or fetched from its footer href, and its values still pass the template's
+  `plausible_range` and `valid_when` checks. The old unprefixed footer
   keys are not read. A missing column produces no value. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading` or `GenericMetricHero`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and
