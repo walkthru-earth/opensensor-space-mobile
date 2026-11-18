@@ -33,7 +33,8 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   included. `migrateBrowseFlag()` runs once at launch and sets it when a Wi-Fi credential exists,
   so an updated install keeps background Wi-Fi sync without a new tap.
 - Each Bluetooth or Wi-Fi link runs the shared `SensorSync.upkeep` once when it is first usable,
-  under one COMMAND lease (clock check, then GET_CONFIG and `enableLanOnce`). `BluetoothCompanion`
+  under one COMMAND lease (clock check, then GET_CONFIG, `enableLanOnce` and the read only
+  `lastBleDropOnce`). `BluetoothCompanion`
   starts it from `settle()`, then makes the quiet token fetch when `tokenWanted` (no token stored,
   read at INFO). A quiet fetch (`tokenAutomatic`) that fails in transport, or times out while its
   GATT write is still in flight, closes the link with the plain `.disconnected` notice. A late

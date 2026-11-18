@@ -56,7 +56,7 @@ concern you are changing in `docs/README.md`.
 - `:core:*` stays reusable without Android or Hilt. Room lives only in `:core:database`,
   one Room KMP schema on the bundled SQLite driver for both phones. Every other `:core` module
   (`model`, `protocol`, `parquet`, `history`, `publicfeed`, `units`, `archive`,
-  `storage`, `net`, `sync`, `settings`, `stac`, `thing`, `thing:testkit`) compiles for JVM and iOS from `commonMain`.
+  `storage`, `storage:testkit`, `net`, `sync`, `settings`, `stac`, `thing`, `thing:testkit`) compiles for JVM and iOS from `commonMain`.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
   H3). Every `:feature:*` module and `:ui:designsystem`, `:ui:map`, `:ui:permissions` and `:ui:strings`
   are Compose for Android and iOS (`opensensor.kmp.compose-feature`). A sensor family (`:family:air`) holds its own science and plugs in through
@@ -108,7 +108,7 @@ Use a JDK 25 (`gradle/gradle-daemon-jvm.properties` pins it, and
 metadata compile, the `:tools` JVM compile; on a Mac also `verifyIos`, the iOS simulator tests, iOS source set
 metadata compiles and framework link). Each convention
 plugin adds its module to the gates, so a new module needs no list edit.
-`app/src/androidTest` is not gated. The installed pre-commit hook checks hygiene,
+The app has no instrumented tests. The installed pre-commit hook checks hygiene,
 secrets and ktlint; the pre-push hook runs `verify`. For setup and CI details see
 `docs/build-and-release.md`. Phone behavior requires a phone run and dated evidence.
 

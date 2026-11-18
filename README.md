@@ -160,4 +160,4 @@ Walkthru.Earth original code in this repository (`app/`, `core/`, `feature/`, `u
 | [Cairo](https://github.com/Gue3bara/Cairo) font v3.130, from google/fonts `ofl/cairo` at commit `a2c83daed9bc723922de8d0a9512990bd3d91df4` | `ui/designsystem/src/commonMain/composeResources/` | SIL OFL 1.1, see [`Cairo-OFL.txt`](ui/designsystem/src/commonMain/composeResources/files/licenses/Cairo-OFL.txt) | Copyright 2009 The Cairo Project Authors |
 | Quicksand font, the variable TTF from google/fonts `ofl/quicksand` | `ui/designsystem/src/commonMain/composeResources/` | SIL OFL 1.1, see [`Quicksand-OFL.txt`](ui/designsystem/src/commonMain/composeResources/files/licenses/Quicksand-OFL.txt) | Copyright 2011 The Quicksand Project Authors |
 
-Libraries pulled in by Gradle (for example AndroidX, Kotlin, Compose Multiplatform, OkHttp and `zstd-jni`) are not copied into this repository. Each keeps its own license, and app builds that ship them must carry their notices.
+Libraries pulled in by Gradle (for example AndroidX, Kotlin, Compose Multiplatform and OkHttp) are not copied into this repository. Each keeps its own license, and app builds that ship them must carry their notices.

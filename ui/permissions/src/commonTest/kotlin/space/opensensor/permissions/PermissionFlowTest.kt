@@ -62,7 +62,7 @@ class PermissionFlowTest {
 
     @Test
     fun settingsLinkOnlyForDenied() {
-        assertEquals(setOf(AccessStatus.DENIED), AccessStatus.entries.filter(PermissionFlow::offersSettings).toSet())
+        assertEquals(setOf(AccessStatus.DENIED), AccessStatus.entries.filter { PermissionFlow.onTap(it) == AccessStep.OPEN_SETTINGS }.toSet())
     }
 
     @Test
@@ -96,7 +96,7 @@ class PermissionFlowTest {
     fun iosLocalNetworkIsUnknownUntilPolicyDenied() {
         assertEquals(AccessStatus.UNKNOWN, IosAuthorization.localNetwork(policyDenied = false))
         assertEquals(AccessStatus.DENIED, IosAuthorization.localNetwork(policyDenied = true))
-        assertTrue(PermissionFlow.offersSettings(IosAuthorization.localNetwork(policyDenied = true)))
+        assertEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onTap(IosAuthorization.localNetwork(policyDenied = true)))
     }
 
     // The trigger table.

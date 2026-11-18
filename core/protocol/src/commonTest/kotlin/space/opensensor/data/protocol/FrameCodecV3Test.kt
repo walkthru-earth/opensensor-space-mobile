@@ -39,6 +39,13 @@ class FrameCodecV3Test {
     }
 
     @Test
+    fun `a disconnect event describes itself in one log line`() {
+        assertEquals("auth-failed, err -1, boot 2", DisconnectEvent(120, 7, 3, 2, -1, 0, 2).describe())
+        assertEquals("keepalive-failed, boot 4", DisconnectEvent(9, 1, 16, 0, 0, 0, 4).describe())
+        assertEquals("unknown, err 62, boot 1", DisconnectEvent(9, 1, 99, 0, 62, 0, 1).describe())
+    }
+
+    @Test
     fun `refused LAN client keeps link 255`() {
         val event = DisconnectEvent(1, 0, DisconnectReason.SESSIONS_FULL.code, 255, 0, 0, 1)
         assertEquals(event, DisconnectEvent.decode(event.encode()))
@@ -164,7 +171,6 @@ class FrameCodecV3Test {
         val status = DeviceStatus.parse("""{"up_s":5,"dc":4,"dr":12,"sd_state":1}""")
         assertEquals(4, status.dc)
         assertEquals(12, status.dr)
-        assertEquals(DisconnectReason.PEER_CLOSED, status.lastDisconnect)
         assertTrue(status.sdDegraded)
         assertFalse(status.sdFull)
         assertTrue(DeviceStatus.parse("""{"sd_state":2}""").sdFull)
@@ -175,7 +181,6 @@ class FrameCodecV3Test {
         val status = DeviceStatus.parse("""{"up_s":5,"dc":0,"dr":null}""")
         assertEquals(0, status.dc)
         assertNull(status.dr)
-        assertNull(status.lastDisconnect)
         assertNull(status.sdState)
         assertFalse(status.sdDegraded)
         val old = DeviceStatus.parse("""{"up_s":5}""")

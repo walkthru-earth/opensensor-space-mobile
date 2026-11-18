@@ -16,8 +16,8 @@ fun interface PageDecompressor {
 /**
  * The codecs a [ParquetFile] can decode. [builtIn] needs nothing beyond the platform: UNCOMPRESSED, LZ4_RAW
  * (own block decoder, the firmware's codec), SNAPPY (own decoder, what PyArrow/DuckDB/GDAL emit by
- * default) and GZIP (`java.util.zip` on the JVM, the system zlib on iOS). ZSTD is not hand-written: `:app`
- * registers `zstd-jni` here and the JVM tests do the same with the JVM jar (docs/parquet.md).
+ * default) and GZIP (`java.util.zip` on the JVM, the system zlib on iOS). ZSTD is not built in. A caller may
+ * register a decoder with [with], as the JVM tests do with `zstd-jni` (docs/parquet.md).
  */
 class ParquetCodecs private constructor(private val table: Map<ParquetCodec, PageDecompressor>) {
 

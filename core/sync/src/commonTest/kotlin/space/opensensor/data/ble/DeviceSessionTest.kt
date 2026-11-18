@@ -23,6 +23,8 @@ import kotlinx.coroutines.test.runTest
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
+import space.opensensor.data.protocol.DisconnectEvent
+import space.opensensor.data.protocol.DisconnectReason
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
 import space.opensensor.data.protocol.LanConfig
@@ -838,6 +840,46 @@ class DeviceSessionTest {
         assertEquals(2, setConfigs())
         assertNull(p.view().enableLanOnce(off, developer = false))
         assertEquals(2, setConfigs())
+    }
+
+    // ------------------------------------------------------------------ DIAG
+
+    private fun drop(reason: DisconnectReason, link: Int, err: Int = 0) =
+        DisconnectEvent(uptimeSeconds = 120, generation = 7, reason = reason.code, link = link, err = err, queued = 0, bootSeq = 2)
+
+    private fun diag(vararg events: DisconnectEvent) = Frame.Diag(2, List(DisconnectReason.COUNT) { 0 }, events.toList())
+
+    @Test
+    fun theLastBluetoothDropIsReadOncePerConnection() = runTest {
+        val p = peer()
+        val ble = drop(DisconnectReason.KEEPALIVE_FAILED, link = 0, err = 8)
+        p.reply = { op, _ ->
+            if (op == Opcode.GET_DIAG) emit(diag(drop(DisconnectReason.IDLE_TIMEOUT, link = 0), ble, drop(DisconnectReason.PEER_CLOSED, link = 1)))
+        }
+        assertEquals(ble, p.view().lastBleDropOnce())
+        assertNull(p.view().lastBleDropOnce())
+        assertEquals(listOf(Opcode.GET_DIAG), p.driver.sent)
+    }
+
+    @Test
+    fun noBluetoothDropInTheRingReadsNothing() = runTest {
+        val p = peer()
+        p.reply = { op, _ -> if (op == Opcode.GET_DIAG) emit(diag(drop(DisconnectReason.AUTH_FAILED, link = 255))) }
+        assertNull(p.view().lastBleDropOnce())
+        assertNull(p.view().lastBleDropOnce())
+        assertEquals(listOf(Opcode.GET_DIAG), p.driver.sent)
+    }
+
+    @Test
+    fun aBusyDiagIsAskedAgainButALinkTooNarrowIsNot() = runTest {
+        val p = peer()
+        p.reply = { op, _ -> if (op == Opcode.GET_DIAG) emit(Frame.Error(Opcode.GET_DIAG, ProtocolError.BUSY.code, "")) }
+        assertFailsWith<DeviceBusyException> { p.view().lastBleDropOnce() }
+        // ERROR 7 "mtu" is the answer of a link narrower than the DIAG header, which a retry cannot change.
+        p.reply = { op, _ -> if (op == Opcode.GET_DIAG) emit(Frame.Error(Opcode.GET_DIAG, ProtocolError.BUSY.code, "mtu")) }
+        assertFailsWith<DeviceBusyException> { p.view().lastBleDropOnce() }
+        assertNull(p.view().lastBleDropOnce())
+        assertEquals(listOf(Opcode.GET_DIAG, Opcode.GET_DIAG), p.driver.sent)
     }
 
     @Test

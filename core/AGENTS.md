@@ -12,7 +12,8 @@ on Android and the JVM, `NSURLSession` on iOS) and the disk block cache (`Cached
 records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `StorageClass`,
 `StorageRoots`, `AtomicFiles` (no-replace commit, F_FULLFSYNC on iOS, directory sync),
 `StorageBudget`, `StorageTree`, `RetentionPolicy` with the derived `QuotaEnforcer`, and
-`MemoryPressure` with `ByteBudgetLru` for memory caches that trim on the OS signal (#61). Every file
+`MemoryPressure` with `ByteBudgetLru` for memory caches that trim on the OS signal (#61).
+`storage/testkit` (`:core:storage:testkit`) holds `FakeStorageBudget` for tests. Every file
 writer goes through `AtomicFiles`, and the `StorageJanitor` (in `sync/`, it needs the archive ports)
 sweeps Scratch at start, enforces the derived quota and never deletes Durable data. Only the user's old format cleanup in Settings (`LegacyFileCleanup`, `:core:history`) removes archive files, phone only, and leaves a `PrunedFiles` record. Sync skips such a file while the device lists it at the same size and the phone has no copy. A whole LIST that no longer names it drops the record, and Settings › Storage › Removed files › Download again clears them all ([sync guide](../docs/sync-engine.md)). One `DeviceCoordinator` (`:core:sync`) per archive owns thing admission, writer leases, thing gates and tombstones. Every archive index write takes its thing gate, lease first then gate, readers never. `HistoryOrchestrator` (`:core:history`) owns the janitor, back-fill and derive order on both phones. `ParquetFile` and
 `ByteReader` are `AutoCloseable`, open them with `use`. `sync/` holds the link session, the sync
@@ -145,8 +146,10 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   and `SafeName` is the firmware name rule (charset, no `..` or `//`, 399-byte cap) plus the phone's
   241-byte segment cap, so every sibling of a segment fits a 255-byte file name. Platform code
   measures and calls them, it does not re-implement them.
-- The clock check and `lan.on` run at most once per link through `LinkSession.claimOnce(key)`,
-  with the keys `CLOCK_CHECK` ("clock") and `LAN_ENABLE` ("lan.on") in `DeviceSession`. The token
+- The clock check, `lan.on` and the read only `GET_DIAG` run at most once per link through
+  `LinkSession.claimOnce(key)`, with the keys `CLOCK_CHECK` ("clock"), `LAN_ENABLE` ("lan.on") and
+  `DIAG` ("diag") in `DeviceSession`. `lastBleDropOnce` keeps its claim on any reply but a plain
+  BUSY, since `ERROR` 7 `"mtu"` will not change on that link. The token
   fetch takes no claim. Android gates it with `LanTokenPolicy.shouldFetch` and iOS with
   `tokenWanted`. `synchronizeClockOnce` and `enableLanOnce` keep the claim once the sensor decided,
   which includes a STATUS timeout and an ERROR reply other than BUSY. A cancelled try, a failure

@@ -459,8 +459,8 @@ faces and emoji without changing measurement validity, labels, advice, WHO colou
 
 PM10 is banded on its own WHO scale (`WhoGuidelines.PM10`, 45 · 50 · 75 · 100 · 150 µg/m³) through
 `MetricSpec.healthScale`; `moodOf`/`stepOf` read the scale, so a PM10 value maps to the same six moods
-and colours. Colours are `WhoStep.color` (light to dark, colour-blind checked), mapped once in the
-app's `Color.kt`.
+and colours. Colours are `WhoStep.color` (light to dark, colour-blind checked), mapped once in
+`:ui:designsystem` `ColorContrast.kt`.
 
 `AirMood` is the air-quality family's scale, not the app's model of "good". Other families
 show neutral metric cards unless their dictionary names a published scale. See

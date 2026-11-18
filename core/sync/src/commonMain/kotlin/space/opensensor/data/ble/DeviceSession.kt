@@ -16,6 +16,7 @@ import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
+import space.opensensor.data.protocol.DisconnectEvent
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.ListCursor
 import space.opensensor.data.protocol.LiveSample
@@ -377,6 +378,27 @@ class DeviceSession(
         }
     }
 
+    /**
+     * The newest Bluetooth event (link 0) of the sensor's disconnect ring, read with `GET_DIAG` at
+     * most once per connection. BLE never sends `BYE`, so this is how the phone learns why its last
+     * Bluetooth link dropped. Null when the ring holds no Bluetooth event or this link already
+     * asked. Read only. A plain BUSY, a cancel or no reply gives the claim back. Any other ERROR
+     * reply keeps it, including BUSY `"mtu"` from a link too narrow for the DIAG header.
+     */
+    suspend fun lastBleDropOnce(): DisconnectEvent? {
+        if (!link.claimOnce(DIAG)) return null
+        try {
+            return single<Frame.Diag>(Request.GetDiag, "GET_DIAG").events.lastOrNull { it.link == BLE_LINK }
+        } catch (e: CancellationException) {
+            link.release(DIAG)
+            throw e
+        } catch (e: Exception) {
+            val answered = e is DeviceErrorException && (e !is DeviceBusyException || e.frame.detail == MTU_DETAIL)
+            if (!answered) link.release(DIAG)
+            throw e
+        }
+    }
+
     /** `FLUSH` → `FLUSHED` or `ERROR` 10. Finalizes the RAM batch into a short file. */
     suspend fun flush(): Frame.Flushed = single(Request.Flush, "FLUSH")
 
@@ -619,9 +641,16 @@ class DeviceSession(
     companion object {
         private const val STATUS_CLOCK_TIMEOUT_MS = 5_000L
 
-        /** [LinkSession.claimOnce] keys of the automatic, once per connection device changes. */
+        /** [LinkSession.claimOnce] keys of the automatic, once per connection device changes and reads. */
         private const val CLOCK_CHECK = "clock"
         private const val LAN_ENABLE = "lan.on"
+        private const val DIAG = "diag"
+
+        /** The `link` of a Bluetooth [DisconnectEvent]. */
+        private const val BLE_LINK = 0
+
+        /** The `ERROR` 7 detail of a link narrower than the 38-byte `DIAG` header. */
+        private const val MTU_DETAIL = "mtu"
 
         /** The most a `LOG_TAIL` returns, the `max_bytes` u16 of the request. */
         const val LOG_RING_BYTES = 0xFFFF

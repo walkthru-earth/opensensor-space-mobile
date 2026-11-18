@@ -229,7 +229,8 @@ class SensorSync internal constructor(
      * The quiet per-connection upkeep, the same steps as Android's connect. Swift calls it once when
      * a Bluetooth or Wi-Fi link is first usable. Under one lease it checks the sensor clock (and
      * asks for a fresh status push when it set it), then reads the config and switches Wi-Fi sync
-     * back on below the Developer level. Each step runs at most once per connection, also when a
+     * back on below the Developer level, and reads the last Bluetooth drop from `DIAG` into the
+     * device log. Each step runs at most once per connection, also when a
      * run got there first. Failures reach the device log by class only and nothing is shown.
      * `finished` fires exactly once on the main thread, also when the link closes or
      * [SyncHandle.cancel] lands.
@@ -272,6 +273,14 @@ class SensorSync internal constructor(
             throw e
         } catch (e: Exception) {
             syncLog("Wi-Fi sync check failed, ${e::class.simpleName}")
+        }
+        // BLE never sends BYE, so the last Bluetooth drop is read from DIAG once per connection.
+        try {
+            session.lastBleDropOnce()?.let { syncLog("last Bluetooth drop ${it.describe()}") }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            syncLog("diagnostics read failed, ${e::class.simpleName}")
         }
     }
 

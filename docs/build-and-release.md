@@ -123,7 +123,7 @@ commit the file. The root `build.gradle.kts` configures that task to write no do
 | --- | --- |
 | Language / UI | Kotlin (`kotlin`), Jetpack Compose through its BOM (`androidxComposeBom`, material3 included), the shared `:ui:designsystem` theme and vendored icons (no dynamic color, no `material-icons-extended`), Navigation 3 (`nav3Core` and `jetbrainsNavigation3`). Versions are the `gradle/libs.versions.toml` keys named here |
 | DI / data | Hilt (`hilt`), Room (`androidxRoom`, **schema v1**), DataStore Preferences (`androidxDatastore`), WorkManager (`androidxWork`) + `androidx.hilt:hilt-work` (`androidxHilt`), kotlinx.serialization (`kotlinxSerialization`), kotlinx-datetime (`kotlinxDatetime`, shared calendar math, added 2026-10-08), coroutines (`coroutines`). Versions are the `gradle/libs.versions.toml` keys named here |
-| Native | `zstd-jni` 1.5.7-20 (`@aar`). Discover (W12, 2026-10-08) adds `maplibre-compose` (0.20.0 since 2026-10-11) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.1 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
+| Native | Discover (W12, 2026-10-08) adds `maplibre-compose` (0.20.0 since 2026-10-11) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.1 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
 | Build | Gradle as `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` names it (configuration cache on), with the daemon on JDK 25 through the Daemon JVM criteria (see Build JDK). AGP (`androidGradlePlugin`), KSP (`ksp`) and Compose Multiplatform (`composeMultiplatform`) as `gradle/libs.versions.toml` pins them. R8 for release. Every `:core` module (protocol, parquet, history, publicfeed, units, archive, storage, net, sync and settings) and `:family:air` target JVM (Java 17) and iOS. `:ui:designsystem`, `:ui:map` and `:feature:discover` use `opensensor.kmp.compose-feature`, Compose Multiplatform for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. `:ios:shared` targets iOS only |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
@@ -276,7 +276,6 @@ keep rules live in `app/src/main/keepRules/opensensor.keep`, the source set the 
 
 | Rule | Why |
 | --- | --- |
-| `-keep class com.github.luben.zstd.** { *; }` | zstd-jni native code looks up its Java classes, fields and methods by name |
 | `-keepnames class * extends java.lang.Throwable` | messages fall back to `e::class.simpleName`, which people and diagnostics see |
 | `-keepnames` for `ConnectionState`, `Frame`, `Request` and their subtypes | their simple names appear in the Debug screen, frame log and protocol errors |
 | `-keepattributes InnerClasses,EnclosingMethod` | `getSimpleName` of a nested class reads these attributes |
@@ -314,10 +313,10 @@ sensors" was off. Not a phone run.
 ABI filter on 2026-10-11 (#61, same kind of host check, not a phone run). `ndk.abiFilters` keeps
 `arm64-v8a` and `armeabi-v7a`. The local minified release APK went from 51,731,831 bytes (x86 and
 x86_64 included, x86_64 without h3) to 35,130,751 bytes. `tools/check_apk_abis.py` fails the verify
-and release workflows when the APK holds any other ABI or one ABI lacks MapLibre, zstd-jni or h3.
+and release workflows when the APK holds any other ABI or one ABI lacks MapLibre or h3.
 
 **R8 runtime behavior is not yet qualified on a phone.** Before the first tagged release
-with R8, install the minified APK on a phone and check BLE and LAN sync, ZSTD GeoParquet import,
+with R8, install the minified APK on a phone and check BLE and LAN sync,
 History charts, background sync, error messages and back stack restore after process death.
 
 ## Permissions (`AndroidManifest.xml`)

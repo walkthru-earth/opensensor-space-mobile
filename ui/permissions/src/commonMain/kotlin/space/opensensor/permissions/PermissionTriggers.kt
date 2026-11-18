@@ -85,6 +85,6 @@ object PermissionTriggers {
     /** What [action] asks for. */
     fun of(action: UserAction): Trigger = table.getValue(action)
 
-    /** The taps allowed to show the prompt for [kind]. */
-    fun actionsAsking(kind: AccessKind): Set<UserAction> = table.filterValues { kind in it.all }.keys
+    /** The taps allowed to show the prompt for [kind]. Read by tests. */
+    internal fun actionsAsking(kind: AccessKind): Set<UserAction> = table.filterValues { kind in it.all }.keys
 }

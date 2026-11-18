@@ -519,10 +519,11 @@ class SensorSyncTest {
         val link = lanOffSensor()
 
         runner.upkeepAndWait(link)
-        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.STATUS, Opcode.GET_CONFIG, Opcode.SET_CONFIG), requests)
+        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.STATUS, Opcode.GET_CONFIG, Opcode.SET_CONFIG, Opcode.GET_DIAG), requests)
         assertEquals(1, anchors)
 
         // The same connection never asks again, neither from a second upkeep nor from a sync.
+        // A refused GET_DIAG is an answer, so the last Bluetooth drop is not asked for again either.
         requests.clear()
         runner.upkeepAndWait(link)
         assertEquals(listOf(Opcode.GET_CONFIG), requests)
@@ -536,7 +537,7 @@ class SensorSyncTest {
         // A new connection checks the clock again.
         requests.clear()
         runner.upkeepAndWait(lanOffSensor())
-        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.STATUS, Opcode.GET_CONFIG, Opcode.SET_CONFIG), requests)
+        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.STATUS, Opcode.GET_CONFIG, Opcode.SET_CONFIG, Opcode.GET_DIAG), requests)
     }
 
     @Test
@@ -553,9 +554,9 @@ class SensorSyncTest {
         val link = sensor { link, req ->
             (op(req) == Opcode.STATUS).also { if (it) link.offerStatus("{\"utc\":1,\"clk\":1,\"clk_age_s\":60}") }
         }
-        // GET_CONFIG is answered with ERROR by the scripted sensor. Upkeep still finishes.
+        // GET_CONFIG and GET_DIAG are answered with ERROR by the scripted sensor. Upkeep still finishes.
         sync.upkeepAndWait(link)
-        assertEquals(listOf(Opcode.STATUS, Opcode.GET_CONFIG), requests)
+        assertEquals(listOf(Opcode.STATUS, Opcode.GET_CONFIG, Opcode.GET_DIAG), requests)
         assertTrue(link.isOpen)
     }
 

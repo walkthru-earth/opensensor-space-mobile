@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fails when an APK ships native code for other ABIs than the app supports (#61).
 
-The app supports arm64-v8a and armeabi-v7a. Every supported ABI must carry the MapLibre, zstd and
-H3 libraries, so a phone never loads a partial set. Usage, python3 tools/check_apk_abis.py <apk>...
+The app supports arm64-v8a and armeabi-v7a. Every supported ABI must carry the MapLibre and H3
+libraries, so a phone never loads a partial set. Usage, python3 tools/check_apk_abis.py <apk>...
 """
 
 import re
@@ -12,7 +12,6 @@ import zipfile
 SUPPORTED = {"arm64-v8a", "armeabi-v7a"}
 REQUIRED = {
     "maplibre": re.compile(r"^libmaplibre-native-c\.so$"),
-    "zstd": re.compile(r"^libzstd-jni.*\.so$"),
     "h3": re.compile(r"^libh3-java\.so$"),
 }
 
