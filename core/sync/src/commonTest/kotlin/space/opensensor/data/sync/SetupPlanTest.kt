@@ -197,6 +197,17 @@ class SetupPlanTest {
     }
 
     @Test
+    fun `a board step carries its template label and a catalog step none`() {
+        val label = LocalizedText(mapOf(LocalizedText.UNTAGGED to "Display", "ar" to "الشاشة"))
+        val m = manifest(ManifestStep(StepId("panel"), keys = listOf("panel.theme"), label = label), ManifestStep(StepId.WIFI, label = label))
+        val plan = SetupPlan.of(m, page(cell = cell))
+        assertEquals("الشاشة", plan.step(StepId("panel"))!!.label?.get("ar"))
+        assertEquals("Display", plan.step(StepId("panel"))!!.label?.get("en"))
+        assertNull(plan.step(StepId.WIFI)!!.label)
+        assertNull(SetupPlan.of(manifest(step("panel", false, "panel.theme")), page(cell = cell)).step(StepId("panel"))!!.label)
+    }
+
+    @Test
     fun `an integer range reads as whole bounds and a fractional bound is refused`() {
         val half = ConfigKeySpec("panel.half", ConfigKeyType.INTEGER, ConfigValues.Range(0.5, 4.0), ConfigApplies.IMMEDIATELY, page = 7)
         val open = ConfigKeySpec("panel.open", ConfigKeyType.INTEGER, ConfigValues.Range(0.0, null), ConfigApplies.IMMEDIATELY, page = 7)
