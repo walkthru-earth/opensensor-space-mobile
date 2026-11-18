@@ -4,12 +4,14 @@ import space.opensensor.model.ConfigApplies
 import space.opensensor.model.ConfigKeySpec
 import space.opensensor.model.ConfigKeyType
 import space.opensensor.model.ConfigValues
+import space.opensensor.model.LocalizedText
 import space.opensensor.model.ManifestSection
 import space.opensensor.model.SetupManifest
 import space.opensensor.model.StepId
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DeviceSectionsTest {
@@ -33,6 +35,17 @@ class DeviceSectionsTest {
         assertEquals(StepId("display"), (developer.last() as DeviceSection.Board).id)
         val reversed = sections(DetailLevel.DEVELOPER, ids = all.reversed())
         assertEquals(DeviceSection.Bonds, reversed[1])
+    }
+
+    @Test
+    fun aBoardSectionIsTitledWithItsTemplateLabelInTheAppLanguage() {
+        val label = LocalizedText(mapOf(LocalizedText.UNTAGGED to "Display", "ar" to "الشاشة"))
+        val labelled = SetupManifest(settings = listOf(ManifestSection(StepId("display"), listOf("panel.theme"), label)), configKeys = DISPLAY_KEYS)
+        val board = DeviceSection.of(labelled, DetailLevel.SIMPLE, pairingNeedsAttention = false, sensorIdentity = false).single() as DeviceSection.Board
+        assertEquals("Display", board.title("en"))
+        assertEquals("الشاشة", board.title("ar"))
+        val unlabelled = sections(DetailLevel.SIMPLE).filterIsInstance<DeviceSection.Board>().single()
+        assertNull(unlabelled.title("en"), "a section without a label keeps the Sensor settings title")
     }
 
     @Test

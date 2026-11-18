@@ -252,7 +252,7 @@ fun LazyListScope.deviceSettingsItems(
                     onSave = { sticker, batch, source -> onAction(DeviceConfigAction.SaveSensor(sticker, batch, source)) },
                 )
             }
-            is DeviceSection.Board -> item(key = "board-${section.id.id}") { BoardSettingsCard(state, section.fields, onAction) }
+            is DeviceSection.Board -> item(key = "board-${section.id.id}") { BoardSettingsCard(state, section, onAction) }
         }
     }
 }

@@ -2,6 +2,7 @@ package space.opensensor.device
 
 import space.opensensor.data.sync.PlanField
 import space.opensensor.data.sync.SetupPlan
+import space.opensensor.model.LocalizedText
 import space.opensensor.model.SetupManifest
 import space.opensensor.model.StepId
 import space.opensensor.settings.DetailLevel
@@ -22,8 +23,11 @@ sealed interface DeviceSection {
     /** The fitted sensor module and its sticker, for the `sensor` section. */
     data object Sensor : DeviceSection
 
-    /** A board section, a form of its declared page 7 keys. */
-    data class Board(val id: StepId, val fields: List<PlanField>) : DeviceSection
+    /** A board section, a form of its declared page 7 keys under its template [label]. */
+    data class Board(val id: StepId, val fields: List<PlanField>, val label: LocalizedText? = null) : DeviceSection {
+        /** The template's title in [language], null when the section has none and keeps Sensor settings. */
+        fun title(language: String): String? = label?.get(language)
+    }
 
     companion object {
         /** The section that carries the sticker card. Its keys, if any, are an ordinary board form under it. */
@@ -55,7 +59,7 @@ sealed interface DeviceSection {
                     else -> {
                         if (declared.id == SENSOR) add(Sensor.takeIf { level.detailed && sensorIdentity })
                         val fields = SetupPlan.fieldsOf(manifest, declared.keys)
-                        if (fields.isNotEmpty()) add(Board(declared.id, fields))
+                        if (fields.isNotEmpty()) add(Board(declared.id, fields, declared.label))
                     }
                 }
             }

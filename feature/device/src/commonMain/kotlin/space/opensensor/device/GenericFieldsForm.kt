@@ -110,11 +110,12 @@ fun GenericFieldsForm(state: DeviceConfigUiState, fields: List<PlanField>, onAct
     }
 }
 
-/** One board settings section on Device settings, its declared keys and a Save for the changed ones. */
+/** One board settings section on Device settings, titled with its template label or Sensor settings, its declared keys and a Save for the changed ones. */
 @Composable
-fun BoardSettingsCard(state: DeviceConfigUiState, fields: List<PlanField>, onAction: (DeviceConfigAction) -> Unit, modifier: Modifier = Modifier) {
+fun BoardSettingsCard(state: DeviceConfigUiState, section: DeviceSection.Board, onAction: (DeviceConfigAction) -> Unit, modifier: Modifier = Modifier) {
+    val fields = section.fields
     BrandCard(modifier = modifier) {
-        CardHeader(stringResource(Res.string.board_title))
+        CardHeader(section.title(Locale.current.language) ?: stringResource(Res.string.board_title))
         Spacer(Modifier.height(8.dp))
         GenericFieldsForm(state, fields, onAction)
         if (fields.any { it.field.type != FieldType.Action }) {
