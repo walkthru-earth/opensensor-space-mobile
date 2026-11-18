@@ -100,7 +100,11 @@ A force quit stops everything. Downloaded bytes and index records stay for the n
 - **Files.** Share one, share all, share zip and save zip stage copies under
   `tmp/opensensor-export/<run>` and open `UIActivityViewController` or the document picker. Only
   verified files are exported and the run is removed when the sheet closes. Runs coexist, and a
-  run the screen could not remove ages out after one hour (`ExportRuns`).
+  run the screen could not remove ages out after one hour (`ExportRuns`). Share daily files zips
+  `Library/Caches/derived/v1` under the names Android uses (#301). `IosArchive.dailyFiles` first
+  drops the manifest of each day the quota or iOS evicted (`forgetEvictedDays`) and builds the days
+  again in one derive pass, then lists them with `directoryEntries`. The derived quota is paused
+  (`DerivedQuota.holding`) from that pass until the zip is staged.
 - **Debug.** Borrows a short link for raw commands, `LOG_TAIL`, `GET_CONFIG` and `STATUS`, with the
   shared denylist and redaction.
 - **Sticker scan.** VisionKit `DataScannerViewController` (`StickerScanner.swift`), shown only where

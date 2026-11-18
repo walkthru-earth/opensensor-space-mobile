@@ -4,6 +4,17 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../opensensor-space-firmware/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-11-18, daily zip on iOS Files (code only)
+
+iOS simulator tests only. No iPhone run is recorded.
+
+- iOS Files offers Share daily files, as Android does (#301). The zip holds
+  `derived/v1/<thing>/day=….parquet` and manifests under the Android entry names. Evicted days are
+  built again first, and the derived quota is paused until the zip is staged.
+- `IosDailyFilesTest` covers the listing, a thing with no day file, a link, a day file gone before
+  the zip and the evicted day manifests.
+- To check on an iPhone. A daily zip after a sync, and one after Clear History cache.
+
 ## 2026-11-17, CrowPanel template at opensensor-space-firmware e2eb30b (code only)
 
 Host tests and the iOS simulator only. No phone or board run is recorded.

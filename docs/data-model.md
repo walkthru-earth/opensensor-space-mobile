@@ -328,9 +328,12 @@ once at process start. No screen edits the quotas yet. `QuotaEnforcer` deletes o
 oldest written first, until the total is under the cap, and keeps the manifests. A missing day file
 with a matching manifest is rebuilt when something reads it. On Android the daily export calls
 `HistoryDeriver.ensureDailyFiles()` first, and lists and zips the day files inside
-`DerivedQuota.holding`, so no eviction runs until the zip is staged. When the last hold ends, after
+`DerivedQuota.holding`, so no eviction runs until the zip is staged. iOS does the same through
+`IosArchive.dailyFiles`. It removes the manifest of each evicted day (`forgetEvictedDays`), so one
+derive pass builds those days again, and lists `derived/v1` with the iOS `directoryEntries` (#301).
+When the last hold ends, after
 success, failure or cancellation, the quota is applied at once, and a Clear History cache tapped during
-the hold runs then. iOS has no derived reader yet. The quota also runs after a derive pass that rebuilt
+the hold runs then. The quota also runs after a derive pass that rebuilt
 a day and in the janitor. The feed `BlockCache` (#94) reads its quota at every write from
 `blockCacheQuotaWithin`, the smaller of its cap and the OS cache allowance left after the map cache
 (Android `getCacheQuotaBytes`). The quota is 0 while the volume has under 256 MiB free for

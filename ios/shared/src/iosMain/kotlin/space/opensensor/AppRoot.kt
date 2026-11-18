@@ -539,6 +539,8 @@ private fun HistoryEntry(address: String, devices: DevicesBridge, units: UnitSys
 /**
  * Sensor Files has a thing owner and device manifest; the My devices shortcut has no owner and
  * shows the whole phone archive. Exports stage into a temporary run removed after the sheet closes.
+ * The daily zip reads `Library/Caches/derived/v1` after the evicted days are built again, with the
+ * derived quota paused until the zip is staged (#301).
  */
 private class FilesHolder(address: String, devices: DevicesBridge, actions: DeviceFilesActions) : ViewModel() {
     val controller = FilesController(
@@ -548,7 +550,8 @@ private class FilesHolder(address: String, devices: DevicesBridge, actions: Devi
         space = IosExportSpace.inTemporaryDirectory(),
         // A forgotten sensor must never fall through to the whole-phone archive.
         owner = if (address == PHONE_ARCHIVE) flowOf(null) else devices.known.map { devices.thingFor(address) ?: "" },
-        daily = null,
+        daily = IosArchive::dailyFiles,
+        holdDaily = { block -> IosArchive.holdingDailyFiles { block() } },
     )
     val sensor = if (address == PHONE_ARCHIVE) null else IosDeviceFiles(address, devices, actions, viewModelScope)
 }
