@@ -76,10 +76,9 @@ import space.opensensor.family.air.Averaging
 import space.opensensor.family.air.NowReading
 import space.opensensor.family.air.PlantowerBatchCandidate
 import space.opensensor.family.air.Pm25Basis
-import space.opensensor.family.air.PmsStatus
 import space.opensensor.family.air.QcFlags
+import space.opensensor.family.air.pmState
 import space.opensensor.family.air.pmValid
-import space.opensensor.family.air.pmsStatus
 import space.opensensor.model.ThingDatastream
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.resources.Res
@@ -334,11 +333,10 @@ internal fun MetricHeroCard(
                             peacockExpressionFor(mood)
                         }
                         NowReading.Waiting -> PeacockExpression.CONFUSED
-                        is NowReading.SensorNotReady -> when (reading.status) {
-                            PmsStatus.WARMING -> PeacockExpression.WORKING
-                            PmsStatus.STALE, PmsStatus.SLEEPING -> PeacockExpression.SLEEPING
-                            PmsStatus.ABSENT, PmsStatus.ERROR, PmsStatus.MODEL_MISMATCH -> PeacockExpression.CONCERNED
-                            PmsStatus.VALID -> PeacockExpression.CONFUSED
+                        is NowReading.SensorNotReady -> when (reading.state.cls?.name.takeUnless { reading.state.absent }) {
+                            "warming" -> PeacockExpression.WORKING
+                            "stale", "sleeping" -> PeacockExpression.SLEEPING
+                            else -> PeacockExpression.CONCERNED
                         }
                     },
                     size = portraitSize,
@@ -374,8 +372,8 @@ internal fun MetricHeroCard(
                         heading = true,
                     )
                     is NowReading.SensorNotReady -> Column(bodyModifier) {
-                        BodyText(reading.status.titleText(), style = MaterialTheme.typography.headlineSmall, heading = true)
-                        BodyText(reading.status.hintText(), style = MaterialTheme.typography.bodyMedium, color = quiet)
+                        BodyText(reading.state.titleText(), style = MaterialTheme.typography.headlineSmall, heading = true)
+                        BodyText(reading.state.hintText(), style = MaterialTheme.typography.bodyMedium, color = quiet)
                     }
                 }
             }
@@ -672,7 +670,7 @@ internal fun BatchEstimateCard(live: LiveReading?, receivedAtEpochMs: Long?, con
         PlantowerBatchCandidate.estimate(
             config?.config?.sensor?.serial,
             config?.config?.sensor?.batchCandidate,
-            live?.pmsStatus?.code,
+            live?.pmValid == true,
             live?.value(AirMetrics.PARTICLES_GT03.column)?.toLong(),
         )
     } else {
@@ -706,12 +704,12 @@ internal fun ReadingsCard(live: LiveReading?, receivedAtEpochMs: Long?, level: D
             BigValue(AirMetrics.PM1.label, if (showPm) fmt(live.value(AirMetrics.PM1.column)) else NO_VALUE, AirMetrics.PM1.unit, Modifier.weight(1f))
         }
         if (!showPm) {
-            val status = live?.pmsStatus
+            val state = live?.pmState
             Text(
                 when {
                     live == null -> stringResource(Res.string.now_waiting)
-                    status == null || status == PmsStatus.VALID -> stringResource(Res.string.readings_absent)
-                    else -> status.titleText()
+                    state == null || state.valid -> stringResource(Res.string.readings_absent)
+                    else -> state.titleText()
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

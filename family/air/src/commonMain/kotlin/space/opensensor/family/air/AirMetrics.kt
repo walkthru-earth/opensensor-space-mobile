@@ -3,7 +3,9 @@ package space.opensensor.family.air
 import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.Metrics
+import space.opensensor.data.history.stateOf
 import space.opensensor.data.protocol.LiveReading
+import space.opensensor.model.SensorState
 
 /**
  * The air family's named metrics, the columns of the bundled air boards that the air cards and their
@@ -12,9 +14,6 @@ import space.opensensor.data.protocol.LiveReading
  * [Metrics] and never these. The derived ones exist once [AirFamily] is installed.
  */
 object AirMetrics {
-    /** The PM sensor state column, `0` absent to `4` valid. */
-    const val PMS_STATUS = "pms_status"
-
     /** The unvalidated Plantower batch estimate column. */
     const val BATCH_ESTIMATE_COLUMN = "pm25_batch_candidate_ug_m3"
 
@@ -38,23 +37,11 @@ object AirMetrics {
     private fun named(id: String): MetricSpec = requireNotNull(MetricCatalog.shared.byId(id)) { "no bundled template has $id" }
 }
 
-/** The PM sensor state, the `pms_status` code from the dictionary. */
-enum class PmsStatus(val code: Int, val label: String) {
-    ABSENT(0, "no PM sensor"),
-    WARMING(1, "sensor warming up"),
-    STALE(2, "sensor stale"),
-    ERROR(3, "sensor error"),
-    VALID(4, "valid"),
-    MODEL_MISMATCH(5, "sensor model mismatch"),
-    SLEEPING(6, "sensor sleeping");
+/**
+ * The particle sensor state, the state of the status column that gates the atmospheric PM2.5
+ * (`pms_status` on a Plantower board). Null when the sample has no reading of it now.
+ */
+val LiveReading.pmState: SensorState? get() = stateOf(AirFamily.PM25_ATMOSPHERIC)
 
-    companion object {
-        fun fromCode(code: Int?): PmsStatus? = entries.firstOrNull { it.code == code }
-    }
-}
-
-/** The PM sensor state, null when the sample has no reading of [AirMetrics.PMS_STATUS]. */
-val LiveReading.pmsStatus: PmsStatus? get() = PmsStatus.fromCode(code(AirMetrics.PMS_STATUS))
-
-/** True when the PM sensor reports a valid reading now. */
-val LiveReading.pmValid: Boolean get() = pmsStatus == PmsStatus.VALID
+/** True when the particle sensor reports a valid reading now. */
+val LiveReading.pmValid: Boolean get() = pmState?.valid == true

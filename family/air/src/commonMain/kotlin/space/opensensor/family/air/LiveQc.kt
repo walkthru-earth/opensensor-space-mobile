@@ -23,7 +23,7 @@ class LiveQc(private val capacity: Int = QcRules.FLATLINE_ROWS + 10) {
      * `mono` takes [receivedAtMs] as its time.
      */
     fun add(live: LiveReading?, receivedAtMs: Long?): Int {
-        if (live == null || live.pmsStatus != PmsStatus.VALID) return QcFlags.NONE
+        if (live == null || !live.pmValid) return QcFlags.NONE
         val sample = live.sample
         val id = sample.seq to sample.mono
         if (id.first != null || id.second != null) {

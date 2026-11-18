@@ -8,7 +8,6 @@ import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.NowReading
-import space.opensensor.family.air.PmsStatus
 import space.opensensor.publicfeed.DiscoverCollection
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
@@ -79,11 +78,14 @@ class CopyRulesTest {
     }
 
     @Test
-    fun `Today owns the warming hint`() {
-        // Today (`:feature:today`) owns the warming hint on both apps.
+    fun `Today owns the sensor state hints`() {
+        // Today (`:feature:today`) owns the hints on both apps, keyed by the class name of the state.
         val waveshare = DeviceInfo(dict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809")
-        val sample = LiveSample.parse("""{"pms":${PmsStatus.WARMING.code}}""")
-        val warming = NowReading.of(DeviceCapabilities.from(waveshare).reading(sample)) as NowReading.SensorNotReady
-        assertEquals(sharedStrings().getValue("today").getValue("pms_warming_hint"), warming.hint)
+        val today = sharedStrings().getValue("today")
+        for ((code, key) in listOf(0 to "pms_absent_hint", 1 to "pms_warming_hint", 2 to "pms_stale_hint", 3 to "pms_error_hint", 5 to "pms_mismatch_hint", 6 to "pms_sleeping_hint", 9 to "pms_other_hint")) {
+            val sample = LiveSample.parse("""{"pms":$code}""")
+            val state = NowReading.of(DeviceCapabilities.from(waveshare).reading(sample)) as NowReading.SensorNotReady
+            assertEquals("pms $code", today.getValue(key), state.hint)
+        }
     }
 }

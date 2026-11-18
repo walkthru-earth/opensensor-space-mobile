@@ -2,6 +2,7 @@ package space.opensensor.family.air
 
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.MetricSpec
+import space.opensensor.data.history.carriesStateOf
 import space.opensensor.data.protocol.LiveSample
 
 /** The WHO step of [value], or null for a neutral metric, a scale that is not WHO shaped or a non-finite value. */
@@ -17,13 +18,13 @@ val DeviceCapabilities.batchEstimate: Boolean get() = AirFamily.BATCH_ESTIMATE i
 fun DeviceCapabilities.showsBatchEstimate(boardBatchCandidate: Int?): Boolean = batchEstimate && boardBatchCandidate == 1
 
 /**
- * The particle cards (mood, PM2.5) apply with [AirFamily.PARTICLES], once a sample carries the PM
- * sensor state. A sample without the `pms_status` key (the board has no such field) or with status
- * ABSENT does not. A `null` status is no reading now, never a missing sensor, so an overflow sample
- * keeps the particle cards with their values cleared.
+ * The particle cards (mood, PM2.5) apply with [AirFamily.PARTICLES], once a sample carries the
+ * particle sensor state ([pmState]). A sample without the status key (the board has no such field)
+ * or with the `nodata` class does not. A `null` status is no reading now, never a missing sensor, so
+ * an overflow sample keeps the particle cards with their values cleared.
  */
 fun DeviceCapabilities.showsAirCards(sample: LiveSample?): Boolean {
     if (AirFamily.PARTICLES !in capabilities) return false
     val reading = reading(sample) ?: return false
-    return reading.carries(AirMetrics.PMS_STATUS) && reading.pmsStatus != PmsStatus.ABSENT
+    return reading.carriesStateOf(AirFamily.PM25_ATMOSPHERIC) && reading.pmState?.absent != true
 }
