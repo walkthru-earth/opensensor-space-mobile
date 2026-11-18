@@ -97,6 +97,56 @@ class MetricCatalogTest {
         assertEquals(null, catalog.tiered(moisture, BundledCatalog.templates.first { it.datastream("soil_moisture_percent") == null }))
     }
 
+    /** [probe] with a board temperature, a battery and three auxiliary columns that show no unit. */
+    private val probeWithBoard = probe.copy(
+        key = TemplateKey("ef".repeat(32), desc = "fe".repeat(32)),
+        datastreams = probe.datastreams + listOf(
+            Datastream("board_temperature_c", "float", Role.AUXILIARY_INFORMATION, unit = "Cel"),
+            Datastream("battery_mv", "int32", Role.AUXILIARY_INFORMATION, unit = "mV"),
+            Datastream("charging_status", "int32", Role.AUXILIARY_INFORMATION, unit = "{code}"),
+            Datastream("rows_dropped", "int64", Role.AUXILIARY_INFORMATION, unit = "{count}"),
+            Datastream("firmware_tag", "string", Role.AUXILIARY_INFORMATION, unit = "mV"),
+            Datastream("clock_status", "int32", Role.QUALITY_INFORMATION, unit = "ms"),
+        ),
+    )
+
+    @Test
+    fun everyNumericAuxiliaryColumnWithAUnitChartsAfterTheMeasurements() {
+        val metrics = Metrics.of(probeWithBoard)
+        assertEquals(listOf("soil_moisture_percent", "soil_temperature_c", "board_temperature_c", "battery_mv"), metrics.map { it.id })
+        assertEquals(listOf(false, false, true, true), metrics.map { it.auxiliary })
+    }
+
+    @Test
+    fun theCoreS3BoardTemperatureAndBatteryAreChartChoices() {
+        val coreS3 = BundledCatalog.templates.single { it.datastream("imu_temperature_c") != null }
+        val metrics = Metrics.of(coreS3)
+        val ids = metrics.map { it.id }
+        assertTrue(ids.containsAll(listOf("imu_temperature_c", "battery_percent", "battery_mv")))
+        assertTrue(ids.none { it in setOf("charging_status", "external_5v_enabled", "rows_dropped", "mag_x_raw", "pms_age_ms", "event_time_utc_us") })
+        assertTrue(metrics.dropWhile { !it.auxiliary }.all { it.auxiliary })
+        assertTrue(MetricCatalog.shared.union.value.dropWhile { !it.auxiliary }.all { it.auxiliary })
+    }
+
+    @Test
+    fun theUnionKeepsTheOrderOfItsTemplatesNotOfTheirDicts() {
+        val first = Metrics.catalogOf(listOf(probeWithBoard) + BundledCatalog.templates).map { it.id }
+        val last = Metrics.catalogOf(BundledCatalog.templates + probeWithBoard).map { it.id }
+        assertEquals("soil_moisture_percent", first.first())
+        assertTrue(last.indexOf("soil_moisture_percent") > last.indexOf("ambient_temperature_c"))
+    }
+
+    @Test
+    fun aPickerListsTheThingsOwnMetricsFirstThenTheRestAuxiliaryLast() {
+        val union = Metrics.catalogOf(BundledCatalog.templates + probeWithBoard)
+        val picked = Metrics.pickerOrder(union, probeWithBoard).map { it.id }
+        assertEquals(listOf("soil_moisture_percent", "soil_temperature_c"), picked.take(2))
+        val firstAux = picked.indexOfFirst { id -> union.first { it.id == id }.auxiliary }
+        assertEquals(listOf("board_temperature_c", "battery_mv"), picked.drop(firstAux).take(2))
+        assertTrue(picked.take(firstAux).none { id -> union.first { it.id == id }.auxiliary })
+        assertEquals(union, Metrics.pickerOrder(union, null))
+    }
+
     private fun probeParquet(): ByteArray {
         val out = MemorySink()
         val w = ParquetWriter(

@@ -9,7 +9,6 @@ import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.history.parquet.ParquetWriter
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
-import space.opensensor.model.AppProfile
 import space.opensensor.model.BoardTemplate
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -130,11 +129,8 @@ class CurrentBoardFilesTest {
         return sink.toByteArray()
     }
 
-    /**
-     * The catalog plus the battery charge, an auxiliary point column the catalog leaves out. The tiers
-     * aggregate any metric list, so the point rollup is still checked against the rows.
-     */
-    private val metrics: List<MetricSpec> = MetricCatalog.shared.union.value + Metrics.of(coreS3Template.datastream("battery_percent")!!, AppProfile.derive(coreS3Template))
+    /** The catalog, which charts the battery charge, an auxiliary point column, so its rollup is checked against the rows. */
+    private val metrics: List<MetricSpec> = MetricCatalog.shared.union.value
 
     private fun buckets(vararg files: ByteArray): List<Bucket> =
         Aggregator(thing, metrics = metrics, templates = FileTemplates.BUNDLED).apply { files.forEach { add(ParquetFile.wrap(it)) } }.buckets()

@@ -114,7 +114,8 @@ class HistoryGoldenTest {
 
                 val sink = MemorySink()
                 val pass = DayPass.run(thing, day, dayEntries.map { it.source() }, sink, anchors, now, templates = CoreS3Files, checks = RowChecks.NONE)
-                assertEquals(legacyBuckets, pass.buckets, "tiers of $thing day $day")
+                val means = MEAN_METRICS.map { it.id }.toSet()
+                assertEquals(legacyBuckets, pass.buckets.map { b -> b.copy(metrics = b.metrics.filterKeys { it in means }) }, "tiers of $thing day $day")
                 assertEquals(emptyList(), pass.failedSources)
                 if (legacyDaily == null) {
                     assertEquals(null, pass.daily, "no daily file on $thing day $day")
