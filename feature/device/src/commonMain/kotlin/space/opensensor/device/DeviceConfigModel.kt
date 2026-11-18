@@ -64,6 +64,9 @@ data class DeviceConfigUiState(
     /** The setup steps of this Thing, from [manifest] and the last page 1 read. Null before page 1 is read. */
     val setupPlan: SetupPlan? get() = location.page?.let { SetupPlan.of(manifest, it) }
 
+    /** The Device settings cards, from the template's `settings` at this level, see [DeviceSection.of]. */
+    val sections: List<DeviceSection> get() = DeviceSection.of(manifest, level, pairingNeedsAttention, capabilities.sensorIdentity)
+
     /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
     val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(snapshot.info)
     val isV2: Boolean get() = capabilities.configurable
