@@ -50,7 +50,8 @@ data class ColumnLabel(val hints: JsonObject) {
         hints.forEach { (key, value) ->
             val ok = when (key) {
                 "title", "description", GROUP, ThingCollections.SCALE -> value.isText()
-                DECIMALS -> (value as? JsonPrimitive)?.takeUnless { it.isString }?.content?.toIntOrNull() in 0..9
+                DECIMALS -> (value as? JsonPrimitive)?.takeUnless { it.isString }?.content?.toDoubleOrNull()
+                    ?.let { it % 1.0 == 0.0 && it in 0.0..9.0 } == true
                 TITLE_I18N, DESCRIPTION_I18N -> value is JsonObject && value.values.all { it.isText() }
                 else -> throw IllegalArgumentException("a column adds $key, which is not a display hint")
             }

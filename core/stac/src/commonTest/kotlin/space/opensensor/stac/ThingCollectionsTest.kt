@@ -184,6 +184,8 @@ class ThingCollectionsTest {
             """{"opensensor:decimals":10}""",
             """{"opensensor:decimals":1.5}""",
             """{"opensensor:decimals":"1"}""",
+            """{"opensensor:decimals":-1}""",
+            """{"opensensor:decimals":true}""",
             """{"opensensor:group":1}""",
             """{"opensensor:title_i18n":{"ar":1}}""",
             """{"description":[]}"""
@@ -191,6 +193,10 @@ class ThingCollectionsTest {
             assertFailsWith<IllegalArgumentException>(column) { ThingOwner.parse("""{"prefix":"p","columns":{"a":$column}}""") }
         }
         assertFailsWith<IllegalArgumentException> { ThingOwner.parse("""{"title":"no prefix"}""") }
+        // JSON Schema takes any integral number as an integer, however it is spelled.
+        for (decimals in listOf("1", "1.0", "1e0", "9")) {
+            ThingOwner.parse("""{"prefix":"p","columns":{"a":{"opensensor:decimals":$decimals}}}""")
+        }
     }
 
     @Test
