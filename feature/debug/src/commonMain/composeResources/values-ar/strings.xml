@@ -2,9 +2,6 @@
 <resources>
     <string name="nav_debug">تصحيح الأخطاء</string>
     <string name="action_back">رجوع</string>
-    <string name="transport_ble">Bluetooth</string>
-    <string name="transport_lan">Wi-Fi LAN</string>
-    <string name="transport_fake">جهاز وهمي</string>
     <string name="conn_disconnected">غير متصل</string>
     <string name="conn_connecting">جارٍ الاتصال…</string>
     <string name="msg_background_owns_command">المزامنة في الخلفية تستخدم هذا المستشعر. انتظر حتى تنتهي.</string>

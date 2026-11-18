@@ -31,7 +31,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,7 +45,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -60,7 +58,6 @@ import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.FrameDirection
 import space.opensensor.data.ble.RawFrameRecord
-import space.opensensor.data.ble.TransportKind
 import space.opensensor.debug.resources.Res
 import space.opensensor.debug.resources.action_back
 import space.opensensor.debug.resources.conn_connecting
@@ -115,9 +112,6 @@ import space.opensensor.debug.resources.fm_rows_count
 import space.opensensor.debug.resources.msg_background_owns_command
 import space.opensensor.debug.resources.nav_debug
 import space.opensensor.debug.resources.scan_files
-import space.opensensor.debug.resources.transport_ble
-import space.opensensor.debug.resources.transport_fake
-import space.opensensor.debug.resources.transport_lan
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.FloatingControl
@@ -126,8 +120,11 @@ import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.InfoNote
 import space.opensensor.designsystem.SectionCard
 import space.opensensor.designsystem.StatLine
+import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.TickingText
 import space.opensensor.designsystem.WarningNote
+import space.opensensor.designsystem.headingSemantics
+import space.opensensor.designsystem.labelText
 import space.opensensor.strings.rememberAgoFormatter
 import kotlin.time.Instant
 
@@ -167,18 +164,13 @@ fun DebugScreen(
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
-                navigationIcon = { IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back)) } },
-                title = {
-                    Column {
-                        Text(stringResource(Res.string.nav_debug), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            state.link.transport?.let {
-                                Text(transportLabel(it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            }
-                            Text(state.link.endpoint ?: address, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+            ThingTopBar(
+                onBack = onBack,
+                backLabel = stringResource(Res.string.action_back),
+                title = { Text(stringResource(Res.string.nav_debug), style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics()) },
+                transport = state.link.transport,
+                subtitle = {
+                    Text(state.link.endpoint ?: address, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
             )
         },
@@ -244,7 +236,7 @@ fun DebugScreen(
 @Composable
 private fun LinkCard(link: DebugLink) {
     SectionCard(stringResource(Res.string.debug_transport_title)) {
-        StatLine(stringResource(Res.string.debug_transport), link.transport?.let { transportLabel(it) } ?: NO_VALUE)
+        StatLine(stringResource(Res.string.debug_transport), link.transport?.labelText() ?: NO_VALUE)
         StatLine(stringResource(Res.string.debug_endpoint), link.endpoint ?: NO_VALUE)
         StatLine("payload_max", link.payloadMax?.let { "$it B" } ?: NO_VALUE)
         StatLine(stringResource(Res.string.debug_state), connectionName(link.connection))
@@ -431,15 +423,6 @@ private fun rawErrorText(e: RawError): String = when (e) {
     RawError.NoResponse -> stringResource(Res.string.debug_raw_no_response)
     is RawError.Failed -> e.detail
 }
-
-@Composable
-private fun transportLabel(kind: TransportKind): String = stringResource(
-    when (kind) {
-        TransportKind.BLE -> Res.string.transport_ble
-        TransportKind.LAN -> Res.string.transport_lan
-        TransportKind.FAKE -> Res.string.transport_fake
-    },
-)
 
 /** The state's type name, as Android showed it, without reflection. */
 private fun connectionName(c: ConnectionState): String = when (c) {

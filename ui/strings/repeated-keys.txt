@@ -100,9 +100,6 @@ scan_files feature/debug feature/devices feature/files
 sensor_scan_unavailable app ui/strings
 sensor_scan_unrecognized app ui/strings
 sync_some_failed feature/today ui/strings
-transport_ble feature/debug feature/today
-transport_fake feature/debug feature/today
-transport_lan feature/debug feature/today
 unit_bytes app feature/files ui/strings
 unit_gigabytes app feature/files ui/strings
 unit_kilobytes app feature/files ui/strings

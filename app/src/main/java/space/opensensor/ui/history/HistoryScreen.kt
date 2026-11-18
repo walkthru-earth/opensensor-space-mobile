@@ -7,8 +7,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import space.opensensor.designsystem.TransportChip
 import space.opensensor.history.HistoryTopBar
-import space.opensensor.today.TransportChip
 import space.opensensor.ui.components.LocalUnits
 import space.opensensor.history.HistoryScreen as SharedHistoryScreen
 

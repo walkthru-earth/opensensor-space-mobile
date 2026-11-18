@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -18,6 +19,9 @@ import kotlinx.coroutines.withContext
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.archive.PrunedFile
 import space.opensensor.data.ManifestState
+import space.opensensor.data.ble.ConnectionState
+import space.opensensor.data.ble.ThingStatus
+import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.sync.ArchivedIdentity
 import space.opensensor.data.sync.FileOutcome
 import space.opensensor.data.sync.SyncPlanner
@@ -34,6 +38,9 @@ internal class DeviceFilesActions(
     val syncOne: (peripheral: String, name: String) -> Unit,
     val cancelSync: (peripheral: String) -> Unit,
 )
+
+/** What the Files top bar and banner show for one sensor. [transport] is null while no link is up. */
+internal data class FilesChrome(val transport: TransportKind?, val status: ThingStatus)
 
 /** One sensor's manifest and plan, independent of the whole-phone export controller. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -68,6 +75,31 @@ internal class IosDeviceFiles(
             result,
         )
     }
+
+    /**
+     * The pipe and the link status for the page chrome, the transport chip and the connection
+     * banner, read the way Device settings reads them on this phone.
+     */
+    val chrome: StateFlow<FilesChrome> = snapshotFlow {
+        val thing = devices.thingFor(address)
+        val lan = devices.state.connectedLanForThing(thing)
+        val ble = devices.state.connected && devices.state.selectedId.equals(address, ignoreCase = true)
+        val connection = when {
+            lan != null || ble -> ConnectionState.Ready(0)
+            devices.state.reconnectingId.equals(address, ignoreCase = true) ||
+                devices.state.selectedId.equals(address, ignoreCase = true) -> ConnectionState.Connecting
+            else -> ConnectionState.Disconnected
+        }
+        FilesChrome(
+            transport = when {
+                lan != null -> TransportKind.LAN
+                ble -> TransportKind.BLE
+                else -> null
+            },
+            status = ThingStatus(connection, heldInBackground = devices.state.heldInBackground(address, thing)),
+        )
+    }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, FilesChrome(null, ThingStatus(ConnectionState.Disconnected)))
+
     private data class Inputs(val link: SensorFilesLink, val manifest: ManifestState, val records: List<ArchiveRecord>, val removed: List<PrunedFile>)
 
     private val selected = combine(devices.known, snapshotFlow { currentLink() }) { _, _ -> currentLink() }.distinctUntilChanged()
