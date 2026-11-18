@@ -54,10 +54,13 @@ internal data class KnownRecord(
 /** Narrow result for the native BLE adapter. No secret material crosses this boundary. */
 class SensorOpenResult(val accepted: Boolean, val notice: CompanionNotice?, val credentialToRemove: String?)
 
-/** Where the bridge keeps its known records. UserDefaults on the phone, memory in tests. */
+/** Where the bridge keeps its known records. Room on the phone, memory in tests. */
 internal interface KnownRecordStorage {
-    fun load(): String?
-    fun save(text: String)
+    /** Every record, newest first, read once when the bridge starts so no sensor opens before it. */
+    fun load(): List<KnownRecord>
+
+    /** Keeps [records] as the whole list, newest first. */
+    fun save(records: List<KnownRecord>)
 }
 
 /** The pure rules behind the iOS known list, so the tests read them without CoreBluetooth. */
@@ -107,20 +110,6 @@ internal object IosKnown {
         }.onStart { emit(emptyMap()) }
         return combine(glances, days) { g, d -> g.mapValues { (thing, glance) -> glance.copy(lastDay = d[thing]) } }
     }
-
-    /** One record per line, tab separated. The sixth field records older thing epochs. */
-    fun encode(records: List<KnownRecord>): String = records.joinToString("\n") { r ->
-        listOf(r.peripheral, r.name?.replace(Regex("[\\t\\r\\n]"), " ").orEmpty(), r.thing, r.device, r.lastSeenMs?.toString().orEmpty(), r.olderThings.joinToString(","))
-            .joinToString("\t")
-    }
-
-    /** Lines that do not parse are dropped, so a damaged entry costs one sensor, not the list. */
-    fun decode(text: String?): List<KnownRecord> = text.orEmpty().lineSequence().mapNotNull { line ->
-        val f = line.split('\t')
-        if (f.size !in 5..6 || f[0].isBlank() || !SyncWire.isThingId(f[2]) || !Regex("[0-9a-fA-F]{12}").matches(f[3])) return@mapNotNull null
-        val older = f.getOrNull(5).orEmpty().split(',').filter { SyncWire.isThingId(it) && it != f[2] }.distinct()
-        KnownRecord(f[0], f[1].ifBlank { null }, f[2], f[3], f[4].toLongOrNull(), older)
-    }.distinctBy { it.peripheral.uppercase() }.toList()
 
     /**
      * The known ids Collect all must skip because a link the user holds already reaches them. A
@@ -237,7 +226,7 @@ class DevicesBridge internal constructor(
     /** Outlives every screen, as Android's app scope does, so leaving Today never cancels a Forget. */
     private val forgetScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
 ) {
-    private val records = MutableStateFlow(IosKnown.decode(storage.load()))
+    private val records = MutableStateFlow(storage.load())
     private val credentials = MutableStateFlow<List<KnownRecord>>(emptyList())
     private val collecting = MutableStateFlow(false)
     private var queue: CollectAllQueue? = null
@@ -492,7 +481,7 @@ class DevicesBridge internal constructor(
 
     private fun save(list: List<KnownRecord>) {
         records.value = list
-        storage.save(IosKnown.encode(list))
+        storage.save(list)
     }
 
     private val store = object : KnownDeviceStore {

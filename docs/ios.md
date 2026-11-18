@@ -91,8 +91,8 @@ A force quit stops everything. Downloaded bytes and index records stay for the n
 ## Screens over iOS services
 
 - **My devices.** `DevicesBridge` feeds the shared list from `CompanionState`, known records in
-  UserDefaults (never a credential), the Keychain credential list (ids only) and the Room
-  index.
+  the Room `known_device` and `thing_epoch` tables Android uses (never a credential), the Keychain
+  credential list (ids only) and the Room index.
 - **Today.** `CompanionTodaySource` reads INFO, STATUS and LIVE for the open link. Forget, in
   the Today menu after confirmation, drops the Discover cells, then the record, the Keychain
   access and Auto-sync (`DevicesBridge.forgetLater`). It runs in a scope that outlives Today, and a

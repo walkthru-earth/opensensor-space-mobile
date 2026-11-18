@@ -50,8 +50,8 @@ class IosDevicePlaceTest {
     }
 
     private class NoRecords : KnownRecordStorage {
-        override fun load(): String? = null
-        override fun save(text: String) = Unit
+        override fun load(): List<KnownRecord> = emptyList()
+        override fun save(records: List<KnownRecord>) = Unit
     }
 
     /** [ThingPlaces] in memory. */

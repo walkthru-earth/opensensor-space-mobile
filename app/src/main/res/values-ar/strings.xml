@@ -42,23 +42,6 @@
     <string name="device_link">الاتصال</string>
     <string name="device_config_read">قراءة الإعدادات</string>
 
-    <string name="autosync_title">المزامنة التلقائية</string>
-    <plurals name="autosync_on">
-        <item quantity="zero">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
-        <item quantity="one">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
-        <item quantity="two">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
-        <item quantity="few">مفعّلة. كل %1$d دقائق، حتى والتطبيق مغلق.</item>
-        <item quantity="many">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
-        <item quantity="other">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
-    </plurals>
-    <plurals name="autosync_off">
-        <item quantity="zero">متوقفة</item>
-        <item quantity="one">متوقفة</item>
-        <item quantity="two">متوقفة</item>
-        <item quantity="few">متوقفة</item>
-        <item quantity="many">متوقفة</item>
-        <item quantity="other">متوقفة</item>
-    </plurals>
     <string name="autosync_unreachable">اتصل مرة واحدة عبر Bluetooth أولًا.</string>
     <string name="autosync_wifi">Wi-Fi</string>
     <string name="autosync_wifi_token">رمز الوصول محفوظ، ويُجرَّب أولًا على هذه الشبكة</string>

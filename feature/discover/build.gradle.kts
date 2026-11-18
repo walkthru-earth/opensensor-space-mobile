@@ -21,6 +21,8 @@ kotlin {
             api(project(":core:units"))
             // DiscoverScreen takes the host's DetailLevel (Simple speaks in moods).
             api(project(":core:settings"))
+            // followPhone reads each own Thing's saved cell (ThingPlaces).
+            api(project(":core:sync"))
             api(project(":ui:designsystem"))
             // The shared map, its camera rest, zoom controls and Near me.
             api(project(":ui:map"))
