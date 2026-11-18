@@ -9,6 +9,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import space.opensensor.model.DisplayGroup
 import space.opensensor.model.ThingSite
 
 /**
@@ -36,7 +37,8 @@ data class StacProvider(
 
 /**
  * The display hints the owner adds to or replaces in one template column, key by key, as the profile
- * lets an owner do. [hints] holds only keys in [KEYS], each of the type the profile gives it.
+ * lets an owner do. [hints] holds only keys in [KEYS], each of the type the profile gives it. A group is
+ * one the pinned profile lists ([DisplayGroup.isKnown]), so the phone never writes a group it cannot read.
  */
 data class ColumnLabel(val hints: JsonObject) {
     constructor(title: String? = null, scale: String? = null) : this(
@@ -49,9 +51,12 @@ data class ColumnLabel(val hints: JsonObject) {
     init {
         hints.forEach { (key, value) ->
             val ok = when (key) {
-                "title", "description", GROUP, ThingCollections.SCALE -> value.isText()
+                "title", "description" -> value.isText()
+                GROUP -> value.isText() && DisplayGroup((value as JsonPrimitive).content).isKnown
+                ThingCollections.SCALE -> value.isText() && SCALE_ID.matches((value as JsonPrimitive).content)
                 DECIMALS -> (value as? JsonPrimitive)?.takeUnless { it.isString }?.content?.let(::decimalsOf) != null
-                TITLE_I18N, DESCRIPTION_I18N -> value is JsonObject && value.isNotEmpty() && value.values.all { it.isText() }
+                TITLE_I18N, DESCRIPTION_I18N -> value is JsonObject && value.isNotEmpty() &&
+                    value.all { (language, text) -> LANGUAGE.matches(language) && text.isText() }
                 else -> throw IllegalArgumentException("a column adds $key, which is not a display hint")
             }
             require(ok) { "the display hint $key has a value of another type" }
@@ -68,6 +73,12 @@ data class ColumnLabel(val hints: JsonObject) {
 
         /** A nonempty string. The profile gives every text hint `minLength` 1, so an empty one would replace the template's. */
         private fun JsonElement.isText() = this is JsonPrimitive && isString && content.isNotEmpty()
+
+        /** The profile's `id`, which a scale id must be. */
+        private val SCALE_ID = Regex("""[a-z0-9][a-z0-9._-]*""")
+
+        /** The profile's language code, the key of an i18n map. */
+        private val LANGUAGE = Regex("""[a-z]{2,3}(-[A-Za-z0-9]+)*""")
 
         private val JSON_NUMBER = Regex("""-?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?""")
 

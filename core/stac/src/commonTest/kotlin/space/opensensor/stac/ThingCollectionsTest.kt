@@ -196,6 +196,11 @@ class ThingCollectionsTest {
             """{"opensensor:scale":""}""",
             """{"opensensor:title_i18n":{"ar":""}}""",
             """{"opensensor:description_i18n":{}}""",
+            """{"opensensor:group":"climte"}""",
+            """{"opensensor:scale":"Heat"}""",
+            """{"opensensor:scale":"-heat"}""",
+            """{"opensensor:title_i18n":{"":"Air"}}""",
+            """{"opensensor:description_i18n":{"english":"Air"}}""",
             """{"description":[]}"""
         )) {
             assertFailsWith<IllegalArgumentException>(column) { ThingOwner.parse("""{"prefix":"p","columns":{"a":$column}}""") }
@@ -205,6 +210,10 @@ class ThingCollectionsTest {
         for (decimals in listOf("1", "1.0", "1e0", "9", "0.5e1", "90e-1")) {
             ThingOwner.parse("""{"prefix":"p","columns":{"a":{"opensensor:decimals":$decimals}}}""")
         }
+        ThingOwner.parse(
+            """{"prefix":"p","columns":{"a":{"opensensor:group":"climate","opensensor:scale":"who.pm2_5-24h",""" +
+                """"opensensor:title_i18n":{"ar":"هواء","en-US":"Air"}}}}""",
+        )
     }
 
     @Test
