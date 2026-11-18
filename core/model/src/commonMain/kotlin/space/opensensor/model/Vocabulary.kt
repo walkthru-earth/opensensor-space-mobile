@@ -153,7 +153,7 @@ data class BitField(
     val description: String? = null,
 ) {
     init {
-        require(offset >= 0 && length >= 1 && offset + length <= Long.SIZE_BITS) { "bit field $name spans bits $offset to ${offset + length - 1}" }
+        require(length in 1..Long.SIZE_BITS && offset in 0..Long.SIZE_BITS - length) { "bit field $name has $length bits from bit $offset" }
     }
 
     /** The value of this field in [raw], the bits shifted down to start at 0. */

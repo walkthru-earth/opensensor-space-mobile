@@ -118,6 +118,8 @@ class MetadataTemplateTest {
     fun aBitFieldOutsideSixtyFourBitsFails() {
         assertFailsWith<IllegalArgumentException> { BitField(offset = 60, length = 8, classes = emptyList()) }
         assertFailsWith<IllegalArgumentException> { BitField(offset = 0, length = 0, classes = emptyList()) }
+        assertFailsWith<IllegalArgumentException> { BitField(offset = Int.MAX_VALUE, length = 1, classes = emptyList()) }
+        assertFailsWith<IllegalArgumentException> { BitField(offset = -1, length = 1, classes = emptyList()) }
         assertEquals(-1L, BitField(offset = 0, length = 64, classes = emptyList()).valueIn(-1L))
     }
 

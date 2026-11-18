@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -87,12 +88,50 @@ class ThingCollectionsTest {
     }
 
     @Test
-    fun aColumnScaleWithoutOwnerScalesLeavesTheKeyOut() {
+    fun onlyTheScalesAColumnNamesAreListedTheOwnersOverTheTemplates() {
+        fun scale(title: String) = buildJsonObject { put("title", title) }
         val scaled = ThingOwner.of(ThingSite(provider = "Osu school"), PREFIX, HOST)
-            .copy(columns = mapOf("ambient_temperature_c" to ColumnLabel(scale = "heat")))
-        assertFalse("opensensor:scales" in build(scaled))
-        val scales = buildJsonObject { put("heat", buildJsonObject { put("title", "Heat") }) }
-        assertEquals(scales, build(scaled.copy(scales = scales))["opensensor:scales"])
+            .copy(columns = mapOf("ambient_temperature_c" to ColumnLabel(scale = "heat"), "relative_humidity_percent" to ColumnLabel(scale = "damp")))
+        // A named scale that neither gives still lists the key, as buildCollection does.
+        assertEquals(JsonObject(emptyMap()), build(scaled)["opensensor:scales"])
+        val template = buildJsonObject {
+            put("heat", scale("Template heat"))
+            put("damp", scale("Template damp"))
+            put("dust", scale("Template dust"))
+        }
+        val owner = scaled.copy(
+            scales = buildJsonObject {
+                put("heat", scale("Owner heat"))
+                put("unused", scale("Unused"))
+            }
+        )
+        val expected = buildJsonObject {
+            put("heat", scale("Owner heat"))
+            put("damp", scale("Template damp"))
+        }
+        assertEquals(expected, build(owner) { put(ThingCollections.SCALES, template) }["opensensor:scales"])
+    }
+
+    @Test
+    fun theOwnersPrimaryWinsOverTheTemplates() {
+        val owner = ThingOwner.of(ThingSite(provider = "Osu school"), PREFIX, HOST)
+        assertFalse("opensensor:primary" in build(owner))
+        val fromTemplate = build(owner) { put(ThingCollections.PRIMARY, "ambient_temperature_c") }
+        assertEquals("ambient_temperature_c", fromTemplate["opensensor:primary"]!!.jsonPrimitive.content)
+        val fromOwner = build(owner.copy(primary = "relative_humidity_percent")) { put(ThingCollections.PRIMARY, "ambient_temperature_c") }
+        assertEquals("relative_humidity_percent", fromOwner["opensensor:primary"]!!.jsonPrimitive.content)
+        assertEquals("relative_humidity_percent", ThingOwner.parse("""{"prefix":"p","primary":"relative_humidity_percent"}""").primary)
+    }
+
+    @Test
+    fun theOwnersDisplayHintsReplaceTheTemplatesKeyByKey() {
+        val hints = """{"title":"Air","description":"Roof air","opensensor:title_i18n":{"ar":"الهواء"},"opensensor:description_i18n":{"ar":"هواء السطح"},""" +
+            """"opensensor:decimals":1,"opensensor:group":"climate","opensensor:scale":"heat"}"""
+        val owner = ThingOwner.parse("""{"prefix":"$PREFIX","columns":{"ambient_temperature_c":$hints}}""")
+        val column = build(owner)["item_assets"]!!.jsonObject["data"]!!.jsonObject["table:columns"]!!.jsonArray
+            .map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == "ambient_temperature_c" }
+        Json.parseToJsonElement(hints).jsonObject.forEach { (key, value) -> assertEquals(value, column[key], key) }
+        assertEquals("ambient_temperature_c", column["name"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -139,16 +178,24 @@ class ThingCollectionsTest {
     }
 
     @Test
-    fun anOwnerConfigMayOnlyLabelAColumn() {
-        assertFailsWith<IllegalArgumentException> {
-            ThingOwner.parse("""{"prefix":"p","columns":{"a":{"title":"A","unit":"K"}}}""")
+    fun anOwnerConfigMayOnlyGiveAColumnDisplayHints() {
+        for (column in listOf(
+            """{"title":"A","unit":"K"}""",
+            """{"opensensor:decimals":10}""",
+            """{"opensensor:decimals":1.5}""",
+            """{"opensensor:decimals":"1"}""",
+            """{"opensensor:group":1}""",
+            """{"opensensor:title_i18n":{"ar":1}}""",
+            """{"description":[]}"""
+        )) {
+            assertFailsWith<IllegalArgumentException>(column) { ThingOwner.parse("""{"prefix":"p","columns":{"a":$column}}""") }
         }
         assertFailsWith<IllegalArgumentException> { ThingOwner.parse("""{"title":"no prefix"}""") }
     }
 
     @Test
     fun anOwnerMemberOfAnotherTypeIsRefused() {
-        for (member in listOf(""""providers":{}""", """"columns":[]""", """"scales":[]""", """"contacts":{}""", """"providers":[{"name":"A","roles":"producer"}]""")) {
+        for (member in listOf(""""providers":{}""", """"columns":[]""", """"primary":1""", """"scales":[]""", """"contacts":{}""", """"providers":[{"name":"A","roles":"producer"}]""")) {
             assertFailsWith<IllegalArgumentException>(member) { ThingOwner.parse("""{"prefix":"p",$member}""") }
         }
         val missing = ThingOwner.parse("""{"prefix":"p"}""")
@@ -179,13 +226,14 @@ class ThingCollectionsTest {
         assertNull(at, "rebuilt Collection differs at $at\n$built\nfrom the example\n$expected")
     }
 
-    /** A Collection of the fixed example Thing for [owner]. */
-    private fun build(owner: ThingOwner): JsonObject {
+    /** A Collection of the fixed example Thing for [owner], from its template with the members [template] adds. */
+    private fun build(owner: ThingOwner, template: JsonObjectBuilder.() -> Unit = {}): JsonObject {
         val footerJson = json("footers/m5stack-cores3.json")
         val footer = assertNotNull(OpenSensorFooter.parse(footerJson.toString()))
         val ledger = assertNotNull(CollectionLedger.of(listOf(json(FIXED_EXAMPLE))))
         val collectionFooter = assertNotNull(CollectionFooter.of(footer, "https://example.org/template.json"))
-        return ThingCollections.build(templateOf(footer), collectionFooter, owner, ledger).also {
+        val board = JsonObject(templateOf(footer) + buildJsonObject(template))
+        return ThingCollections.build(board, collectionFooter, owner, ledger).also {
             assertTrue(it["partition:glob"]!!.jsonPrimitive.content.startsWith("s3://$PREFIX/thing=$THING/"))
         }
     }

@@ -88,8 +88,10 @@ object ThingCollections {
     const val LICENSE = "CC-BY-4.0"
     const val CONTACTS_EXTENSION = "https://stac-extensions.github.io/contacts/v0.1.1/schema.json"
 
-    /** The column key that names an owner scale. */
+    /** The column key that names a scale, the scales by id, and the name of the column a client shows first. */
     const val SCALE = "opensensor:scale"
+    const val SCALES = "opensensor:scales"
+    const val PRIMARY = "opensensor:primary"
 
     /** Every extension a Collection can list, in the profile's order. Without contacts it leaves out [CONTACTS_EXTENSION]. */
     val EXTENSIONS = listOf(
@@ -115,8 +117,9 @@ object ThingCollections {
     /**
      * The Collection of the Thing the [footer] names, from its board [template] as the template file's
      * JSON, the owner config [owner] and the upload [ledger]. Columns are the template's, in its order,
-     * each with the owner's [ColumnLabel]. `opensensor:scales` is listed only when a column names a
-     * scale and the owner has [ThingOwner.scales], as `buildCollection` drops an undefined value.
+     * each with the owner's [ColumnLabel] merged over it key by key. `opensensor:primary` is the owner's,
+     * else the template's, else left out. `opensensor:scales` holds the template's scales overlaid by
+     * the owner's, only the ids a column names, and is left out when no column names one.
      * Providers are copied as the owner gives them. Throws [IllegalArgumentException] when [template] lacks a part the Collection copies.
      */
     fun build(template: JsonObject, footer: CollectionFooter, owner: ThingOwner, ledger: CollectionLedger): JsonObject {
@@ -126,7 +129,11 @@ object ThingCollections {
             val label = (c["name"] as? JsonPrimitive)?.content?.let { owner.columns[it] }
             label?.let { JsonObject(c + it.json()) } ?: c
         }
-        val usesScales = columns.any { SCALE in it }
+        // The owner's primary wins over the template's. Only the scales a column names are published,
+        // the template's overlaid by the owner's, and the key is left out when no column names one.
+        val primary = (owner.primary ?: template.text(PRIMARY))?.takeIf { it.isNotEmpty() }
+        val used = columns.mapNotNull { (it[SCALE] as? JsonPrimitive)?.content }.toSet()
+        val known = (template[SCALES] as? JsonObject).orEmpty() + owner.scales.orEmpty()
         val dictionary = requireNotNull(
             (template["links"] as? JsonArray)?.firstOrNull { link ->
                 link is JsonObject && link.text("rel") == DESCRIBED_BY && link.text("type") == TEXT_TYPE
@@ -159,6 +166,7 @@ object ThingCollections {
             }
             put("opensensor:sample_interval_s", template.part("opensensor:sample_interval_s"))
             put("opensensor:mobility", footer.mobility.wire)
+            primary?.let { put(PRIMARY, it) }
             put("partition:scheme", "hive")
             put("partition:strategy", "temporal")
             putJsonArray("partition:keys") {
@@ -171,7 +179,7 @@ object ThingCollections {
                 }
             }
             put("partition:glob", "s3://${owner.prefix}/thing=${footer.thingId}/year=*/month=*/day=*/*.parquet")
-            if (usesScales) owner.scales?.let { put("opensensor:scales", it) }
+            if (used.isNotEmpty()) put(SCALES, JsonObject(known.filterKeys { it in used }))
             putJsonObject("item_assets") { put("data", JsonObject(data + ("table:columns" to JsonArray(columns)))) }
             putJsonArray("links") {
                 link("root", CATALOG_HREF, JSON_TYPE)

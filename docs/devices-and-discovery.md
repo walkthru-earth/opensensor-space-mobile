@@ -91,7 +91,8 @@ Rules.
    A new `opensensor:property` belongs in stac-opensensor `registry/properties.json` first. Copy
    `registry/properties.json` and `registry/scales.json` byte for byte into
    `core/model/bundled/registry/` and update the `pinned` map of `BundledRegistryBytesTest`. Until
-   then the column's own display hints label and round it.
+   then the plan is that the column's own display hints label and round it. Today they parse and
+   nothing renders them, see `:core:model` below.
    A board whose firmware serves its template over `GET_DESCRIPTOR` works without a bundled one,
    the app fetches and caches it on connect (`BoardDescriptors`). Without a reviewed profile it gets
    a profile derived from that template, which names the columns for History and Files but gives no

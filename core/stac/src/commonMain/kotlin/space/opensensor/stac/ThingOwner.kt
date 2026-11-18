@@ -34,11 +34,39 @@ data class StacProvider(
     }
 }
 
-/** What the owner adds to one template column, the only two keys the profile lets an owner add. */
-data class ColumnLabel(val title: String? = null, val scale: String? = null) {
-    fun json(): JsonObject = buildJsonObject {
-        title?.let { put("title", it) }
-        scale?.let { put(ThingCollections.SCALE, it) }
+/**
+ * The display hints the owner adds to or replaces in one template column, key by key, as the profile
+ * lets an owner do. [hints] holds only keys in [KEYS], each of the type the profile gives it.
+ */
+data class ColumnLabel(val hints: JsonObject) {
+    constructor(title: String? = null, scale: String? = null) : this(
+        buildJsonObject {
+            title?.let { put("title", it) }
+            scale?.let { put(ThingCollections.SCALE, it) }
+        },
+    )
+
+    init {
+        hints.forEach { (key, value) ->
+            val ok = when (key) {
+                "title", "description", GROUP, ThingCollections.SCALE -> value.isText()
+                DECIMALS -> (value as? JsonPrimitive)?.takeUnless { it.isString }?.content?.toIntOrNull() in 0..9
+                TITLE_I18N, DESCRIPTION_I18N -> value is JsonObject && value.values.all { it.isText() }
+                else -> throw IllegalArgumentException("a column adds $key, which is not a display hint")
+            }
+            require(ok) { "the display hint $key has a value of another type" }
+        }
+    }
+
+    fun json(): JsonObject = hints
+
+    companion object {
+        const val DECIMALS = "opensensor:decimals"
+        const val GROUP = "opensensor:group"
+        const val TITLE_I18N = "opensensor:title_i18n"
+        const val DESCRIPTION_I18N = "opensensor:description_i18n"
+
+        private fun JsonElement.isText() = this is JsonPrimitive && isString
     }
 }
 
@@ -50,11 +78,11 @@ data class ColumnLabel(val title: String? = null, val scale: String? = null) {
  *
  * [title], [description] and the producer in [providers] come from the owner site the board keeps
  * (firmware #148), which the phone reads and edits as [ThingSite]. [of] maps one to the other, so the
- * site stays the one record of what the owner typed. [prefix], the host provider, [columns], [scales]
- * and [contacts] belong to the upload target and the owner's labels, which no board key holds yet.
- * A null [title] or [description] is left out of the Collection. [providers] are copied as given.
- * [scales] is listed only when a column names a scale. [contacts] adds the Contacts extension when
- * it is not null, even empty.
+ * site stays the one record of what the owner typed. [prefix], the host provider, [columns], [primary],
+ * [scales] and [contacts] belong to the upload target and the owner's display hints, which no board key
+ * holds yet. A null [title] or [description] is left out of the Collection. [providers] are copied as
+ * given. [primary] wins over the template's. [scales] overlay the template's, and only the ids a column
+ * names are listed. [contacts] adds the Contacts extension when it is not null, even empty.
  */
 data class ThingOwner(
     val title: String?,
@@ -62,6 +90,7 @@ data class ThingOwner(
     val providers: List<StacProvider>,
     val prefix: String,
     val columns: Map<String, ColumnLabel> = emptyMap(),
+    val primary: String? = null,
     val scales: JsonObject? = null,
     val contacts: JsonArray? = null,
 ) {
@@ -90,8 +119,8 @@ data class ThingOwner(
 
         /**
          * The owner config [json] in the shape of `owner.json`. Throws [IllegalArgumentException] when it
-         * is not one, including a `providers`, `columns`, `scales`, `contacts` or `roles` of another JSON
-         * type. A member that is missing or JSON null counts as not given.
+         * is not one, including a `providers`, `columns`, `primary`, `scales`, `contacts` or `roles` of
+         * another JSON type, or a column key that is not a display hint. A member that is missing or JSON null counts as not given.
          */
         fun parse(json: String): ThingOwner {
             val root = Json.parseToJsonElement(json) as? JsonObject ?: throw IllegalArgumentException("owner config is not an object")
@@ -108,8 +137,7 @@ data class ThingOwner(
             }
             val columns = root.member<JsonObject>("columns", "an object").orEmpty().mapValues { (name, c) ->
                 val o = c as? JsonObject ?: throw IllegalArgumentException("column $name is not an object")
-                require(o.keys.all { it == "title" || it == ThingCollections.SCALE }) { "column $name adds a key the profile does not allow" }
-                ColumnLabel(title = o.string("title"), scale = o.string(ThingCollections.SCALE))
+                ColumnLabel(JsonObject(o.filterValues { it != JsonNull }))
             }
             return ThingOwner(
                 title = root.string("title"),
@@ -117,6 +145,7 @@ data class ThingOwner(
                 providers = providers,
                 prefix = requireNotNull(root.string("prefix")) { "owner config has no prefix" },
                 columns = columns,
+                primary = root.string("primary"),
                 scales = root.member<JsonObject>("scales", "an object"),
                 contacts = root.member<JsonArray>("contacts", "an array"),
             )
