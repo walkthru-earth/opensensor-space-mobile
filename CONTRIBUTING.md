@@ -40,3 +40,5 @@ tools/setup-hooks.sh                 # once per clone, the pre-push hook runs ve
 Build-tools 36.0.0 is AGP 9.5's default, so the build does not download it again. Update it with AGP.
 
 Why the build needs JDK 25 is in [docs/build-and-release.md](docs/build-and-release.md#build-jdk).
+
+To add your own board or sensor without changing the app, start with [docs/your-first-board.md](docs/your-first-board.md).
