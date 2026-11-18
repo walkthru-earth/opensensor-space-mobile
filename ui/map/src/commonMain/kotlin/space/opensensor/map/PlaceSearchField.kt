@@ -44,10 +44,25 @@ import space.opensensor.map.resources.map_search_places
  */
 @Composable
 fun PlaceSearchField(onPlace: (Place) -> Unit, modifier: Modifier = Modifier) {
-    val label = stringResource(Res.string.map_search_places)
     var open by remember { mutableStateOf(false) }
+    PlaceSearchField(open = open, onOpenChange = { open = it }, onPlace = onPlace, modifier = modifier)
+}
+
+/**
+ * [PlaceSearchField] whose caller holds [open], so it can fold its other top controls while the
+ * field is open. [noMatches] draws the line shown when nothing matches, plain text by default.
+ */
+@Composable
+fun PlaceSearchField(
+    open: Boolean,
+    onOpenChange: (Boolean) -> Unit,
+    onPlace: (Place) -> Unit,
+    modifier: Modifier = Modifier,
+    noMatches: @Composable (String) -> Unit = { text -> Text(text, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium) },
+) {
+    val label = stringResource(Res.string.map_search_places)
     if (!open) {
-        FloatingIconButton(onClick = { open = true }, contentDescription = label, modifier = modifier) {
+        FloatingIconButton(onClick = { onOpenChange(true) }, contentDescription = label, modifier = modifier) {
             Icon(MapIcons.Search, contentDescription = null)
         }
         return
@@ -72,7 +87,7 @@ fun PlaceSearchField(onPlace: (Place) -> Unit, modifier: Modifier = Modifier) {
                 trailingIcon = {
                     IconButton(onClick = {
                         query = ""
-                        open = false
+                        onOpenChange(false)
                         focus.clearFocus()
                     }) { Icon(MapIcons.Close, contentDescription = stringResource(Res.string.map_search_clear)) }
                 },
@@ -91,7 +106,7 @@ fun PlaceSearchField(onPlace: (Place) -> Unit, modifier: Modifier = Modifier) {
             FloatingSurface(Modifier.padding(top = FloatingControl.Inset).fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 4.dp)) {
                     if (results.isEmpty()) {
-                        Text(stringResource(Res.string.map_no_places), Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+                        noMatches(stringResource(Res.string.map_no_places))
                     }
                     results.forEach { place ->
                         Column(
@@ -99,7 +114,7 @@ fun PlaceSearchField(onPlace: (Place) -> Unit, modifier: Modifier = Modifier) {
                                 .heightIn(min = FloatingControl.Size)
                                 .clickable(role = Role.Button) {
                                     query = ""
-                                    open = false
+                                    onOpenChange(false)
                                     focus.clearFocus()
                                     onPlace(place)
                                 }

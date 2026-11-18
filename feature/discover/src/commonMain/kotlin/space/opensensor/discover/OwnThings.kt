@@ -89,38 +89,23 @@ fun observeOwnTracks(moving: Flow<Set<String>>, track: (String) -> Flow<CellTrac
         }
     }.distinctUntilChanged()
 
-/** How old an own reading is, the steps the sheet names. */
-internal enum class AgeStep { JUST_NOW, MINUTES, HOURS, DAYS }
-
 /** What an own pin's row says after its reading. */
 internal sealed interface OwnFreshness {
     /** The phone is linked to the sensor now. */
     data object Live : OwnFreshness
 
-    /** The newest reading on this phone ended [count] [step] ago. */
-    data class Ago(val step: AgeStep, val count: Long) : OwnFreshness
+    /** The newest reading on this phone ended [ageMs] milliseconds ago. */
+    data class Ago(val ageMs: Long) : OwnFreshness
 
     /** Not linked and no reading on this phone yet. */
     data object None : OwnFreshness
-}
-
-/** The step and count of an age of [ageMs]. A minute or less, or a clock behind, is just now. */
-internal fun ageOf(ageMs: Long): Pair<AgeStep, Long> {
-    val minutes = ageMs / 60_000
-    return when {
-        minutes < 1 -> AgeStep.JUST_NOW to 0L
-        minutes < 60 -> AgeStep.MINUTES to minutes
-        minutes < 24 * 60 -> AgeStep.HOURS to minutes / 60
-        else -> AgeStep.DAYS to minutes / (24 * 60)
-    }
 }
 
 /** Live while linked, else the age of the newest reading at [nowMs], else [OwnFreshness.None]. */
 internal fun ownFreshness(status: OwnStatus?, nowMs: Long): OwnFreshness {
     if (status?.live == true) return OwnFreshness.Live
     val reading = status?.reading ?: return OwnFreshness.None
-    val (step, count) = ageOf(nowMs - reading.endEpochS * 1000)
-    return OwnFreshness.Ago(step, count)
+    return OwnFreshness.Ago(nowMs - reading.endEpochS * 1000)
 }
 
 /**

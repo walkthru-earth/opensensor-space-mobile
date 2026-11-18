@@ -7,7 +7,6 @@
 -->
 <resources>
 
-    <string name="discover_search_places">ابحث عن أماكن</string>
     <string name="discover_add_sensor">أضف مستشعرك</string>
     <string name="discover_more">المزيد</string>
     <string name="discover_window_last_hour">آخر ساعة</string>
@@ -18,11 +17,6 @@
     <string name="discover_scale_title">مقياس الألوان</string>
     <string name="discover_scale_info1">لا يوجد مقياس صحي منشور لهذا القياس. تمتد الألوان من الأدنى إلى الأعلى عبر المناطق الظاهرة، مع استبعاد أدنى 5 بالمئة وأعلى 5 بالمئة.</string>
     <string name="discover_scale_info2">تعرض كل منطقة متوسطات كل ساعة من ثلاثة مستشعرات أو أكثر. المنطقة الباهتة ليس لها قيمة جديدة منذ 3 ساعات. الحدود وحدها تعني أن المنطقة لا تقيس هذا.</string>
-    <string name="discover_osm">© OpenStreetMap</string>
-    <string name="discover_map_title">بيانات الخريطة</string>
-    <string name="discover_map_info1">بيانات الخريطة © المساهمون في OpenStreetMap، بموجب رخصة Open Database License. راجع openstreetmap.org/copyright.</string>
-    <string name="discover_map_info2">الخريطة الأساسية من Protomaps.</string>
-    <string name="discover_map_info3">أسماء الأماكن © GeoNames، بموجب رخصة CC BY 4.0. راجع geonames.org.</string>
     <string name="discover_no_areas">لا توجد مناطق مستشعرات هنا بعد</string>
     <string name="discover_not_measured">لا يُقاس هنا</string>
     <string name="discover_stale">لا قيمة جديدة منذ 3 ساعات</string>
@@ -36,8 +30,6 @@
     <string name="discover_loading">جارٍ التحميل</string>
     <string name="discover_read_failed">غير متاح الآن</string>
     <string name="discover_retry">أعد المحاولة</string>
-    <string name="discover_no_places">لا توجد أماكن مطابقة</string>
-    <string name="discover_clear_search">مسح البحث</string>
     <string name="discover_updated_recently">حُدّثت خلال الساعة</string>
     <string name="discover_window_short_hour">1 س</string>
     <string name="discover_window_short_day">24 س</string>
@@ -160,17 +152,6 @@
     <string name="discover_own_show">عرض %1$s على الخريطة</string>
     <!-- Own sensors on the map (#273). Their newest reading on this phone, Live while linked. -->
     <string name="discover_live">مباشر</string>
-    <string name="discover_ago_just_now">الآن</string>
-    <string name="discover_ago_minutes">قبل %1$d د</string>
-    <string name="discover_ago_hours">قبل %1$d س</string>
-    <plurals name="discover_ago_days">
-        <item quantity="zero">قبل %1$d يوم</item>
-        <item quantity="one">قبل %1$d يوم</item>
-        <item quantity="two">قبل %1$d يومين</item>
-        <item quantity="few">قبل %1$d أيام</item>
-        <item quantity="many">قبل %1$d يومًا</item>
-        <item quantity="other">قبل %1$d يوم</item>
-    </plurals>
     <!-- The Real label while the network fails and the last read data is shown, as in "OpenAQ, cached 2 h ago". -->
     <string name="discover_real_cached">OpenAQ، محفوظة %1$s</string>
     <!-- On a public area that folds in a sensor the user shares. -->

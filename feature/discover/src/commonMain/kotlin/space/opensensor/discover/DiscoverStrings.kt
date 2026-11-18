@@ -3,24 +3,18 @@ package space.opensensor.discover
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import kotlinx.datetime.LocalDate
-import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.preferredLanguage
 import space.opensensor.discover.resources.Res
 import space.opensensor.discover.resources.discover_add_sensor
-import space.opensensor.discover.resources.discover_ago_days
-import space.opensensor.discover.resources.discover_ago_hours
-import space.opensensor.discover.resources.discover_ago_just_now
-import space.opensensor.discover.resources.discover_ago_minutes
 import space.opensensor.discover.resources.discover_all_measurements
 import space.opensensor.discover.resources.discover_area_count
 import space.opensensor.discover.resources.discover_areas_in_view
 import space.opensensor.discover.resources.discover_average_summary
 import space.opensensor.discover.resources.discover_avg
 import space.opensensor.discover.resources.discover_clear_filter
-import space.opensensor.discover.resources.discover_clear_search
 import space.opensensor.discover.resources.discover_data_openaq
 import space.opensensor.discover.resources.discover_data_to
 import space.opensensor.discover.resources.discover_day_month
@@ -31,11 +25,7 @@ import space.opensensor.discover.resources.discover_includes_own
 import space.opensensor.discover.resources.discover_live
 import space.opensensor.discover.resources.discover_load_failed
 import space.opensensor.discover.resources.discover_loading
-import space.opensensor.discover.resources.discover_map_info1
-import space.opensensor.discover.resources.discover_map_info2
-import space.opensensor.discover.resources.discover_map_info3
 import space.opensensor.discover.resources.discover_map_label
-import space.opensensor.discover.resources.discover_map_title
 import space.opensensor.discover.resources.discover_max
 import space.opensensor.discover.resources.discover_min
 import space.opensensor.discover.resources.discover_months_short
@@ -45,10 +35,8 @@ import space.opensensor.discover.resources.discover_mood_info_title
 import space.opensensor.discover.resources.discover_more
 import space.opensensor.discover.resources.discover_no_areas
 import space.opensensor.discover.resources.discover_no_health_scale
-import space.opensensor.discover.resources.discover_no_places
 import space.opensensor.discover.resources.discover_not_measured
 import space.opensensor.discover.resources.discover_off_scale
-import space.opensensor.discover.resources.discover_osm
 import space.opensensor.discover.resources.discover_own_heading
 import space.opensensor.discover.resources.discover_own_show
 import space.opensensor.discover.resources.discover_own_unnamed
@@ -67,7 +55,6 @@ import space.opensensor.discover.resources.discover_scale_info2
 import space.opensensor.discover.resources.discover_scale_info2_real
 import space.opensensor.discover.resources.discover_scale_mark
 import space.opensensor.discover.resources.discover_scale_title
-import space.opensensor.discover.resources.discover_search_places
 import space.opensensor.discover.resources.discover_sensors
 import space.opensensor.discover.resources.discover_sheet_collapse
 import space.opensensor.discover.resources.discover_sheet_expand
@@ -105,7 +92,11 @@ import space.opensensor.discover.resources.discover_window_short_day
 import space.opensensor.discover.resources.discover_window_short_hour
 import space.opensensor.discover.resources.discover_window_short_latest_day
 import space.opensensor.discover.resources.discover_window_short_week
+import space.opensensor.map.mapInfoTitle
+import space.opensensor.map.osmCredit
+import space.opensensor.map.searchMapInfo
 import space.opensensor.publicfeed.StepScale
+import space.opensensor.strings.rememberAgoFormatter
 
 /**
  * Every word Discover shows, read from this module's Compose resources
@@ -116,7 +107,6 @@ import space.opensensor.publicfeed.StepScale
  */
 @Immutable
 class DiscoverStrings internal constructor(
-    val searchPlaces: String,
     val addSensor: String,
     val more: String,
     val windowLastHour: String,
@@ -145,8 +135,6 @@ class DiscoverStrings internal constructor(
     /** A cell's window read that failed after its retries, with [retry] beside it. */
     val readFailed: String,
     val retry: String,
-    val noPlaces: String,
-    val clearSearch: String,
     val updatedRecently: String,
     /** Short labels beside the time slider stops. The full window names are spoken. */
     val windowShortHour: String,
@@ -210,16 +198,12 @@ class DiscoverStrings internal constructor(
     val live: String,
     /** On a public area that folds in a sensor the user shares. */
     val includesOwn: String,
+    /**
+     * "12 min ago", the age in milliseconds of an own reading or of the kept public data, in the
+     * shared words of every screen. Under a minute reads just now.
+     */
+    val ago: (Long) -> String,
 ) {
-    /** "12 min ago", the age of an own reading or of the kept public data. */
-    @Composable
-    internal fun age(step: AgeStep, n: Long): String = when (step) {
-        AgeStep.JUST_NOW -> stringResource(Res.string.discover_ago_just_now)
-        AgeStep.MINUTES -> stringResource(Res.string.discover_ago_minutes, n.toInt())
-        AgeStep.HOURS -> stringResource(Res.string.discover_ago_hours, n.toInt())
-        AgeStep.DAYS -> pluralStringResource(Res.plurals.discover_ago_days, n.toInt(), n.toInt())
-    }
-
     /** The Real label while the kept data is on screen, as in "OpenAQ, cached 2 h ago". */
     @Composable
     fun realCached(age: String): String = stringResource(Res.string.discover_real_cached, age)
@@ -306,9 +290,6 @@ class DiscoverStrings internal constructor(
         if (upTo != null) stringResource(Res.string.discover_who_step_spoken, name, upTo, unit) else name
 }
 
-/** The lines of Discover's map info, the basemap credits and the GeoNames credit of the place search. */
-internal val DiscoverMapInfo: List<StringResource> = listOf(Res.string.discover_map_info1, Res.string.discover_map_info2, Res.string.discover_map_info3)
-
 /** Discover's copy in the phone's language, from the shared Compose resources. */
 @Composable
 fun discoverStrings(): DiscoverStrings = DiscoverStrings(
@@ -327,7 +308,7 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     ownUnnamed = stringResource(Res.string.discover_own_unnamed),
     live = stringResource(Res.string.discover_live),
     includesOwn = stringResource(Res.string.discover_includes_own),
-    searchPlaces = stringResource(Res.string.discover_search_places),
+    ago = rememberAgoFormatter(seconds = false),
     addSensor = stringResource(Res.string.discover_add_sensor),
     more = stringResource(Res.string.discover_more),
     windowLastHour = stringResource(Res.string.discover_window_last_hour),
@@ -344,11 +325,8 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
         stringResource(Res.string.discover_scale_title),
         listOf(stringResource(Res.string.discover_scale_info1), stringResource(Res.string.discover_scale_info2_real)),
     ),
-    osm = stringResource(Res.string.discover_osm),
-    mapInfo = InfoText(
-        stringResource(Res.string.discover_map_title),
-        DiscoverMapInfo.map { stringResource(it) },
-    ),
+    osm = osmCredit(),
+    mapInfo = InfoText(mapInfoTitle(), searchMapInfo().map { stringResource(it) }),
     noAreas = stringResource(Res.string.discover_no_areas),
     notMeasured = stringResource(Res.string.discover_not_measured),
     stale = stringResource(Res.string.discover_stale),
@@ -362,8 +340,6 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     loading = stringResource(Res.string.discover_loading),
     readFailed = stringResource(Res.string.discover_read_failed),
     retry = stringResource(Res.string.discover_retry),
-    noPlaces = stringResource(Res.string.discover_no_places),
-    clearSearch = stringResource(Res.string.discover_clear_search),
     updatedRecently = stringResource(Res.string.discover_updated_recently),
     windowShortHour = stringResource(Res.string.discover_window_short_hour),
     windowShortDay = stringResource(Res.string.discover_window_short_day),

@@ -85,9 +85,13 @@ object FloatingControl {
     fun segmentShape(index: Int, count: Int): Shape =
         SegmentedButtonDefaults.itemShape(index, count, baseShape = RoundedCornerShape(12.dp))
 
-    /** Filter chip colours, Signal blue with ink text when selected, neutral otherwise. */
+    /**
+     * Filter chip colours, Signal blue with ink text when selected, neutral otherwise. Chips that
+     * float over content ([overContent]) sit on the floating surface so they read over anything.
+     */
     @Composable
-    fun chipColors(): SelectableChipColors = FilterChipDefaults.filterChipColors(
+    fun chipColors(overContent: Boolean = false): SelectableChipColors = FilterChipDefaults.filterChipColors(
+        containerColor = if (overContent) surfaceColor() else Color.Unspecified,
         selectedContainerColor = Selected,
         selectedLabelColor = OnSelected,
         selectedLeadingIconColor = OnSelected,
@@ -100,6 +104,10 @@ object FloatingControl {
         activeContainerColor = Selected,
         activeContentColor = OnSelected,
     )
+
+    /** The near opaque surface under every floating control. */
+    @Composable
+    fun surfaceColor(): Color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
 
     /** The primary action's colours, Signal blue with ink text in either theme. */
     @Composable
@@ -114,7 +122,7 @@ object FloatingControl {
 fun FloatingSurface(
     modifier: Modifier = Modifier,
     shape: Shape = FloatingControl.Shape,
-    color: Color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+    color: Color = FloatingControl.surfaceColor(),
     content: @Composable () -> Unit,
 ) {
     Surface(
@@ -127,12 +135,16 @@ fun FloatingSurface(
     )
 }
 
-/** A square floating button for one icon, at least [FloatingControl.Size] on each side. */
+/**
+ * A square floating button for one icon, at least [FloatingControl.Size] on each side. [primary]
+ * gives the screen's main action the Signal blue tint, otherwise it sits on the neutral surface.
+ */
 @Composable
 fun FloatingIconButton(
     onClick: () -> Unit,
     contentDescription: String,
     modifier: Modifier = Modifier,
+    primary: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     Surface(
@@ -144,7 +156,8 @@ fun FloatingIconButton(
                 role = Role.Button
             },
         shape = FloatingControl.Shape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        color = if (primary) FloatingControl.Selected else FloatingControl.surfaceColor(),
+        contentColor = if (primary) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurface,
         shadowElevation = 3.dp,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline),
     ) {
@@ -168,7 +181,7 @@ fun FloatingTextButton(
         onClick = onClick,
         modifier = modifier.touchTarget(minHeight = FloatingControl.Size),
         shape = FloatingControl.Shape,
-        color = if (primary) FloatingControl.Selected else MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        color = if (primary) FloatingControl.Selected else FloatingControl.surfaceColor(),
         contentColor = if (primary) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurface,
         shadowElevation = 3.dp,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline),
