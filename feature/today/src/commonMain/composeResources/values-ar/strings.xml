@@ -49,11 +49,6 @@
     <string name="fresh_none">لا عيّنة بعد</string>
     <string name="fresh_updated">حُدّث %1$s</string>
     <string name="fresh_stale">قديم، حُدّث %1$s</string>
-    <string name="ago_just_now">الآن</string>
-    <string name="ago_seconds">قبل %1$d ث</string>
-    <string name="ago_minutes">قبل %1$d د</string>
-    <string name="ago_hours">قبل %1$d س</string>
-    <string name="ago_days">قبل %1$d يوم</string>
     <string name="now_right_now">الآن</string>
     <string name="now_last_reading">آخر قراءة</string>
     <string name="now_snapshot_note">لقطة لمدة 10 ثوانٍ، وليست متوسطًا يوميًا.</string>

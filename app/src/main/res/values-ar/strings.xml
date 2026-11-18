@@ -91,10 +91,6 @@
     <string name="sensor_scan_unrecognized">هذا الرمز الشريطي ليس ملصق Plantower معروفًا. اكتبه يدويًا إن لزم.</string>
     <string name="sensor_scan_unavailable">الماسح غير متاح. اكتب ما على الملصق أدناه.</string>
 
-
-
-
-
     <!-- Files -->
     <string name="files_connect_to_list">اتصل لعرض الملفات على المستشعر.</string>
 
@@ -114,9 +110,6 @@
 
     <!-- Info sheets -->
     <string name="info_file_chart_body">عمود لكل ملف تمت مزامنته بترتيب الملفات. الأعمدة الباهتة فيها قراءات صالحة قليلة، مثلًا أثناء الإحماء. الأعمدة المتقطعة وقتها مقدَّر. المس عمودًا لقراءة ملفه وصفوفه ومدته الزمنية ومتوسطه.</string>
-
-    <!-- Connection banner -->
-    <string name="conn_failed">تعذّر الاتصال. اقترب وحاول مرة أخرى</string>
 
     <!-- Bottom bar -->
 
@@ -144,135 +137,12 @@
 
     <!-- History -->
     <!-- Device and Files messages (snackbars) -->
-    <string name="msg_sticker_invalid">أدخل الملصق بصيغة PMS5003T مع التاريخ وأرقام الوحدة.</string>
     <string name="msg_wake_no_dialog">تعذّر فتح نافذة النظام.</string>
     <string name="msg_wake_failed">لم يُضبط التنبيه عند الاقتراب. تعذّر على هذا الهاتف ربط المستشعر.</string>
     <string name="msg_wake_cancelled">لم يُضبط التنبيه عند الاقتراب.</string>
     <string name="msg_wake_no_link">لم يُضبط التنبيه عند الاقتراب. لم يسجّل Android أي ربط.</string>
     <string name="msg_wake_on">التنبيه عند الاقتراب مفعّل. تبدأ المزامنة عندما يقترب هذا الهاتف من المستشعر.</string>
     <string name="msg_wake_off">التنبيه عند الاقتراب متوقف.</string>
-    <string name="msg_pairing_saved">حُفظت إعدادات الإقران</string>
-    <string name="msg_pin_saved">حُفظ رمز PIN</string>
-    <string name="msg_wifi_sent">أُرسلت إعدادات Wi-Fi. المستشعر يتصل الآن.</string>
-    <string name="msg_wifi_on">Wi-Fi مفعّل</string>
-    <string name="msg_wifi_off">Wi-Fi متوقف</string>
-    <string name="msg_lan_on">المزامنة عبر Wi-Fi مفعّلة</string>
-    <string name="msg_lan_off">المزامنة عبر Wi-Fi متوقفة</string>
-    <string name="msg_settings_saved">حُفظت الإعدادات</string>
-    <string name="config_problem_pin">يتكوّن رمز PIN من 6 أرقام بالضبط.</string>
-    <string name="config_problem_ssid_empty">أدخل اسم الشبكة.</string>
-    <string name="config_problem_ssid_long">اسم الشبكة طويل جدًا. الحد الأقصى 32 بايت.</string>
-    <string name="config_problem_psk_short">كلمة المرور قصيرة جدًا. الحد الأدنى 8 بايت.</string>
-    <string name="config_problem_psk_long">كلمة المرور طويلة جدًا. الحد الأقصى 63 بايت.</string>
-    <string name="config_problem_line_break">لا يُسمح بفواصل الأسطر أو أحرف التحكم هنا.</string>
-    <string name="config_problem_site">إحدى قيم بيانات الموقع غير صالحة. راجع الحقول.</string>
-    <string name="config_problem_field">هذه القيمة غير مسموح بها هنا.</string>
-    <string name="msg_bonds_cleared">نسي المستشعر كل الهواتف المقترنة. ستُقرن من جديد عند اتصال Bluetooth التالي.</string>
-    <string name="msg_saved_after_reboot">%1$s. تُطبّق تغييرات Bluetooth بعد إعادة التشغيل.</string>
-    <string name="msg_config_rejected_pairing">رفض المستشعر إعدادات الاقتران. لم يتغيّر شيء.</string>
-    <string name="msg_config_rejected_wifi">رفض المستشعر إعدادات Wi-Fi. لم يتغيّر شيء.</string>
-    <string name="msg_config_rejected_lan">رفض المستشعر إعدادات المزامنة عبر Wi-Fi. لم يتغيّر شيء.</string>
-    <string name="msg_config_rejected_location">رفض المستشعر الموقع. لم يتغيّر شيء.</string>
-    <string name="msg_config_rejected_site">رفض المستشعر بيانات الموقع. لم يتغيّر شيء.</string>
-    <string name="msg_config_rejected_sensor">رفض المستشعر بيانات وحدة الاستشعار. لم يتغيّر شيء.</string>
-    <string name="msg_config_rejected_other">رفض المستشعر هذا الإعداد. لم يتغيّر شيء.</string>
-    <string name="msg_secret_needs_bluetooth">تُرسل كلمات المرور والرموز عبر Bluetooth فقط.</string>
-
-    <!-- Device messages from the data layer (data/DeviceMessage.kt, mapped in components/DeviceMessages.kt) -->
-    <string name="msg_background_owns_connect">المزامنة في الخلفية تستخدم هذا المستشعر. يبقى تقدّمها ظاهرًا. اتصل مرة أخرى عندما تنتهي.</string>
-    <string name="msg_background_owns_sync">المزامنة في الخلفية تستخدم هذا المستشعر. انتظر حتى تنتهي قبل المزامنة.</string>
-    <string name="msg_background_owns_command">المزامنة في الخلفية تستخدم هذا المستشعر. انتظر حتى تنتهي.</string>
-    <string name="msg_busy_before_sync">انتظر حتى تنتهي مهمة المستشعر الحالية قبل المزامنة.</string>
-    <string name="msg_busy">انتظر حتى تنتهي مهمة المستشعر الحالية.</string>
-    <string name="msg_newer_protocol">بروتوكول المستشعر v%1$d، وبروتوكول التطبيق v%2$d. تُتجاهل الميزات الأحدث.</string>
-    <string name="msg_firmware_update_required">حدّث برنامج المستشعر للاتصال. يستخدم البروتوكول %1$d، ويحتاج هذا التطبيق إلى %2$d.</string>
-    <string name="msg_firmware_update_required_unknown">حدّث برنامج المستشعر للاتصال. يحتاج هذا التطبيق إلى البروتوكول %1$d.</string>
-    <string name="msg_hardware_in_use">هذا المستشعر متصل بالفعل بطريقة أخرى.</string>
-    <string name="msg_verification_failed">تعذّر التحقق من المستشعر. حاول مرة أخرى.</string>
-    <string name="msg_thing_changed">أُعيد ضبط المستشعر. يُحتفظ بالسجل السابق.</string>
-    <string name="msg_reconnecting">انقطع الاتصال. جارٍ إعادة الاتصال، المحاولة %1$d من %2$d…</string>
-    <plurals name="msg_reconnect_failed">
-        <item quantity="zero">تعذّرت إعادة الاتصال بعد %1$d محاولة. اضغط إعادة الاتصال عندما يعود المستشعر.</item>
-        <item quantity="one">تعذّرت إعادة الاتصال بعد محاولة واحدة (%1$d). اضغط إعادة الاتصال عندما يعود المستشعر.</item>
-        <item quantity="two">تعذّرت إعادة الاتصال بعد محاولتين (%1$d). اضغط إعادة الاتصال عندما يعود المستشعر.</item>
-        <item quantity="few">تعذّرت إعادة الاتصال بعد %1$d محاولات. اضغط إعادة الاتصال عندما يعود المستشعر.</item>
-        <item quantity="many">تعذّرت إعادة الاتصال بعد %1$d محاولة. اضغط إعادة الاتصال عندما يعود المستشعر.</item>
-        <item quantity="other">تعذّرت إعادة الاتصال بعد %1$d محاولة. اضغط إعادة الاتصال عندما يعود المستشعر.</item>
-    </plurals>
-    <string name="msg_lan_token_stored">حُفظ رمز الوصول عبر Wi-Fi على هذا الهاتف.</string>
-    <string name="msg_token_needs_ble">يصل رمز الوصول عبر Bluetooth فقط. أعد الاتصال عبر Bluetooth أولًا.</string>
-    <string name="msg_token_rotated_lan">تغيّر رمز الوصول. تنتهي جلسة Wi-Fi هذه. أعد الاتصال عبر Bluetooth للحصول على الرمز الجديد.</string>
-    <string name="msg_token_rotated_stored">تغيّر رمز الوصول وحُفظ الرمز الجديد على هذا الهاتف.</string>
-    <string name="msg_token_rotated_fetch">تغيّر رمز الوصول. استخدم جلب الرمز لحفظ الرمز الجديد.</string>
-    <string name="msg_file_list_not_ready">قائمة الملفات ليست جاهزة بعد. حاول مرة أخرى بعد لحظة.</string>
-    <string name="msg_no_thing">لم يُبلغ المستشعر عن معرّفه. أعد الاتصال وحاول مرة أخرى.</string>
-    <string name="msg_up_to_date">كل شيء موجود على هذا الهاتف بالفعل.</string>
-    <string name="msg_file_check_failed">لم يجتز %1$s الفحوصات. يبقى على المستشعر.</string>
-    <string name="msg_file_refused">رفض المستشعر إرسال %1$s.</string>
-    <string name="msg_file_failed">تعذّر نسخ %1$s. ستُعاد المحاولة في المزامنة التالية.</string>
-    <plurals name="msg_sync_finished">
-        <item quantity="zero">تمت مزامنة %1$d من %2$d ملف</item>
-        <item quantity="one">تمت مزامنة %1$d من %2$d ملف</item>
-        <item quantity="two">تمت مزامنة %1$d من %2$d ملف</item>
-        <item quantity="few">تمت مزامنة %1$d من %2$d ملفات</item>
-        <item quantity="many">تمت مزامنة %1$d من %2$d ملفًا</item>
-        <item quantity="other">تمت مزامنة %1$d من %2$d ملف</item>
-    </plurals>
-    <string name="msg_sync_stopped">توقفت المزامنة. تُستأنف الملفات الجزئية في المرة القادمة.</string>
-    <string name="msg_sync_aborted">توقفت المزامنة مبكرًا. تُستأنف في المزامنة التالية.</string>
-    <string name="msg_bluetooth_off">شغِّل Bluetooth للاتصال.</string>
-    <string name="msg_bluetooth_permission">اسمح لهذا التطبيق بالوصول إلى الأجهزة القريبة للاتصال.</string>
-    <string name="msg_bluetooth_missing">لا يحتوي هذا الهاتف على Bluetooth.</string>
-    <string name="msg_sync_end_interrupted">أوقف أندرويد المزامنة مؤقتًا. تُستأنف عند فتح التطبيق.</string>
-    <string name="msg_sync_end_bluetooth_off">توقفت المزامنة. شغِّل Bluetooth ثم زامِن مرة أخرى.</string>
-    <string name="msg_sync_end_permission">توقفت المزامنة. اسمح لهذا التطبيق بالوصول إلى الأجهزة القريبة ثم زامِن مرة أخرى.</string>
-    <string name="msg_sync_end_wifi_access">توقفت المزامنة. اتصل عبر Bluetooth مرة واحدة ثم زامن مرة أخرى.</string>
-    <string name="msg_sync_end_busy">المستشعر مشغول بهاتف آخر. حاول مرة أخرى بعد قليل.</string>
-    <string name="msg_sync_end_out_of_range">المستشعر بعيد. اقترب منه ثم زامِن مرة أخرى.</string>
-    <string name="msg_sync_end_update_firmware">حدِّث البرنامج الثابت للمستشعر ثم زامِن مرة أخرى.</string>
-    <string name="msg_sync_end_no_space">لا توجد مساحة كافية على هذا الهاتف. حرِّر بعض المساحة ثم زامِن مرة أخرى.</string>
-    <string name="msg_sync_end_storage">تعذّر الحفظ على هذا الهاتف. زامِن مرة أخرى لإعادة المحاولة.</string>
-    <string name="msg_sync_end_link_lost">انقطع الاتصال. تُستأنف المزامنة التالية من حيث توقفت.</string>
-    <string name="msg_not_enough_space">لا توجد مساحة كافية على هذا الهاتف. حرّر %1$s ثم زامن مرة أخرى.</string>
-    <plurals name="msg_unplaced">
-        <item quantity="zero">%1$d قراءة مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
-        <item quantity="one">قراءة واحدة (%1$d) مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
-        <item quantity="two">قراءتان (%1$d) مؤرشفتان لكن بلا وقت بعد، لذا لا تظهران في التقويم.</item>
-        <item quantity="few">%1$d قراءات مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
-        <item quantity="many">%1$d قراءة مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
-        <item quantity="other">%1$d قراءة مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
-    </plurals>
-    <plurals name="msg_finalized">
-        <item quantity="zero">اكتملت %1$d قراءة. %2$d ملفات على البطاقة.</item>
-        <item quantity="one">اكتملت قراءة واحدة (%1$d). %2$d ملفات على البطاقة.</item>
-        <item quantity="two">اكتملت قراءتان (%1$d). %2$d ملفات على البطاقة.</item>
-        <item quantity="few">اكتملت %1$d قراءات. %2$d ملفات على البطاقة.</item>
-        <item quantity="many">اكتملت %1$d قراءة. %2$d ملفات على البطاقة.</item>
-        <item quantity="other">اكتملت %1$d قراءة. %2$d ملفات على البطاقة.</item>
-    </plurals>
-    <string name="msg_no_reboot_syncing">لن يُعاد التشغيل أثناء المزامنة. أوقف المزامنة أولًا.</string>
-    <string name="msg_rebooting">يُعاد تشغيل المستشعر. جارٍ إعادة الاتصال…</string>
-    <string name="msg_rejected_get_token">رفض المستشعر مشاركة رمز الوصول عبر Wi-Fi.</string>
-    <string name="msg_rejected_flush">رفض المستشعر إكمال قراءاته.</string>
-    <string name="msg_rejected_get_config">رفض المستشعر مشاركة إعداداته.</string>
-    <string name="msg_rejected_set_config">رفض المستشعر الإعدادات. لم يتغيّر شيء.</string>
-    <string name="msg_rejected_reboot">رفض المستشعر إعادة التشغيل.</string>
-    <string name="msg_rejected_rotate_token">رفض المستشعر تغيير رمز الوصول.</string>
-    <string name="msg_failed_get_token">تعذّر الحصول على رمز الوصول عبر Wi-Fi. حاول مرة أخرى.</string>
-    <string name="msg_failed_flush">تعذّر إكمال القراءات. حاول مرة أخرى.</string>
-    <string name="msg_failed_get_config">تعذّرت قراءة إعدادات المستشعر. حاول مرة أخرى.</string>
-    <string name="msg_failed_set_config">تعذّر حفظ الإعدادات. حاول مرة أخرى.</string>
-    <string name="msg_failed_reboot">تعذّرت إعادة تشغيل المستشعر. حاول مرة أخرى.</string>
-    <string name="msg_failed_rotate_token">تعذّر تغيير رمز الوصول. حاول مرة أخرى.</string>
-    <string name="msg_identity_endpoint_changed">يرد هذا المستشعر من عنوان جديد. أقرنه من جديد كمستشعر جديد.</string>
-    <string name="msg_identity_hardware_changed">هذا عتاد مختلف. أقرنه كمستشعر جديد.</string>
-    <string name="msg_identity_hardware_missing">لم يعد المستشعر يُبلغ عن معرّف العتاد.</string>
-    <string name="msg_identity_hardware_malformed">يُبلغ المستشعر عن معرّف عتاد غير صالح.</string>
-    <string name="msg_identity_thing_missing">لم يُبلغ المستشعر عن معرّفه.</string>
-    <string name="msg_identity_thing_malformed">يُبلغ المستشعر عن معرّف غير صالح.</string>
-    <string name="msg_identity_enroll_ble">اتصل بهذا المستشعر عبر Bluetooth أولًا.</string>
-    <string name="msg_identity_thing_ble">تغيّر معرّف المستشعر. أعد الاتصال عبر Bluetooth للتحقق منه.</string>
-    <string name="msg_identity_thing_hardware">تغيّر معرّف المستشعر دون معرّف عتاد مطابق.</string>
 
     <!-- Sensor ID label in the scan list. The Files screen strings live in :feature:files. -->
 
@@ -343,8 +213,6 @@
         <item quantity="other">%1$d صف</item>
     </plurals>
 
-    <!-- The Debug screen copy lives in feature/debug composeResources. -->
-    <string name="conn_pairing_repair">يحتاج إقران Bluetooth إلى إصلاح. إذا أُعيد ضبط هذا المستشعر أو أُعيد تثبيت برنامجه الثابت، فانسَه في إعدادات Bluetooth في Android ثم أقرنه مجددًا. ملفاتك المؤرشفة محفوظة.</string>
     <!-- Byte counts in steps of 1024, the same words as Files (core/units byteSize). -->
     <string name="unit_bytes">%1$s بايت</string>
     <string name="unit_kilobytes">%1$s كيلوبايت</string>

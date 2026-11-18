@@ -162,16 +162,6 @@ class DebugControllerTest {
     }
 
     @Test
-    fun agoUsesTheCatalogueTemplates() {
-        val m = ""
-        assertEquals("now", formatAgo(-1, "now", "${m}s", "${m}m", "${m}h", "${m}d"))
-        assertEquals("5s", formatAgo(5_000, "now", "${m}s", "${m}m", "${m}h", "${m}d"))
-        assertEquals("2m", formatAgo(120_000, "now", "${m}s", "${m}m", "${m}h", "${m}d"))
-        assertEquals("3h", formatAgo(3 * 3_600_000L, "now", "${m}s", "${m}m", "${m}h", "${m}d"))
-        assertEquals("1d", formatAgo(86_400_000L, "now", "${m}s", "${m}m", "${m}h", "${m}d"))
-    }
-
-    @Test
     fun anyConfirmedLevelBelowDeveloperLeavesDebug() {
         assertTrue(leavesDebug(false))
         assertFalse(leavesDebug(null))

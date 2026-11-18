@@ -71,11 +71,6 @@ import space.opensensor.designsystem.spokenList
 import space.opensensor.designsystem.touchTarget
 import space.opensensor.files.resources.Res
 import space.opensensor.files.resources.action_back
-import space.opensensor.files.resources.ago_days
-import space.opensensor.files.resources.ago_hours
-import space.opensensor.files.resources.ago_just_now
-import space.opensensor.files.resources.ago_minutes
-import space.opensensor.files.resources.ago_seconds
 import space.opensensor.files.resources.file_invalid
 import space.opensensor.files.resources.file_metrics_named
 import space.opensensor.files.resources.file_mismatch
@@ -134,6 +129,7 @@ import space.opensensor.files.resources.files_syncing
 import space.opensensor.files.resources.files_title
 import space.opensensor.files.resources.scan_files
 import space.opensensor.settings.DetailLevel
+import space.opensensor.strings.rememberAgoFormatter
 import space.opensensor.strings.resources.sync_some_failed
 import space.opensensor.strings.resources.Res as SharedRes
 
@@ -430,17 +426,7 @@ private fun Hint(text: String) {
 
 /** How long ago [epochMs] was, refreshed every second. */
 @Composable
-private fun ago(epochMs: Long): String {
-    val ageMs = rememberNowMillis() - epochMs
-    val s = ageMs / 1000
-    return when {
-        ageMs < 0 -> stringResource(Res.string.ago_just_now)
-        s < 60 -> stringResource(Res.string.ago_seconds, s)
-        s < 3600 -> stringResource(Res.string.ago_minutes, s / 60)
-        s < 86_400 -> stringResource(Res.string.ago_hours, s / 3600)
-        else -> stringResource(Res.string.ago_days, s / 86_400)
-    }
-}
+private fun ago(epochMs: Long): String = rememberAgoFormatter()(rememberNowMillis() - epochMs)
 
 @Composable
 private fun GroupHeader(group: PartitionGroup, level: DetailLevel) {

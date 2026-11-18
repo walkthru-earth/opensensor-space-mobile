@@ -17,6 +17,8 @@ kotlin {
         commonMain.dependencies {
             api(project(":core:sync"))
             api(project(":ui:designsystem"))
+            // The shared "N ago" formatter and its words.
+            implementation(project(":ui:strings"))
             implementation(libs.kotlinx.coroutines.core)
             // Pretty printing of the status and config JSON.
             implementation(libs.kotlinx.serialization.json)

@@ -1,18 +1,14 @@
 package space.opensensor
 
 import space.opensensor.collection.SyncEndReason
+import space.opensensor.data.DeviceMessage
 import space.opensensor.data.sync.FileNotSaved
 import space.opensensor.strings.UiText
 import space.opensensor.strings.resources.Res
 import space.opensensor.strings.resources.companion_lan_sync_paused
 import space.opensensor.strings.resources.companion_sync_storage_failed
-import space.opensensor.strings.resources.msg_busy
-import space.opensensor.strings.resources.msg_hardware_in_use
-import space.opensensor.strings.resources.msg_sync_aborted
-import space.opensensor.strings.resources.msg_sync_finished
-import space.opensensor.strings.resources.msg_sync_stopped
-import space.opensensor.strings.resources.msg_up_to_date
 import space.opensensor.strings.resources.sync_some_failed
+import space.opensensor.strings.text
 
 /** How one sync ended. [SyncResult] carries the counts. */
 enum class SyncEnd {
@@ -78,7 +74,7 @@ class SyncResult internal constructor(
     /** Worth resuming automatically when the link returns. */
     val resumable: Boolean get() = end == SyncEnd.LINK_LOST || endReason == SyncEndReason.INTERRUPTED
 
-    /** The words for this outcome, Android's keys and wording. */
+    /** The words for this outcome. Endings Android also reports read through the shared device message mapping. */
     internal val message: UiText
         get() = if (endReason == SyncEndReason.INTERRUPTED) {
             UiText.of(Res.string.companion_lan_sync_paused)
@@ -86,15 +82,15 @@ class SyncResult internal constructor(
             when (end) {
                 SyncEnd.COMPLETE, SyncEnd.FILES_NOT_SAVED -> when {
                     notSaved > 0 -> UiText.plural(Res.plurals.sync_some_failed, notSaved, notSaved)
-                    saved == 0 -> UiText.of(Res.string.msg_up_to_date)
-                    else -> UiText.plural(Res.plurals.msg_sync_finished, saved, saved, saved)
+                    saved == 0 -> DeviceMessage.UpToDate.text()
+                    else -> DeviceMessage.SyncFinished(synced = saved, total = saved).text()
                 }
                 SyncEnd.STORAGE_FAILED -> UiText.of(Res.string.companion_sync_storage_failed)
-                SyncEnd.STOPPED -> UiText.of(Res.string.msg_sync_stopped)
-                SyncEnd.BUSY -> UiText.of(Res.string.msg_busy)
-                SyncEnd.IN_USE -> UiText.of(Res.string.msg_hardware_in_use)
+                SyncEnd.STOPPED -> DeviceMessage.SyncStopped.text()
+                SyncEnd.BUSY -> DeviceMessage.Busy.text()
+                SyncEnd.IN_USE -> DeviceMessage.HardwareInUse.text()
                 // A refused Wi-Fi token is renewed quietly on the next Bluetooth connection, so it reads as a lost link.
-                SyncEnd.LINK_LOST, SyncEnd.AUTH_FAILED, SyncEnd.FAILED -> UiText.of(Res.string.msg_sync_aborted)
+                SyncEnd.LINK_LOST, SyncEnd.AUTH_FAILED, SyncEnd.FAILED -> SyncEndReason.OTHER.text()
             }
         }
 
