@@ -208,7 +208,7 @@ class LinkOweCloseTest {
     }
 
     private suspend fun LinkSession.closeOwing(handle: Int): Frame =
-        exchange(RequestSpec.of(Request.Close(handle)), oweCloseIfUnsent = handle) { frame, terminal -> if (terminal) frame else null }
+        exchange(RequestSpec.of(Request.Close(handle), kind), oweCloseIfUnsent = handle) { frame, terminal -> if (terminal) frame else null }
 
     /** Holds the first `CLOSE` write until [failWrite], then fails it. */
     private class FailFirstCloseLate(private val peer: ScriptedLinkDriver) : LinkDriver by peer {

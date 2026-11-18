@@ -1,7 +1,7 @@
 # Transports, BLE, LAN, pairing, the token, reconnect
 
 **Scope:** the two byte pipes behind `DeviceTransport`, how the repository picks one, pairing, the LAN token lifecycle, link loss.
-**Code:** Android `data/ble/BleLinkDriver.kt`, `BleScanner.kt`; `data/lan/TcpLinkDriver.kt`, `LanDiscovery.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionManager.kt`, `DeviceFacade.kt`, `DeviceLinkOwner.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`), `DeviceIdentityClaims.kt`; `ui/permissions/LanPermission.kt`. Shared in `core/sync` commonMain: `data/ble/DeviceTransport.kt`, `DeviceSession.kt`, `FrameRecorder.kt`; `data/lan/LanTokenPolicy.kt`, `LanFailure.kt`; `data/DeviceContinuityPolicy.kt`, `TransportSelector.kt`, `ConnectionIntent.kt`. `core/protocol` `LanFrameSplitter.kt` (socket slices to frames).
+**Code:** Android `data/ble/BleLinkDriver.kt`, `BleScanner.kt`; `data/lan/TcpLinkDriver.kt`, `LanDiscovery.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionManager.kt`, `DeviceFacade.kt`, `DeviceLinkOwner.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`), `DeviceIdentityClaims.kt`; `ui/permissions/LanPermission.kt`. Shared in `core/sync` commonMain: `data/ble/DeviceTransport.kt`, `DeviceSession.kt`, `FrameRecorder.kt`; `data/lan/LanTokenPolicy.kt`, `LanFailure.kt`, `LanHandshake.kt` (the HELLO verdict and the LAN limits of both phones); `data/DeviceContinuityPolicy.kt`, `TransportSelector.kt`, `ConnectionIntent.kt`.
 **Related:** [protocol-quickref.md](protocol-quickref.md), [sync-engine.md](sync-engine.md) (what runs on top), [background-sync.md](background-sync.md) (unattended links, WifiLock).
 
 ## Choosing a link
@@ -159,11 +159,18 @@ measurements do not establish Android/iPhone throughput after the upgrade.
 | Auth | LE Secure Connections bond; passkey/PIN modes require encrypted, authenticated access; explicit lab `none` mode uses encrypted Just Works without MITM authentication | `"OSS1"` + 32-byte token, obtainable **only** over BLE; the socket itself is unencrypted by contract and does not authenticate server identity |
 | Framing | one notification per frame; `payload_max = min(MTU − 3, 512)`, Android silently drops notifications above the 512-byte GATT attribute limit; control requests ≤ 512 B | `len` u16 LE + frame; `payload_max` from `HELLO` (1024), `mtu` reports `payload_max + 3` |
 | Pushes | `status` / `live` characteristics. The firmware omits a snapshot notification larger than `MTU − 3` (snapshots are at most 480 B), so below MTU 483 the phone also long reads both every 10 s (`SnapshotPoller` on Android, `BleSnapshotReads` on iOS). Reads start once setup is done and stop with the link. On Android a tick skips while a transfer holds or borrows the link, and otherwise queues behind other GATT ops on `opMutex`. It runs whenever the session is open, also with the app in the background while a link the UI opened stays up. On iOS a tick skips while a run, command, lease, token request or any GATT op holds the link, and runs only while the link is kept for on screen or running work | `STATUS` 0x48 / `LIVE` 0x49 frames, **demultiplexed by type byte in the transport's single reader loop**, they may sit between two `CHUNK`s; `DeviceSession` is byte-for-byte identical for both pipes |
-| Liveness | GATT link state | `STATUS` keep-alive after 120 s idle (`KEEPALIVE_POLL_MS` 15 s); link declared dead after `DEAD_AFTER_MS` 180 s without a byte |
-| Timeouts | connect 15 s unattended (`BACKGROUND_BLE_CONNECT_MS`), `requestMtu` 10 s | `CONNECT_TIMEOUT_MS` 5 s, `HANDSHAKE_TIMEOUT_MS` 8 s, `PUSH_WAIT_MS` 10 s (`readStatus`), `LIVE_WAIT_MS` 15 s (`readLive`) |
+| Liveness | GATT link state | `STATUS` keep-alive after 120 s idle, link declared dead after 180 s without a byte (`Heartbeat.LAN`, read as `LanHandshake.KEEPALIVE_AFTER_IDLE` and `IDLE_BOUND`). iOS checks both every 15 s |
+| Timeouts | connect 15 s unattended (`BACKGROUND_BLE_CONNECT_MS`), `requestMtu` 10 s | `LanHandshake.CONNECT_TIMEOUT` 5 s, `HELLO_TIMEOUT` 8 s, `STATUS_PUSH_WAIT` 10 s (`readStatus`), `LIVE_PUSH_WAIT` 15 s (`readLive`), the same on both phones. Replies wait at least 30 s (`RequestSpec.LAN_REPLY_WAIT`) |
 | Framing loss | n/a (per-notification) | zero-length or oversize frame, or EOF mid-frame → close the socket (a resync could deliver a wrong `CHUNK`) |
 | Kept alive by | `dataSync` foreground service during a transfer; nothing while idle | the same + `LanWifiLock` only while a LAN transfer runs |
 | Serialization | **one GATT op at a time**, `opMutex` around every read/write/descriptor call; a callback completes the pending op only when its kind and characteristic match (`PendingGattOperation`), so a late callback is dropped | one socket, one reader loop |
+
+Both phones read one `LanHandshake` in `:core:sync`. Android `TcpLinkDriver` uses it directly and
+iOS `LanSession` reads it through `SyncWire`, so neither holds a LAN number of its own. The TCP
+connect gets 5 s. A connect on a LAN takes milliseconds, so a slower one is a stale mDNS record
+or a sleeping radio, and falling back to Bluetooth is faster than waiting. HELLO gets 8 s from the
+token write. The device answers at once, and the extra time covers a device busy writing its card.
+These are the values Android ran on the bench.
 
 ## Pairing (BLE)
 
@@ -356,7 +363,7 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 
 | Question | Decision |
 | --- | --- |
-| `HELLO.payload_max` ≠ 1024 | Trusted if ≥ 64; longer frames are a framing error that drops the link. Before `HELLO` the cap is 1024. |
+| `HELLO.payload_max` ≠ 1024 | Trusted from 64 to 1024 (`LanHandshake`). Both phones refuse a HELLO outside that range. Longer frames are a framing error that drops the link. Before `HELLO` the cap is 1024. |
 | `LIST_SINCE` on either pipe | The same frames on Bluetooth and LAN. A `payload_max` below 48 cannot carry `LIST_SINCE_END` (the firmware would answer `ERROR` 7), so the app sends plain `LIST` instead. |
 | LAN `readLive()` / `readStatus()` | Nothing can request a `LIVE`, so `readLive` returns the latest push or waits ≤ 15 s; `readStatus` returns the latest push or sends `STATUS` and waits ≤ 10 s. |
 | `WIFI_SCAN_END.status` ≠ 0 | The scan's error (15 → "Wi-Fi unavailable"), not partial success; APs received before it are discarded. |

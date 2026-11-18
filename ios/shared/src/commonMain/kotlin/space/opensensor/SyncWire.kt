@@ -1,11 +1,13 @@
 package space.opensensor
 
 import space.opensensor.data.ble.TransportKind
+import space.opensensor.data.lan.LanHandshake
 import space.opensensor.data.lan.LanTokenPolicy
 import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
+import space.opensensor.data.protocol.FrameType
 import space.opensensor.data.protocol.LanProtocol
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ProtoGate
@@ -14,6 +16,8 @@ import space.opensensor.data.protocol.Request
 import space.opensensor.data.protocol.requireProto3
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.peerClosedCause
+import kotlin.time.Duration
+import kotlin.time.DurationUnit
 
 /**
  * Small Swift facade around the canonical shared codec for the session itself: the token
@@ -54,7 +58,41 @@ class SyncWire {
         tokenPolicy.shouldFetch(TransportKind.BLE, DeviceInfo.parse(json).proto, if (hasToken) STORED else null)
     }.getOrDefault(false)
 
+    /**
+     * The shared [LanHandshake] verdict on the frame that answered the handshake, against the saved
+     * [thing] and [device]. ACCEPTED carries the identity [identity] validates, else BAD_INFO.
+     */
+    internal fun helloCheckFrame(bytes: ByteArray, thing: String, device: String): HelloCheck {
+        val frame = runCatching { FrameCodec.decode(bytes) }.getOrNull() ?: return HelloCheck(HelloVerdict.WRONG_KIND)
+        return when (val verdict = LanHandshake.verify(frame, savedDevice = device, savedThing = thing)) {
+            is LanHandshake.Verdict.Accepted -> identity(verdict.hello.infoJson)
+                ?.let { HelloCheck(HelloVerdict.ACCEPTED, it, verdict.hello.payloadMax, verdict.hello.infoJson) }
+                ?: HelloCheck(HelloVerdict.BAD_INFO)
+            LanHandshake.Verdict.WrongKind -> HelloCheck(HelloVerdict.WRONG_KIND)
+            is LanHandshake.Verdict.OldProto -> HelloCheck(HelloVerdict.OLD_PROTO)
+            is LanHandshake.Verdict.PayloadCapOutOfRange -> HelloCheck(HelloVerdict.PAYLOAD_CAP_OUT_OF_RANGE)
+            LanHandshake.Verdict.BadInfo -> HelloCheck(HelloVerdict.BAD_INFO)
+            LanHandshake.Verdict.DeviceChanged -> HelloCheck(HelloVerdict.DEVICE_CHANGED)
+            LanHandshake.Verdict.ThingChanged -> HelloCheck(HelloVerdict.THING_CHANGED)
+        }
+    }
+
     companion object {
+        /** LAN limits from the shared [LanHandshake], so Swift holds no literal. Seconds are `TimeInterval`. */
+        val lanConnectTimeoutSeconds: Double = LanHandshake.CONNECT_TIMEOUT.seconds()
+        val lanHelloTimeoutSeconds: Double = LanHandshake.HELLO_TIMEOUT.seconds()
+        val lanKeepaliveSeconds: Double = LanHandshake.KEEPALIVE_AFTER_IDLE.seconds()
+        val lanIdleSeconds: Double = LanHandshake.IDLE_BOUND.seconds()
+        val lanPayloadMax: Int = LanHandshake.PAYLOAD_MAX
+
+        /**
+         * How often the iOS socket checks the keepalive and idle bound. Android's `LinkSession`
+         * sleeps until the next due time instead. Short against the gap between the two bounds.
+         */
+        val lanLivenessCheckSeconds: Double = 15.0
+
+        private fun Duration.seconds(): Double = toDouble(DurationUnit.SECONDS)
+
         private const val STORED = "stored"
         const val DEFAULT_MAX_READ = 4096
         private const val MAX_READ_CAP = 16384
@@ -144,6 +182,40 @@ private fun byeRefusal(reason: Int): HandshakeRefusal {
         else -> HandshakeRefusal.PEER_CLOSED
     }
 }
+
+/** What [frameKindOf] says about a frame body before any decode. */
+enum class FrameKind {
+    /** A STATUS push, small JSON the socket reads itself. */
+    STATUS,
+
+    /** A LIVE push, small JSON the socket reads itself. */
+    LIVE,
+
+    /** Any other known type. It goes to the shared link as is, which decodes and checks it once. */
+    REPLY,
+
+    /** Empty, or a type this app does not know. The socket closes, as before. */
+    INVALID,
+}
+
+internal fun frameKindOf(type: Int?): FrameKind = when {
+    type == null -> FrameKind.INVALID
+    type == FrameType.STATUS -> FrameKind.STATUS
+    type == FrameType.LIVE -> FrameKind.LIVE
+    FrameType.isKnown(type) -> FrameKind.REPLY
+    else -> FrameKind.INVALID
+}
+
+/** [LanHandshake.Verdict] flattened for Swift. */
+enum class HelloVerdict { ACCEPTED, WRONG_KIND, OLD_PROTO, PAYLOAD_CAP_OUT_OF_RANGE, BAD_INFO, DEVICE_CHANGED, THING_CHANGED }
+
+/** One HELLO check. [identity], [payloadMax] and [json] are set only when ACCEPTED. */
+class HelloCheck(
+    val verdict: HelloVerdict,
+    val identity: SyncIdentity? = null,
+    val payloadMax: Int = 0,
+    val json: String = "",
+)
 
 /** What a frame received in place of HELLO means for the stored LAN token. */
 enum class HandshakeRefusal {

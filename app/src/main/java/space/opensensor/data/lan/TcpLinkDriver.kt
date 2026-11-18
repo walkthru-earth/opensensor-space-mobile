@@ -26,6 +26,7 @@ import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.FrameRecorder
 import space.opensensor.data.ble.TransportException
 import space.opensensor.data.ble.TransportKind
+import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
@@ -78,8 +79,6 @@ class TcpLinkDriver(
     token: ByteArray,
     private val ioDispatcher: CoroutineDispatcher,
     private val socketFactory: () -> Socket = ::Socket,
-    private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
-    private val handshakeTimeoutMs: Int = HANDSHAKE_TIMEOUT_MS,
 ) : AndroidLink {
 
     init {
@@ -97,7 +96,7 @@ class TcpLinkDriver(
     override val connectionState: StateFlow<ConnectionState> = _state.asStateFlow()
 
     @Volatile
-    private var payloadMax: Int = LanFraming.PAYLOAD_MAX
+    private var payloadMax: Int = LanHandshake.PAYLOAD_MAX
     override val mtu: Int get() = payloadMax + 3
 
     private val _status = MutableSharedFlow<ByteArray>(replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -130,7 +129,7 @@ class TcpLinkDriver(
         val once = OnceSink(sink)
         this.sink = once
         _state.value = ConnectionState.Connecting
-        val (frame, input) = try {
+        val (frame, info, input) = try {
             // Await on our own scope so a cancelled caller returns at once. Closing the socket
             // below is what unblocks the handshake thread.
             scope.async { handshake() }.await()
@@ -149,23 +148,23 @@ class TcpLinkDriver(
         payloadMax = frame.payloadMax
         _state.value = ConnectionState.Ready(mtu)
         scope.launch { readLoop(input, once) }
-        val info = try {
-            DeviceInfo.parse(frame.infoJson)
-        } catch (e: Exception) {
-            abort(DisconnectCause.FramingViolation("bad device info"))
-            throw LinkClosedException(DisconnectCause.FramingViolation("bad device info"), null)
-        }
         return LinkInfo(kind, payloadMax = frame.payloadMax, info = info)
     }
 
-    /** Blocking. Returns the HELLO and the buffered input the reader continues from. */
-    private fun handshake(): Pair<Frame.Hello, InputStream> {
+    private data class Greeting(val hello: Frame.Hello, val info: DeviceInfo, val input: InputStream)
+
+    /**
+     * Blocking. Returns the HELLO accepted by the shared [LanHandshake.check], its info, and the
+     * buffered input the reader continues from. The saved identity is checked by the caller
+     * through the same `DeviceContinuityPolicy` that [LanHandshake.verify] uses.
+     */
+    private fun handshake(): Greeting {
         val s = socketFactory()
         socket = s
         try {
             s.tcpNoDelay = true
             s.keepAlive = true
-            s.connect(InetSocketAddress(host, port), connectTimeoutMs)
+            s.connect(InetSocketAddress(host, port), LanHandshake.CONNECT_TIMEOUT.inWholeMilliseconds.toInt())
         } catch (e: IOException) {
             throw LinkClosedException(SocketErrors.connectCause(e), SocketErrors.connectException(e))
         }
@@ -178,9 +177,9 @@ class TcpLinkDriver(
         } catch (e: IOException) {
             throw LinkClosedException(SocketErrors.cause(e), LanConnectException(LanFailure.UNREACHABLE, null, e))
         }
-        s.soTimeout = handshakeTimeoutMs
+        s.soTimeout = LanHandshake.HELLO_TIMEOUT.inWholeMilliseconds.toInt()
         val raw = try {
-            LanFraming.read(input, LanFraming.PAYLOAD_MAX)
+            LanFraming.read(input, LanHandshake.PAYLOAD_MAX)
                 ?: throw peerClosed("device closed the socket without HELLO")
         } catch (e: SocketTimeoutException) {
             throw LinkClosedException(DisconnectCause.Timeout(TimeoutPhase.HANDSHAKE, 0), LanConnectException(LanFailure.TIMEOUT, cause = e))
@@ -199,18 +198,31 @@ class TcpLinkDriver(
             throw protocol(e.message)
         }
         when (frame) {
-            is Frame.Hello -> if (frame.payloadMax < MIN_PAYLOAD_MAX) throw protocol("HELLO payload_max ${frame.payloadMax} is too small")
             is Frame.Error -> throw when (frame.code) {
                 ProtocolError.AUTH_FAILED.code -> rejected(frame.describe())
                 ProtocolError.BUSY.code -> LinkClosedException(DisconnectCause.Busy, LanConnectException(LanFailure.BUSY, frame.describe()))
                 else -> protocol(frame.describe())
             }
             is Frame.Bye -> throw byeClosed(frame)
-            else -> throw protocol("expected HELLO, got ${frame::class.simpleName}")
+            else -> Unit
         }
-        // Quiet between pushes is allowed. The session heartbeat is the liveness rule.
-        s.soTimeout = 0
-        return frame as Frame.Hello to input
+        when (val verdict = LanHandshake.check(frame)) {
+            is LanHandshake.Verdict.Accepted -> {
+                // Quiet between pushes is allowed. The session heartbeat is the liveness rule.
+                s.soTimeout = 0
+                return Greeting(verdict.hello, verdict.info, input)
+            }
+            // The same cause LinkSession gives an old INFO, so the owner shows the update notice.
+            is LanHandshake.Verdict.OldProto -> throw LinkClosedException(
+                DisconnectCause.UpdateFirmware(verdict.reported, DeviceGatt.PROTOCOL_VERSION),
+                LanConnectException(LanFailure.PROTOCOL, "proto ${verdict.reported}"),
+            )
+            is LanHandshake.Verdict.PayloadCapOutOfRange -> throw protocol("HELLO payload_max ${verdict.payloadMax} is outside ${LanHandshake.MIN_PAYLOAD_MAX}..${LanHandshake.PAYLOAD_MAX}")
+            LanHandshake.Verdict.BadInfo -> throw LinkClosedException(DisconnectCause.FramingViolation("bad device info"), LanConnectException(LanFailure.PROTOCOL, "bad device info"))
+            LanHandshake.Verdict.WrongKind -> throw protocol("expected HELLO, got ${frame::class.simpleName}")
+            // Identity verdicts come from LanHandshake.verify, which this driver does not call.
+            LanHandshake.Verdict.DeviceChanged, LanHandshake.Verdict.ThingChanged -> throw protocol("unexpected identity verdict")
+        }
     }
 
     private fun rejected(detail: String) =
@@ -322,24 +334,16 @@ class TcpLinkDriver(
         if (!_state.value.isReady) throw TransportException("not connected")
         _status.replayCache.firstOrNull()?.let { return it }
         send(byteArrayOf(Opcode.STATUS.toByte()), RequestSpec.WRITE_DEADLINE)
-        return withTimeoutOrNull(PUSH_WAIT_MS) { _status.first() }
-            ?: throw TransportException("no STATUS push within ${PUSH_WAIT_MS / 1000} s")
+        return withTimeoutOrNull(LanHandshake.STATUS_PUSH_WAIT) { _status.first() }
+            ?: throw TransportException("no STATUS push within ${LanHandshake.STATUS_PUSH_WAIT}")
     }
 
     override suspend fun readLive(): ByteArray {
         if (!_state.value.isReady) throw TransportException("not connected")
         _live.replayCache.firstOrNull()?.let { return it }
-        return withTimeoutOrNull(LIVE_WAIT_MS) { _live.first() }
-            ?: throw TransportException("no LIVE push within ${LIVE_WAIT_MS / 1000} s")
+        return withTimeoutOrNull(LanHandshake.LIVE_PUSH_WAIT) { _live.first() }
+            ?: throw TransportException("no LIVE push within ${LanHandshake.LIVE_PUSH_WAIT}")
     }
 
     override suspend fun writeControl(request: ByteArray) = send(request, RequestSpec.WRITE_DEADLINE)
-
-    companion object {
-        const val CONNECT_TIMEOUT_MS = 5_000
-        const val HANDSHAKE_TIMEOUT_MS = 8_000
-        const val MIN_PAYLOAD_MAX = 64
-        const val PUSH_WAIT_MS = 10_000L
-        const val LIVE_WAIT_MS = 15_000L
-    }
 }

@@ -24,6 +24,7 @@ import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
 import space.opensensor.data.protocol.FrameDecodeException
 import space.opensensor.data.protocol.FrameType
+import space.opensensor.data.protocol.LanProtocol
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ProtoGate
 import space.opensensor.data.protocol.Request
@@ -65,8 +66,11 @@ data class Heartbeat(val pingAfterIdle: Duration, val deadline: Duration) {
     }
 
     companion object {
-        /** Ping well inside the firmware's 300 s LAN idle limit. */
-        val LAN = Heartbeat(pingAfterIdle = 120.seconds, deadline = 180.seconds)
+        /**
+         * Ping after the contract's 120 s keepalive, well inside the firmware's 300 s LAN idle
+         * limit. Both phones read these through `LanHandshake`.
+         */
+        val LAN = Heartbeat(pingAfterIdle = LanProtocol.KEEPALIVE_AFTER_IDLE_MS.milliseconds, deadline = 180.seconds)
     }
 }
 
@@ -475,7 +479,7 @@ class LinkSession(
             FrameCodec.decode(raw)
         } catch (_: FrameDecodeException) {
             queue(-size)
-            if (type in KNOWN_TYPES) {
+            if (FrameType.isKnown(type)) {
                 terminate(DisconnectCause.FramingViolation("bad ${FrameType.name(type)} frame"))
             } else {
                 log.event(LinkEvent.UnknownDropped(type))
@@ -584,7 +588,7 @@ class LinkSession(
      * closes the handle on the next `OPEN` or on disconnect.
      */
     private fun sendOwedClose(handle: Int) {
-        val spec = RequestSpec.of(Request.Close(handle))
+        val spec = RequestSpec.of(Request.Close(handle), kind)
         val d = Drain(spec.op, spec.drainBound, timeSource.markNow(), abortPending = false, replied = false)
         drain = d
         own.launch {
@@ -714,13 +718,5 @@ class LinkSession(
         const val BLE_BUDGET: Long = 256L * 1024
 
         fun defaultBudget(kind: TransportKind): Long = if (kind == TransportKind.BLE) BLE_BUDGET else LAN_BUDGET
-
-        private val KNOWN_TYPES = setOf(
-            FrameType.FILE, FrameType.LIST_END, FrameType.OPENED, FrameType.CHUNK, FrameType.READ_END,
-            FrameType.CLOSED, FrameType.TIME_SET, FrameType.FLUSHED, FrameType.CONFIG, FrameType.WIFI_AP,
-            FrameType.WIFI_SCAN_END, FrameType.REBOOTING, FrameType.LOG, FrameType.LOG_END, FrameType.TOKEN,
-            FrameType.HELLO, FrameType.STATUS, FrameType.LIVE, FrameType.CONFIG_CHUNK, FrameType.BYE,
-            FrameType.DIAG, FrameType.ABORTED, FrameType.LIST_SINCE_END, FrameType.DESCRIPTOR_CHUNK, FrameType.ERROR,
-        )
     }
 }

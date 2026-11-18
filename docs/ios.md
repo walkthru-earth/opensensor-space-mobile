@@ -41,9 +41,13 @@ A phone first connects over bonded Bluetooth and taps Save Wi-Fi access. `GET_TO
 encrypted BLE characteristics, and the token is saved in the Keychain with
 `AfterFirstUnlockThisDeviceOnly`. It never enters Kotlin, the UI or a log. The `OSS1` HELLO must
 match the enrolled thing and full hardware ID, so discovery alone cannot enroll a replacement.
+`SyncWire.helloCheck` gives the shared `LanHandshake` verdict, the same check Android runs, and
+the connect and HELLO bounds (5 s and 8 s), keepalive, idle bound and frame cap come from `SyncWire` too.
 A LAN `AUTH_FAILED` drops the saved token. Each `LanSession` is an actor on its own serial queue,
 keeps one receive of up to 64 KiB outstanding, splits `len` u16 frames and forbids cellular
-interfaces. Frames cross into Kotlin as `NSData` (`SyncWireData.kt`).
+interfaces. Frames cross into Kotlin as `NSData` (`SyncWireData.kt`). Once the shared link
+exists, Swift reads only a reply's type byte (`SyncWire.frameKind`), so a file frame is copied
+into Kotlin once and decoded once, by `LinkSession`. STATUS and LIVE pushes are still decoded in Swift.
 
 ## Sync and archive
 

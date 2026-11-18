@@ -1,5 +1,6 @@
 package space.opensensor.link
 
+import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.Request
 import kotlin.time.Duration
@@ -36,7 +37,7 @@ class RequestSpec(
     override fun toString(): String = "RequestSpec(${Opcode.name(op)}, ${body.size} bytes)"
 
     companion object {
-        /** The app's own bound on a pause between two frames of one reply. The contract states none. */
+        /** The app's own bound on a pause between two frames of one BLE reply. The contract states none. */
         val INTER_FRAME: Duration = 20.seconds
         val DEFAULT_FIRST_FRAME: Duration = 15.seconds
 
@@ -47,17 +48,30 @@ class RequestSpec(
         val SCAN_FIRST_FRAME: Duration = 20.seconds
         val WRITE_DEADLINE: Duration = 10.seconds
 
-        fun of(request: Request, drainBound: DrainBound = DrainBound()): RequestSpec = RequestSpec(
-            op = request.opcode,
-            body = request.encode(),
-            firstFrameTimeout = when (request.opcode) {
+        /**
+         * The firmware contract's LAN transport tells a phone to allow at least 30 s for a reply
+         * (`ble-sync-protocol.md`, "LAN transport"). On LAN this is the floor for the first frame
+         * and the wait between frames.
+         */
+        val LAN_REPLY_WAIT: Duration = 30.seconds
+
+        /** The spec for [request] on [kind]. LAN raises both waits to at least [LAN_REPLY_WAIT]. */
+        fun of(request: Request, kind: TransportKind, drainBound: DrainBound = DrainBound()): RequestSpec {
+            val first = when (request.opcode) {
                 Opcode.OPEN, Opcode.FLUSH, Opcode.REBOOT -> SLOW_FIRST_FRAME
                 Opcode.WIFI_SCAN -> SCAN_FIRST_FRAME
                 else -> DEFAULT_FIRST_FRAME
-            },
-            // STATUS is answered by a push, never by a reply frame.
-            expectsResponse = request.opcode != Opcode.STATUS,
-            drainBound = drainBound,
-        )
+            }
+            val lan = kind == TransportKind.LAN
+            return RequestSpec(
+                op = request.opcode,
+                body = request.encode(),
+                firstFrameTimeout = if (lan) maxOf(first, LAN_REPLY_WAIT) else first,
+                interFrameTimeout = if (lan) maxOf(INTER_FRAME, LAN_REPLY_WAIT) else INTER_FRAME,
+                // STATUS is answered by a push, never by a reply frame.
+                expectsResponse = request.opcode != Opcode.STATUS,
+                drainBound = drainBound,
+            )
+        }
     }
 }

@@ -57,7 +57,7 @@ class ScriptedLinkDriver(
 /** All reply frames of [request], the way a typed API built on the session reads them. */
 suspend fun LinkSession.collect(request: Request): List<Frame> {
     val frames = mutableListOf<Frame>()
-    return exchange(RequestSpec.of(request)) { frame, terminal ->
+    return exchange(RequestSpec.of(request, kind)) { frame, terminal ->
         frames += frame
         if (terminal) frames.toList() else null
     }

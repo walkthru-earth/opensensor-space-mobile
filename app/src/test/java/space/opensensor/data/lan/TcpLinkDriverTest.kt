@@ -521,6 +521,25 @@ class TcpLinkDriverTest {
     }
 
     @Test
+    fun `a HELLO the shared check refuses never opens the link`() = runBlocking {
+        val cases = listOf(
+            hello(payloadMax = LanHandshake.MIN_PAYLOAD_MAX - 1) to DisconnectCause.FramingViolation("handshake"),
+            hello(payloadMax = LanHandshake.PAYLOAD_MAX + 1) to DisconnectCause.FramingViolation("handshake"),
+            FrameCodec.encode(Frame.Hello(2, 1024, info)) to DisconnectCause.UpdateFirmware(2, 3),
+            FrameCodec.encode(Frame.Hello(3, 1024, info.replace("\"proto\":3", "\"proto\":2"))) to DisconnectCause.UpdateFirmware(2, 3),
+            FrameCodec.encode(Frame.Hello(3, 1024, "not json")) to DisconnectCause.FramingViolation("bad device info"),
+            FrameCodec.encode(Frame.Closed(1)) to DisconnectCause.FramingViolation("handshake"),
+        )
+        for ((answer, expected) in cases) {
+            FakeLanDevice(token, answer) { emptyList() }.use {
+                val e = openFails(it, it.port)
+                assertEquals(expected, e.disconnectCause)
+                assertEquals(LanFailure.PROTOCOL, (e.cause as LanConnectException).failure)
+            }
+        }
+    }
+
+    @Test
     fun `nothing listening is Unreachable`() = runBlocking {
         val free = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
         val e = openFails(null, free)

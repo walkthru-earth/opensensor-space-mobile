@@ -381,7 +381,7 @@ class DeviceSession(
     suspend fun flush(): Frame.Flushed = single(Request.Flush, "FLUSH")
 
     /** `STATUS` → a `status` notification only; no `response` frame is defined. */
-    suspend fun requestStatus() = link.send(RequestSpec.of(Request.Status))
+    suspend fun requestStatus() = link.send(RequestSpec.of(Request.Status, link.kind))
 
     /** The last status [freshStatus] got on this session, null before one. */
     var latestStatus: DeviceStatus? = null
@@ -586,7 +586,7 @@ class DeviceSession(
      * [DeviceErrorException]. [onFrame] returns the result on the terminal frame, null before it.
      */
     private suspend fun <R : Any> request(request: Request, oweCloseIfUnsent: Int? = null, onFrame: suspend (Frame) -> R?): R = try {
-        link.exchange(RequestSpec.of(request), oweCloseIfUnsent) { frame, _ ->
+        link.exchange(RequestSpec.of(request, link.kind), oweCloseIfUnsent) { frame, _ ->
             if (frame is Frame.Error) throw DeviceErrorException.of(frame)
             onFrame(frame)
         }
