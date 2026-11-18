@@ -4,6 +4,17 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../opensensor-space-firmware/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-11-17, CrowPanel template at opensensor-space-firmware e2eb30b (code only)
+
+Host tests and the iOS simulator only. No phone or board run is recorded.
+
+- The bundled templates are byte copies of opensensor-space-firmware e2eb30b `docs/shared/templates`,
+  which adds the CrowPanel e-paper SEN63C template `e7279c4e…` (firmware #182). CI checks out the
+  firmware at that commit.
+- CrowPanel has no reviewed app profile. It renders with a profile derived from its template, so
+  its columns show their template names and units, and it has no LIVE view, hero or Today so far.
+- To check on phones. A CrowPanel file in History and Files.
+
 ## 2026-11-10, repository audit (docs only)
 
 Every Markdown file and `AGENTS.md` was reconciled with `main`. Nothing in this entry is phone verified.

@@ -336,7 +336,6 @@ internal fun AppRoot(
                             onBack = { nav.popIfTop { it is DebugKey } },
                         )
                     }
-                    // Smart Sync on Today asks before setting the clock, so the consent shows as on Android.
                     entry<SettingsKey> {
                         SettingsScreen(
                             controller = settings,

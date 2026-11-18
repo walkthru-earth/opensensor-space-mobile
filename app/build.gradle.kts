@@ -126,7 +126,7 @@ android {
     lint {
         // Offline-first: fail the build on lint errors so an insecure API or a
         // permission nobody reviewed cannot slip in unnoticed. INTERNET is declared
-        // deliberately for the mDNS-discovered LAN transport only (see the manifest).
+        // deliberately for the mDNS-discovered LAN transport and the anonymous public GETs (see the manifest).
         // Existing warnings are recorded in lint-baseline.xml; any new warning fails the build.
         // Regenerate only after review: ./gradlew :app:updateLintBaseline
         abortOnError = true

@@ -124,7 +124,7 @@ object ConfigFields {
         ConfigField(LAN_ON, FieldType.Toggle, Applies.IMMEDIATELY),
         ConfigField(LAN_ROTATE_TOKEN, FieldType.Action, Applies.ONCE, confirm = Confirm.Always, disrupts = true),
         ConfigField(LOCATION_CELL, FieldType.H3Cell, Applies.NEXT_SAMPLE),
-        // The firmware still takes 0 to 15 until #139. The app only ever sends 8.
+        // The firmware accepts 8 only and answers any other value with ERROR 12.
         ConfigField(LOCATION_RESOLUTION, FieldType.IntBetween(PUBLISHED_RES, PUBLISHED_RES), Applies.NEXT_SAMPLE),
         ConfigField(LOCATION_COUNTRY, FieldType.Country, Applies.NEXT_SAMPLE),
         ConfigField(THING_MOBILITY, FieldType.Choice(ThingMobility.entries.map { it.wire }), Applies.NEXT_SAMPLE),

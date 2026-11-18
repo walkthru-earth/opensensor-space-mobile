@@ -15,9 +15,11 @@ import space.opensensor.archive.ArchiveKey
 import space.opensensor.archive.ArchiveLayout
 import space.opensensor.archive.PartialMeta
 import space.opensensor.data.ble.DeviceSession
+import space.opensensor.data.ble.ProtocolViolationException
 import space.opensensor.data.ble.WindowLostException
 import space.opensensor.data.protocol.FrameType
 import space.opensensor.data.protocol.Opcode
+import space.opensensor.data.protocol.ParquetVerify
 import space.opensensor.link.LinkEvent
 import space.opensensor.link.LinkTimeoutException
 import space.opensensor.link.TimeoutPhase
@@ -27,6 +29,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -106,6 +109,59 @@ class SyncEngineTest {
         assertIs<FileOutcome.Failed>(outcome)
         assertEquals(0, store.openWriters, "the partial writer is closed on an early return")
         assertTrue(hasPartials(), "the partial is kept for resume")
+    }
+
+    @Test
+    fun aChunkPastTheOpenedSizeEndsTheAttemptWithNoByteWrittenPastTheSize() = runTest {
+        val d = device(backgroundScope)
+        val file = d.first.files[0]
+        // File 0 is 24 000 bytes. READ 2 asks 16 384 bytes at 16 384, so its window ends past the file
+        // and only the OPENED size bounds the extra CHUNK.
+        d.first.overrunBytes = { k -> if (k == 2) 4096 else 0 }
+
+        assertFailsWith<ProtocolViolationException> { engine().pull(d, 0) }
+
+        val partial = assertNotNull(partialBytes(d.first.thing, file.name))
+        assertTrue(partial.size <= file.bytes.size, "partial holds ${partial.size} of ${file.bytes.size} bytes")
+        assertContentEquals(file.bytes.copyOf(partial.size), partial)
+        assertNull(finalBytes(d.first.thing, file.name))
+        assertTrue(index.records.isEmpty())
+        assertEquals(0, store.openWriters)
+        assertEquals(0, coordinator.activeWriters())
+    }
+
+    @Test
+    fun aChunkPastTheReadWindowEndsTheAttemptWithNoByteWrittenPastTheWindow() = runTest {
+        val d = device(backgroundScope)
+        val file = d.first.files[0]
+        d.first.overrunBytes = { k -> if (k == 1) 4096 else 0 }
+
+        assertFailsWith<ProtocolViolationException> { engine().pull(d, 0) }
+
+        val partial = partialBytes(d.first.thing, file.name) ?: ByteArray(0)
+        assertTrue(partial.size <= 16_384, "partial holds ${partial.size} bytes of a 16 384 byte window")
+        assertContentEquals(file.bytes.copyOf(partial.size), partial)
+        assertNull(finalBytes(d.first.thing, file.name))
+        assertEquals(1, d.first.readCount)
+        assertEquals(0, store.openWriters)
+    }
+
+    @Test
+    fun anOpenedSizeTooSmallForParquetIsAMismatchAndNothingIsKept() = runTest {
+        val d = device(backgroundScope)
+        val dir = "thing=${d.first.thing}/year=2026/month=09/day=15"
+        d.first.files += FakeArchiveDevice.FakeFile("$dir/data_1030_b41d_1-1-1.parquet", ByteArray(0))
+        d.first.files += FakeArchiveDevice.FakeFile("$dir/data_1045_b41d_2-2-1.parquet", ParquetVerify.MAGIC + ParquetVerify.MAGIC)
+        val readsBefore = d.first.readCount
+
+        assertIs<FileOutcome.Mismatch>(engine().pull(d, 3))
+        assertEquals(readsBefore, d.first.readCount, "an empty file is never read")
+        assertIs<FileOutcome.Mismatch>(engine().pull(d, 4))
+
+        assertTrue(index.records.isEmpty())
+        assertNull(finalBytes(d.first.thing, d.first.files[3].name))
+        assertNull(finalBytes(d.first.thing, d.first.files[4].name))
+        assertFalse(hasPartials())
     }
 
     @Test

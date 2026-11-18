@@ -65,7 +65,7 @@ class ConfigFieldTest {
     fun `secret keys come from the table`() {
         assertEquals(setOf("wifi.psk", "ble.pin"), ConfigFields.SECRET_KEYS)
         assertEquals(ConfigFields.SECRET_KEYS, ConfigPatch.SECRET_KEYS)
-        assertTrue(ConfigPatch.build { wifiPsk("x") }.carriesSecret)
+        assertTrue(ConfigPatch.build { wifiPsk("aaaaaaaa") }.carriesSecret)
         assertFalse(ConfigPatch.build { wifiSsid("home") }.carriesSecret)
     }
 

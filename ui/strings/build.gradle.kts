@@ -1,7 +1,7 @@
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.testing.Test
 
-// The shared English copy for the iOS companion screen and the shared screens to come, one Compose
+// The shared copy of the iOS app and the shared screens, in English and Arabic, one Compose
 // resource catalogue for both apps (docs/screens.md, Copy and the info affordance). Keys that
 // Android `strings.xml` already has keep the same name and the same words.
 // The host tests here are the repository copy lint. CopyLintTest reads every Compose resource and

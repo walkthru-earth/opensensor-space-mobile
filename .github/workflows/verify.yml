@@ -23,9 +23,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request replaces its run. Every other run gets its own group, because a
+# shared group would still replace a queued main run. So every commit on main gets its iOS jobs and
+# saves the caches.
 concurrency:
-  group: verify-${{ github.ref }}
-  cancel-in-progress: true
+  group: verify-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   hooks:
@@ -68,7 +71,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: walkthru-earth/opensensor-space-firmware
-          ref: 5a7bb7a13bf9405125fe51e0c5f7fdfb3c95298e
+          ref: e2eb30b6b1fb30b3e237d63e24ff5683a50cd185
           path: opensensor-space-firmware
           persist-credentials: false
           sparse-checkout: docs/shared/templates
@@ -106,10 +109,7 @@ jobs:
           name: reports-${{ github.sha }}
           path: |
             app/build/reports/lint-results-debug.html
-            app/build/reports/tests/
-            core/*/build/reports/tests/
-            feature/*/build/reports/tests/
-            ui/*/build/reports/tests/
+            **/build/reports/tests/
           retention-days: 14
           if-no-files-found: ignore
 
@@ -207,14 +207,8 @@ jobs:
           path: |
             ios/build/ci/*.log
             ios/build/ci/*.xcresult.zip
-            core/*/build/reports/tests/iosSimulatorArm64Test/
-            core/*/build/test-results/iosSimulatorArm64Test/
-            feature/*/build/reports/tests/iosSimulatorArm64Test/
-            feature/*/build/test-results/iosSimulatorArm64Test/
-            ui/*/build/reports/tests/iosSimulatorArm64Test/
-            ui/*/build/test-results/iosSimulatorArm64Test/
-            ios/shared/build/reports/tests/iosSimulatorArm64Test/
-            ios/shared/build/test-results/iosSimulatorArm64Test/
+            **/build/reports/tests/iosSimulatorArm64Test/
+            **/build/test-results/iosSimulatorArm64Test/
           retention-days: 14
           if-no-files-found: ignore
 

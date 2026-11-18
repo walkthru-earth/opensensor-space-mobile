@@ -49,6 +49,7 @@ class DevicesBridgeTest {
         val forgotten = mutableListOf<Pair<String, String?>>()
         val collected = mutableListOf<Pair<String, String?>>()
         val placesForgotten = mutableListOf<List<String>>()
+        val settingsForgotten = mutableListOf<String>()
     }
 
     private fun bridge(state: CompanionState = CompanionState(), storage: KnownRecordStorage = MemoryStorage(), calls: Calls = Calls(), now: Long = 5) =
@@ -64,6 +65,7 @@ class DevicesBridgeTest {
             forget = { p, d -> calls.forgotten += p to d },
             collect = { id, wifi -> calls.collected += id to wifi },
             forgetPlaces = { calls.placesForgotten += it },
+            forgetSettings = { calls.settingsForgotten += it },
         )
 
     @Test fun setupFindScansOverBluetoothOnlyAndNeverBrowsesTheLocalNetwork() {
@@ -301,6 +303,7 @@ class DevicesBridgeTest {
         bridge.forgetNow(a)
         assertEquals(listOf<Pair<String, String?>>(a to "aabbccddeeff"), calls.forgotten, "Swift removes the credential of this hardware id")
         assertEquals(listOf(listOf("st-a")), calls.placesForgotten, "the Discover cell of its Thing goes too")
+        assertEquals(listOf(a), calls.settingsForgotten, "its nickname and setup flag go too")
         assertEquals(listOf(b), bridge.knownNow().map { it.id })
         assertTrue(IosKnown.decode(storage.text).isEmpty())
         assertTrue(bridge(storage = storage).knownNow().isEmpty(), "forgotten stays forgotten after a restart")

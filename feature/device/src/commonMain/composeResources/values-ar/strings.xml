@@ -176,8 +176,9 @@
     <string name="config_problem_pin">يتكوّن رمز PIN من 6 أرقام بالضبط.</string>
     <string name="config_problem_ssid_empty">أدخل اسم الشبكة.</string>
     <string name="config_problem_ssid_long">اسم الشبكة طويل جدًا. الحد الأقصى 32 بايت.</string>
+    <string name="config_problem_psk_short">كلمة المرور قصيرة جدًا. الحد الأدنى 8 بايت.</string>
     <string name="config_problem_psk_long">كلمة المرور طويلة جدًا. الحد الأقصى 63 بايت.</string>
-    <string name="config_problem_line_break">لا يُسمح بفواصل الأسطر هنا.</string>
+    <string name="config_problem_line_break">لا يُسمح بفواصل الأسطر أو أحرف التحكم هنا.</string>
     <string name="device_back">رجوع</string>
     <string name="device_not_ready">اتصل بالمستشعر لقراءة إعداداته وتغييرها.</string>
     <string name="location_title">موقع الجهاز</string>
@@ -200,6 +201,7 @@
     <string name="location_stop">إيقاف</string>
     <string name="location_country">رمز البلد</string>
     <string name="location_country_info">اختياري. حرفان، مثل GH.</string>
+    <string name="wifi_psk_control">بدون مسافات جدولة أو فواصل أسطر أو رموز تحكم أخرى</string>
     <string name="wifi_psk_long">طويلة جدًا. استخدم كلمة مرور أقصر.</string>
     <string name="wifi_psk_short">8 أحرف على الأقل</string>
     <string name="location_fresh_required">اختر المنطقة مجددًا قبل الحفظ</string>
