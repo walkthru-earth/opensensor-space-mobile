@@ -60,6 +60,8 @@ data class DeviceConfigUiState(
     /** The board template's steps, sections and keys, [SetupManifest.NONE] when no template is known. */
     val manifest: SetupManifest = SetupManifest.NONE,
     val board: DeviceBoardState = DeviceBoardState(),
+    /** The picker's phone fix, see [DeviceConfigController.locate]. */
+    val phoneFix: PhoneFixState = PhoneFixState(),
 ) {
     /** The setup steps of this Thing, from [manifest] and the last page 1 read. Null before page 1 is read. */
     val setupPlan: SetupPlan? get() = location.page?.let { SetupPlan.of(manifest, it) }

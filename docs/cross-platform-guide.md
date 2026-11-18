@@ -409,6 +409,16 @@ Accessibility, VoiceOver, or triple-click the side button).
 9. **Arabic.** Repeat steps 1 and 3 in Arabic. Swipe order follows right to left, except chart bars,
    which stay in time order, left to right, as they are drawn.
 
+### Compose effects
+
+A `LaunchedEffect`, `DisposableEffect`, `LifecycleStartEffect`, `LifecycleResumeEffect` or
+`pointerInput` block keeps the lambdas it saw when it started. A shared screen reads a caller's
+lambda in such a block through `val latest by rememberUpdatedState(onX)`, as `AppShell` and
+`BaseMap` do, so a host that passes a new lambda is the one called. `EffectLambdaLintTest` in
+`:ui:strings` fails `verify` on a direct call, and an exception names its reason there. Work that
+outlives a composable, such as a location fix, runs in the screen's controller, and the composable
+only draws its state.
+
 ### Platform conventions that stay native
 
 Shared screens still respect each OS where people notice:

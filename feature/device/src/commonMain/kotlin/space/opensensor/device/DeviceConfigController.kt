@@ -3,7 +3,9 @@ package space.opensensor.device
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import space.opensensor.data.WifiScanState
@@ -127,10 +130,15 @@ class DeviceConfigController(
      */
     private var rereadAfterFailure = false
 
-    private val forms = combine(location, site, board) { loc, owner, settings -> Triple(loc, owner, settings) }
+    private val phoneFix = MutableStateFlow(PhoneFixState())
+    private var fixJob: Job? = null
 
-    val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel, forms, manifest) { snapshot, level, (loc, owner, settings), declared ->
-        DeviceConfigUiState(snapshot, level, loc, owner, declared, settings)
+    private class Forms(val location: DeviceLocationState, val site: DeviceSiteState, val board: DeviceBoardState, val phoneFix: PhoneFixState)
+
+    private val forms = combine(location, site, board, phoneFix, ::Forms)
+
+    val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel, forms, manifest) { snapshot, level, f, declared ->
+        DeviceConfigUiState(snapshot, level, f.location, f.site, declared, f.board, f.phoneFix)
     }.stateIn(scope, SharingStarted.Eagerly, DeviceConfigUiState(source.snapshot.value))
 
     private val _dialog = MutableStateFlow<DeviceConfigDialog?>(null)
@@ -458,6 +466,50 @@ class DeviceConfigController(
         location.value = location.value.copy(draft = location.value.draft.copy(cell = "", needsFix = false), result = null)
     }
 
+    /**
+     * Runs one phone fix for the area map. The controller owns the job, so a recomposition or a
+     * rotation does not cancel it, Stop or closing the picker does ([stopLocating]), and a fix that
+     * takes longer than [FIX_TIMEOUT_MS] fails. The cell only moves the map, the owner still taps
+     * one. Nothing about the fix is sent, stored or logged.
+     */
+    fun locate(fix: suspend (resolution: Int) -> String?) {
+        if (phoneFix.value.locating || !now.canEdit || location.value.working) return
+        phoneFix.value = phoneFix.value.copy(locating = true, failed = false)
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            val cell = try {
+                withTimeoutOrNull(FIX_TIMEOUT_MS) { fix(DeviceLocationDraft.RESOLUTION) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            val last = phoneFix.value
+            phoneFix.value = if (cell == null) last.copy(locating = false, failed = true) else PhoneFixState(cell = cell, serial = last.serial + 1)
+        }
+        fixJob = job
+        // A fix cancelled from inside still ends the spinner. One stopped by stopLocating is already reset.
+        job.invokeOnCompletion {
+            if (fixJob === job) {
+                fixJob = null
+                phoneFix.update { it.copy(locating = false) }
+            }
+        }
+        job.start()
+    }
+
+    /** Stops a running fix. Nothing is kept from it, and the next picker opens with no fix. */
+    fun stopLocating() {
+        val job = fixJob
+        fixJob = null
+        job?.cancel()
+        phoneFix.value = PhoneFixState()
+    }
+
+    /** The platform declined the coarse permission, so the picker says the fix failed. */
+    fun locationDeclined() {
+        phoneFix.value = phoneFix.value.copy(locating = false, failed = true)
+    }
+
     fun saveLocation() {
         val loc = location.value
         if (!now.canEdit || now.snapshot.syncRunning || loc.supported != true || loc.working || loc.draft.needsFix) return
@@ -658,6 +710,9 @@ class DeviceConfigController(
     companion object {
         /** Every board key of [manifest] a form may show. */
         fun boardFields(manifest: SetupManifest): List<PlanField> = SetupPlan.fieldsOf(manifest, manifest.configKeys.keys.toList())
+
+        /** The longest phone fix the picker waits for before it says the fix failed. */
+        const val FIX_TIMEOUT_MS = 25_000L
 
         const val WIFI_POLL_MS = 3_000L
         const val WIFI_POLL_ATTEMPTS = 20

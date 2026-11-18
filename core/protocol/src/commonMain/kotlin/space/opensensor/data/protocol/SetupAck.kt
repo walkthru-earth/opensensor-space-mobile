@@ -20,9 +20,9 @@ object SetupAck {
     const val MASK_MAX = Int.MAX_VALUE
 
     /**
-     * The `setup_v` of [stepIds], the ordered `firmware.setup` ids. The first 31 bits of SHA-256
-     * over the ids joined by `\n` in UTF-8, read big endian. Never 0, so 0 and absent both read as
-     * a record that names no list. Only the ids count, so a step that only changes `req` or `keys`
+     * The `setup_v` of [stepIds], the ordered `firmware.setup` ids. It takes the first four bytes of
+     * SHA-256 over the ids joined by `\n` in UTF-8, reads them big endian, clears the top bit and
+     * maps 0 to 1. Never 0, so 0 and absent both read as a record that names no list. Only the ids count, so a step that only changes `req` or `keys`
      * keeps its bit.
      */
     fun version(stepIds: List<String>): Int {
