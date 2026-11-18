@@ -110,9 +110,10 @@ object ConfigFields {
 
     /**
      * Key prefixes that only the app allowlist may use. A board key under one of them is refused,
-     * so a template can never add a pairing, Wi-Fi, LAN, location, Thing, owner or sensor key.
+     * so a template can never add a pairing, Wi-Fi, LAN, location, Thing, owner, sensor or clock
+     * (`ntp.`) key. Firmware and the STAC profile reserve the same prefixes.
      */
-    val RESERVED_PREFIXES: List<String> = listOf("ble.", "wifi.", "lan.", "location.", "thing.", "owner.", "sensor.")
+    val RESERVED_PREFIXES: List<String> = listOf("ble.", "wifi.", "lan.", "location.", "thing.", "owner.", "sensor.", "ntp.")
 
     /** The longest board key name the app accepts, in bytes. */
     const val DECLARED_KEY_MAX_BYTES = 48
