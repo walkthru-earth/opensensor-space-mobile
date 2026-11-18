@@ -5,51 +5,35 @@ import space.opensensor.publicfeed.DiscoverCollection
 import space.opensensor.publicfeed.StepScale
 
 /**
- * The scales the air family ships for a feed that has no Collection yet (the bundled sample and the
- * OpenAQ manifest feed), installed as [DiscoverCollection.BUNDLED] by [AirFamily.install]. PM2.5 and
- * PM10 on the WHO 2021 guideline and interim targets, the same edges and colours as [WhoGuidelines]
- * and [WhoStep] and the same step names as the app's step strings.
+ * The Collection the air family ships for a feed that has none yet (the bundled sample and the
+ * OpenAQ manifest feed), installed as [DiscoverCollection.BUNDLED] by [AirFamily.install]. It ties
+ * each feed property id the air family knows to its `opensensor:property`, so Discover labels it
+ * from the property registry, and names the registry's WHO 2021 scales for PM2.5 and PM10. Their
+ * edges, colours and step names come from the bundled scale registry, never from a copy here.
  */
 object AirDiscover {
-    /** The `who-2021-pm25` and `who-2021-pm10` scales as a STAC Collection, for [DiscoverCollection.installBundled]. */
+    /** The feed property ids the air family knows, each to its `opensensor:property` URI. */
+    val PROPERTIES: Map<String, String> = mapOf(
+        "pm25" to AirProperty.PM25,
+        "pm10" to AirProperty.PM10,
+        "pm1" to AirProperty.PM1,
+        "um003" to AirProperty.PARTICLE_COUNTS.first(),
+        "temperature" to AirProperty.AIR_TEMPERATURE,
+        "humidity" to AirProperty.RELATIVE_HUMIDITY,
+        "co2" to AirProperty.CARBON_DIOXIDE,
+    )
+
+    /** The registry scale of each feed property that has one. */
+    private val SCALES: Map<String, String> = mapOf("pm25" to "who-2021-pm25", "pm10" to "who-2021-pm10")
+
+    /** The Collection, for [DiscoverCollection.installBundled]. */
     val COLLECTION: String by lazy {
-        """
-            {"type":"Collection","id":"discover-cells-bundled",
-             "opensensor:scales":{
-               "who-2021-pm25":${scale(WhoGuidelines.PM25)},
-               "who-2021-pm10":${scale(WhoGuidelines.PM10)}},
-             "item_assets":{"data":{"table:columns":[
-               {"name":"pm25__mean","opensensor:scale":"who-2021-pm25"},
-               {"name":"pm10__mean","opensensor:scale":"who-2021-pm10"}]}}}
-        """.trimIndent()
-    }
-
-    private fun scale(who: HealthScale): String {
-        val uppers = who.edges.map { it.toString() } + "null"
-        val steps = uppers.indices.joinToString(",") { i ->
-            """{"upper":${uppers[i]},"label":{"en":"${WHO_EN[i]}","ar":"${WHO_AR[i]}"},"color_hint":"${hex(WhoStep.entries[i].color)}"}"""
+        val columns = PROPERTIES.entries.joinToString(",") { (id, uri) ->
+            val scale = SCALES[id]?.let { ""","opensensor:scale":"$it"""" }.orEmpty()
+            """{"name":"${id}__mean","opensensor:property":"$uri"$scale}"""
         }
-        return """{"source":"${WhoGuidelines.URL}","unit":"${who.unit}","guideline":${who.guideline},"steps":[$steps]}"""
+        """{"type":"Collection","id":"discover-cells-bundled","item_assets":{"data":{"table:columns":[$columns]}}}"""
     }
-
-    private fun hex(argb: Int): String = (argb and 0xFFFFFF).toString(16).padStart(6, '0').uppercase()
-
-    private val WHO_EN = listOf(
-        "Within the WHO guideline",
-        "Within WHO interim target 4",
-        "Within WHO interim target 3",
-        "Within WHO interim target 2",
-        "Within WHO interim target 1",
-        "Above every WHO target",
-    )
-    private val WHO_AR = listOf(
-        "ضمن إرشاد منظمة الصحة العالمية",
-        "ضمن الهدف المرحلي 4 لمنظمة الصحة العالمية",
-        "ضمن الهدف المرحلي 3 لمنظمة الصحة العالمية",
-        "ضمن الهدف المرحلي 2 لمنظمة الصحة العالمية",
-        "ضمن الهدف المرحلي 1 لمنظمة الصحة العالمية",
-        "فوق كل أهداف منظمة الصحة العالمية",
-    )
 }
 
 /**
