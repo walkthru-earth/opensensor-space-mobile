@@ -62,6 +62,8 @@ data class DeviceLocationState(
     val gnssCell: String? = null,
     /** The cell the board stores now, at [DeviceLocationDraft.RESOLUTION], or empty. */
     val storedCell: String = "",
+    /** The last page 1 read or saved, with its `thing` setup record. Null before one was read. */
+    val page: DeviceConfig? = null,
 ) {
     /** Setup may finish. The board stores a cell, or the Thing moves and takes no configured cell. */
     val located: Boolean get() = saved || mobility == ThingMobility.MOVING
@@ -82,6 +84,7 @@ data class DeviceLocationState(
             gnssReceiver = loc.gnssCellText != null,
             gnssCell = loc.gnssCell,
             storedCell = DeviceLocationDraft.from(loc).cell,
+            page = page,
         )
     }
 

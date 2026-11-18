@@ -106,7 +106,8 @@ logged or sent.
 
 The owner site describes where and by whom a Thing is deployed (firmware #148, mobile #272). It
 holds five optional values. Device settings show them under the area as one "Location and site"
-card, and the setup wizard asks for them on its Site page after Location. The info text says
+card, and the setup wizard asks for them on its Site page when the board template declares the
+`site` step. The info text says
 plainly that these values are public when the owner shares the sensor's data, and asks a home
 owner not to type a home address.
 
@@ -143,7 +144,7 @@ because it clears the key.
 - A refused or unconfirmed write says so under the fields, and the draft stays for another Save
   or Next. After a failed site write, the next site save that succeeds reads pages 0 and 1 again
   too. In the wizard Next moves on only when the save is confirmed, and Skip is off while it runs
-  (`SetupController.saveSiteThenNext`).
+  (`SetupController.next` with `DeviceConfigController.saveSiteAndWait` as its save).
 - The board never logs owner values, and only `deployment_id` reaches the Parquet files, so a
   change splits the current file. Owner values are not secrets. The Debug frame list redacts
   every `SET_CONFIG`, and a CONFIG reply shows them as the board sent them.
