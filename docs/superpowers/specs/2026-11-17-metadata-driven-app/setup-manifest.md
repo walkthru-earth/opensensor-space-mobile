@@ -75,11 +75,11 @@ In the template `firmware` block, generated from `board.json`, hashed with the t
 - A `setup_v` that does not match the resolved template's step list means no step is done. The exact rule is open in firmware #183.
 - The app sets a step's bit with its own `SET_CONFIG` after the step's save reads back. Skip also sets the bit of a skippable step.
 - Every ack write sends `setup_ack` and the current `setup_v` together. Under a stale `setup_v` the old bits read as none, so the first write after a change carries only the new bit and the new version. Bits from an earlier step order never count for the new one.
-- Required steps stay derived from config, never from the bitmask alone. Location is done only while a fixed Thing has a valid `location.cell`. When the manifest omits `location` and a fixed Thing has no cell, the plan adds the app `location` step, which has no ack bit.
+- A required step the app knows stays derived from config, never from the bitmask alone. Location is done only while a fixed Thing has a valid `location.cell`. The one exception is a required step the app does not know but can draw as a generic form (the last item of this section). The app has no config rule for it, so its bit alone completes it. When the manifest omits `location` and a fixed Thing has no cell, the plan adds the app `location` step, which has no ack bit.
 - Firmware that reports page 1 without `setup_ack` and `setup_v` reads as no step done. Its declared steps stay pending until a phone writes the bits, and no phone keeps step progress of its own.
 - An unknown optional step without typed keys is dropped from the plan. It never counts as pending, and its bit is not written.
 - Setup is needed when a required step is not satisfied, or when the bit of a declared step left in the plan is clear. The app `location` step has no bit, so the saved cell alone completes it. Advert bit 6 or page 1 `thing.setup` 1 is the board saying setup is needed, and the app trusts it. A clear bit or `thing.setup` 0 never ends setup on its own, the plan still decides, so a fixed Thing without a cell stays pending whatever the board reports.
-- A required step whose id the app does not know is a generic form when it has typed keys, and its bit completes it once the form saves. Without typed keys the app cannot draw it, so it leaves setup pending. The wizard says to update the app and offers Leave.
+- A required step whose id the app does not know is a generic form when it has typed keys, and its bit completes it once the form saves, the exception to the config rule above. Without typed keys the app cannot draw it, so it leaves setup pending. The wizard says to update the app and offers Leave.
 
 ## 5. Safety floors
 
