@@ -50,4 +50,15 @@
     <string name="transport_ble">Bluetooth</string>
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">Fake device</string>
+    <!-- ConnectionBanner and the link state words, the shared strip on every page of one sensor. -->
+    <string name="conn_discovering">Discovering services…</string>
+    <string name="conn_mtu">Negotiating MTU…</string>
+    <string name="conn_setting_up">Setting up the link…</string>
+    <string name="conn_notifications">Enabling notifications…</string>
+    <string name="conn_lan_auth">Authenticating on the LAN…</string>
+    <string name="conn_lan_checking">Checking this phone on your Wi-Fi…</string>
+    <string name="conn_ready_mtu">Connected, MTU %1$d</string>
+    <string name="conn_held_background">Syncing in the background. This page updates when it finishes.</string>
+    <string name="conn_link_lost_detail">Link lost (%1$s). Reconnecting, attempt %2$d of %3$d…</string>
+    <string name="conn_bluetooth_settings">Bluetooth settings</string>
 </resources>

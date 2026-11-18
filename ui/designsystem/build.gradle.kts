@@ -17,6 +17,10 @@ kotlin {
             // MoodStrip and the mood words take the air family's WhoStep and MoodBlock in their public API.
             api(project(":family:air"))
             implementation(project(":core:history"))
+            // ConnectionBanner takes the link state of :core:sync in its public API.
+            api(project(":core:sync"))
+            // The link words both apps share (connecting, ready, pairing repair) come from that catalogue.
+            implementation(project(":ui:strings"))
         }
         // Semantics tests render the shared components headless on the iOS simulator (verifyIos).
         iosTest.dependencies {

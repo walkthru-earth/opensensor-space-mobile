@@ -107,7 +107,6 @@ private fun accessTexts(kind: AccessKind): AccessDialogTexts = when (kind) {
         continueLabel = stringResource(R.string.perm_continue),
         notNow = stringResource(R.string.action_not_now),
         openSettings = stringResource(R.string.perm_open_settings),
-        cancel = stringResource(R.string.action_cancel),
         icon = AppIcons.Wifi,
     )
     else -> AccessDialogTexts(
@@ -118,7 +117,6 @@ private fun accessTexts(kind: AccessKind): AccessDialogTexts = when (kind) {
         continueLabel = stringResource(R.string.perm_continue),
         notNow = stringResource(R.string.action_not_now),
         openSettings = stringResource(R.string.perm_open_settings),
-        cancel = stringResource(R.string.action_cancel),
         icon = AppIcons.Bluetooth,
     )
 }

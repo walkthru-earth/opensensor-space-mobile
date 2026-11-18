@@ -21,7 +21,7 @@ class StringsMatchAndroidTest {
         val android = Catalogues.parse(File(Catalogues.root, "app/src/main/res/$folder/strings.xml"))
         val shared = Catalogues.parse(File("src/commonMain/composeResources/$folder/strings.xml"))
         val both = shared.keys.intersect(android.keys)
-        assertTrue(both.containsAll(listOf("app_name", "ago_just_now", "nav_disconnect", "action_cancel", "perm_continue")), "$folder shared keys $both")
+        assertTrue(both.containsAll(listOf("app_name", "nav_disconnect", "action_not_now", "perm_continue")), "$folder shared keys $both")
         // Android escapes an apostrophe with a backslash, Compose resources do not. Compare the text shown.
         both.forEach { key -> assertEquals(android.getValue(key).replace("\\'", "'"), shared.getValue(key), "$folder $key") }
     }

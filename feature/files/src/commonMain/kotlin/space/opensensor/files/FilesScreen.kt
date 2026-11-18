@@ -76,7 +76,6 @@ import space.opensensor.designsystem.rememberNowMillis
 import space.opensensor.designsystem.spokenList
 import space.opensensor.designsystem.touchTarget
 import space.opensensor.files.resources.Res
-import space.opensensor.files.resources.action_back
 import space.opensensor.files.resources.file_invalid
 import space.opensensor.files.resources.file_metrics_named
 import space.opensensor.files.resources.file_mismatch
@@ -136,6 +135,7 @@ import space.opensensor.files.resources.files_title
 import space.opensensor.files.resources.scan_files
 import space.opensensor.settings.DetailLevel
 import space.opensensor.strings.rememberAgoFormatter
+import space.opensensor.strings.resources.action_back
 import space.opensensor.strings.resources.sync_some_failed
 import space.opensensor.strings.resources.Res as SharedRes
 
@@ -224,7 +224,7 @@ fun FilesScreen(
             ThingTopBar(
                 title = { Text(stringResource(Res.string.files_title), modifier = Modifier.headingSemantics()) },
                 onBack = onBack,
-                backLabel = stringResource(Res.string.action_back),
+                backLabel = stringResource(SharedRes.string.action_back),
                 // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.
                 transport = transport.takeIf { level.detailed },
                 subtitle = {

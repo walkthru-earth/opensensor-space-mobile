@@ -41,7 +41,6 @@ import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.headingSemantics
 import space.opensensor.device.resources.Res
-import space.opensensor.device.resources.action_cancel
 import space.opensensor.device.resources.action_reconnect
 import space.opensensor.device.resources.board_action_button
 import space.opensensor.device.resources.board_action_confirm
@@ -111,6 +110,8 @@ import space.opensensor.device.resources.rotate_confirm
 import space.opensensor.device.resources.rotate_title
 import space.opensensor.model.SiteField
 import space.opensensor.permissions.RuntimeAccess
+import space.opensensor.strings.resources.action_cancel
+import space.opensensor.strings.resources.Res as SharedRes
 
 /**
  * Everything the shared Device section can ask for. [DeviceConfigController.onAction] runs all of
@@ -318,7 +319,7 @@ fun DeviceConfigDialogs(dialog: DeviceConfigDialog, onConfirm: () -> Unit, onDis
         title = { Text(heading, Modifier.semantics { heading() }) },
         text = { Text(stringResource(body)) },
         confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(button)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.action_cancel)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(SharedRes.string.action_cancel)) } },
     )
 }
 

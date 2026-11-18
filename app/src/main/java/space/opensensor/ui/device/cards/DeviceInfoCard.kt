@@ -18,12 +18,12 @@ import space.opensensor.designsystem.BrandCard
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.TickingText
+import space.opensensor.designsystem.describe
 import space.opensensor.designsystem.labelText
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.spokenList
-import space.opensensor.today.describe
+import space.opensensor.strings.rememberAgoFormatter
 import space.opensensor.ui.components.NO_VALUE
-import space.opensensor.ui.components.agoFormatter
 
 /**
  * The device header card. Simple names the device and how it is connected, in words. Detailed adds
@@ -72,7 +72,7 @@ fun DeviceInfoCard(
             )
             if (configReadAtEpochMs != null) {
                 val label = stringResource(R.string.device_config_read)
-                val ago = agoFormatter()
+                val ago = rememberAgoFormatter()
                 TickingText({ now -> "$label ${ago(now - configReadAtEpochMs)}" }, style = MaterialTheme.typography.bodyMedium)
             }
         }

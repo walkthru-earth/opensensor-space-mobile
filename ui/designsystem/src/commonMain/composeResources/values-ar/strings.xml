@@ -48,4 +48,15 @@
     <string name="transport_ble">Bluetooth</string>
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">جهاز وهمي</string>
+    <!-- ConnectionBanner and the link state words, the shared strip on every page of one sensor. -->
+    <string name="conn_discovering">جارٍ اكتشاف الخدمات…</string>
+    <string name="conn_mtu">جارٍ التفاوض على MTU…</string>
+    <string name="conn_setting_up">جارٍ إعداد الاتصال…</string>
+    <string name="conn_notifications">جارٍ تفعيل الإشعارات…</string>
+    <string name="conn_lan_auth">جارٍ التحقق على الشبكة المحلية…</string>
+    <string name="conn_lan_checking">جارٍ التحقق من هذا الهاتف على شبكة Wi-Fi لديك…</string>
+    <string name="conn_ready_mtu">متصل، MTU %1$d</string>
+    <string name="conn_held_background">تجري المزامنة في الخلفية. تتحدث هذه الصفحة عند انتهائها.</string>
+    <string name="conn_link_lost_detail">انقطع الاتصال (%1$s). جارٍ إعادة الاتصال، المحاولة %2$d من %3$d…</string>
+    <string name="conn_bluetooth_settings">إعدادات Bluetooth</string>
 </resources>

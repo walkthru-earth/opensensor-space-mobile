@@ -52,7 +52,6 @@ import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.mono
 import space.opensensor.designsystem.spokenList
 import space.opensensor.files.resources.Res
-import space.opensensor.files.resources.action_back
 import space.opensensor.files.resources.fm_benchmark
 import space.opensensor.files.resources.fm_boot
 import space.opensensor.files.resources.fm_col_first_last
@@ -106,6 +105,8 @@ import space.opensensor.files.resources.fm_writer
 import space.opensensor.files.resources.history_of
 import space.opensensor.files.resources.row_groups
 import space.opensensor.settings.DetailLevel
+import space.opensensor.strings.resources.action_back
+import space.opensensor.strings.resources.Res as SharedRes
 
 /**
  * Detailed and Developer view of one archived file, decoded by the app's own Parquet reader on Android
@@ -120,7 +121,7 @@ fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String,
             ThingTopBar(
                 title = { Text(name.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium.mono(), modifier = Modifier.headingSemantics()) },
                 onBack = onBack,
-                backLabel = stringResource(Res.string.action_back),
+                backLabel = stringResource(SharedRes.string.action_back),
             )
         },
     ) { padding ->

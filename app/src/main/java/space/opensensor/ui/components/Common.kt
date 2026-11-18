@@ -10,7 +10,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalResources
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -21,8 +20,7 @@ import space.opensensor.app.R
 import space.opensensor.data.ReconnectState
 import space.opensensor.data.ble.BleConnectionFailure
 import space.opensensor.data.ble.ConnectionState
-import space.opensensor.designsystem.TickingText
-import space.opensensor.today.TodayReconnect
+import space.opensensor.designsystem.LinkRetry
 import space.opensensor.units.ByteUnit
 import space.opensensor.units.byteSize
 
@@ -41,24 +39,6 @@ fun formatBytes(bytes: Long, res: Resources): String {
     return res.getString(id, size.number)
 }
 
-fun formatAgo(ageMs: Long, res: Resources): String {
-    val s = ageMs / 1000
-    return when {
-        ageMs < 0 -> res.getString(R.string.ago_just_now)
-        s < 60 -> res.getString(R.string.ago_seconds, s)
-        s < 3600 -> res.getString(R.string.ago_minutes, s / 60)
-        s < 86_400 -> res.getString(R.string.ago_hours, s / 3600)
-        else -> res.getString(R.string.ago_days, s / 86_400)
-    }
-}
-
-/** [formatAgo] bound to the current resources, for leaf `TickingText` lambdas. */
-@Composable
-fun agoFormatter(): (Long) -> String {
-    val res = LocalResources.current
-    return remember(res) { { ageMs -> formatAgo(ageMs, res) } }
-}
-
 /**
  * Collect one-off UI events only while the screen is at least STARTED: a snackbar or a system dialog
  * is never fired at a stopped activity. Events are buffered by the producer's `extraBufferCapacity`.
@@ -75,7 +55,7 @@ fun <T> CollectEvents(events: Flow<T>, onEvent: suspend (T) -> Unit) {
 }
 
 /** The data layer's reconnect attempt as the shared thing banner reads it. */
-fun ReconnectState.toShared(): TodayReconnect = TodayReconnect(attempt, maxAttempts, reason)
+fun ReconnectState.toShared(): LinkRetry = LinkRetry(attempt, maxAttempts, reason)
 
 /** Opens Android's Bluetooth settings, for the shared banner's pairing repair link. */
 @Composable
@@ -95,7 +75,7 @@ fun ConnectionBanner(
     reconnecting: ReconnectState? = null,
     technical: Boolean = false,
     heldInBackground: Boolean = false,
-) = space.opensensor.today.ConnectionBanner(
+) = space.opensensor.designsystem.ConnectionBanner(
     state = state,
     reconnecting = reconnecting?.toShared(),
     technical = technical,

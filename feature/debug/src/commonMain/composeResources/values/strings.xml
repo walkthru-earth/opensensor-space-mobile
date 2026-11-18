@@ -6,12 +6,8 @@
 -->
 <resources>
     <string name="nav_debug">Debug</string>
-    <string name="action_back">Back</string>
-    <string name="conn_disconnected">Not connected</string>
-    <string name="conn_connecting">Connecting…</string>
     <string name="msg_background_owns_command">Background sync is using this sensor. Wait for it to finish.</string>
     <string name="debug_link_busy">The link to this sensor is busy. Try again in a moment.</string>
-
 
     <plurals name="scan_files">
         <item quantity="one">%1$d file</item>

@@ -58,9 +58,6 @@ import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.FrameDirection
 import space.opensensor.data.ble.RawFrameRecord
 import space.opensensor.debug.resources.Res
-import space.opensensor.debug.resources.action_back
-import space.opensensor.debug.resources.conn_connecting
-import space.opensensor.debug.resources.conn_disconnected
 import space.opensensor.debug.resources.debug_archive
 import space.opensensor.debug.resources.debug_boots
 import space.opensensor.debug.resources.debug_clear
@@ -129,7 +126,11 @@ import space.opensensor.designsystem.headingSemantics
 import space.opensensor.designsystem.labelText
 import space.opensensor.designsystem.mono
 import space.opensensor.strings.rememberAgoFormatter
+import space.opensensor.strings.resources.action_back
+import space.opensensor.strings.resources.conn_connecting
+import space.opensensor.strings.resources.conn_disconnected
 import kotlin.time.Instant
+import space.opensensor.strings.resources.Res as SharedRes
 
 private const val NO_VALUE = "n/a"
 
@@ -169,7 +170,7 @@ fun DebugScreen(
         topBar = {
             ThingTopBar(
                 onBack = onBack,
-                backLabel = stringResource(Res.string.action_back),
+                backLabel = stringResource(SharedRes.string.action_back),
                 title = { Text(stringResource(Res.string.nav_debug), style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics()) },
                 transport = state.link.transport,
                 subtitle = {
@@ -185,7 +186,7 @@ fun DebugScreen(
                     if (connectionBanner != null) {
                         connectionBanner(state.link.connection)
                     } else {
-                        WarningNote(stringResource(if (state.link.connection.isBusy) Res.string.conn_connecting else Res.string.conn_disconnected))
+                        WarningNote(stringResource(if (state.link.connection.isBusy) SharedRes.string.conn_connecting else SharedRes.string.conn_disconnected))
                     }
                 }
             }

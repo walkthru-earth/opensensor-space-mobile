@@ -110,13 +110,12 @@ internal class IosDeviceConfigSource(
         val info = state.info.takeIf { bleReady } ?: lanInfo
         CompanionView(
             ready = ready,
-            connection = when {
-                ready -> ConnectionState.Ready(0)
-                state.failedId.equals(address, ignoreCase = true) -> ConnectionState.Failed(PAIRING_REPAIR)
-                state.reconnectingId.equals(address, ignoreCase = true) ||
-                    state.selectedId.equals(address, ignoreCase = true) -> ConnectionState.Connecting
-                else -> ConnectionState.Disconnected
-            },
+            connection = SensorLink.state(
+                ready = ready,
+                pairingLost = state.failedId.equals(address, ignoreCase = true),
+                connecting = state.reconnectingId.equals(address, ignoreCase = true) ||
+                    state.selectedId.equals(address, ignoreCase = true),
+            ),
             info = info,
             transport = if (bleReady) TransportKind.BLE else TransportKind.LAN,
             lanSeen = lan != null || (info != null && info.thing in state.lanThings.values),
@@ -411,9 +410,6 @@ internal class IosDeviceConfigSource(
 
     private companion object {
         const val REBOOT_MIN_MS = 100L
-
-        /** The technical reason behind a lost bond. The screen shows its own words. */
-        const val PAIRING_REPAIR = "BOND_MISSING"
         const val REBOOT_MAX_MS = 5_000L
 
         /** The same wait Android takes before reconnecting after a restart. */

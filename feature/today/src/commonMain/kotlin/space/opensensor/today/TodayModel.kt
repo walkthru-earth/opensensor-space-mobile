@@ -15,6 +15,7 @@ import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
 import space.opensensor.data.protocol.LiveReading
 import space.opensensor.data.protocol.LiveSample
+import space.opensensor.designsystem.LinkRetry
 import space.opensensor.family.air.NowReading
 import space.opensensor.family.air.Pm25NowCast
 import space.opensensor.family.air.QcFlags
@@ -45,9 +46,6 @@ data class TodayArchive(
     }
 }
 
-/** A link that was Ready dropped on its own and the platform is trying to get it back. */
-data class TodayReconnect(val attempt: Int, val maxAttempts: Int, val reason: String)
-
 /**
  * Everything Today shows about one device, as the platform reports it. Missing values stay null,
  * the screen never invents a reading. [status] and [live] carry the instant they arrived, for the
@@ -67,7 +65,7 @@ data class TodaySnapshot(
     val archive: TodayArchive = TodayArchive(),
     /** The last `GET_CONFIG` answer, for the board's batch estimate opt-in. */
     val config: ConfigSnapshot? = null,
-    val reconnecting: TodayReconnect? = null,
+    val reconnecting: LinkRetry? = null,
     /** The link failed because the phone and the sensor disagree about the pairing. The platform decides. */
     val needsPairingRepair: Boolean = false,
     /** Today (local calendar day) from the phone archive, once it has timed rows for this thing. */

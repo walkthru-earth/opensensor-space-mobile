@@ -47,9 +47,6 @@ import space.opensensor.designsystem.moodWord
 import space.opensensor.designsystem.pm25Label
 import space.opensensor.designsystem.touchTarget
 import space.opensensor.devices.resources.Res
-import space.opensensor.devices.resources.conn_failed
-import space.opensensor.devices.resources.conn_link_lost
-import space.opensensor.devices.resources.conn_pairing
 import space.opensensor.devices.resources.devices_on_wifi
 import space.opensensor.devices.resources.info_wifi_only
 import space.opensensor.devices.resources.month_1
@@ -85,6 +82,9 @@ import space.opensensor.family.air.stepOf
 import space.opensensor.settings.DetailLevel
 import space.opensensor.strings.rememberAgoFormatter
 import space.opensensor.strings.resources.conn_connecting
+import space.opensensor.strings.resources.conn_failed
+import space.opensensor.strings.resources.conn_link_lost
+import space.opensensor.strings.resources.conn_pairing
 import space.opensensor.strings.resources.conn_ready
 import space.opensensor.units.UnitFormatter
 import space.opensensor.strings.resources.Res as SharedRes
@@ -102,10 +102,10 @@ internal fun ActiveRow(link: ActiveLink, onClick: () -> Unit) {
         Spacer(Modifier.height(4.dp))
         val (phase, color) = when (link.phase) {
             LinkPhase.CONNECTING -> SharedRes.string.conn_connecting to MaterialTheme.colorScheme.onSurfaceVariant
-            LinkPhase.PAIRING -> Res.string.conn_pairing to MaterialTheme.colorScheme.tertiary
+            LinkPhase.PAIRING -> SharedRes.string.conn_pairing to MaterialTheme.colorScheme.tertiary
             LinkPhase.CONNECTED -> SharedRes.string.conn_ready to MaterialTheme.colorScheme.primary
-            LinkPhase.RECONNECTING -> Res.string.conn_link_lost to MaterialTheme.colorScheme.onSurfaceVariant
-            LinkPhase.FAILED -> Res.string.conn_failed to MaterialTheme.colorScheme.error
+            LinkPhase.RECONNECTING -> SharedRes.string.conn_link_lost to MaterialTheme.colorScheme.onSurfaceVariant
+            LinkPhase.FAILED -> SharedRes.string.conn_failed to MaterialTheme.colorScheme.error
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusDot(color)

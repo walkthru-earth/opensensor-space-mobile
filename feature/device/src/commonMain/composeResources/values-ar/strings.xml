@@ -135,7 +135,6 @@
     <string name="wifi_switch">Wi-Fi المستشعر</string>
     <string name="wifi_title">Wi-Fi</string>
     <string name="wifi_unknown">حالة Wi-Fi غير معروفة</string>
-    <string name="action_cancel">إلغاء</string>
     <string name="perm_lan_body">يعثر على مستشعرك على شبكة Wi-Fi لديك لتكون المزامنة أسرع. يعمل Bluetooth من دونه.</string>
     <string name="msg_sticker_invalid">أدخل الملصق بصيغة PMS5003T مع التاريخ وأرقام الوحدة.</string>
     <string name="device_screen_title">الجهاز</string>

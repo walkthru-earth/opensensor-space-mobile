@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="nav_debug">تصحيح الأخطاء</string>
-    <string name="action_back">رجوع</string>
-    <string name="conn_disconnected">غير متصل</string>
-    <string name="conn_connecting">جارٍ الاتصال…</string>
     <string name="msg_background_owns_command">المزامنة في الخلفية تستخدم هذا المستشعر. انتظر حتى تنتهي.</string>
     <string name="debug_link_busy">الاتصال بهذا المستشعر مشغول. حاول مرة أخرى بعد قليل.</string>
-
 
     <plurals name="scan_files">
         <item quantity="zero">%1$d ملف</item>

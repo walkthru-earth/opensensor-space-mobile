@@ -3,7 +3,6 @@ package space.opensensor.today
 import androidx.compose.runtime.Composable
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
-import space.opensensor.data.ble.ConnectionState
 import space.opensensor.designsystem.moodLineRes
 import space.opensensor.designsystem.moodWord
 import space.opensensor.family.air.AirMood
@@ -13,19 +12,6 @@ import space.opensensor.family.air.PmsStatus
 import space.opensensor.family.air.formatPm
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.resources.Res
-import space.opensensor.today.resources.conn_connecting
-import space.opensensor.today.resources.conn_disconnected
-import space.opensensor.today.resources.conn_discovering
-import space.opensensor.today.resources.conn_failed
-import space.opensensor.today.resources.conn_lan_auth
-import space.opensensor.today.resources.conn_lan_checking
-import space.opensensor.today.resources.conn_mtu
-import space.opensensor.today.resources.conn_notifications
-import space.opensensor.today.resources.conn_pairing
-import space.opensensor.today.resources.conn_pairing_repair
-import space.opensensor.today.resources.conn_ready
-import space.opensensor.today.resources.conn_ready_mtu
-import space.opensensor.today.resources.conn_setting_up
 import space.opensensor.today.resources.info_now_body
 import space.opensensor.today.resources.info_now_body_simple
 import space.opensensor.today.resources.mood_fair_advice
@@ -174,26 +160,3 @@ internal fun PmsStatus.hintText(): String = stringResource(
         PmsStatus.VALID -> Res.string.pms_valid_title
     },
 )
-
-/**
- * The link state in words. Link internals such as the MTU appear only when [technical] is set
- * (Developer level). [pairingRepair] comes from the platform, which knows its own failure codes.
- */
-@Composable
-fun ConnectionState.describe(technical: Boolean, pairingRepair: Boolean = false): String = when (this) {
-    ConnectionState.Disconnected -> stringResource(Res.string.conn_disconnected)
-    ConnectionState.Connecting -> stringResource(Res.string.conn_connecting)
-    ConnectionState.DiscoveringServices -> stringResource(if (technical) Res.string.conn_discovering else Res.string.conn_connecting)
-    ConnectionState.Bonding -> stringResource(Res.string.conn_pairing)
-    ConnectionState.NegotiatingMtu -> stringResource(if (technical) Res.string.conn_mtu else Res.string.conn_setting_up)
-    ConnectionState.EnablingNotifications -> stringResource(if (technical) Res.string.conn_notifications else Res.string.conn_setting_up)
-    ConnectionState.Authenticating -> stringResource(if (technical) Res.string.conn_lan_auth else Res.string.conn_lan_checking)
-    // iOS reports Ready without a negotiated MTU (0), so the technical line only names it when known.
-    is ConnectionState.Ready -> if (technical && mtu > 0) stringResource(Res.string.conn_ready_mtu, mtu) else stringResource(Res.string.conn_ready)
-    // A pairing repair message is plain language and says what to do, so every level shows it.
-    is ConnectionState.Failed -> when {
-        pairingRepair -> stringResource(Res.string.conn_pairing_repair)
-        technical -> reason
-        else -> stringResource(Res.string.conn_failed)
-    }
-}

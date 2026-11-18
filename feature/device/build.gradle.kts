@@ -23,6 +23,8 @@ kotlin {
             api(project(":core:history"))
             api(project(":core:settings"))
             api(project(":ui:designsystem"))
+            // Shared action words such as Cancel.
+            implementation(project(":ui:strings"))
             implementation(libs.kotlinx.coroutines.core)
         }
         androidMain.dependencies {

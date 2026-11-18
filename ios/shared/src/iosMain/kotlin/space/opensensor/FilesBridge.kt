@@ -40,7 +40,7 @@ internal class DeviceFilesActions(
 )
 
 /** What the Files top bar and banner show for one sensor. [transport] is null while no link is up. */
-internal data class FilesChrome(val transport: TransportKind?, val status: ThingStatus)
+internal data class FilesChrome(val transport: TransportKind?, val status: ThingStatus, val pairingRepair: Boolean = false)
 
 /** One sensor's manifest and plan, independent of the whole-phone export controller. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -84,12 +84,12 @@ internal class IosDeviceFiles(
         val thing = devices.thingFor(address)
         val lan = devices.state.connectedLanForThing(thing)
         val ble = devices.state.connected && devices.state.selectedId.equals(address, ignoreCase = true)
-        val connection = when {
-            lan != null || ble -> ConnectionState.Ready(0)
-            devices.state.reconnectingId.equals(address, ignoreCase = true) ||
-                devices.state.selectedId.equals(address, ignoreCase = true) -> ConnectionState.Connecting
-            else -> ConnectionState.Disconnected
-        }
+        val connection = SensorLink.state(
+            ready = lan != null || ble,
+            pairingLost = devices.state.failedId.equals(address, ignoreCase = true),
+            connecting = devices.state.reconnectingId.equals(address, ignoreCase = true) ||
+                devices.state.selectedId.equals(address, ignoreCase = true),
+        )
         FilesChrome(
             transport = when {
                 lan != null -> TransportKind.LAN
@@ -97,6 +97,7 @@ internal class IosDeviceFiles(
                 else -> null
             },
             status = ThingStatus(connection, heldInBackground = devices.state.heldInBackground(address, thing)),
+            pairingRepair = SensorLink.needsRepair(connection),
         )
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, FilesChrome(null, ThingStatus(ConnectionState.Disconnected)))
 

@@ -11,7 +11,6 @@
     <string name="locale_tag">ar</string>
 
     <!-- Common -->
-    <string name="action_cancel">إلغاء</string>
     <string name="action_not_now">ليس الآن</string>
     <string name="action_reconnect">إعادة الاتصال</string>
     <string name="nav_disconnect">قطع الاتصال</string>
@@ -131,11 +130,6 @@
 
     <!-- Scan archive line. Mood, metric, value, unit, day. -->
     <!-- Relative time -->
-    <string name="ago_just_now">الآن</string>
-    <string name="ago_seconds">قبل %1$d ث</string>
-    <string name="ago_minutes">قبل %1$d د</string>
-    <string name="ago_hours">قبل %1$d س</string>
-    <string name="ago_days">قبل %1$d يوم</string>
     <string name="file_chart_estimated">%1$s، تقديري</string>
     <string name="file_chart_unplaced">لا مكان له على الخط الزمني بعد. لا يملك هذا التشغيل وقتًا من الساعة.</string>
     <plurals name="file_chart_rows">
