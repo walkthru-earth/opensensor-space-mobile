@@ -363,6 +363,18 @@ class DeviceSessionTest {
     }
 
     @Test
+    fun emptyLogSlicesAddNothingAndStillEndAtLogEnd() = runTest {
+        val p = peer()
+        p.reply = { op, _ ->
+            if (op == Opcode.LOG_TAIL) emit(Frame.Log(ByteArray(0)), Frame.Log(ByteArray(3) { 'a'.code.toByte() }), Frame.Log(ByteArray(0)), Frame.LogEnd(3, 3))
+        }
+        val tail = p.view().logTail()
+        assertEquals("aaa", tail.text)
+        assertEquals(3, tail.receivedBytes)
+        assertTrue(tail.complete)
+    }
+
+    @Test
     fun chunkForAnotherHandleIsAProtocolViolation() = runTest {
         val p = peer()
         p.reply = { op, _ -> if (op == Opcode.READ) emit(Frame.Chunk(2, 0, ByteArray(4)), Frame.ReadEnd(1, 4, 0)) }
