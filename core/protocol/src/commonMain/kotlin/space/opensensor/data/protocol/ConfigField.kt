@@ -117,6 +117,9 @@ object ConfigFields {
     /** The longest board key name the app accepts, in bytes. */
     const val DECLARED_KEY_MAX_BYTES = 48
 
+    /** The most dot-separated parts a board key name may have, so [BoardSettings] reads every one back. */
+    const val DECLARED_KEY_MAX_PARTS = 4
+
     /** The text limit of a declared `text` key that names no range, in UTF-8 bytes. */
     const val DECLARED_TEXT_MAX_BYTES = 64
 
@@ -196,9 +199,10 @@ object ConfigFields {
      * 1. A field marked secret, or a key in [SECRET_KEYS], is dropped. Secrets are never declarable.
      * 2. An app key keeps the app's type, timing and protections, and gains a stricter
      *    confirmation or `disrupts` when [schema] asks.
-     * 3. A board key is kept when it is outside [RESERVED_PREFIXES], has a valid name and type and
-     *    reads back from [Request.GetConfigPage.BOARD_SETTINGS]. A board [FieldType.Action] always
-     *    confirms, disrupts and applies [Applies.ONCE].
+     * 3. A board key is kept when it is outside [RESERVED_PREFIXES], has a valid name of at most
+     *    [DECLARED_KEY_MAX_PARTS] parts and a board type, and reads back from
+     *    [Request.GetConfigPage.BOARD_SETTINGS]. A board [FieldType.Action] always confirms,
+     *    disrupts and applies [Applies.ONCE].
      * 4. Anything else is dropped, and a repeated key keeps its first entry.
      */
     fun merge(schema: List<ConfigField>): List<ConfigField> = schema.mapNotNull(::floor).distinctBy { it.key }
@@ -271,7 +275,9 @@ object ConfigFields {
 
     private val BOARD_KEY = Regex("[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+")
 
-    private fun isBoardKeyName(key: String): Boolean = key.length <= DECLARED_KEY_MAX_BYTES && BOARD_KEY.matches(key)
+    private fun isBoardKeyName(key: String): Boolean = key.length <= DECLARED_KEY_MAX_BYTES &&
+        key.count { it == '.' } < DECLARED_KEY_MAX_PARTS &&
+        BOARD_KEY.matches(key)
 
     private fun isBoardType(type: FieldType): Boolean = when (type) {
         FieldType.Toggle, FieldType.Action -> true

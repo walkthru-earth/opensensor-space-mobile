@@ -172,8 +172,8 @@ floor.
 - An app key keeps the app's type, timing and protections, and only gains a stricter confirmation
   or `disrupts`.
 - A board key is kept only outside the reserved prefixes `ble.`, `wifi.`, `lan.`, `location.`,
-  `thing.`, `owner.` and `sensor.`, with a dotted lowercase name of at most 48 bytes, read back from
-  page 7. A board `action` always confirms, disrupts and applies once.
+  `thing.`, `owner.` and `sensor.`, with a dotted lowercase name of at most 48 bytes and four parts, read
+  back from page 7. A board `action` always confirms, disrupts and applies once.
 
 `ConfigPatch.Builder.field` sends one merged board key. It refuses a secret, reserved or unmerged
 field and a value outside its type (`ConfigProblem.FIELD_VALUE`, the message never holds the value).

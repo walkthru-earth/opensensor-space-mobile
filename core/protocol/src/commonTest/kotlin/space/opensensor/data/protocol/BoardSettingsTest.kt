@@ -52,6 +52,15 @@ class BoardSettingsTest {
     }
 
     @Test
+    fun `every key a board may declare reads back`() {
+        val key = List(ConfigFields.DECLARED_KEY_MAX_PARTS) { "k$it" }.joinToString(".")
+        val page = key.split('.').reversed().fold("true") { inner, part -> """{"$part":$inner}""" }
+        val field = ConfigField(key, FieldType.Toggle, Applies.IMMEDIATELY, page = Request.GetConfigPage.BOARD_SETTINGS)
+        assertEquals(listOf(field), ConfigFields.merge(listOf(field)))
+        assertEquals("1", BoardSettings.parse(page)[key])
+    }
+
+    @Test
     fun `a page that is not an object is refused`() {
         assertFailsWith<IllegalArgumentException> { BoardSettings.parse("[1]") }
     }

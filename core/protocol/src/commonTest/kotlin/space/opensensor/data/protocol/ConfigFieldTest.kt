@@ -183,9 +183,11 @@ class ConfigFieldTest {
 
     @Test
     fun `a board key name must be dotted lowercase`() {
-        val names = listOf("Panel.theme", "panel", "panel.", ".theme", "panel theme.x", "panel.t=x", "a." + "b".repeat(60))
+        val names = listOf("Panel.theme", "panel", "panel.", ".theme", "panel theme.x", "panel.t=x", "a." + "b".repeat(60), "a.b.c.d.e")
         val fields = names.map { ConfigField(it, FieldType.Toggle, Applies.IMMEDIATELY, page = BOARD) }
         assertTrue(ConfigFields.merge(fields).isEmpty())
+        val fourParts = ConfigField("a.b.c.d", FieldType.Toggle, Applies.IMMEDIATELY, page = BOARD)
+        assertEquals(listOf(fourParts), ConfigFields.merge(listOf(fourParts)))
     }
 
     @Test

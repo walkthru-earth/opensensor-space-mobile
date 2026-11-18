@@ -19,8 +19,11 @@ data class BoardSettings(val values: Map<String, String>) {
     operator fun get(key: String): String? = values[key]
 
     companion object {
-        /** The deepest nesting read, so a hostile page cannot recurse without end. */
-        private const val MAX_DEPTH = 4
+        /**
+         * The deepest nesting read, so a hostile page cannot recurse without end. It is the most
+         * parts a declared board key may have, so every merged key reads back.
+         */
+        private const val MAX_DEPTH = ConfigFields.DECLARED_KEY_MAX_PARTS
 
         val EMPTY = BoardSettings(emptyMap())
 
