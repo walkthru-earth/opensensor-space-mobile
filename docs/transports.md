@@ -1,7 +1,7 @@
 # Transports, BLE, LAN, pairing, the token, reconnect
 
-**Scope:** the two byte pipes behind `DeviceTransport`, how the repository picks one, pairing, the LAN token lifecycle, link loss.
-**Code:** Android `data/ble/BleLinkDriver.kt`, `BleScanner.kt`; `data/lan/TcpLinkDriver.kt`, `LanDiscovery.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionManager.kt`, `DeviceFacade.kt`, `DeviceLinkOwner.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`), `DeviceIdentityClaims.kt`; `ui/permissions/LanPermission.kt`. Shared in `core/sync` commonMain: `data/ble/DeviceTransport.kt`, `DeviceSession.kt`, `FrameRecorder.kt`; `data/lan/LanTokenPolicy.kt`, `LanFailure.kt`; `data/DeviceContinuityPolicy.kt`, `TransportSelector.kt`, `ConnectionIntent.kt`. `core/protocol` `LanFrameSplitter.kt` (socket slices to frames).
+**Scope:** the two byte pipes behind `DeviceTransport`, how `DeviceLinkOwner` picks one, pairing, the LAN token lifecycle, link loss.
+**Code:** Android `data/ble/BleLinkDriver.kt`, `BleScanner.kt`; `data/lan/TcpLinkDriver.kt`, `LanDiscovery.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionManager.kt`, `DeviceFacade.kt`, `DeviceLinkOwner.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`), `DeviceIdentityClaims.kt`; `ui/permissions/LanPermission.kt`. Shared in `core/sync` commonMain: `data/ble/DeviceTransport.kt`, `DeviceSession.kt`, `FrameRecorder.kt`, `SnapshotPoller.kt`; `link/LinkSession.kt` (`Heartbeat`); `data/lan/LanTokenPolicy.kt`, `LanFailure.kt`; `data/DeviceContinuityPolicy.kt`, `TransportSelector.kt`, `ConnectionIntent.kt`. `core/protocol` `LanFrameSplitter.kt` (socket slices to frames).
 **Related:** [protocol-quickref.md](protocol-quickref.md), [sync-engine.md](sync-engine.md) (what runs on top), [background-sync.md](background-sync.md) (unattended links, WifiLock).
 
 ## Choosing a link
@@ -28,7 +28,7 @@ a known sensor with a saved token, thing and current mDNS discovery may open LAN
 path has no BLE fallback or BLE auto-reconnect; if LAN cannot connect, its archive remains
 available offline. Reconnect on the thing page is the tap that asks for Bluetooth. `TransportFactory` throws `TransportUnavailableException` (RADIO_OFF,
 PERMISSION_MISSING or NO_ADAPTER) before any Bluetooth open. Connect and collection turn it into
-`DisconnectCause.Unavailable`, which is never retried, and say which one applies (2026-10-12).
+`DisconnectCause.Unavailable`, which is never retried, and say which one applies.
 A LAN connect refused with EPERM, the Local Network permission refusal, is the same
 `Unavailable(PERMISSION_MISSING)` (`SocketErrors.connectException`), never a retried UNREACHABLE.
 
@@ -70,6 +70,11 @@ Android already keeps separate controllers for several sensors and limits
 concurrent file transfers to two per phone. Its existing framed TCP transport
 uses the same protocol with the firmware's multi-client pool. iOS collection
 support and its validation scope are documented in [ios.md](ios.md).
+Both phones start each `READ` at the advertised `max_read` and drop below it only after a lost or
+timed-out window. Both sockets set TCP no-delay (`TcpLinkDriver`, `LanPolicy.swift`). Throughput
+work never shrinks the LAN window or removes an integrity check. Firmware scheduling and radio
+behaviour belong to the firmware
+[LAN performance guide](../../opensensor-space-firmware/docs/shared/lan-performance.md).
 Real multi-phone/multi-sensor throughput and radio behavior require phone and
 board qualification; host tests alone do not establish these results.
 
@@ -96,70 +101,13 @@ the pairing phase, and a lost bond shows as a failed link until the next connect
 
 ## Side by side
 
-### Investigating slow Wi-Fi collection (2026-10-08)
-
-The owner reported Wi-Fi file collection slower than BLE on both iPhone and
-Android after saving iPhone access. Both mobile engines start at the advertised
-`max_read` (normally 16 KiB) and only drop below it after a lost or timed-out window; Android also enables `TCP_NODELAY`. Do not shrink
-LAN windows, remove integrity checks or assume an iOS UI change fixes both apps.
-
-The [CoreS3 v6.6 concurrency bench](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#board-1-concurrent-lan-collectors-firmware-v66)
-measured two host collectors downloading 87,654 bytes each in 49.801 seconds
-(about 1.8 KB/s each), with a third connection present. That host benchmark used
-4 KiB READ windows; it establishes a slow concurrent run, not the throughput of
-an isolated phone using 16 KiB windows. Older single-client LAN observations were
-faster, so this is not an established hardware speed ceiling.
-
-Firmware inspection found a 100 ms LAN request poll, up to a 50 ms sample-queue
-wait before storage command dispatch, whole-file CRC calculation on OPEN, and a
-single storage worker shared by all clients. Socket sends also share a mutex;
-one blocked peer can delay others within its one-second frame-send deadline.
-Wi-Fi modem sleep is intentional for BLE coexistence. These are candidates,
-not a measured attribution of the owner's slowdown.
-
-Compare the same immutable file with one active collector, then two. Time OPEN,
-each 16 KiB READ through READ_END, CLOSE, and local verification separately;
-report actual newly received bytes per second, excluding resumed bytes. Record
-firmware/app versions, file size, active collectors and radio conditions. Keep
-tokens and private credentials out of traces. Any firmware scheduling or radio
-change belongs in `../opensensor-space-firmware` and needs sampling/coexistence checks and a
-dated board run before claiming a throughput improvement.
-
-The subsequent implementation replaces the fixed LAN poll sleep with a bounded
-socket-readiness wait, and wakes the storage worker after successful queue
-enqueues. Sampling and commands retain one turn each per worker pass; queue
-contents survive coalesced wakeups. See the firmware owner's
-[LAN performance guide](../../opensensor-space-firmware/docs/shared/lan-performance.md) for
-regressions and qualification. CRC calculation, Wi-Fi sleep/coexistence, frame
-sizes and the wire contract remain unchanged.
-
-Android now limits intermediate file progress and debug CHUNK snapshot copies
-to ten updates per second, while keeping every ring entry and flushing trailing
-history at request completion/failure. Initial/final/recovery progress remains
-immediate. iOS limits chunk progress to four updates per second, removes the
-second archive-actor hop per chunk, cancels completed timeout timers, and enables
-TCP `noDelay` as Android already does. Its card reports end-to-end average KiB/s
-from newly written bytes, excluding resumed or reused bytes. Read-window fsync
-and final verification are retained. These changes remove overhead; a new board
-run is required to establish actual throughput improvement.
-
-The owner subsequently authorized the CoreS3 v6.7 deployment. Three host fetches
-of the same 87,654-byte file without a USB reader took 0.925–1.045 seconds;
-two simultaneous host collectors each reached about 57 KB/s. The old image's
-USB-drained/undrained comparison identified console backpressure as a material
-contributor: radio/archive diagnostics now stay in LOG_TAIL without console IO.
-Physical serial DATA/list/status/provisioning paths retain their behavior.
-See the [dated board result](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--cores3-v67-lan-latency-and-usb-backpressure)
-for image/backup hashes, client-count differences and limits. These short host
-measurements do not establish Android/iPhone throughput after the upgrade.
-
 | | Bluetooth LE (`BleLinkDriver`) | LAN (`TcpLinkDriver`) |
 | --- | --- | --- |
 | Discovery | GATT scan for the service UUID (`BleScanner`), any advertised name, timeboxed by `ScanPlan`: `LOW_LATENCY` until 2 s after the first result or 10 s, then `BALANCED`, stop at 45 s; initial starts and restarts share a process-local five-starts-per-30-s budget with `AdvertFlagScan`. Exhausted discovery returns a scan failure without a radio start. Step down and flag re-registration reserve one slot for discovery. The policy is conservative, Android vendor limits and process restarts can differ. My devices folds adverts in `NearbyAdverts` (seen map at most every 250 ms, Room `touch` at most once per device per 60 s) | mDNS `_ossync._tcp` via `NsdManager` (`LanDiscovery`), TXT `thing`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |
 | Auth | LE Secure Connections bond; passkey/PIN modes require encrypted, authenticated access; explicit lab `none` mode uses encrypted Just Works without MITM authentication | `"OSS1"` + 32-byte token, obtainable **only** over BLE; the socket itself is unencrypted by contract and does not authenticate server identity |
 | Framing | one notification per frame; `payload_max = min(MTU − 3, 512)`, Android silently drops notifications above the 512-byte GATT attribute limit; control requests ≤ 512 B | `len` u16 LE + frame; `payload_max` from `HELLO` (1024), `mtu` reports `payload_max + 3` |
 | Pushes | `status` / `live` characteristics. The firmware omits a snapshot notification larger than `MTU − 3` (snapshots are at most 480 B), so below MTU 483 the phone also long reads both every 10 s (`SnapshotPoller` on Android, `BleSnapshotReads` on iOS). Reads start once setup is done and stop with the link. On Android a tick skips while a transfer holds or borrows the link, and otherwise queues behind other GATT ops on `opMutex`. It runs whenever the session is open, also with the app in the background while a link the UI opened stays up. On iOS a tick skips while a run, command, lease, token request or any GATT op holds the link, and runs only while the link is kept for on screen or running work | `STATUS` 0x48 / `LIVE` 0x49 frames, **demultiplexed by type byte in the transport's single reader loop**, they may sit between two `CHUNK`s; `DeviceSession` is byte-for-byte identical for both pipes |
-| Liveness | GATT link state | `STATUS` keep-alive after 120 s idle (`KEEPALIVE_POLL_MS` 15 s); link declared dead after `DEAD_AFTER_MS` 180 s without a byte |
+| Liveness | GATT link state | `Heartbeat.LAN`, a `STATUS` ping after 120 s idle and a 180 s deadline without a byte |
 | Timeouts | connect 15 s unattended (`BACKGROUND_BLE_CONNECT_MS`), `requestMtu` 10 s | `CONNECT_TIMEOUT_MS` 5 s, `HANDSHAKE_TIMEOUT_MS` 8 s, `PUSH_WAIT_MS` 10 s (`readStatus`), `LIVE_WAIT_MS` 15 s (`readLive`) |
 | Framing loss | n/a (per-notification) | zero-length or oversize frame, or EOF mid-frame → close the socket (a resync could deliver a wrong `CHUNK`) |
 | Kept alive by | `dataSync` foreground service during a transfer; nothing while idle | the same + `LanWifiLock` only while a LAN transfer runs |
@@ -214,36 +162,9 @@ because Android may encrypt a bonded link right after connect but flaky stacks a
 133 and a bare disconnect never count. No stale bond on a phone has produced them, while healthy
 bonds do at the edge of range.
 
-The reflash for firmware #93 (opensensor-space-firmware#102) is a partial erase. The settings namespace `oscfg`
-starts empty, and nothing is copied from the old one. `parquet` keeps the thing UUID and the
-codec, so the app sees the same thing and keeps its archive. Lost on the board, back to first
-boot defaults.
-
-- Pairing mode and PIN (`<dev pin>`) and the display flag. A headless board makes a new random
-  fixed PIN, read it with the owner serial path (`parquet owner-pin`).
-- Wi-Fi on, SSID and passphrase, and `lan.on` (back to on).
-- The LAN token. The board makes a new one.
-- Sensor identity, `sensor.vendor`, `sensor.model`, `sensor.serial` and `sensor.batch_candidate`.
-  Until it is set again, Waveshare files carry no sensor identity and the batch candidate stays off.
-- Location and the NTP settings.
-
-BLE bonds survive the reflash, but the phone may cache the old GATT table, so pair again cleanly.
-Re-provision in this order on the Device settings page.
-
-1. Forget the board in the phone's Bluetooth settings.
-2. Connect from My devices, then use Paired phones, Clear (`ble.clear_bonds=1`), and pair again
-   with the code on the display or `<dev pin>`.
-3. Bluetooth pairing, the mode and PIN if they should differ from the default, then Restart.
-4. Find networks and Join. Sync over Wi-Fi comes back on by itself, see below.
-5. Nothing to do for the Wi-Fi token. If the phone still holds the old token, the first `OSS1`
-   handshake fails with `ERROR` 14 and the stored token is cleared (`LanTokenPolicy`, Android
-   Room and iOS Keychain alike). The next Bluetooth connection fetches the new one quietly.
-6. Particle sensor sticker on Waveshare, which sends vendor, model, serial and the batch choice.
-7. Device location, a cell tapped on the area map.
-
-The display flag is detected again at first boot and has no setting. The app has no NTP settings,
-so NTP runs on the firmware defaults (on, DHCP servers, public fallback, one hour interval).
-Custom NTP servers or interval need the host tools.
+A stored token the board no longer accepts fails the first `OSS1` handshake with `ERROR` 14 and
+is cleared (`LanTokenPolicy`, Android Room and iOS Keychain alike). The next Bluetooth connection
+fetches the new one quietly. The app has no NTP settings, so NTP runs on the firmware defaults.
 
 Thing generations preserve the original archive and Hive paths; they do not reparent old data
 ([data model](data-model.md#thing-generations-and-device-continuity)). The policies and migration
@@ -298,7 +219,7 @@ stateDiagram-v2
 
 `known_device.lanToken` (nullable) holds AES-GCM ciphertext. Rows read through the DAO, and so
 every ViewModel, see only that ciphertext, enough for `hasLanToken`. The plaintext hex comes only from
-`LanCredentialStore.lanCredential(address)`, which the repository calls at the moment it builds a LAN
+`LanCredentialStore.lanCredential(address)`, which `DeviceLinkOwner` calls at the moment it builds a LAN
 transport (`tryLan`, the facade `syncInBackground` worker path). **Never logged, never displayed**: `KnownDevice.toString`,
 `Frame.Token.toString`, `FrameRecorder` and the raw-command view redact it. Startup finishes the
 one-time plaintext migration before Auto-sync scheduling or triggers can read credentials. Failed GCM
@@ -327,7 +248,7 @@ invalidates even an idle retry decided by the watcher but not yet launched.
 An active collection suppresses that idle watcher. `CollectionController` owns its typed
 loss handling and retries from CONNECT and a fresh listing, including loss during preparation.
 PROCESS stays held through retry waiting and finalization. The foreground service follows
-those leases, not the old `sync.running || reconnecting != null` inference.
+those leases.
 See [collection retry](sync-engine.md#resume-after-a-lost-link).
 
 ## `REBOOT` reconnect
@@ -343,8 +264,8 @@ own. It is in the NEARBY_DEVICES group with the Bluetooth permissions so it is *
 them, but a runtime permission can be missing while its group is granted, and below API 37 the
 constant does not exist. `LanPermission` returns "granted" below 37 and asks above; a denial hides
 LAN with an explanation while BLE keeps working. `INTERNET` covers these local sockets
-and anonymous, read-only public feed and basemap GETs behind
-the "Show public sensors" switch, and per-device opt-in uploads later
+and the anonymous, read-only GETs of the public feed, the basemap and a board template behind
+the "Show public sensors" switch. Nothing uploads
 ([devices-and-discovery.md](devices-and-discovery.md#network-boundary)).
 
 ## `NsdManager` two code paths
@@ -352,7 +273,7 @@ the "Show public sensors" switch, and per-device opt-in uploads later
 API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31–33: one-shot
 `resolveService`, which rejects concurrent calls (`FAILURE_ALREADY_ACTIVE`) → resolves are queued.
 
-## Decisions (protocol v2, 2026-09-17)
+## Link rules
 
 | Question | Decision |
 | --- | --- |
@@ -369,10 +290,10 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 
 | Edit… | Affects… |
 | --- | --- |
-| `DeviceTransport` interface | all three transports, `DeviceSession`, repository, `TransportFactory` |
+| `DeviceTransport` interface | all three transports, `DeviceSession`, `DeviceLinkOwner`, `TransportFactory` |
 | `TcpLinkDriver` reader loop | push demux (`LIVE` between `CHUNK`s), `TcpLinkDriverTest` asserts it |
 | `BleLinkDriver.allowBonding` / timeouts | `AutoSyncRunner` path (`bleUnattended`), a passkey dialog in the background is a bug |
-| `LanTokenPolicy` | repository `tryLan`, token refetch after Ready, snackbar copy |
+| `LanTokenPolicy` | `DeviceLinkOwner.tryLan`, token refetch after Ready, snackbar copy |
 | `DeviceContinuityPolicy` / `DeviceIdentityClaims` | INFO acceptance, thing epochs, credential renewal and prevention of duplicate physical-device owners |
 | `DeviceConnectionManager` | per-device ownership and snapshots; selection must not close another controller |
 | `LanDiscovery` TXT parsing | `BackgroundSyncPolicy.linksFor` (thing match), Device screen LAN card |
