@@ -6,8 +6,8 @@ import org.gradle.kotlin.dsl.configure
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 
 /**
- * `opensensor.jvm.library`. A plain Kotlin/JVM module (bytecode 17), used by modules that still
- * depend on `java.*` APIs and are not yet multiplatform.
+ * `opensensor.jvm.library`. A plain Kotlin/JVM module (bytecode 17) for the build tools under
+ * `tools/`, with `kotlin-test` for its tests. `verify` compiles it and runs its tests.
  */
 class JvmLibraryConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) = with(target) {
@@ -23,7 +23,8 @@ class JvmLibraryConventionPlugin : Plugin<Project> {
                 openSensorDefaults()
             }
         }
+        dependencies.add("testImplementation", catalogLibrary("kotlin-test"))
         // `assemble` (and so GitHub CodeQL autobuild) compiles these modules, so `verify` does too.
-        addToGate(Gates.HOST, "compileKotlin")
+        addToGate(Gates.HOST, "compileKotlin", "test")
     }
 }

@@ -17,14 +17,6 @@ kotlin {
             api(project(":core:settings"))
             api(project(":core:units"))
             api(project(":ui:designsystem"))
-            implementation(libs.kotlinx.coroutines.core)
-        }
-        commonTest.dependencies {
-            implementation(libs.kotlinx.coroutines.test)
-        }
-        // Row semantics tests render headless on the iOS simulator (verifyIos), as in :feature:history.
-        iosTest.dependencies {
-            implementation(libs.compose.ui.test)
         }
     }
 }

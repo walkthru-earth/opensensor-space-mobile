@@ -9,12 +9,14 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
  * `OpenSensorShared` framework for every iOS target, which the Xcode project links directly.
  *
  * There is no JVM target, so `commonMain` can depend on the Android and iOS Compose feature modules.
- * `commonTest` runs on the iOS simulator. Both the tests and the debug simulator framework link join
+ * It gets the same Compose setup as those modules ([applyOpenSensorCompose]). `commonTest` gets
+ * `kotlin-test` and kotlinx-coroutines-test and runs on the iOS simulator. Both the tests and the debug simulator framework link join
  * `verifyIos`.
  */
 class IosFrameworkConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) = with(target) {
         pluginManager.apply("org.jetbrains.kotlin.multiplatform")
+        applyOpenSensorCompose()
 
         extensions.configure<KotlinMultiplatformExtension> {
             openSensorIosTargets()
@@ -22,6 +24,7 @@ class IosFrameworkConventionPlugin : Plugin<Project> {
 
             sourceSets.getByName("commonTest").dependencies {
                 implementation(catalogLibrary("kotlin-test"))
+                implementation(catalogLibrary("kotlinx-coroutines-test"))
             }
             targets.withType(KotlinNativeTarget::class.java).configureEach {
                 binaries.framework {

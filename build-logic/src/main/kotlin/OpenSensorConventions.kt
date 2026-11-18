@@ -20,9 +20,12 @@ internal object OpenSensorConventions {
     val jvmTarget: JvmTarget = JvmTarget.JVM_17
     const val JAVA_RELEASE: Int = 17
 
-    /** Android SDK levels of every shared Android library target. `:app` uses the same numbers. */
+    /** Android SDK levels of every shared Android library target and of `:app`. */
     const val COMPILE_SDK: Int = 37
     const val MIN_SDK: Int = 31
+
+    /** Android target SDK of `:app`. Libraries have none. */
+    const val TARGET_SDK: Int = 37
 
     /** Namespace root of the shared Compose modules. The module name is appended. */
     const val COMPOSE_NAMESPACE_ROOT: String = "space.opensensor"

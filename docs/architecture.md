@@ -139,18 +139,20 @@ flowchart TB
 ## Build conventions (`build-logic/`)
 
 `settings.gradle.kts` includes `build-logic/` through `pluginManagement { includeBuild(...) }`.
-It holds four convention plugins, so a new shared module is one `plugins {}` line.
+It holds six convention plugins, so a new module is one `plugins {}` line.
 
 | Plugin | Applied by | Sets |
 | --- | --- | --- |
 | `opensensor.kmp.library` | every `:core` module | Kotlin Multiplatform with `jvm` (bytecode 17), `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, a `test` task that runs `jvmTest`. Adds `jvmTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
-| `opensensor.kmp.compose-feature` | `:ui:designsystem`, `:ui:strings`, `:ui:permissions`, `:ui:map`, `:feature:discover`, `:feature:settings`, `:feature:shell` | the AGP KMP Android library target (namespace `space.opensensor.<module>`, SDK 37, min 31, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, internal resources class in `<namespace>.resources`, `kotlin-test` in `commonTest` (runs in the Android host test and on the simulator), a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
-| `opensensor.kmp.ios-framework` | `:ios:shared` | iOS only Kotlin Multiplatform with the static `OpenSensorShared` framework for each iOS target. Adds `iosSimulatorArm64Test` and `linkDebugFrameworkIosSimulatorArm64` to `verifyIos` |
-| `opensensor.jvm.library` | none today (kept for a future JVM-only module) | Kotlin/JVM with Java and Kotlin bytecode 17 |
+| `opensensor.kmp.android-library` | `:core:database` | the AGP KMP Android library target and the two iOS targets without Compose, for a library that ships separate Android and iOS artifacts (Room). `kotlin-test` in `commonTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
+| `opensensor.kmp.compose-feature` | every `:ui` and `:feature` module | the AGP KMP Android library target (namespace `space.opensensor.<module>`, SDK 37, min 31, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, kotlinx-coroutines-core, internal resources class in `<namespace>.resources`, `kotlin-test` and kotlinx-coroutines-test in `commonTest` (runs in the Android host test and on the simulator), Compose UI test in `iosTest`, a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
+| `opensensor.kmp.ios-framework` | `:ios:shared` | iOS only Kotlin Multiplatform with the static `OpenSensorShared` framework for each iOS target, the same Compose setup as `compose-feature`, `kotlin-test` and kotlinx-coroutines-test in `commonTest`. Adds `iosSimulatorArm64Test` and `linkDebugFrameworkIosSimulatorArm64` to `verifyIos` |
+| `opensensor.jvm.library` | `:tools:history-benchmark`, `:tools:pins` | Kotlin/JVM with Java and Kotlin bytecode 17, `kotlin-test` for tests. Adds `compileKotlin` and `test` to `verify` |
+| `opensensor.android.application` | `:app` | AGP's application plugin with `compileSdk` 37, `minSdk` 31, `targetSdk` 37 and Java and Kotlin bytecode 17 |
 
 The conventions compile against the Kotlin, Android and Compose Gradle plugins as `compileOnly`.
 The root `build.gradle.kts` declares every plugin once with `apply false`, so all modules share one
-plugin classloader. The shared modules' bytecode 17 is a compiler target, not `jvmToolchain(17)`, so the build needs one JDK only. `:app` keeps AGP's default JVM target.
+plugin classloader. Bytecode 17 is a compiler target, not `jvmToolchain(17)`, so the build needs one JDK only.
 Gradle runs on JDK 25, pinned in `gradle/gradle-daemon-jvm.properties`, which Android Studio, the terminal and CI
 all follow ([build-and-release.md](build-and-release.md#build-jdk)). A `jvmToolchain(17)` would need a second JDK or a download.
 Warnings are not errors yet, since existing code still has a few.

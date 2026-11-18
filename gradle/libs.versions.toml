@@ -16,6 +16,9 @@ androidxTestEspresso = "3.7.0"
 coroutines = "1.11.0"
 hilt = "2.60.1"
 junit = "4.13.2"
+# The ktlint the pre-commit hook downloads (tools/hooks/ktlint.sh). Listed here so Dependabot sees it.
+# KtlintPinTest (:tools:pins) fails until the script carries the same version and its SHA-256.
+ktlint = "1.8.0"
 jsonSchemaValidator = "3.0.9"
 # Android framework on the host for :ui:designsystem window and font scale tests (#170, #115).
 robolectric = "4.17"
@@ -85,6 +88,8 @@ hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", ve
 hilt-android-testing = { module = "com.google.dagger:hilt-android-testing", version.ref = "hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hilt" }
 junit = { module = "junit:junit", version.ref = "junit" }
+# No module depends on it. It carries the ktlint version for Dependabot (see [versions] ktlint).
+ktlint-cli = { module = "com.pinterest.ktlint:ktlint-cli", version.ref = "ktlint" }
 json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "jsonSchemaValidator" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }

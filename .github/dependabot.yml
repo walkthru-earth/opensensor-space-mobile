@@ -5,7 +5,8 @@
 version: 2
 
 updates:
-  # gradle/libs.versions.toml, the wrapper and plugin versions.
+  # gradle/libs.versions.toml, the wrapper and plugin versions. The catalog also carries the ktlint
+  # version of tools/hooks/ktlint.sh, and KtlintPinTest fails until the script matches a bump.
   - package-ecosystem: gradle
     directory: /
     schedule:
@@ -63,3 +64,12 @@ updates:
       hooks:
         patterns:
           - "*"
+
+  # tools/ci/requirements.txt, the pre-commit version the verify.yml hooks job installs.
+  - package-ecosystem: pip
+    directory: /tools/ci
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7

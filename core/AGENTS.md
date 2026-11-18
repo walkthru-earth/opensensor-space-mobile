@@ -137,7 +137,8 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   (docs/parquet.md), so a new source (a cache, another transport) implements `RangeSource`
   instead of touching the decoder. The decoder reads `ByteView`s in place and never copies them.
 - Module build files apply a convention plugin from `../build-logic/` (`opensensor.kmp.library`,
-  `opensensor.kmp.compose-feature`, `opensensor.kmp.ios-framework`, `opensensor.jvm.library`).
+  `opensensor.kmp.android-library`, `opensensor.kmp.compose-feature`, `opensensor.kmp.ios-framework`,
+  `opensensor.jvm.library`, and `opensensor.android.application` for `:app`).
   Change targets, bytecode level, test wiring or gate membership there, once, not in a module.
   See `docs/architecture.md`.
 - Sync rules that both phones must share live in `protocol/commonMain`. `ParquetVerify` (size,

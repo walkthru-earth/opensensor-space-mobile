@@ -44,8 +44,20 @@ class TypographyTest {
     @Test
     fun everyRequestedWeightIsInsideTheBundledFontAxis() {
         for ((file, weights) in listOf("quicksand.ttf" to QuicksandWeights, "cairo.ttf" to CairoWeights)) {
-            val (min, max) = weightAxis(File("src/commonMain/composeResources/font/$file").readBytes())
+            val (min, max) = axes(File("src/commonMain/composeResources/font/$file").readBytes()).getValue("wght")
             for (w in weights) assertTrue(w.toFloat() in min..max, "$file weight $w outside $min..$max")
+        }
+    }
+
+    /**
+     * The bundled fonts vary by weight only. Cairo ships with its `slnt` axis pinned to 0, which halves
+     * the file and keeps it under the 600 KB large file hook (docs/build-and-release.md).
+     */
+    @Test
+    fun bundledFontsCarryOnlyTheWeightAxis() {
+        for (file in listOf("quicksand.ttf", "cairo.ttf")) {
+            val axes = axes(File("src/commonMain/composeResources/font/$file").readBytes())
+            assertEquals(setOf("wght"), axes.keys, file)
         }
     }
 
@@ -57,8 +69,8 @@ class TypographyTest {
         }
     }
 
-    /** Reads the `wght` axis range from an OpenType `fvar` table. */
-    private fun weightAxis(font: ByteArray): Pair<Float, Float> {
+    /** Reads every axis tag and its min to max range from an OpenType `fvar` table. */
+    private fun axes(font: ByteArray): Map<String, Pair<Float, Float>> {
         val b = ByteBuffer.wrap(font)
         val tables = b.getShort(4).toInt()
         val fvar = (0 until tables).map { 12 + it * 16 }.first { String(font, it, 4) == "fvar" }
@@ -67,10 +79,9 @@ class TypographyTest {
         val axisCount = b.getShort(start + 8).toInt()
         val axisSize = b.getShort(start + 10).toInt()
         fun fixed(at: Int) = b.getInt(at) / 65536f
-        for (i in 0 until axisCount) {
+        return (0 until axisCount).associate { i ->
             val axis = start + axesOffset + i * axisSize
-            if (String(font, axis, 4) == "wght") return fixed(axis + 4) to fixed(axis + 12)
+            String(font, axis, 4) to (fixed(axis + 4) to fixed(axis + 12))
         }
-        error("no wght axis")
     }
 }

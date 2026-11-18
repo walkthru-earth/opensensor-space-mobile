@@ -23,7 +23,6 @@ kotlin {
             api(project(":core:settings"))
             api(project(":ui:designsystem"))
             implementation(project(":ui:strings"))
-            implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
         }
         androidMain.dependencies {
@@ -33,13 +32,6 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodel.compose)
             // FileProvider.
             implementation(libs.androidx.core.ktx)
-        }
-        commonTest.dependencies {
-            implementation(libs.kotlinx.coroutines.test)
-        }
-        // File row semantics tests render headless on the iOS simulator (verifyIos), as in :feature:history.
-        iosTest.dependencies {
-            implementation(libs.compose.ui.test)
         }
     }
 }

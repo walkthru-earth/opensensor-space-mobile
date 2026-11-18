@@ -1,0 +1,45 @@
+# The cache key of ~/.konan, the Kotlin/Native compiler, its dependencies and its platform library
+# caches. They change with the Kotlin version, and on a Mac with the Xcode version, never with a build
+# script, so the key holds only those (docs/build-and-release.md, CI caches). Reads `kotlin` from
+# gradle/libs.versions.toml and fails with an annotation on that file when it is missing or repeated.
+name: Kotlin/Native cache key
+description: Outputs the ~/.konan cache key and its restore prefix for this runner, Kotlin and Xcode.
+inputs:
+  xcode:
+    description: The Xcode version of a macOS job. Leave empty on Linux.
+    required: false
+    default: ""
+outputs:
+  kotlin:
+    description: The Kotlin version, for example 2.4.21.
+    value: ${{ steps.read.outputs.kotlin }}
+  key:
+    description: The exact cache key.
+    value: ${{ steps.read.outputs.key }}
+  restore-prefix:
+    description: The key without the Kotlin version, so a Kotlin bump starts from the previous cache.
+    value: ${{ steps.read.outputs.prefix }}
+runs:
+  using: composite
+  steps:
+    - id: read
+      shell: bash
+      env:
+        XCODE: ${{ inputs.xcode }}
+      run: |
+        set -euo pipefail
+        file=gradle/libs.versions.toml
+        values="$(sed -n 's/^kotlin = "\(.*\)"$/\1/p' "$file" 2>/dev/null || true)"
+        if [[ ! "$values" =~ ^[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.-]*$ ]]; then
+          echo "::error file=$file::kotlin must appear exactly once in [versions], found '${values//$'\n'/,}'"
+          exit 1
+        fi
+        prefix="konan-$RUNNER_OS-$RUNNER_ARCH-"
+        if [[ -n "$XCODE" ]]; then
+          prefix="${prefix}xcode-$XCODE-"
+        fi
+        {
+          echo "kotlin=$values"
+          echo "prefix=$prefix"
+          echo "key=${prefix}kotlin-$values"
+        } >> "$GITHUB_OUTPUT"

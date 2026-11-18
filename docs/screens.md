@@ -199,7 +199,7 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   value. Ink on a step uses `onColor()`, step-coloured text uses `textColorOnSurface()` and falls
   back to the text colour where a step cannot reach 3:1 (yellow on light paper, maroon on dark paper).
 - **Type.** Quicksand (OFL variable TTF from google/fonts) for text, Cairo (OFL variable TTF
-  version 3.130 from google/fonts `ofl/cairo`, the same file as the website's) for Arabic-script
+  version 3.130 from google/fonts `ofl/cairo`, the website's file with its `slnt` axis pinned to 0) for Arabic-script
   locales, right-to-left layouts and display numbers, because Quicksand has
   proportional digits and no `tnum` while Cairo's digits share one width. Both fonts and the
   type scale live in `:ui:designsystem` (`Typography.kt`, Compose resources under
