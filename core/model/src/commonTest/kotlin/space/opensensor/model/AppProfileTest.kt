@@ -50,7 +50,6 @@ class AppProfileTest {
     @Test
     fun theTemplatePrimaryWinsAndOnlyItsOwnScaleApplies() {
         assertEquals("soil_moisture_pct", thing.primary?.name)
-        assertEquals(Family.GENERIC, thing.profile.family)
         assertNull(thing.profile.hero)
         assertEquals("acme-soil-dryness", thing.datastream("soil_moisture_pct")!!.scale?.id)
         assertEquals(setOf("soil_moisture_pct"), thing.profile.scales.keys)

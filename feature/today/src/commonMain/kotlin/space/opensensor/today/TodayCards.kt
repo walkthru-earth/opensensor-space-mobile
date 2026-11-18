@@ -69,15 +69,16 @@ import space.opensensor.designsystem.pm25CorrectionInfo
 import space.opensensor.designsystem.pm25Label
 import space.opensensor.designsystem.rememberNowMillis
 import space.opensensor.designsystem.spokenList
-import space.opensensor.family.air.AirFamily
-import space.opensensor.family.air.AirMetrics
+import space.opensensor.family.air.AirProperty
 import space.opensensor.family.air.Averaging
 import space.opensensor.family.air.NowReading
 import space.opensensor.family.air.PlantowerBatchCandidate
 import space.opensensor.family.air.Pm25Basis
 import space.opensensor.family.air.QcFlags
+import space.opensensor.family.air.air
 import space.opensensor.family.air.pmState
 import space.opensensor.family.air.pmValid
+import space.opensensor.model.Datastream
 import space.opensensor.model.ThingDatastream
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.resources.Res
@@ -205,21 +206,14 @@ import space.opensensor.units.UnitFormatter
 /** The display units for Today's readings, provided by [TodayScreen] from its `units` parameter. */
 internal val LocalTodayUnits = staticCompositionLocalOf { UnitFormatter.Metric }
 
-/** The size bins (label, column) LIVE shows for [reading]'s thing. None without a thing. */
+/** The size bins (label, column) LIVE shows for [reading]'s thing, found by property. None without a thing. */
 internal fun particleBins(reading: LiveReading?): List<Pair<String, String>> =
-    PARTICLE_BINS.filter { (_, column) -> reading?.declares(column) == true }
+    reading?.thing?.air?.bins.orEmpty()
+        .filter { reading?.declares(it.name) == true }
+        .map { AirProperty.binLabel(it.property?.id.orEmpty()) to it.name }
 
-/** The CF=1 PM1, PM2.5 and PM10 columns, a Developer line on the readings card. */
-private val CF1_COLUMNS = listOf("pm1_cf1_ug_m3", AirFamily.PM25_CF1, "pm10_cf1_ug_m3")
-
-private val PARTICLE_BINS = listOf(
-    ">0.3" to "particles_gt03_per_01l",
-    ">0.5" to "particles_gt05_per_01l",
-    ">1" to "particles_gt10_per_01l",
-    ">2.5" to "particles_gt25_per_01l",
-    ">5" to "particles_gt50_per_01l",
-    ">10" to "particles_gt100_per_01l",
-)
+/** The column of [ds] on [live]'s thing, with its labels and display unit. */
+private fun LiveReading?.column(ds: Datastream?): ThingDatastream? = ds?.let { this?.thing?.datastream(it.name) }
 
 /** The column's label from the app profile in the app's language. */
 @Composable
@@ -351,7 +345,7 @@ internal fun MetricHeroCard(
                             color = if (fresh) onCard else quiet,
                             maxLines = 1,
                         )
-                        FitText("${pm25Label(reading.basis)}  ${AirMetrics.PM25.unit}", style = MaterialTheme.typography.titleMedium, color = quiet)
+                        FitText("${pm25Label(reading.basis)}  ${live.column(live?.thing?.air?.pm25)?.displayUnit.orEmpty()}", style = MaterialTheme.typography.titleMedium, color = quiet)
                         // Every level says what the number averages, in one short line.
                         FitText(stringResource(averagingLineRes(reading.averaging, level)), style = MaterialTheme.typography.bodyMedium, color = quiet)
                         if (level.detailed && reading.averaging == Averaging.NOWCAST) {
@@ -665,7 +659,7 @@ internal fun BatchEstimateCard(live: LiveReading?, receivedAtEpochMs: Long?, con
             config?.config?.sensor?.serial,
             config?.config?.sensor?.batchCandidate,
             live?.pmValid == true,
-            live?.value(AirMetrics.PARTICLES_GT03.column)?.toLong(),
+            live?.thing?.air?.gt03?.let { live.value(it.name) }?.toLong(),
         )
     } else {
         null
@@ -694,8 +688,10 @@ internal fun ReadingsCard(live: LiveReading?, receivedAtEpochMs: Long?, level: D
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            BigValue(AirMetrics.PM10.label, if (showPm) fmt(live.value(AirMetrics.PM10.column)) else NO_VALUE, AirMetrics.PM10.unit, Modifier.weight(1f))
-            BigValue(AirMetrics.PM1.label, if (showPm) fmt(live.value(AirMetrics.PM1.column)) else NO_VALUE, AirMetrics.PM1.unit, Modifier.weight(1f))
+            val air = live?.thing?.air
+            for (pm in listOfNotNull(live.column(air?.pm10), live.column(air?.pm1))) {
+                BigValue(pm.localLabel(), if (showPm) fmt(live.value(pm.name)) else NO_VALUE, pm.displayUnit.orEmpty(), Modifier.weight(1f))
+            }
         }
         if (!showPm) {
             val state = live?.pmState
@@ -709,7 +705,7 @@ internal fun ReadingsCard(live: LiveReading?, receivedAtEpochMs: Long?, level: D
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        val cf1 = CF1_COLUMNS.map { live?.value(it) }
+        val cf1 = live?.thing?.air?.cf1.orEmpty().map { ds -> ds?.let { live?.value(it.name) } }
         if (level.developer && showPm && cf1.any { it != null }) {
             Spacer(Modifier.height(10.dp))
             Text(

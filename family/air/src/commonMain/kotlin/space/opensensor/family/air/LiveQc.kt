@@ -1,6 +1,7 @@
 package space.opensensor.family.air
 
 import space.opensensor.data.protocol.LiveReading
+import space.opensensor.model.Datastream
 
 /**
  * The quality checks of [QcRules] on the live samples of one thing (issue #91). LIVE is the same row
@@ -38,16 +39,18 @@ class LiveQc(private val capacity: Int = QcRules.FLATLINE_ROWS + 10) {
     }
 
     private fun rowOf(live: LiveReading, timeMs: Long): QcRow {
-        val bins = AirFamily.PARTICLE_BINS.filter(live::declares)
-        val counts = bins.map { live.value(it) }
+        val air = live.thing.air
+        fun value(ds: Datastream?): Double = ds?.let { live.value(it.name) } ?: Double.NaN
+        val bins = air?.bins.orEmpty().filter { live.declares(it.name) }
+        val counts = bins.map { live.value(it.name) }
         return QcRow(
             timeMs = timeMs,
-            pm1 = live.value(AirFamily.PM1_ATMOSPHERIC) ?: Double.NaN,
-            pm25 = live.value(AirFamily.PM25_ATMOSPHERIC) ?: Double.NaN,
-            pm10 = live.value(AirFamily.PM10_ATMOSPHERIC) ?: Double.NaN,
+            pm1 = value(air?.pm1),
+            pm25 = value(air?.pm25),
+            pm10 = value(air?.pm10),
             // A board without counts, or a sample missing one of them, skips the checks that read counts.
             counts = if (bins.isEmpty() || counts.any { it == null }) null else IntArray(bins.size) { counts[it]!!.toInt() },
-            rh = live.value(AirFamily.RELATIVE_HUMIDITY) ?: Double.NaN,
+            rh = value(air?.humidity),
         )
     }
 }

@@ -5,7 +5,6 @@ import space.opensensor.data.history.ServedTemplates
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.model.AppProfile
 import space.opensensor.model.BoardTemplate
-import space.opensensor.model.Family
 
 /**
  * A soil board no bundled profile knows, served as a template. Its primary is soil moisture, the first
@@ -43,7 +42,7 @@ internal object SoilFixture {
     val info = DeviceInfo(proto = 3, schema = "soil-probe-v1", dict = DICT, desc = DESC.take(16), thing = "soil")
 
     /** An overlay of the soil dictionary, as a bundled one would be. */
-    val profile = AppProfile(dict = DICT, family = Family.GENERIC)
+    val profile = AppProfile(dict = DICT)
 
     /** The served soil template joined with [profile]. */
     fun capabilities(): DeviceCapabilities = DeviceCapabilities.from(info, served = listOf(template)) { profile.takeIf { p -> p.dict == it } }

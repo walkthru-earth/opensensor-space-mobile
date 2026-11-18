@@ -147,6 +147,17 @@ class MetricCatalogTest {
         assertEquals(union, Metrics.pickerOrder(union, null))
     }
 
+    @Test
+    fun aCorrectedViewHidesTheRawColumnOfItsPropertyAndNoOther() {
+        val waveshare = Thing.join("w", BundledCatalog.templates.single { it.dict.startsWith("a8605aaf") })
+        val crowpanel = Thing.join("c", BundledCatalog.templates.single { it.id == "crowpanel-epaper-telemetry-v1" })
+        val shown = Metrics.withoutViewedRaw(MetricCatalog.of(waveshare)).map { it.id }
+        assertTrue(AirFamily.PM25_CORRECTED_ID in shown)
+        assertTrue(AirFamily.PM25_ATMOSPHERIC !in shown)
+        assertTrue(AirFamily.PM10_ATMOSPHERIC in shown, "PM10 has no corrected view")
+        assertEquals(MetricCatalog.of(crowpanel), Metrics.withoutViewedRaw(MetricCatalog.of(crowpanel)))
+    }
+
     private fun probeParquet(): ByteArray {
         val out = MemorySink()
         val w = ParquetWriter(

@@ -15,7 +15,9 @@ import kotlin.test.assertNull
  */
 class AirQcTest {
     private val bins = AirFamily.PARTICLE_BINS
-    private val check = AirQc(bins)
+    private fun qc(bins: List<String>) =
+        AirQc(AirFamily.PM1_ATMOSPHERIC, AirFamily.PM25_ATMOSPHERIC, AirFamily.PM10_ATMOSPHERIC, AirFamily.RELATIVE_HUMIDITY, bins)
+    private val check = qc(bins)
 
     /** [rows] as the check columns the daily builder hands [AirQc], NaN where a value is missing. */
     private fun columns(rows: List<QcRow>): List<DoubleArray> {
@@ -92,7 +94,7 @@ class AirQcTest {
     fun theFamilyChecksOnlyTemplatesWithAtmosphericPm25() {
         val waveshare = assertNotNull(BundledCatalog.template(LiveFixtures.waveshareDict))
         val qc = assertNotNull(AirFamily.rowCheck(waveshare))
-        assertEquals(AirQc(bins.filter { waveshare.datastream(it) != null }), qc)
+        assertEquals(qc(bins.filter { waveshare.datastream(it) != null }), qc)
         assertNull(AirFamily.rowCheck(waveshare.copy(datastreams = waveshare.datastreams.filter { it.name != AirFamily.PM25_ATMOSPHERIC }, primary = null)))
     }
 }

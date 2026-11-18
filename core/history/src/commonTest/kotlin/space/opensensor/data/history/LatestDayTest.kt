@@ -9,7 +9,6 @@ import space.opensensor.family.air.AirMetrics
 import space.opensensor.model.AppProfile
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.Datastream
-import space.opensensor.model.Family
 import space.opensensor.model.Role
 import space.opensensor.model.TemplateKey
 import kotlin.test.Test
@@ -113,6 +112,6 @@ class LatestDayTest {
             dictionaryHref = null,
         )
 
-        val profile = AppProfile(dict = probe.dict, family = Family.GENERIC, primary = MOISTURE, decimals = mapOf(MOISTURE to 2, TEMPERATURE to 1))
+        val profile = AppProfile(dict = probe.dict, primary = MOISTURE, decimals = mapOf(MOISTURE to 2, TEMPERATURE to 1))
     }
 }
