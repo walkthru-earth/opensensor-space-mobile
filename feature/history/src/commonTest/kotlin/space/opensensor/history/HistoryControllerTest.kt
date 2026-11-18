@@ -248,6 +248,17 @@ class HistoryControllerTest {
     }
 
     @Test
+    fun thePickerListsTheThingsOwnTemplateFirstInItsOrder() = runTest {
+        val served = ServedTemplates(catalog = MetricCatalog()).apply { add(soil) }
+        val ids = setOf(AirMetrics.PM25.id, AirMetrics.AMBIENT_TEMP.id, "soil_temperature_c", "soil_moisture_percent")
+        val soilFile = record("s1").copy(dictionarySha256 = soil.dict, templateSha256 = soil.key.desc)
+        val c = controller(metricIds = ids, index = Index(listOf(soilFile)), served = served)
+        val s = c.state.first { !it.initializing && it.toS == lastDayEndS }
+        assertEquals(listOf("soil_moisture_percent", "soil_temperature_c"), s.availableMetrics.take(2).map { it.id })
+        assertEquals(setOf(AirMetrics.PM25.id, AirMetrics.AMBIENT_TEMP.id), s.availableMetrics.drop(2).map { it.id }.toSet())
+    }
+
+    @Test
     fun aPickedMetricStaysWhileTheUnionGrows() = runTest {
         val served = ServedTemplates(catalog = MetricCatalog())
         val c = controller(metricIds = setOf(AirMetrics.AMBIENT_TEMP.id, AirMetrics.HUMIDITY.id, "soil_moisture_percent"), served = served)

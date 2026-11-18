@@ -89,6 +89,9 @@ data class Datastream(
     /** True for an integer Parquet type, whose values show without decimals by default. */
     val isInteger: Boolean get() = type in INTEGER_TYPES
 
+    /** True for an integer or floating point Parquet type, a column with values to chart. */
+    val isNumeric: Boolean get() = isInteger || type in FLOAT_TYPES
+
     /** The code class of [value], or null for a column without classes or an unlisted value. */
     fun classOf(value: Long): CodeClass? = classes.firstOrNull { it.value == value }
 
@@ -103,5 +106,6 @@ data class Datastream(
         const val MAX_DECIMALS = 9
 
         private val INTEGER_TYPES = setOf("int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64")
+        private val FLOAT_TYPES = setOf("float", "double")
     }
 }

@@ -47,7 +47,7 @@ class MetricsParityTest {
                 assertEquals(spec.settleSeconds.toDouble(), ds.datastream.settleSeconds, at)
                 assertEquals(spec.decimals, ds.decimals, at)
                 assertEquals(spec.healthScale?.id, ds.scale?.id, at)
-                assertNotNull(ds.datastream.plausibleRange, "$at has no plausible range in its template")
+                if (!spec.auxiliary) assertNotNull(ds.datastream.plausibleRange, "$at has no plausible range in its template")
             }
         }
     }

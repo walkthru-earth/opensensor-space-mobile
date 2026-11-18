@@ -11,8 +11,10 @@ import space.opensensor.model.DerivedMetricProvider
 import space.opensensor.model.HealthScale
 import space.opensensor.model.LocalizedText
 import space.opensensor.model.PlausibleRange
+import space.opensensor.model.Role
 import space.opensensor.model.RowFormula
 import space.opensensor.model.ValidityGate
+import space.opensensor.units.UcumDisplay
 import kotlin.concurrent.Volatile
 
 /**
@@ -69,6 +71,11 @@ data class MetricSpec(
     val labels: LocalizedText? = null,
     /** The decimals a value shows with, from the profile ([AppProfile.decimalsOf]). */
     val decimals: Int = 2,
+    /**
+     * True for an `auxiliaryInformation` column, such as a board temperature or a battery, and its
+     * derived views. Pickers list it after the measurements, and Simple never offers it.
+     */
+    val auxiliary: Boolean = false,
 ) {
     init {
         require(healthScale == null || healthScale.unit == unit) { "a health scale reads only its own unit ($unit)" }
@@ -171,13 +178,15 @@ object Metrics {
             primary = ds.name == profile.primary,
             labels = labels,
             decimals = profile.decimalsOf(ds),
+            auxiliary = ds.role == Role.AUXILIARY_INFORMATION,
         )
     }
 
     /**
      * The metrics of [template] under [profile]. The [providers]' derived metrics come first, then the
      * profile's primary column, then every other measured (`physicalMeasurement` or
-     * `modelResult`) column the profile does not hide, in template order. A board-derived column counts
+     * `modelResult`) column the profile does not hide, in template order, then every
+     * `auxiliaryInformation` column that [charts]. A board-derived column counts
      * when the file stores it, and a file without it gives it no values. A template with none of a
      * provider's source columns simply gets none of its metrics. Ids are unique, a derived id that
      * repeats a stored column or another derived id is an error.
@@ -191,7 +200,9 @@ object Metrics {
         val views = derived.mapNotNullTo(HashSet()) { it.viewOf }
         val columns = LinkedHashSet<String>()
         profile.primary?.let(columns::add)
-        template.datastreams.filter { it.role?.isMeasurement == true && it.name !in profile.hidden }.mapTo(columns) { it.name }
+        val shown = template.datastreams.filter { it.name !in profile.hidden }
+        shown.filter { it.role?.isMeasurement == true }.mapTo(columns) { it.name }
+        shown.filter { it.role == Role.AUXILIARY_INFORMATION && charts(it) }.mapTo(columns) { it.name }
         val stored = columns.mapNotNull { name -> template.datastream(name)?.let { of(it, profile, if (name in views) Basis.RAW else null) } }
         val metrics = derived.map { of(it, template, profile) } + stored
         val repeated = metrics.groupingBy { it.id }.eachCount().filterValues { it > 1 }.keys
@@ -221,17 +232,35 @@ object Metrics {
             auxColumn = from.getOrNull(1),
             primary = shown?.primary ?: false,
             decimals = shown?.decimals ?: profile.decimalsOf(ds),
+            auxiliary = shown?.auxiliary ?: false,
         )
     }
 
     /**
+     * True for a numeric column whose unit shows a symbol, the auxiliary columns History and Files
+     * chart. A code that shows no unit, such as `{code}`, `{boolean}`, `{count}` or `1`, is a state
+     * or a tally, not a quantity.
+     */
+    fun charts(ds: Datastream): Boolean = ds.isNumeric && UcumDisplay.of(ds.unit.orEmpty()).isNotEmpty()
+
+    /**
      * Every metric of [templates] under their bundled or derived profiles and [providers], each id once,
-     * in the order the first profile lists it. Where two boards describe one column, the first keeps its
-     * unit and aggregate and the plausible ranges join. A board that stores it otherwise gives it no
-     * values ([MetricSpec.inTemplate]).
+     * in the order of [templates] and then of each template's metrics, the auxiliary ones last. Where
+     * two boards describe one column, the first keeps its unit and aggregate and the plausible ranges
+     * join. A board that stores it otherwise gives it no values ([MetricSpec.inTemplate]).
      */
     fun catalogOf(templates: List<BoardTemplate>, providers: List<DerivedMetricProvider> = this.providers): List<MetricSpec> =
-        merge(templates.sortedBy { it.dict }.map { of(it, providers = providers) })
+        merge(templates.map { of(it, providers = providers) }).sortedBy { it.auxiliary }
+
+    /**
+     * [metrics] in the stable order a picker lists them for a Thing of [template]. The metrics
+     * [template] defines come first, in its own order, then the rest in the order of [metrics], and the
+     * auxiliary ones last. A null [template] keeps the order of [metrics], the auxiliary ones last.
+     */
+    fun pickerOrder(metrics: List<MetricSpec>, template: BoardTemplate?): List<MetricSpec> {
+        val own = template?.let { of(it) }.orEmpty().withIndex().associate { (i, m) -> m.id to i }
+        return metrics.sortedWith(compareBy<MetricSpec> { it.auxiliary }.thenBy { own[it.id] ?: Int.MAX_VALUE })
+    }
 
     internal fun merge(lists: List<List<MetricSpec>>): List<MetricSpec> {
         val out = LinkedHashMap<String, MetricSpec>()

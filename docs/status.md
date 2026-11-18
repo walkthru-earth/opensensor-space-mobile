@@ -13,7 +13,10 @@ Host tests and the iOS simulator only. No phone or board run is recorded.
   only add the family, hero and hidden columns. Scales come from the column or the registry, never a
   column name.
 - LIVE shows for any template whose SHA-256 verifies, CrowPanel and served templates included.
-- Board temperature and battery are auxiliary columns, so History and Files no longer chart them.
+- Every numeric column with a unit that shows a symbol charts in History and Files. Auxiliary
+  columns, such as the CoreS3 board temperature and battery, list after the measurements and only
+  in Detailed and Developer. Each picker lists the Thing's own template order first, then the rest
+  of the union.
 - A served template joins the metric union (`MetricCatalog`), so its columns aggregate into tiers
   and show in Files and Stations with no app change. History opens on the Thing's own primary.
 - To check on phones. CrowPanel LIVE and Today, and the History default metric of each board.
