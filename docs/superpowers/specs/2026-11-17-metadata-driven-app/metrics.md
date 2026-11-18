@@ -56,7 +56,7 @@ Scale for a column, first hit wins.
 - PM1, PM4, CF=1 and CO2 have no scale in the registry. They stay neutral.
 - Every scale has a required `period`, an ISO 8601 duration. The WHO PM2.5 and PM10 scales are `P1D`, 24-hour, as in `WhoGuidelines.kt`. The app reads `period` and the chart caption names it. `P1D` gives "compared with the WHO 24-hour guideline". A scale whose period the app cannot caption still colours values and shows its period in plain words.
 
-Main metric, first hit wins. Collection `opensensor:primary`, template top-level `opensensor:primary` (written from `board.json` `primary`), the first `physicalMeasurement` column with a scale, the first `physicalMeasurement` column.
+Main metric, first hit wins. Collection `opensensor:primary`, template top-level `opensensor:primary` (written from `board.json` `primary`), the first `physicalMeasurement` column with a scale, the first `physicalMeasurement` column. A column the `AppProfile` overlay hides is never a candidate, a named primary included, so the search moves on to the next rule.
 
 ### 2.4 LIVE
 
@@ -106,7 +106,7 @@ Ordered. Each passes `./gradlew --no-daemon verify`. Tests are `commonTest` unle
 | M1 | `UcumDisplay` and the `Cel` imperial rule | `core/units` | `UcumDisplayTest` for each unit in the three bundled templates, imperial `Cel` |
 | M2 | Parse the new template fields. `Datastream` gains `title`, `titleI18n`, `description`, `descriptionI18n`, `decimals`, `group`, `scale` and bitfields. `BoardTemplate` gains `primary` and `scales` | `core/model` (`ModelJson`, `Datastream`, `BoardTemplate`) | Parse of each field, unknown fields ignored, i18n titles, CrowPanel bitfields |
 | M3 | `PropertyRegistry` and `ScaleRegistry`, `registry/properties.json` and `registry/scales.json` bundled byte for byte from stac-opensensor with pinned SHA-256 | `core/model` | Pin test, lookup by URI, unknown URI returns null, a `null` scale stays none |
-| M4 | `AppProfile.derive` from M1 to M3. Labels, decimals, primary, display unit. `select` merges an overlay | `core/model` | Derived profile of CrowPanel shows PM2.5 in µg/m³ with its registry label and opens on `opensensor:primary`. Fake board shows names with spaces |
+| M4 | `AppProfile.derive` from M1 to M3. Labels, decimals, primary, display unit. `select` merges an overlay | `core/model` | Derived profile of CrowPanel shows PM2.5 in µg/m³ with its registry label and opens on `opensensor:primary`. A primary the overlay hides falls through to the next visible column. Fake board shows names with spaces |
 | M5 | Scales from data, lookup order of 2.3. `HealthScale` built from a scale entry | `core/model`, `core/history` (`Metrics.of`), `family/air` (`AirFamily.scales`, `WhoGuidelines`), `ui/designsystem` (`metricLabelRes`) | CrowPanel PM2.5 gets the WHO scale from the registry, CO2, PM4 and CF=1 stay neutral, a column `opensensor:scale` wins. `CoreStaysAirFreeTest` unchanged |
 | M6 | `MetricCatalog` per Thing and the union flow. Remove `Metrics.all` and `Metrics.default` defaults | `core/history` (Aggregation, FileSummary, LatestReading, LatestDay, `Metrics`), `feature/history` (`HistoryController`), `app` (`RoomHistoryTiers`, `FilesViewModel`, `ScanViewModel`), `ios/shared` | Catalog of a served template appears in the union. A tier of the fake board aggregates. History opens on `opensensor:primary` |
 | M7 | LIVE for verified templates. Drop the gates at `DeviceCapabilities.kt:72` and `:82` | `core/history` | Fake board and CrowPanel get `Capability.LIVE` from a served template. An unresolved desc gets none |
