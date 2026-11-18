@@ -11,6 +11,10 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import space.opensensor.model.DisplayGroup
 import space.opensensor.model.ThingSite
+import space.opensensor.stac.ProfileRules.isI18n
+import space.opensensor.stac.ProfileRules.isId
+import space.opensensor.stac.ProfileRules.isScale
+import space.opensensor.stac.ProfileRules.isText
 
 /**
  * One STAC provider of a Thing Collection, with the four fields STAC 1.1.0 defines. A null [roles],
@@ -53,10 +57,9 @@ data class ColumnLabel(val hints: JsonObject) {
             val ok = when (key) {
                 "title", "description" -> value.isText()
                 GROUP -> value.isText() && DisplayGroup((value as JsonPrimitive).content).isKnown
-                ThingCollections.SCALE -> value.isText() && SCALE_ID.matches((value as JsonPrimitive).content)
+                ThingCollections.SCALE -> value.isId()
                 DECIMALS -> (value as? JsonPrimitive)?.takeUnless { it.isString }?.content?.let(::decimalsOf) != null
-                TITLE_I18N, DESCRIPTION_I18N -> value is JsonObject && value.isNotEmpty() &&
-                    value.all { (language, text) -> LANGUAGE.matches(language) && text.isText() }
+                TITLE_I18N, DESCRIPTION_I18N -> value.isI18n()
                 else -> throw IllegalArgumentException("a column adds $key, which is not a display hint")
             }
             require(ok) { "the display hint $key has a value of another type" }
@@ -70,15 +73,6 @@ data class ColumnLabel(val hints: JsonObject) {
         const val GROUP = "opensensor:group"
         const val TITLE_I18N = "opensensor:title_i18n"
         const val DESCRIPTION_I18N = "opensensor:description_i18n"
-
-        /** A nonempty string. The profile gives every text hint `minLength` 1, so an empty one would replace the template's. */
-        private fun JsonElement.isText() = this is JsonPrimitive && isString && content.isNotEmpty()
-
-        /** The profile's `id`, which a scale id must be. */
-        private val SCALE_ID = Regex("""[a-z0-9][a-z0-9._-]*""")
-
-        /** The profile's language code, the key of an i18n map. */
-        private val LANGUAGE = Regex("""[a-z]{2,3}(-[A-Za-z0-9]+)*""")
 
         private val JSON_NUMBER = Regex("""-?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?""")
 
@@ -99,6 +93,58 @@ data class ColumnLabel(val hints: JsonObject) {
             return digits.take(point.toInt()).trimStart('0').ifEmpty { "0" }.takeIf { it.length == 1 }?.toInt()
         }
     }
+}
+
+/**
+ * The pinned profile's rules for what an owner writes, from stac-opensensor `schema.json`. The phone
+ * checks them before it copies a value into a Collection, so it never publishes one the profile refuses.
+ */
+private object ProfileRules {
+    /** The profile's `id`, which a scale id must be. */
+    private val ID = Regex("""[a-z0-9][a-z0-9._-]*""")
+
+    /** The profile's language code, the key of an i18n map. */
+    private val LANGUAGE = Regex("""[a-z]{2,3}(-[A-Za-z0-9]+)*""")
+
+    /** The profile's ISO 8601 duration, the period of a scale. */
+    private val PERIOD = Regex("""^P(?!$)([0-9]+Y)?([0-9]+M)?([0-9]+W)?([0-9]+D)?(T(?=[0-9])([0-9]+H)?([0-9]+M)?([0-9]+S)?)?$""")
+
+    /** An absolute URI, which starts with a scheme. */
+    private val URI = Regex("""[A-Za-z][A-Za-z0-9+.-]*:\S+""")
+
+    private val COLOR_HINT = Regex("""[0-9A-F]{6}""")
+    private val SCALE_KEYS = setOf("source", "unit", "period", "guideline", "steps")
+    private val STEP_KEYS = setOf("upper", "label", "color_hint")
+
+    /** A nonempty string. The profile gives every text hint `minLength` 1, so an empty one would replace the template's. */
+    fun JsonElement.isText() = this is JsonPrimitive && isString && content.isNotEmpty()
+
+    fun JsonElement.isId() = isText() && ID.matches((this as JsonPrimitive).content)
+
+    /** A map from language code to text, with at least one entry. */
+    fun JsonElement.isI18n() = this is JsonObject && isNotEmpty() && all { (language, text) -> LANGUAGE.matches(language) && text.isText() }
+
+    /** A scale as the profile defines it, with a source, a period and at least one step. */
+    fun JsonElement.isScale(): Boolean {
+        if (this !is JsonObject || !SCALE_KEYS.containsAll(keys)) return false
+        val steps = this["steps"] as? JsonArray ?: return false
+        return this["source"].let { it != null && it.isText() && URI.matches((it as JsonPrimitive).content) } &&
+            this["period"].let { it != null && it.isText() && PERIOD.matches((it as JsonPrimitive).content) } &&
+            this["unit"].let { it == null || (it is JsonPrimitive && it.isString) } &&
+            this["guideline"].let { it == null || it.isNumber() } &&
+            steps.isNotEmpty() && steps.all { it.isStep() }
+    }
+
+    private fun JsonElement.isStep(): Boolean {
+        if (this !is JsonObject || !STEP_KEYS.containsAll(keys)) return false
+        val upper = this["upper"] ?: return false
+        val label = this["label"] ?: return false
+        return (upper == JsonNull || upper.isNumber()) &&
+            (label.isText() || label.isI18n()) &&
+            this["color_hint"].let { it == null || (it.isText() && COLOR_HINT.matches((it as JsonPrimitive).content)) }
+    }
+
+    private fun JsonElement.isNumber() = this is JsonPrimitive && !isString && content.toDoubleOrNull() != null
 }
 
 /**
@@ -151,7 +197,8 @@ data class ThingOwner(
         /**
          * The owner config [json] in the shape of `owner.json`. Throws [IllegalArgumentException] when it
          * is not one, including a `providers`, `columns`, `primary`, `scales`, `contacts` or `roles` of
-         * another JSON type, or a column key that is not a display hint. A member that is missing or JSON null counts as not given.
+         * another JSON type, a column key that is not a display hint, an empty `primary` or a scale the
+         * profile refuses. A member that is missing or JSON null counts as not given.
          */
         fun parse(json: String): ThingOwner {
             val root = Json.parseToJsonElement(json) as? JsonObject ?: throw IllegalArgumentException("owner config is not an object")
@@ -176,8 +223,12 @@ data class ThingOwner(
                 providers = providers,
                 prefix = requireNotNull(root.string("prefix")) { "owner config has no prefix" },
                 columns = columns,
-                primary = root.string("primary"),
-                scales = root.member<JsonObject>("scales", "an object"),
+                primary = root.string("primary")?.also { require(it.isNotEmpty()) { "primary is empty" } },
+                scales = root.member<JsonObject>("scales", "an object")?.also { scales ->
+                    scales.forEach { (id, scale) ->
+                        require(JsonPrimitive(id).isId() && scale.isScale()) { "scale $id is not one the profile allows" }
+                    }
+                },
                 contacts = root.member<JsonArray>("contacts", "an array"),
             )
         }

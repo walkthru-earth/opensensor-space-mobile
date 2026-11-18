@@ -228,6 +228,41 @@ class ThingCollectionsTest {
     }
 
     @Test
+    fun anOwnerPrimaryIsNotEmpty() {
+        assertFailsWith<IllegalArgumentException> { ThingOwner.parse("""{"prefix":"p","primary":""}""") }
+        assertEquals("pm2_5", ThingOwner.parse("""{"prefix":"p","primary":"pm2_5"}""").primary)
+    }
+
+    @Test
+    fun anOwnerScaleFollowsTheProfile() {
+        val step = """{"upper":15,"label":"Good","color_hint":"00E400"}"""
+        val good = """{"source":"https://www.who.int/","period":"PT24H","steps":[$step,{"upper":null,"label":{"ar":"سيئ","en":"Bad"}}]}"""
+        ThingOwner.parse("""{"prefix":"p","scales":{"who.pm2_5-24h":$good}}""")
+        ThingOwner.parse("""{"prefix":"p","scales":{"heat":{"source":"urn:x:heat","unit":"Cel","period":"P1D","guideline":25,"steps":[$step]}}}""")
+        for (scale in listOf(
+            """"Heat":$good""",
+            """"heat":[]""",
+            """"heat":{"period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"who","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"urn:x","period":"24h","steps":[$step]}""",
+            """"heat":{"source":"urn:x","period":"P","steps":[$step]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"extra":1}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"unit":1}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":"25"}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":"15","label":"Good"}]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"label":"Good"}]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":1,"label":""}]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":1,"label":{"english":"Good"}}]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":1,"label":"Good","color_hint":"00e400"}]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":1,"label":"Good","more":1}]}"""
+        )) {
+            assertFailsWith<IllegalArgumentException>(scale) { ThingOwner.parse("""{"prefix":"p","scales":{$scale}}""") }
+        }
+    }
+
+    @Test
     fun aCollectionThatDiffersIsFound() {
         val expected = json("collection-fixed.json")
         val moved = JsonObject(expected + ("opensensor:mobility" to JsonPrimitive("moving")))
