@@ -234,7 +234,9 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   ships `material-icons-extended`.
 - **Floating controls.** Anything over the map or a list uses `FloatingSurface`,
   `FloatingIconButton` or `FloatingTextButton` (the Scan and Sync all actions) and the
-  `FloatingControl` shapes and tint (curved cards, Signal blue only for the selection).
+  `FloatingControl` shapes and tint (curved cards, Signal blue only for the selection or the one
+  primary action, `primary = true`). Chips over a map take `FloatingControl.chipColors(overContent = true)`.
+  A search over a map is `PlaceSearchField`, compact until tapped.
   The rules are in `docs/cross-platform-guide.md`, "Floating controls".
 - **Mascot.** One peacock represents air moods and app states on Android and iOS. The original
   website reference (`ui/designsystem/src/commonMain/composeResources/drawable/peacock.webp`,
