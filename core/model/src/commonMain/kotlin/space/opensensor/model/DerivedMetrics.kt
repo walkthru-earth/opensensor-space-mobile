@@ -3,17 +3,14 @@ package space.opensensor.model
 /**
  * What one device family (`:family:*`) adds to the generic core. Its phone derived datastreams, each
  * named as data, a [Datastream] with [Datastream.derived] set, plus its per row [RowFormula], so
- * History builds it like a stored column and holds no family code. Its health [scales], which a
- * profile's `scales` id picks. The [capabilitiesOf] a Thing of the family. And the [rowCheck] that
+ * History builds it like a stored column and holds no family code. The [capabilitiesOf] a Thing of
+ * the family. And the [rowCheck] that
  * flags its suspect rows. The app lists its providers once where it builds the metric catalog, never
  * from static registration.
  */
 fun interface DerivedMetricProvider {
     /** The datastreams the phone derives for [template], empty when it lacks their source columns. */
     fun derive(template: BoardTemplate): List<DerivedMetric>
-
-    /** The health scales this family publishes, keyed by the scale id a profile's `scales` names. */
-    val scales: Map<String, HealthScale> get() = emptyMap()
 
     /** The family capabilities [thing] has, beyond the generic ones core reads from any template. */
     fun capabilitiesOf(thing: Thing): Set<Capability> = emptySet()
@@ -56,7 +53,7 @@ fun interface RowFormula {
 /**
  * A derived [datastream] with its English [label] and [formula]. Its `derived.from` lists one or two
  * stored columns, the ones [RowFormula.valueOf] reads in order. [viewOf] is the stored column this is a
- * corrected view of, whose profile unit, scale and primary flag it shares, or null for a new quantity.
+ * corrected view of, whose unit, scale and primary flag it shares, or null for a new quantity.
  */
 class DerivedMetric(
     val datastream: Datastream,

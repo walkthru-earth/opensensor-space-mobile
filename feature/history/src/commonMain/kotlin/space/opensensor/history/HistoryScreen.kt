@@ -337,7 +337,7 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
 
 /**
  * The History metric chips. Detailed and Developer offer every measured metric, corrected PM2.5 first
- * and raw second. Simple offers only the app profile's primary metrics, corrected PM2.5 only, and raw
+ * and raw second. Simple offers only the primary metric, corrected PM2.5 only, and raw
  * only when no corrected value exists, so it is still labelled raw. A board with no primary metric
  * offers them all, so Simple is never empty.
  */

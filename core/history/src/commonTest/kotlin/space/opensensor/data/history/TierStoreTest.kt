@@ -97,7 +97,7 @@ class TierStoreTest {
     private val sample: DayTiers = mapOf(
         Resolution.MIN15 to mapOf(
             AirMetrics.PM25.id to listOf(TierBucket(1_728_000_000, 4, 3, 1, 12.5f, 1f, Float.NaN), TierBucket(1_728_000_900, 0, 0, 0, Float.NaN, Float.NaN, Float.NaN)),
-            AirMetrics.BOARD_TEMP.id to emptyList(),
+            LightMetric.id to emptyList(),
         ),
         Resolution.DAY to emptyMap(),
     )

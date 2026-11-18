@@ -139,16 +139,16 @@ class TemplateDatastreamsTest {
             listOf("soil_moisture_percent", "soil_temperature_c", "rain_tips", "wind_class", "gust_m_s", "frost_c", "tip_counter", "leaf_wetness"),
             metrics.map { it.id },
         )
-        val profile = AppProfile(soil.dict, Family.GENERIC, primary = listOf("frost_c", "rain_tips"))
-        assertEquals(listOf("frost_c", "rain_tips", "soil_moisture_percent"), Metrics.of(soil, profile).take(3).map { it.id })
-        assertEquals(listOf(true, true, false), Metrics.of(soil, profile).take(3).map { it.primary })
+        val profile = AppProfile(soil.dict, Family.GENERIC, primary = "frost_c")
+        assertEquals(listOf("frost_c", "soil_moisture_percent"), Metrics.of(soil, profile).take(2).map { it.id })
+        assertEquals(listOf(true, false), Metrics.of(soil, profile).take(2).map { it.primary })
     }
 
     @Test
-    fun theDefaultMetricIsTheFirstPrimaryColumnOfTheProfile() {
+    fun theDefaultMetricIsThePrimaryColumnOfTheProfile() {
         assertEquals("soil_moisture_percent", Metrics.defaultOf(metrics)?.id)
         assertEquals("soil_moisture_percent", Metrics.defaultOf(metrics.reversed())?.id)
-        val profile = AppProfile(soil.dict, Family.GENERIC, primary = listOf("soil_temperature_c"))
+        val profile = AppProfile(soil.dict, Family.GENERIC, primary = "soil_temperature_c")
         assertEquals("soil_temperature_c", Metrics.defaultOf(Metrics.of(soil, profile))?.id)
         // A bundled air board opens on PM2.5, its corrected view where the board stores RH (#92).
         assertEquals(AirMetrics.PM25_CORRECTED.id, Metrics.default.id)

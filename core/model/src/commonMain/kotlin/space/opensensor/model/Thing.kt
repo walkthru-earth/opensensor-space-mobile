@@ -2,7 +2,7 @@ package space.opensensor.model
 
 /**
  * What the app reads from a thing Collection (stac-opensensor thing profile). Column titles,
- * the scale each column points at and the scales themselves. [dict] and [desc] come from the
+ * the column it opens on, the scale each column points at and the scales themselves. [dict] and [desc] come from the
  * `file:checksum` of its two `describedby` links, the dictionary and the board template.
  */
 data class ThingCollection(
@@ -10,6 +10,8 @@ data class ThingCollection(
     val title: String? = null,
     val license: String? = null,
     val sampleIntervalS: Double? = null,
+    /** `opensensor:primary`, the column the thing opens on. It wins over the template's. */
+    val primary: String? = null,
     val scales: Map<String, Scale> = emptyMap(),
     val columnTitles: Map<String, String> = emptyMap(),
     /** Column name to the id of its scale in [scales]. */
@@ -27,24 +29,22 @@ data class ThingCollection(
     }
 }
 
-/** One datastream of a [Thing], with the presentation the thing and its profile give it. */
+/** One datastream of a [Thing], with the presentation its [AppProfile] gives it. */
 data class ThingDatastream(
     val datastream: Datastream,
-    /** Column `title` from the thing Collection. */
-    val title: String?,
-    /** Profile label, if the profile has one. */
-    val profileLabel: LocalizedText?,
-    val displayStep: Double,
-    val scale: Scale?,
-    /** Unit text from the profile, else the template's raw unit, null for a unitless column. */
+    /** The label by language, see [AppProfile.derive]. */
+    val labels: LocalizedText,
+    /** Decimals the value shows with. */
+    val decimals: Int,
+    /** The scale the value is judged on, or null for a neutral column. */
+    val scale: Scale? = null,
+    /** Unit text the screens show, null for a unitless column. */
     val displayUnit: String? = datastream.unit,
-    /** Health scale id from the profile, or null for a neutral column. */
-    val scaleId: String? = null,
 ) {
     val name: String get() = datastream.name
 
-    /** The profile label in [language], else the thing title, else the column name. */
-    fun label(language: String): String = profileLabel?.get(language) ?: title ?: datastream.name
+    /** The label in [language], else English, else the untagged one. */
+    fun label(language: String): String = labels.get(language)
 }
 
 /**
@@ -58,7 +58,7 @@ class Thing private constructor(
     /** H3 cell of the owner's chosen resolution, never a coordinate. */
     val h3Cell: String?,
     val template: BoardTemplate,
-    /** The bundled profile for [dict], else one derived from [template]. */
+    /** The profile [AppProfile.select] derives from [template], [collection] and the bundled overlay. */
     val profile: AppProfile,
     val collection: ThingCollection?,
     /** The interval the device reports at runtime, from `info` or the file footer. */
@@ -82,22 +82,19 @@ class Thing private constructor(
 
     /** Every datastream in template order, whatever its role. The profile picks what is shown first. */
     val datastreams: List<ThingDatastream> = template.datastreams.map { ds ->
-        val scaleId = collection?.columnScales?.get(ds.name)
         ThingDatastream(
             datastream = ds,
-            title = collection?.columnTitles?.get(ds.name),
-            profileLabel = profile.labels[ds.name],
-            displayStep = profile.displayStepOf(ds),
-            scale = scaleId?.let { collection?.scales?.get(it) },
-            displayUnit = profile.displayUnit[ds.name] ?: ds.unit,
-            scaleId = profile.scales[ds.name],
+            labels = profile.labelOf(ds),
+            decimals = profile.decimalsOf(ds),
+            scale = profile.scales[ds.name],
+            displayUnit = profile.displayUnitOf(ds),
         )
     }
 
     private val byName: Map<String, ThingDatastream> = datastreams.associateBy { it.name }
 
-    /** The profile's primary columns that this template has and the profile does not hide, in profile order. */
-    val primary: List<ThingDatastream> = profile.primary.filter { it !in profile.hidden }.mapNotNull { byName[it] }
+    /** The column the thing opens on, [AppProfile.primary], or null when it measures nothing. */
+    val primary: ThingDatastream? = profile.primary?.let { byName[it] }
 
     fun datastream(name: String): ThingDatastream? = byName[name]
 
@@ -111,9 +108,8 @@ class Thing private constructor(
         private const val MS_PER_S = 1000.0
 
         /**
-         * Joins [template] with [profile] and the thing [collection]. A profile for another
-         * dictionary, a missing one, or one with none of its primary columns in [template] is replaced
-         * by [AppProfile.derive], so an unknown digest still renders.
+         * Joins [template] with the overlay [profile] and the thing [collection] through
+         * [AppProfile.select]. A profile for another dictionary is ignored, so an unknown digest still renders.
          */
         fun join(
             uuid: String,
@@ -128,7 +124,7 @@ class Thing private constructor(
             deviceId = deviceId,
             h3Cell = h3Cell,
             template = template,
-            profile = AppProfile.select(template, profile, collection?.columnTitles.orEmpty()),
+            profile = AppProfile.select(template, profile, collection),
             collection = collection,
             runtimeSampleIntervalS = runtimeSampleIntervalS,
         )

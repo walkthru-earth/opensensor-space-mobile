@@ -1,5 +1,6 @@
 package space.opensensor.family.air
 
+import space.opensensor.model.BundledCatalog
 import space.opensensor.model.HealthScale
 
 /**
@@ -33,21 +34,28 @@ enum class WhoStep(val color: Int) {
 }
 
 /**
- * The WHO 2021 Air Quality Guidelines, 24-hour means. Edges are inclusive from below, as WHO states
- * them ("at or below 15 µg/m³ meets the guideline"). Properties without a WHO value (CO₂,
- * temperature, humidity) have no scale and stay neutral.
+ * The WHO 2021 Air Quality Guidelines, 24-hour means, read from the bundled scale registry
+ * (`who-2021-pm25`, `who-2021-pm10`). Edges are inclusive from below, as WHO states them ("at or below
+ * 15 µg/m³ meets the guideline"). Properties without a WHO value (CO₂, temperature, humidity) have no
+ * scale and stay neutral.
  */
 object WhoGuidelines {
     const val SOURCE = "WHO global air quality guidelines, 2021"
     const val URL = "https://www.who.int/publications/i/item/9789240034228"
 
-    val PM25 = HealthScale("pm25", "µg/m³", listOf(15.0, 25.0, 37.5, 50.0, 75.0), SOURCE)
-    val PM10 = HealthScale("pm10", "µg/m³", listOf(45.0, 50.0, 75.0, 100.0, 150.0), SOURCE)
+    val PM25: HealthScale = registry("who-2021-pm25")
+    val PM10: HealthScale = registry("who-2021-pm10")
 
     val all: List<HealthScale> = listOf(PM25, PM10)
 
-    /** The scale for [propertyId], or null when WHO publishes none for it. */
-    fun forProperty(propertyId: String): HealthScale? = all.firstOrNull { it.propertyId == propertyId }
+    /** The public feed property ids the Discover feed names, see [forProperty]. */
+    private val byFeedProperty: Map<String, HealthScale> = mapOf("pm25" to PM25, "pm10" to PM10)
+
+    /** The scale of the public feed property [propertyId] (`pm25`, `pm10`), or null when WHO publishes none for it. */
+    fun forProperty(propertyId: String): HealthScale? = byFeedProperty[propertyId]
+
+    private fun registry(id: String): HealthScale =
+        checkNotNull(BundledCatalog.scales[id]?.let { HealthScale.of(it) }) { "the bundled scale registry lacks $id" }
 }
 
 /** True for a scale with one edge per WHO step boundary, the guideline and four interim targets. */

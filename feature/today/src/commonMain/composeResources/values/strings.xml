@@ -161,6 +161,7 @@
     <string name="readings_absent">Particle values are missing (shown as empty, not zero)</string>
     <string name="readings_cf1">CF=1 raw %1$s, %2$s, %3$s µg/m³ (PM1, PM2.5, PM10)</string>
     <string name="particles_title">Particles per 0.1 L by size (µm)</string>
+    <string name="board_temp_label">Board temperature</string>
     <string name="board_temp">board temperature, not ambient</string>
     <string name="board_ambient_note">ambient temperature from the sensor</string>
     <string name="board_temp_unsupported">live temperature is not supported for this firmware yet</string>

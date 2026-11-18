@@ -26,7 +26,7 @@ data class Sensor(val procedure: String, val board: String? = null) {
 /**
  * One column of a board template, or one datastream the phone derives from columns. It carries only
  * template facts, the column's display hints included ([title], [decimals], [group], [scale] and
- * the rest). Owner titles and scales come from the thing Collection and labels and display steps from
+ * the rest). Owner titles and scales come from the thing Collection and labels and decimals from
  * the app profile, see [ThingDatastream]. A hint the template leaves out stays null or empty, the
  * fallback to the [PropertyRegistry] is the caller's.
  *

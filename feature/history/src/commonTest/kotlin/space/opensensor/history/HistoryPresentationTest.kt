@@ -87,21 +87,21 @@ class HistoryPresentationTest {
     @Test
     fun simpleOffersCorrectedPm25OnlyAndDetailedOffersCorrectedThenRaw() {
         val both = listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25, AirMetrics.AMBIENT_TEMP)
-        assertEquals(listOf(AirMetrics.PM25_CORRECTED, AirMetrics.AMBIENT_TEMP), pickerMetrics(both, DetailLevel.SIMPLE))
+        assertEquals(listOf(AirMetrics.PM25_CORRECTED), pickerMetrics(both, DetailLevel.SIMPLE))
         assertEquals(both, pickerMetrics(both, DetailLevel.DETAILED))
         // No humidity anywhere, so Simple keeps raw PM2.5, labelled raw.
         val rawOnly = listOf(AirMetrics.PM25, AirMetrics.AMBIENT_TEMP)
-        assertEquals(rawOnly, pickerMetrics(rawOnly, DetailLevel.SIMPLE))
+        assertEquals(listOf(AirMetrics.PM25), pickerMetrics(rawOnly, DetailLevel.SIMPLE))
     }
 
     @Test
-    fun simpleOffersOnlyTheProfilePrimaryMetrics() {
-        val measured = listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25, AirMetrics.PM10, AirMetrics.PARTICLES_GT03, AirMetrics.BOARD_TEMP, AirMetrics.PARTICLES_GT25)
-        assertTrue(AirMetrics.PARTICLES_GT03.primary.not() && AirMetrics.PARTICLES_GT25.primary.not() && AirMetrics.PM10.primary)
-        assertEquals(listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM10, AirMetrics.BOARD_TEMP), pickerMetrics(measured, DetailLevel.SIMPLE))
+    fun simpleOffersOnlyThePrimaryMetric() {
+        val measured = listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25, AirMetrics.PM10, AirMetrics.PARTICLES_GT03, AirMetrics.PM1, AirMetrics.PARTICLES_GT25)
+        assertTrue(AirMetrics.PM25.primary && AirMetrics.PM25_CORRECTED.primary && !AirMetrics.PM10.primary && !AirMetrics.PM1.primary)
+        assertEquals(listOf(AirMetrics.PM25_CORRECTED), pickerMetrics(measured, DetailLevel.SIMPLE))
         assertEquals(measured, pickerMetrics(measured, DetailLevel.DETAILED))
         assertEquals(measured, pickerMetrics(measured, DetailLevel.DEVELOPER))
-        // A board whose profile names no primary column still offers its metrics in Simple.
+        // A board with no primary metric still offers its metrics in Simple.
         val noPrimary = listOf(AirMetrics.PARTICLES_GT03, AirMetrics.PARTICLES_GT25)
         assertEquals(noPrimary, pickerMetrics(noPrimary, DetailLevel.SIMPLE))
     }

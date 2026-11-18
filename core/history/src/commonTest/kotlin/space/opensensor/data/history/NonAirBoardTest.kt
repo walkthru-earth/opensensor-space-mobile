@@ -4,7 +4,6 @@ import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.showsAirCards
-import space.opensensor.model.AppProfile
 import space.opensensor.model.Basis
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.Capability
@@ -12,7 +11,6 @@ import space.opensensor.model.Datastream
 import space.opensensor.model.Derivation
 import space.opensensor.model.DerivedMetric
 import space.opensensor.model.DerivedMetricProvider
-import space.opensensor.model.Family
 import space.opensensor.model.Role
 import space.opensensor.model.RowFormula
 import space.opensensor.model.TemplateKey
@@ -21,7 +19,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** A board with no PM columns builds metrics, a catalog and capabilities without any air metric. */
@@ -101,9 +98,8 @@ class NonAirBoardTest {
     }
 
     @Test
-    fun `a served non air board with a reviewed profile resolves a thing without the particles capability`() {
-        val reviewed = AppProfile(dict = probe.dict, family = Family.GENERIC, primary = listOf("soil_temperature_c"))
-        val caps = DeviceCapabilities.from(info, served = listOf(probe)) { reviewed.takeIf { p -> p.dict == it } }
+    fun `a served non air board reads LIVE without the particles capability`() {
+        val caps = DeviceCapabilities.from(info, served = listOf(probe))
         assertNotNull(caps.thing)
         assertEquals(setOf(Capability.LIVE, Capability.CONFIG), caps.capabilities)
         val sample = LiveSample.parse("""{"st":14.5,"sm":31.0,"pms":4}""")
@@ -114,12 +110,11 @@ class NonAirBoardTest {
     }
 
     @Test
-    fun `a served board with no reviewed profile has no live view`() {
-        // ble-sync-protocol LIVE key stability, the derived profile only names raw columns.
+    fun `a served board on protocol 1 still reads LIVE but cannot be configured`() {
         val caps = DeviceCapabilities.from(info.copy(proto = 1), served = listOf(probe))
-        assertNull(caps.thing)
-        assertEquals(emptySet(), caps.capabilities)
-        assertNull(caps.reading(LiveSample.parse("""{"st":14.5,"sm":31.0}""")))
+        assertNotNull(caps.thing)
+        assertEquals(setOf(Capability.LIVE), caps.capabilities)
+        assertEquals(31.0, caps.reading(LiveSample.parse("""{"st":14.5,"sm":31.0}"""))?.value("soil_moisture_percent")!!, 0.0)
     }
 
     private val info get() = DeviceInfo(proto = 3, dict = probe.dict, desc = probe.key.desc?.take(TemplateKey.DESC_PREFIX_HEX))

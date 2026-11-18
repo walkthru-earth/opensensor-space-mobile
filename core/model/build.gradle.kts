@@ -91,7 +91,12 @@ kotlin {
             kotlin.srcDir(bundleFiles.map { it.output })
             dependencies {
                 api(libs.kotlinx.serialization.json)
+                api(project(":core:units"))
             }
+        }
+        commonTest {
+            // The Acme soil probe, a board no app code names, shared with the :feature:device tests.
+            kotlin.srcDir("src/acmeFixture/kotlin")
         }
     }
 }

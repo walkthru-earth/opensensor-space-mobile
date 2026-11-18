@@ -9,10 +9,10 @@ package space.opensensor.model
  * profile defines, which a reader ignores. The `firmware` setup fields are the planned shapes of
  * opensensor-space-firmware decision 0003, which the stac-opensensor template schema does not accept yet.
  */
-internal const val ACME_DICT = "a5c0ffee00000000000000000000000000000000000000000000000000000001"
-internal const val ACME_DESC = "a5c0ffee00000000000000000000000000000000000000000000000000000002"
+const val ACME_DICT = "a5c0ffee00000000000000000000000000000000000000000000000000000001"
+const val ACME_DESC = "a5c0ffee00000000000000000000000000000000000000000000000000000002"
 
-internal val ACME_SOIL_PROBE_TEMPLATE = """
+val ACME_SOIL_PROBE_TEMPLATE = """
 {
   "type": "OpenSensorTemplate",
   "template_version": "0.1.0",

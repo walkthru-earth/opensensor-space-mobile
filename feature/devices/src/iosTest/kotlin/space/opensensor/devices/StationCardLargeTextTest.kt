@@ -46,7 +46,7 @@ class StationCardLargeTextTest {
     }
 
     // 2026-11-09 UTC, an unhealthy day so the mood word is one of the longest.
-    private val day = LatestDay(startEpochS = 1_794_182_400, mean = 148.9f, coverage = 0.92f, metric = AirMetrics.PM25_CORRECTED, displayStep = 0.1)
+    private val day = LatestDay(startEpochS = 1_794_182_400, mean = 148.9f, coverage = 0.92f, metric = AirMetrics.PM25_CORRECTED)
     private val agoMs = nowEpochMillis() - 45 * 60_000L - 30_000L
     private val glance = ArchiveGlance(files = 124, lastSyncedMs = agoMs, lastDataUtcNs = 1_794_200_000_000_000_000, lastDay = day)
     private val row = DeviceRow(
