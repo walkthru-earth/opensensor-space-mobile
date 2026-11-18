@@ -30,7 +30,7 @@ host agree on names. The types live in `:core:model` unless the table says other
 | `Thing` | `Thing.join` of a template, a profile and the Thing Collection. A Thing has a persistent UUID, and the MAC address is separate |
 | `Capability` | An open id of what a connected Thing can do (`LIVE`, `CONFIG`, `SENSOR_IDENTITY`). `DeviceCapabilities` in `:core:history` builds the set from `INFO` and the resolved Thing |
 | `ThingKind` (`:core:thing`) | One kind of Thing. It says how its Things are recognized (`Evidence`), where their data comes from (`DataSource`) and whether it may ever be published (`PublishPolicy`). `OpenSensorBoardKind` is the one kind, and each app lists its kinds in `ThingKinds` |
-| `Scale`, `HealthScale` | An optional interpretation of a value. A `Scale` is parsed from a Collection's `opensensor:scales`. A `HealthScale` is one a family publishes through `DerivedMetricProvider.scales`, such as `WhoGuidelines` in `:family:air` |
+| `Scale`, `HealthScale` | An optional interpretation of a value. A `Scale` is parsed from a Collection's `opensensor:scales`. A `HealthScale` is one a family publishes through `DerivedMetricProvider.scales`, such as `WhoGuidelines` in `:family:air`, with the step names of its registry scale |
 | `DerivedMetricProvider` | The seam a sensor family plugs into. It gives derived metrics, health scales, extra capabilities and a row check for a template |
 
 Rules.
@@ -79,7 +79,7 @@ Rules.
    `core/model/bundled/templates/`, byte for byte, with
    `rsync -a --delete ../opensensor-space-firmware/docs/shared/templates/ core/model/bundled/templates/` from the
    repo root. Set the firmware checkout `ref` in `.github/workflows/verify.yml` to the commit copied,
-   so CI checks the copy against it with `FirmwareTemplatesTest`. The bundle is at `6291f3e` and holds
+   so CI checks the copy against it with `FirmwareTemplatesTest`. The bundle is at `b6c84e0` and holds
    three boards, M5Stack CoreS3, Waveshare ESP32-S3 SIM7670G and ELECROW CrowPanel e-paper SEN63C
    (`elecrow-crowpanel-epaper-42`). Only CoreS3 and Waveshare have a profile. Add a reviewed `AppProfile` for that
    `dict` under `core/model/bundled/profiles/`, or the board has no LIVE, hero or metrics card. `BundledCatalog` reads the
@@ -333,8 +333,8 @@ identical on Android and iOS, and every one carries a spoken summary of its valu
   cells.
 - **Step names.** Colour never carries a step alone. The cell headline, each row of the
   cell list and each range row with a step scale name the step in text, the scale's own label in
-  the app's language (for WHO, Within the WHO guideline, Within WHO interim target 4 to 1, Above
-  every WHO target).
+  the app's language. Discover, History and Today read that label from the scale the Collection
+  names (`opensensor:scale`), then the bundled registry, and the app keeps no copy of it.
 - **Range rows.** One row per other metric the cell reports, in dictionary order, grouped by
   category past five rows. Label and unit, a track for that metric's axis (zero to an edge
   with a dashed guideline tick for a step scale, the extent in view for the rest), the cell's min to max
