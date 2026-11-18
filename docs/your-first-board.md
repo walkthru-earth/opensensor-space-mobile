@@ -108,7 +108,7 @@ never a value. The device reports current values on `GET_CONFIG` page 7, nested 
 `ConfigFields.declared` and `ConfigFields.merge` keep a key only when every floor holds.
 
 - The name matches `[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+` and is at most 48 bytes.
-- It is not under a reserved prefix, `ble.`, `wifi.`, `lan.`, `location.`, `thing.`, `owner.` or `sensor.`,
+- It is not under a reserved prefix, `ble.`, `wifi.`, `lan.`, `location.`, `thing.`, `owner.`, `sensor.` or `ntp.`,
   which only the app allowlist uses. So a template can never declare the PIN, the Wi-Fi password or the LAN token.
 - It is not one of the app's secret keys.
 - `page` is 7.

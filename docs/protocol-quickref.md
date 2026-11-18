@@ -173,7 +173,7 @@ floor.
 - An app key keeps the app's type, timing and protections, and only gains a stricter confirmation
   or `disrupts`.
 - A board key is kept only outside the reserved prefixes `ble.`, `wifi.`, `lan.`, `location.`,
-  `thing.`, `owner.` and `sensor.`, with a dotted lowercase name of at most 48 bytes and four parts, read
+  `thing.`, `owner.`, `sensor.` and `ntp.`, with a dotted lowercase name of at most 48 bytes and four parts, read
   back from page 7. A board `action` always confirms, disrupts and applies once.
 
 `ConfigPatch.Builder.field` sends one merged board key. It refuses a secret, reserved or unmerged
@@ -255,8 +255,9 @@ it returns the legacy object the page has no `location`, which reads as unsuppor
 location object is not an unset supported location.
 
 The setup record is `SetupAck`. Bit `i` of `setup_ack` marks step `i` of the template `firmware.setup`
-done. `setup_v` is `SetupAck.version` of the ordered step ids, the first 31 bits of SHA-256 over the
-ids joined by `\n`, never 0. A `setup_v` that differs from the phone's reads as no step done
+done. `setup_v` is `SetupAck.version` of the ordered step ids. It takes the first four bytes of
+SHA-256 over the ids joined by `\n` in UTF-8, reads them big endian, clears the top bit and maps 0 to
+1, so it is never 0. A `setup_v` that differs from the phone's reads as no step done
 (`SetupAck.done`), and `SetupAck.withStep` starts a stale record from zero. The phone sends both with
 `ConfigPatch.Builder.setupAck`, `thing.setup_v` first. A list holds at most 31 steps. The record
 never proves a required step, those stay derived from the config.

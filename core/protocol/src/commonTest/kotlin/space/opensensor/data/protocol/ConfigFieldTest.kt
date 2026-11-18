@@ -125,9 +125,12 @@ class ConfigFieldTest {
         val reserved = ConfigFields.RESERVED_PREFIXES.map { prefix ->
             ConfigField("${prefix}extra", FieldType.Toggle, Applies.IMMEDIATELY, page = BOARD)
         } + ConfigField("location.phone_cell", FieldType.H3Cell, Applies.NEXT_SAMPLE, page = BOARD)
-        assertEquals(7, ConfigFields.RESERVED_PREFIXES.size)
+        assertEquals(8, ConfigFields.RESERVED_PREFIXES.size)
         assertTrue(ConfigFields.merge(reserved).isEmpty())
         assertTrue(ConfigFields.merge(listOfNotNull(ConfigFields.declared("wifi.extra", "boolean", emptyList(), "immediately", BOARD))).isEmpty())
+        // The clock keys belong to the app too. A template's ntp. key is refused like the others.
+        assertTrue(ConfigFields.isReserved("ntp.server"))
+        assertTrue(ConfigFields.merge(listOfNotNull(ConfigFields.declared("ntp.server", "text", emptyList(), "immediately", BOARD))).isEmpty())
     }
 
     @Test
