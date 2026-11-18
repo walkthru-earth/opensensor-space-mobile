@@ -50,8 +50,7 @@ data class ColumnLabel(val hints: JsonObject) {
         hints.forEach { (key, value) ->
             val ok = when (key) {
                 "title", "description", GROUP, ThingCollections.SCALE -> value.isText()
-                DECIMALS -> (value as? JsonPrimitive)?.takeUnless { it.isString }?.content?.toDoubleOrNull()
-                    ?.let { it % 1.0 == 0.0 && it in 0.0..9.0 } == true
+                DECIMALS -> (value as? JsonPrimitive)?.takeUnless { it.isString }?.content?.let(::decimalsOf) != null
                 TITLE_I18N, DESCRIPTION_I18N -> value is JsonObject && value.values.all { it.isText() }
                 else -> throw IllegalArgumentException("a column adds $key, which is not a display hint")
             }
@@ -68,6 +67,25 @@ data class ColumnLabel(val hints: JsonObject) {
         const val DESCRIPTION_I18N = "opensensor:description_i18n"
 
         private fun JsonElement.isText() = this is JsonPrimitive && isString
+
+        private val JSON_NUMBER = Regex("""-?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?""")
+
+        /**
+         * The decimals a JSON number gives, when it is an integer from 0 to 9 however it is spelled, as
+         * `1`, `1.0`, `1e0` or `0.5e1`. It reads the digits, not a Double, so `1.0000000000000001` is
+         * not rounded to 1. Anything else is null.
+         */
+        private fun decimalsOf(number: String): Int? {
+            val (whole, fraction, exponent) = JSON_NUMBER.matchEntire(number)?.destructured ?: return null
+            val digits = whole + fraction
+            if (digits.all { it == '0' }) return 0
+            if (number.startsWith('-')) return null
+            val shift = if (exponent.isEmpty()) 0L else exponent.toLongOrNull() ?: return null
+            val point = whole.length + shift
+            if (point < 0 || point > digits.length) return null
+            if (digits.drop(point.toInt()).any { it != '0' }) return null
+            return digits.take(point.toInt()).trimStart('0').ifEmpty { "0" }.takeIf { it.length == 1 }?.toInt()
+        }
     }
 }
 
