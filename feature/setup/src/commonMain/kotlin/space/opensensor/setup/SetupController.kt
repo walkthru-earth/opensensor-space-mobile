@@ -97,6 +97,8 @@ data class SetupUiState(
     val hidden: List<StepId> = emptyList(),
     /** Next is saving the page or writing its ack. Skip waits for it, Back leaves it and the page stays. */
     val saving: Boolean = false,
+    /** The sensor did not confirm this page's step bit, the page says so and offers Retry. */
+    val ackFailed: Boolean = false,
     val askClose: Boolean = false,
     val closed: Boolean = false,
 ) {
@@ -114,6 +116,9 @@ data class SetupUiState(
         SetupPage.Done -> !saving
         SetupPage.Find, SetupPage.Loading -> false
     }
+
+    /** A board step's template label in [language], null on a page that keeps its own title. */
+    fun title(language: String): String? = step?.label?.get(language)
 
     /** Skip shows on an optional step, and is off while Next saves. */
     val canSkip: Boolean get() = step?.skippable == true && !saving
@@ -266,8 +271,8 @@ class SetupController(
     /**
      * Next. On a step it runs [save] when the page has something to save, saves the nickname on Name,
      * then sets the step's bit with [ack], and moves on once both are confirmed. A refused save or an
-     * unconfirmed ack stays on the page, as does a save that ends after Back left it. On Done it sets
-     * the hidden bits still clear and leaves.
+     * unconfirmed ack stays on the page and sets [SetupUiState.ackFailed], as does a save that ends
+     * after Back left it. On Done it sets the hidden bits still clear and leaves.
      */
     fun next(save: (suspend () -> Boolean)? = null, ack: suspend (Collection<StepId>) -> Boolean = { true }) {
         val s = _state.value
@@ -278,12 +283,11 @@ class SetupController(
                     val id = s.selected?.id ?: return@busy false
                     port.saveNickname(id, s.nickname.trim().ifEmpty { null })
                 }
-                (save == null || save()) && ack(listOf(page.id) + s.hidden)
+                (save == null || save()) && acked(page, ack)
             }
             SetupPage.Done -> {
-                val clear = s.hidden.filter { s.plan?.step(it)?.acked == false }
-                if (clear.isEmpty()) return finish()
-                busy(page) { ack(clear) }
+                if (acks(s, page).isEmpty()) return finish()
+                busy(page) { acked(page, ack) }
             }
             SetupPage.Find, SetupPage.Loading -> Unit
         }
@@ -294,12 +298,33 @@ class SetupController(
         val s = _state.value
         val page = s.page as? SetupPage.Step ?: return
         if (!s.canSkip) return
-        busy(page) { ack(listOf(page.id) + s.hidden) }
+        busy(page) { acked(page, ack) }
+    }
+
+    /** Sends only the step bits again after [SetupUiState.ackFailed], the page's values are already saved. */
+    fun retryAck(ack: suspend (Collection<StepId>) -> Boolean) {
+        val s = _state.value
+        if (!s.ackFailed || s.saving) return
+        busy(s.page) { acked(s.page, ack) }
+    }
+
+    /** The bits a page sets, its own and the hidden steps' on a step, the hidden ones still clear on Done. */
+    private fun acks(s: SetupUiState, page: SetupPage): List<StepId> = when (page) {
+        is SetupPage.Step -> listOf(page.id) + s.hidden
+        SetupPage.Done -> s.hidden.filter { s.plan?.step(it)?.acked == false }
+        SetupPage.Find, SetupPage.Loading -> emptyList()
+    }
+
+    /** Sets the bits of [from], and marks [SetupUiState.ackFailed] when the sensor did not confirm them while still on [from]. */
+    private suspend fun acked(from: SetupPage, ack: suspend (Collection<StepId>) -> Boolean): Boolean {
+        val ok = ack(acks(_state.value, from))
+        if (!ok) _state.update { if (it.page == from) it.copy(ackFailed = true) else it }
+        return ok
     }
 
     /** Runs [work] with Next and Skip off, and moves on when it succeeds while the wizard is still on [from]. */
     private fun busy(from: SetupPage, work: suspend () -> Boolean) {
-        _state.update { it.copy(saving = true) }
+        _state.update { it.copy(saving = true, ackFailed = false) }
         scope.launch {
             val ok = try {
                 work()
@@ -329,7 +354,7 @@ class SetupController(
             SetupPage.Done -> finish()
             is SetupPage.Step -> {
                 val at = s.order.indexOf(page.id)
-                if (at <= 0) requestClose() else _state.update { it.copy(page = SetupPage.Step(s.order[at - 1])) }
+                if (at <= 0) requestClose() else _state.update { it.copy(page = SetupPage.Step(s.order[at - 1]), ackFailed = false) }
             }
             SetupPage.Find, SetupPage.Loading -> requestClose()
         }

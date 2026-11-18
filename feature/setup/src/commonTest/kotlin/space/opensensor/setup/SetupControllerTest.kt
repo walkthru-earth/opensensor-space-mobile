@@ -15,6 +15,7 @@ import space.opensensor.model.ConfigApplies
 import space.opensensor.model.ConfigKeySpec
 import space.opensensor.model.ConfigKeyType
 import space.opensensor.model.ConfigValues
+import space.opensensor.model.LocalizedText
 import space.opensensor.model.ManifestStep
 import space.opensensor.model.SetupManifest
 import space.opensensor.model.StepId
@@ -200,6 +201,42 @@ class SetupControllerTest {
     }
 
     @Test
+    fun anUnconfirmedAckSaysWhyAndRetrySendsOnlyTheAck() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL)))
+        c.next()
+        c.next()
+        val acks = Acks(answer = false)
+        var saves = 0
+        c.next(save = { saves++; true }, ack = acks.ack)
+        assertEquals(SetupPage.Step(StepId.SITE), c.at)
+        assertTrue(c.state.value.ackFailed, "the page says the sensor did not confirm")
+        c.retryAck(acks.ack)
+        assertTrue(c.state.value.ackFailed, "a second miss still says why")
+        acks.answer = true
+        c.retryAck(acks.ack)
+        assertEquals(1, saves, "Retry sends only the ack, the values are already on the sensor")
+        assertEquals(3, acks.sent.size)
+        assertEquals(SetupPage.Step(StepId.WIFI), c.at)
+        assertFalse(c.state.value.ackFailed)
+    }
+
+    @Test
+    fun aRefusedSaveIsNoAckFailureAndBackClearsOne() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL)))
+        c.next()
+        c.next()
+        val acks = Acks(answer = false)
+        c.next(save = { false }, ack = acks.ack)
+        assertFalse(c.state.value.ackFailed, "a refused save shows its own error")
+        c.skip(acks.ack)
+        assertTrue(c.state.value.ackFailed, "a Skip whose ack is not confirmed says why too")
+        c.back()
+        assertFalse(c.state.value.ackFailed)
+        c.retryAck(acks.ack)
+        assertEquals(1, acks.sent.size, "Retry does nothing once the page left the failure")
+    }
+
+    @Test
     fun skipWaitsForASaveAndASaveEndingAfterBackNeverMoves() = runTest(UnconfinedTestDispatcher()) {
         val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL)))
         c.next()
@@ -241,8 +278,10 @@ class SetupControllerTest {
         c.next(ack = acks.ack)
         assertEquals(listOf(listOf(StepId.PAIRING, StepId.LAN, StepId.BONDS)), acks.sent)
         assertFalse(c.state.value.closed, "an unconfirmed ack stays on Done")
+        assertTrue(c.state.value.ackFailed)
         acks.answer = true
-        c.next(ack = acks.ack)
+        c.retryAck(acks.ack)
+        assertEquals(2, acks.sent.size)
         assertTrue(c.state.value.closed)
     }
 
@@ -254,6 +293,18 @@ class SetupControllerTest {
         assertEquals(PlanStepKind.UNSUPPORTED, c.state.value.step?.kind)
         assertFalse(c.state.value.canAdvance)
         assertFalse(c.state.value.canSkip)
+    }
+
+    @Test
+    fun aBoardStepTitleIsItsTemplateLabelInTheAppLanguage() = runTest(UnconfinedTestDispatcher()) {
+        val label = LocalizedText(mapOf(LocalizedText.UNTAGGED to "Display", "ar" to "الشاشة"))
+        val manifest = Plans.manifest(ManifestStep(StepId("panel"), keys = listOf("panel.theme"), label = label), Plans.step("tune", false, "panel.theme"))
+        val c = walking(FakePort(), Plans.plan(manifest, Plans.page(mobility = "moving")))
+        assertEquals("Display", c.state.value.title("en"))
+        assertEquals("الشاشة", c.state.value.title("ar"))
+        c.next()
+        assertEquals(SetupPage.Step(StepId("tune")), c.at)
+        assertNull(c.state.value.title("en"), "a step without a label keeps the Sensor settings title")
     }
 
     @Test
