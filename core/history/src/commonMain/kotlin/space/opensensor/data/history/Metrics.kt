@@ -18,7 +18,8 @@ import kotlin.concurrent.Volatile
 /**
  * One quantity History keeps in its tiers and charts, built from a board template datastream and the
  * app profile ([Metrics.of]). The gate, settle time, aggregate, unit and plausible range are the
- * template's. The label, display unit and health scale are the profile's. Nothing here names a board.
+ * template's. The label, decimals, display unit and health scale are the profile's, which reads them
+ * from the template hints, the Collection and the registries. Nothing here names a board.
  *
  * [id] is the column name, the tier key and the picker key on both platforms. The one exception is a
  * metric the phone derives ([formula] set, from a [DerivedMetricProvider]), which has its own id.
@@ -42,11 +43,11 @@ data class MetricSpec(
     /** The template's `opensensor:plausible_range`, the axis bounds of a neutral chart. */
     val plausibleRange: PlausibleRange? = null,
     /**
-     * The published health scale a family names ([DerivedMetricProvider.scales]) that colours and
-     * names a value, or null for a metric shown in a neutral colour. Its property id and unit must match [property].
+     * The published scale that colours and names a value ([AppProfile.scales]), or null for a metric
+     * shown in a neutral colour. Its unit must match [unit].
      */
     val healthScale: HealthScale? = null,
-    /** The quantity this metric measures, the health scale key. Two views of one quantity share it. */
+    /** The quantity this metric measures, its `opensensor:property` URI, else [id]. Two views of one quantity share it. */
     val property: String = id,
     /**
      * Raw or corrected, for a stored column with a derived corrected view and for that view, so every
@@ -62,15 +63,16 @@ data class MetricSpec(
     val formula: RowFormula? = null,
     /** The second stored column [formula] reads, or null when it reads only [column]. */
     val auxColumn: String? = null,
-    /** True for a column of the profile's `primary` list, the metrics Simple offers. */
+    /** True for the profile's primary column and its corrected view, the metric Simple offers. */
     val primary: Boolean = false,
     /** Labels by language from the profile, or null when it has none. */
     val labels: LocalizedText? = null,
+    /** The decimals a value shows with, from the profile ([AppProfile.decimalsOf]). */
+    val decimals: Int = 2,
 ) {
     init {
-        require(healthScale == null || (healthScale.propertyId == property && healthScale.unit == unit)) {
-            "a health scale reads only its own property ($property, $unit)"
-        }
+        require(healthScale == null || healthScale.unit == unit) { "a health scale reads only its own unit ($unit)" }
+        require(decimals in 0..Datastream.MAX_DECIMALS) { "decimals out of range" }
         require(auxColumn == null || formula != null) { "only a derived metric reads a second column" }
     }
 
@@ -117,8 +119,8 @@ data class MetricSpec(
 /**
  * Builds History's metrics from board templates and app profiles. The bundled templates give the
  * [catalog] the screens pick from. The tiers and readers take any list, so a template the app does
- * not bundle aggregates the same way once something resolves it. Nothing here names a column. Family
- * knowledge comes from the profile's scale ids and from the [providers] of derived metrics.
+ * not bundle aggregates the same way once something resolves it. Nothing here names a column. Labels,
+ * decimals and scales come from the profile, and family knowledge from the [providers] of derived metrics.
  */
 object Metrics {
     /** The installed providers and the catalog built from them on first read. */
@@ -148,38 +150,35 @@ object Metrics {
     /** The aggregate the tiers apply to [ds]. A missing aggregate is a mean, an unknown one a point (rule 5). */
     fun rollupOf(ds: Datastream): Aggregate = if (ds.aggregate == null) Aggregate.MEAN else ds.rollup
 
-    /** Every health scale the [providers] publish, by scale id. The first provider that names an id keeps it. */
-    fun scalesOf(providers: List<DerivedMetricProvider> = this.providers): Map<String, HealthScale> =
-        providers.reversed().fold(emptyMap()) { acc, p -> acc + p.scales }
-
     /**
      * The metric for [ds] under [profile]. [basis] marks a column with a derived corrected view. The
-     * profile's scale id picks one of [scales], and an id no family publishes leaves the column neutral.
+     * profile's scale for the column becomes its [HealthScale], and a column without one stays neutral.
      */
-    fun of(ds: Datastream, profile: AppProfile, basis: Basis? = null, scales: Map<String, HealthScale> = scalesOf()): MetricSpec {
-        val scale = profile.scales[ds.name]?.let(scales::get)
-        val labels = profile.labels[ds.name]
+    fun of(ds: Datastream, profile: AppProfile, basis: Basis? = null): MetricSpec {
+        val labels = profile.labelOf(ds)
+        val unit = profile.displayUnitOf(ds).orEmpty()
         return MetricSpec(
             id = ds.name,
             column = ds.name,
-            label = labels?.get(LocalizedText.ENGLISH) ?: ds.name,
-            unit = profile.displayUnit[ds.name] ?: ds.unit.orEmpty(),
+            label = labels.get(LocalizedText.ENGLISH),
+            unit = unit,
             sourceUnit = ds.unit,
             gate = ds.validWhen,
             settleSeconds = ds.settleSeconds,
             aggregate = rollupOf(ds),
             plausibleRange = ds.plausibleRange,
-            healthScale = scale,
-            property = scale?.propertyId ?: ds.name,
+            healthScale = profile.scales[ds.name]?.let { HealthScale.of(it, unit) },
+            property = ds.property?.id ?: ds.name,
             basis = basis,
-            primary = ds.name in profile.primary && ds.name !in profile.hidden,
+            primary = ds.name == profile.primary,
             labels = labels,
+            decimals = profile.decimalsOf(ds),
         )
     }
 
     /**
      * The metrics of [template] under [profile]. The [providers]' derived metrics come first, then the
-     * profile's primary columns in its order, then every other measured (`physicalMeasurement` or
+     * profile's primary column, then every other measured (`physicalMeasurement` or
      * `modelResult`) column the profile does not hide, in template order. A board-derived column counts
      * when the file stores it, and a file without it gives it no values. A template with none of a
      * provider's source columns simply gets none of its metrics. Ids are unique, a derived id that
@@ -191,23 +190,22 @@ object Metrics {
         providers: List<DerivedMetricProvider> = this.providers,
     ): List<MetricSpec> {
         val derived = providers.flatMap { it.derive(template) }
-        val scales = scalesOf(providers)
         val views = derived.mapNotNullTo(HashSet()) { it.viewOf }
         val columns = LinkedHashSet<String>()
-        profile.primary.filterTo(columns) { it !in profile.hidden && template.datastream(it) != null }
+        profile.primary?.let(columns::add)
         template.datastreams.filter { it.role?.isMeasurement == true && it.name !in profile.hidden }.mapTo(columns) { it.name }
-        val stored = columns.mapNotNull { name -> template.datastream(name)?.let { of(it, profile, if (name in views) Basis.RAW else null, scales) } }
-        val metrics = derived.map { of(it, template, profile, scales) } + stored
+        val stored = columns.mapNotNull { name -> template.datastream(name)?.let { of(it, profile, if (name in views) Basis.RAW else null) } }
+        val metrics = derived.map { of(it, template, profile) } + stored
         val repeated = metrics.groupingBy { it.id }.eachCount().filterValues { it > 1 }.keys
         require(repeated.isEmpty()) { "metric ids repeat on ${template.dict}: ${repeated.joinToString()}" }
         return metrics
     }
 
-    /** [metric] on [template], sharing the profile unit, scale and primary flag of the column it is a view of. */
-    private fun of(metric: DerivedMetric, template: BoardTemplate, profile: AppProfile, scales: Map<String, HealthScale>): MetricSpec {
+    /** [metric] on [template], sharing the profile unit, scale, decimals and primary flag of the column it is a view of. */
+    private fun of(metric: DerivedMetric, template: BoardTemplate, profile: AppProfile): MetricSpec {
         val ds = metric.datastream
         val from = ds.sourceColumns
-        val shown = metric.viewOf?.let(template::datastream)?.let { of(it, profile, scales = scales) }
+        val shown = metric.viewOf?.let(template::datastream)?.let { of(it, profile) }
         return MetricSpec(
             id = ds.name,
             column = from.first(),
@@ -224,6 +222,7 @@ object Metrics {
             formula = metric.formula,
             auxColumn = from.getOrNull(1),
             primary = shown?.primary ?: false,
+            decimals = shown?.decimals ?: profile.decimalsOf(ds),
         )
     }
 

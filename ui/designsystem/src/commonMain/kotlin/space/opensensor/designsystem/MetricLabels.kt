@@ -29,8 +29,8 @@ fun pm25CorrectionInfo(): String = stringResource(Res.string.pm25_correction_inf
 fun metricLabel(metric: MetricSpec): String = metricLabelRes(metric)?.let { stringResource(it) } ?: metric.label
 
 /**
- * The app label that replaces a metric's registry label, set for the two PM2.5 views and null otherwise.
- * A raw or corrected view of any other quantity keeps its own label.
+ * The app label that replaces a metric's registry label, set for the two views of a column on the
+ * WHO PM2.5 scale and null otherwise. A raw or corrected view of any other quantity keeps its own label.
  */
 fun metricLabelRes(metric: MetricSpec): StringResource? =
-    metric.basis?.takeIf { metric.property == WhoGuidelines.PM25.propertyId }?.let(::pm25LabelRes)
+    metric.basis?.takeIf { metric.healthScale?.id == WhoGuidelines.PM25.id }?.let(::pm25LabelRes)

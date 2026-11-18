@@ -957,7 +957,7 @@ class DiscoverControllerTest {
     }
 
     private fun status(endS: Long = 900L, shared: Boolean = false, live: Boolean = false) =
-        OwnStatus(LatestReading(endS, 12f, AirMetrics.PM25, 1.0), live = live, shared = shared)
+        OwnStatus(LatestReading(endS, 12f, AirMetrics.PM25), live = live, shared = shared)
 
     @Test
     fun ownStatusNeverChangesThePublicCells() = runTest {

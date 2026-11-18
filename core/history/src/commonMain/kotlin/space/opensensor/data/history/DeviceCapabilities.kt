@@ -15,13 +15,13 @@ import space.opensensor.model.ThingDatastream
 /**
  * What the connected device can do, derived from `INFO` as a set of [Capability] ids. Screens ask
  * these questions instead of comparing schema strings or key names. Every answer comes from the
- * bundled template and app profile of `info.dict`, or from the template the board served (#191), so a
- * new board is a template and a profile, not a code change. Pure and shared by Android and iOS.
+ * bundled template of `info.dict`, or from the template the board served (#191) after its SHA-256
+ * matched, so a new board is a template, not a code change. Pure and shared by Android and iOS.
  *
- * - [thing] is the served or bundled template joined with its reviewed app profile. It reads LIVE
- *   ([reading]). Null without `INFO`, without a dictionary, for a board whose template is neither
- *   served nor bundled, or for a dictionary with no reviewed profile. Such a board has no LIVE view,
- *   the LIVE key stability rule of `ble-sync-protocol.md`, so a derived profile never names a hero.
+ * - [thing] is the served or bundled template joined with its derived app profile and any bundled
+ *   overlay. It reads LIVE ([reading]). Null without `INFO`, without a dictionary, or for a board
+ *   whose template is neither served nor bundled. LIVE values still pass the template's
+ *   `opensensor:plausible_range` and `opensensor:valid_when` checks.
  * - [Capability.LIVE] is a resolved [thing].
  * - [Capability.CONFIG] is protocol v2 or later: pairing, Wi-Fi, LAN and bonds can be edited.
  * - [Capability.SENSOR_IDENTITY] is a template with the `sensor_serial_code` column, a board that
@@ -59,8 +59,7 @@ data class DeviceCapabilities(
 
         /**
          * Resolves `info.dict` and `info.desc` against [served] templates first, then the bundled ones,
-         * and joins the reviewed profile [profiles] gives for the dict. A template without one keeps
-         * [Capability.SENSOR_IDENTITY] but has no [thing] and no LIVE.
+         * and joins the profile overlay [profiles] gives for the dict, if any.
          */
         fun from(
             info: DeviceInfo?,
@@ -68,9 +67,8 @@ data class DeviceCapabilities(
             profiles: (String) -> AppProfile? = BundledCatalog::profile,
         ): DeviceCapabilities {
             if (info == null) return NONE
-            val joined = info.dict?.let { BundledCatalog.thing(info.thing.orEmpty(), it, desc = info.desc, served = served, profile = profiles(it)) }
-            val thing = joined?.takeUnless { it.profile.isDerived }
-            return DeviceCapabilities(thing, capabilitiesOf(joined, proto = info.proto ?: 1))
+            val thing = info.dict?.let { BundledCatalog.thing(info.thing.orEmpty(), it, desc = info.desc, served = served, profile = profiles(it)) }
+            return DeviceCapabilities(thing, capabilitiesOf(thing, proto = info.proto ?: 1))
         }
 
         /** The capabilities of [thing] on a board speaking sync protocol [proto], with the [providers]' own. */
@@ -78,8 +76,6 @@ data class DeviceCapabilities(
             if (proto >= 2) add(Capability.CONFIG)
             if (thing == null) return@buildSet
             if (thing.datastream(SENSOR_SERIAL_COLUMN) != null) add(Capability.SENSOR_IDENTITY)
-            // LIVE and what it shows need a reviewed profile, a derived one only names columns.
-            if (thing.profile.isDerived) return@buildSet
             add(Capability.LIVE)
             providers.forEach { addAll(it.capabilitiesOf(thing)) }
         }

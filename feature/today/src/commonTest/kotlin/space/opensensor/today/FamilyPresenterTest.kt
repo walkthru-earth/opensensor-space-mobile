@@ -17,8 +17,8 @@ import space.opensensor.units.formatFixed
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class FamilyPresenterTest {
     private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809")
@@ -53,14 +53,13 @@ class FamilyPresenterTest {
     }
 
     @Test
-    fun aServedBoardWithNoReviewedProfileHasNoLive() = SoilFixture.served {
-        // ble-sync-protocol LIVE key stability. A derived profile would show raw column names as a hero.
+    fun aServedBoardWithNoReviewedProfileShowsLive() = SoilFixture.served {
+        // A verified template is enough for LIVE, with labels, decimals and units from the template.
         val state = state(SoilFixture.info, soilSample, DetailLevel.DETAILED)
-        assertEquals(LiveSupport.UNSUPPORTED, state.liveSupport)
-        assertNull(state.capabilities.thing)
-        assertNull(state.reading)
-        assertEquals(emptyList(), todayMetrics(state.capabilities))
-        assertFalse(METRICS in state.cards)
+        assertEquals(LiveSupport.READY, state.liveSupport)
+        assertEquals(SoilFixture.MOISTURE, state.capabilities.thing?.primary?.name)
+        assertEquals(0.31, state.reading?.value(SoilFixture.MOISTURE))
+        assertTrue(METRICS in state.cards)
     }
 
     @Test
@@ -80,13 +79,13 @@ class FamilyPresenterTest {
     }
 
     @Test
-    fun soilReadingsFormatAtTheirDisplayStep() {
+    fun soilReadingsFormatAtTheirDecimals() {
         val thing = SoilFixture.capabilities().thing!!
         val moisture = heroColumn(thing)!!
         val reading = SoilFixture.capabilities().reading(soilSample)
         val units = UnitFormatter(UnitSystem.METRIC)
         assertEquals(0.31, reading?.value(moisture.name))
         assertEquals(NO_VALUE, formatReading(null, moisture, units))
-        assertEquals(formatFixed(0.3, 1), formatReading(0.31, moisture, units), "a float without a profile step shows one decimal")
+        assertEquals(formatFixed(0.31, 2), formatReading(0.31, moisture, units), "a float without a decimals hint shows two")
     }
 }

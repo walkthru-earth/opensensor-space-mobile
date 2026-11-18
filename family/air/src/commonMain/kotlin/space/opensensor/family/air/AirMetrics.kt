@@ -29,12 +29,10 @@ object AirMetrics {
     val PM25_BATCH_ESTIMATE: MetricSpec get() = named(BATCH_ESTIMATE_COLUMN)
     val PARTICLES_GT03: MetricSpec get() = named("particles_gt03_per_01l")
     val PARTICLES_GT25: MetricSpec get() = named("particles_gt25_per_01l")
-    val BOARD_TEMP: MetricSpec get() = named("imu_temperature_c")
 
     /** Null on CoreS3 (SHT20 address collision), written by the Waveshare PMS5003T. A null RH leaves PM2.5 raw. */
     val AMBIENT_TEMP: MetricSpec get() = named("ambient_temperature_c")
     val HUMIDITY: MetricSpec get() = named(AirFamily.RELATIVE_HUMIDITY)
-    val BATTERY: MetricSpec get() = named("battery_percent")
 
     private fun named(id: String): MetricSpec = requireNotNull(Metrics.byId(id)) { "no bundled template has $id" }
 }

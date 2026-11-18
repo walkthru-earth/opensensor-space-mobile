@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.map
 /**
  * The newest 15 minute reading of one thing's main metric on this phone, as the Discover own pin
  * shows it (#273). [endEpochS] is the end of its 15 minute bucket, [mean] the bucket mean in the
- * metric's stored unit. [displayStep] is the profile's step for the metric's column. It is read from
+ * metric's stored unit, shown with the metric's decimals. It is read from
  * the history tiers, so it works with no network and never comes from a live link. [flaggedRows] of the
  * bucket's rows failed a stored row check (#91), with the OR of their [flags], and [cleanMean] is the
  * mean of the others, null when none passed.
@@ -20,7 +20,6 @@ data class LatestReading(
     val endEpochS: Long,
     val mean: Float,
     val metric: MetricSpec,
-    val displayStep: Double,
     val flaggedRows: Int = 0,
     val flags: Int = 0,
     val cleanMean: Float? = null,
@@ -41,14 +40,12 @@ object LatestReadings {
     fun latest(
         buckets: Map<String, List<TierBucket>>,
         metrics: List<MetricSpec> = Metrics.all,
-        stepOf: (MetricSpec) -> Double = { LatestDays.displayStepOf(it) },
-    ): LatestReading? = latestChecked(buckets.mapValues { (_, list) -> list.map(::CheckedBucket) }, metrics, stepOf)
+    ): LatestReading? = latestChecked(buckets.mapValues { (_, list) -> list.map(::CheckedBucket) }, metrics)
 
     /** [latest] of buckets that carry their stored checks ([CheckedTiers]). */
     fun latestChecked(
         buckets: Map<String, List<CheckedBucket>>,
         metrics: List<MetricSpec> = Metrics.all,
-        stepOf: (MetricSpec) -> Double = { LatestDays.displayStepOf(it) },
     ): LatestReading? {
         val available = metrics.filter { m -> buckets[m.id].orEmpty().any { it.bucket.validRows > 0 } }
         var best: LatestReading? = null
@@ -56,7 +53,7 @@ object LatestReadings {
             val c = buckets[metric.id].orEmpty().filter { shown(it.bucket) }.maxByOrNull { it.bucket.startEpochS } ?: continue
             val end = c.bucket.startEpochS + Resolution.MIN15.seconds
             if (best != null && end <= best.endEpochS) continue
-            best = LatestReading(end, c.bucket.mean, metric, stepOf(metric), c.flaggedRows, c.flags, c.cleanMean)
+            best = LatestReading(end, c.bucket.mean, metric, c.flaggedRows, c.flags, c.cleanMean)
         }
         return best
     }
@@ -101,6 +98,6 @@ object LatestReadings {
     /** The start of the newest day in [fromS, toS) where a candidate has a shown day bucket, or null. */
     private fun newestDay(tiers: HistoryTiers, thing: String, candidates: List<MetricSpec>, fromS: Long, toS: Long): Flow<Long?> =
         combine(candidates.map { m -> tiers.observe(thing, m.id, Resolution.DAY, fromS, toS).map { m.id to it } }) { pairs ->
-            LatestDays.latest(pairs.toMap(), candidates) { 0.0 }?.startEpochS
+            LatestDays.latest(pairs.toMap(), candidates)?.startEpochS
         }.distinctUntilChanged()
 }

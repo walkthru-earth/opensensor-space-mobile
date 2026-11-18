@@ -53,12 +53,12 @@ object AirDiscover {
 }
 
 /**
- * The scale as a WHO guideline scale, for the mood surfaces (Simple mode). Set only for a scale
- * cited to the WHO 2021 guidelines with six steps and an open last step.
+ * The WHO guideline scale this scale is, for the mood surfaces (Simple mode). Set only for a scale
+ * cited to the WHO 2021 guidelines whose edges are those of a [WhoGuidelines] registry scale.
  */
 val StepScale.who: HealthScale?
-    get() = if (scale.source == WhoGuidelines.URL && size == WhoStep.entries.size && scale.steps.last().upper == null) {
-        HealthScale(propertyId, scale.unit.orEmpty(), edges, WhoGuidelines.SOURCE)
+    get() = if (scale.source == WhoGuidelines.URL && scale.steps.last().upper == null) {
+        WhoGuidelines.all.firstOrNull { it.edges == edges }
     } else {
         null
     }
