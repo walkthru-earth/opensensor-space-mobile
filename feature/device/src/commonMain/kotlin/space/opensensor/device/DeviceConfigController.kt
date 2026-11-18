@@ -397,6 +397,11 @@ class DeviceConfigController(
         }
     }
 
+    /** The Save of a Device settings section, [saveBoardAndWait] without waiting. */
+    fun saveBoard(fields: List<PlanField>) {
+        scope.launch { saveBoardAndWait(fields) }
+    }
+
     /** A declared board action opens its confirmation, when the link is quiet. Nothing is sent before Confirm. */
     fun requestBoardAction(action: PlanField) {
         if (action.field.type != FieldType.Action) return

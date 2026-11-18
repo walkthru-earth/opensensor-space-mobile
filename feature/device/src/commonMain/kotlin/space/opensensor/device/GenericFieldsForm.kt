@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
@@ -21,14 +23,19 @@ import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.protocol.FieldType
 import space.opensensor.data.sync.PlanField
+import space.opensensor.designsystem.BrandCard
+import space.opensensor.designsystem.CardHeader
 import space.opensensor.designsystem.OutlinePillButton
+import space.opensensor.designsystem.PillButton
 import space.opensensor.designsystem.SwitchRow
 import space.opensensor.device.resources.Res
 import space.opensensor.device.resources.board_failed
 import space.opensensor.device.resources.board_not_confirmed
 import space.opensensor.device.resources.board_range
 import space.opensensor.device.resources.board_read_failed
+import space.opensensor.device.resources.board_save
 import space.opensensor.device.resources.board_saved
+import space.opensensor.device.resources.board_title
 import space.opensensor.device.resources.site_retry
 
 /** Whether a board form may send now. */
@@ -99,6 +106,25 @@ fun GenericFieldsForm(state: DeviceConfigUiState, fields: List<PlanField>, onAct
             DeviceBoardResult.SAVED -> Text(stringResource(Res.string.board_saved), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             DeviceBoardResult.NOT_CONFIRMED -> Text(stringResource(Res.string.board_not_confirmed), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             DeviceBoardResult.FAILED -> Text(stringResource(Res.string.board_failed), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        }
+    }
+}
+
+/** One board settings section on Device settings, titled with its template label or Sensor settings, its declared keys and a Save for the changed ones. */
+@Composable
+fun BoardSettingsCard(state: DeviceConfigUiState, section: DeviceSection.Board, onAction: (DeviceConfigAction) -> Unit, modifier: Modifier = Modifier) {
+    val fields = section.fields
+    BrandCard(modifier = modifier) {
+        CardHeader(section.title(Locale.current.language) ?: stringResource(Res.string.board_title))
+        Spacer(Modifier.height(8.dp))
+        GenericFieldsForm(state, fields, onAction)
+        if (fields.any { it.field.type != FieldType.Action }) {
+            Spacer(Modifier.height(10.dp))
+            PillButton(
+                stringResource(Res.string.board_save),
+                onClick = { onAction(DeviceConfigAction.SaveBoard(fields)) },
+                enabled = state.canEditBoard && state.board.changes(fields).isNotEmpty(),
+            )
         }
     }
 }
