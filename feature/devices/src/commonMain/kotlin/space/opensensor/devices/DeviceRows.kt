@@ -17,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,11 +45,6 @@ import space.opensensor.designsystem.moodWord
 import space.opensensor.designsystem.pm25Label
 import space.opensensor.designsystem.touchTarget
 import space.opensensor.devices.resources.Res
-import space.opensensor.devices.resources.ago_days
-import space.opensensor.devices.resources.ago_hours
-import space.opensensor.devices.resources.ago_just_now
-import space.opensensor.devices.resources.ago_minutes
-import space.opensensor.devices.resources.ago_seconds
 import space.opensensor.devices.resources.conn_failed
 import space.opensensor.devices.resources.conn_link_lost
 import space.opensensor.devices.resources.conn_pairing
@@ -87,6 +81,7 @@ import space.opensensor.devices.resources.scan_unnamed
 import space.opensensor.family.air.WhoStep
 import space.opensensor.family.air.stepOf
 import space.opensensor.settings.DetailLevel
+import space.opensensor.strings.rememberAgoFormatter
 import space.opensensor.strings.resources.conn_connecting
 import space.opensensor.strings.resources.conn_ready
 import space.opensensor.units.UnitFormatter
@@ -181,7 +176,7 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, o
                 }
                 row.lastSeenMs?.let { seen ->
                     val seenTemplate = stringResource(Res.string.scan_seen)
-                    val ago = agoFormatter()
+                    val ago = rememberAgoFormatter()
                     TickingText({ now -> DeviceText.fill(seenTemplate, ago(now - seen)) }, style = MaterialTheme.typography.bodySmall)
                 }
                 if (level.developer && row.archive == null) row.thing?.let { Mono(it.take(8)) }
@@ -298,7 +293,7 @@ private fun ArchiveLine(glance: ArchiveGlance?, level: DetailLevel) {
     val line = day?.let { dayLine(it, LocalArchiveUnits.current) }
     val files = pluralStringResource(Res.plurals.scan_files, glance.files, glance.files)
     val syncedTemplate = stringResource(Res.string.scan_synced)
-    val ago = agoFormatter()
+    val ago = rememberAgoFormatter()
     if (day != null && line != null) {
         val metric = day.metric
         val step = line.step
@@ -360,28 +355,6 @@ private val MONTHS = listOf(
     Res.string.month_5, Res.string.month_6, Res.string.month_7, Res.string.month_8,
     Res.string.month_9, Res.string.month_10, Res.string.month_11, Res.string.month_12,
 )
-
-/** "N ago" from the shared catalogue, for leaf `TickingText` lambdas. */
-@Composable
-private fun agoFormatter(): (Long) -> String {
-    val justNow = stringResource(Res.string.ago_just_now)
-    val seconds = stringResource(Res.string.ago_seconds)
-    val minutes = stringResource(Res.string.ago_minutes)
-    val hours = stringResource(Res.string.ago_hours)
-    val days = stringResource(Res.string.ago_days)
-    return remember(justNow, seconds, minutes, hours, days) {
-        { ageMs ->
-            val (unit, n) = DeviceText.ago(ageMs)
-            when (unit) {
-                AgoUnit.JUST_NOW -> justNow
-                AgoUnit.SECONDS -> DeviceText.fill(seconds, n)
-                AgoUnit.MINUTES -> DeviceText.fill(minutes, n)
-                AgoUnit.HOURS -> DeviceText.fill(hours, n)
-                AgoUnit.DAYS -> DeviceText.fill(days, n)
-            }
-        }
-    }
-}
 
 @Composable
 private fun Mono(text: String) {

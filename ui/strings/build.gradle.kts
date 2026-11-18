@@ -17,8 +17,13 @@ compose.resources {
     publicResClass = true
 }
 
-// TranslationsTest reads the iOS purpose string catalogue (InfoPlist.xcstrings) as JSON.
 kotlin {
+    // DeviceMessageText maps the shared device messages and sync endings, and a byte count, to this catalogue.
+    sourceSets.commonMain.dependencies {
+        implementation(project(":core:sync"))
+        implementation(project(":core:units"))
+    }
+    // TranslationsTest reads the iOS purpose string catalogue (InfoPlist.xcstrings) as JSON.
     sourceSets.getByName("androidHostTest").dependencies {
         implementation(libs.kotlinx.serialization.json)
     }
@@ -37,6 +42,7 @@ val copyAuditInputs = rootProject.fileTree(rootProject.projectDir) {
         "ui/map/src/commonMain/kotlin/**/*.kt",
         "ui/permissions/src/commonMain/kotlin/**/*.kt",
         "app/src/main/res/xml/locales_config.xml",
+        "ui/strings/repeated-keys.txt",
         "app/src/main/AndroidManifest.xml",
         "ios/App/Info.plist",
         "ios/App/InfoPlist.xcstrings",

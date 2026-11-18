@@ -3,9 +3,9 @@ package space.opensensor
 import space.opensensor.strings.UiText
 import space.opensensor.strings.resources.Res
 import space.opensensor.strings.resources.companion_ble_off
-import space.opensensor.strings.resources.companion_firmware_update_unknown
 import space.opensensor.strings.resources.companion_lan_syncing
 import space.opensensor.strings.resources.msg_busy_before_sync
+import space.opensensor.strings.resources.msg_firmware_update_required_unknown
 import space.opensensor.strings.resources.msg_hardware_in_use
 import space.opensensor.strings.resources.msg_verification_failed
 import kotlin.test.Test
@@ -18,7 +18,7 @@ class CompanionNoticeTest {
         for (notice in CompanionNotice.entries) assertTrue(notice.text is UiText.Resource, notice.name)
         assertEquals(UiText.of(Res.string.msg_verification_failed), CompanionNotice.VERIFICATION_FAILED.text)
         assertEquals(UiText.of(Res.string.msg_busy_before_sync), CompanionNotice.BUSY_BEFORE_SYNC.text)
-        assertEquals(UiText.of(Res.string.companion_firmware_update_unknown, 3), CompanionNotice.FIRMWARE_UPDATE.text)
+        assertEquals(UiText.of(Res.string.msg_firmware_update_required_unknown, 3), CompanionNotice.FIRMWARE_UPDATE.text)
     }
 
     @Test fun lanNoticeKeepsTheCardCountsAndStopsTheRate() {

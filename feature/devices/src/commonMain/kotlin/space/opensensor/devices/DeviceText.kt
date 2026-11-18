@@ -1,22 +1,7 @@
 package space.opensensor.devices
 
-/** The unit an "N ago" text uses. */
-enum class AgoUnit { JUST_NOW, SECONDS, MINUTES, HOURS, DAYS }
-
 /** Pure text helpers, so the leaf `TickingText` lambdas format without a composable call. */
 object DeviceText {
-    /** The unit and count of an age, the same steps as the Android `formatAgo`. */
-    fun ago(ageMs: Long): Pair<AgoUnit, Long> {
-        val s = ageMs / 1000
-        return when {
-            ageMs < 0 -> AgoUnit.JUST_NOW to 0L
-            s < 60 -> AgoUnit.SECONDS to s
-            s < 3600 -> AgoUnit.MINUTES to s / 60
-            s < 86_400 -> AgoUnit.HOURS to s / 3600
-            else -> AgoUnit.DAYS to s / 86_400
-        }
-    }
-
     /** Puts [args] into a resource template's positional `%1$d` or `%1$s` slots. */
     fun fill(template: String, vararg args: Any): String {
         var out = template
