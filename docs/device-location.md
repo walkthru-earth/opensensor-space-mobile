@@ -41,7 +41,9 @@ and that cell only moves the camera (`CellFocus`). `DeviceConfigController.accep
 drops anything that is not a resolution 8 cell id. UI and controller state and wire requests contain
 only the cell, the resolution and the declared country. The exact fix is never written to app
 storage, logged, sent to firmware or reverse-geocoded through a remote service. There are no
-background updates. Leaving the picker cancels the request.
+background updates. `DeviceConfigController.locate` runs the fix with a 25 second timeout, so a
+recomposition or a rotation does not stop it, and the picker only draws `PhoneFixState`. Stop or
+leaving the picker cancels it (`stopLocating`), and nothing is kept from a stopped fix.
 After a read or save the phone keeps the readback cell of a fixed Thing in `thing_place`, so
 Discover can show the user's own pin there. It keeps the cell only, never the published centre.
 A moving Thing keeps its last `location.gnss_cell` there with `moving` set, or an empty cell

@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -126,14 +127,15 @@ fun MyDevicesScreen(
     LaunchedEffect(state.scanning) { if (!state.scanning) explicitScan = false }
     val showStop = state.scanning && (onScanTap == null || explicitScan)
 
+    val latestOnAction by rememberUpdatedState(onAction)
     LifecycleStartEffect(bluetooth.ready) {
-        if (bluetooth.ready) onAction(DevicesAction.StartScan)
-        onStopOrDispose { onAction(DevicesAction.StopScan) }
+        if (bluetooth.ready) latestOnAction(DevicesAction.StartScan)
+        onStopOrDispose { latestOnAction(DevicesAction.StopScan) }
     }
 
     // The wizard opens by itself at most once per foreground session (#272), and only while this
     // screen collects. Each request is a one shot event, so a recomposition cannot send it twice.
-    LaunchedEffect(setupOpens) { setupOpens.collect { onAction(DevicesAction.FinishSetup(it)) } }
+    LaunchedEffect(setupOpens) { setupOpens.collect { latestOnAction(DevicesAction.FinishSetup(it)) } }
 
     fun open(id: String, name: String?) = openThing(id, name, bluetooth, onAction)
 

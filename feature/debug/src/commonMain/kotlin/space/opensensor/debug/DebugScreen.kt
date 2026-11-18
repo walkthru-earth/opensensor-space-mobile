@@ -38,6 +38,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -161,8 +162,9 @@ fun DebugScreen(
     val ago = agoFormatter()
 
     // Null while the stored level loads. Any confirmed level below Developer leaves at once.
+    val latestOnBack by rememberUpdatedState(onBack)
     LaunchedEffect(developer) {
-        if (leavesDebug(developer)) onBack()
+        if (leavesDebug(developer)) latestOnBack()
     }
 
     val ready = state.link.connection.isReady

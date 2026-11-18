@@ -107,6 +107,19 @@ fun LocationConfig.hasCell(): Boolean {
     return (cellResolution == null || cellResolution == res) && res <= (resolution ?: 15)
 }
 
+/**
+ * The picker's one shot phone fix, run by [DeviceConfigController.locate]. [cell] is already coarse and
+ * only moves the map. [serial] counts the fixes that found a cell, so each one moves the map once.
+ * Nothing here is sent, stored or logged.
+ */
+data class PhoneFixState(
+    val locating: Boolean = false,
+    /** The last fix failed, timed out or was declined. */
+    val failed: Boolean = false,
+    val cell: String? = null,
+    val serial: Int = 0,
+)
+
 /** Tap-only, cancellable foreground location. The implementation returns only a coarsened cell. */
 class DeviceLocationRequest(val access: RuntimeAccess, val cell: suspend (resolution: Int) -> String?)
 

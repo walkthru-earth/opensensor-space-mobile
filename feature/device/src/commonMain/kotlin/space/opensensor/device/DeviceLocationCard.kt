@@ -20,10 +20,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,10 +36,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.designsystem.AppIcons
@@ -52,7 +49,7 @@ import space.opensensor.designsystem.InfoNote
 import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.PillButton
 import space.opensensor.device.resources.Res
-import space.opensensor.device.resources.action_cancel
+import space.opensensor.device.resources.device_back
 import space.opensensor.device.resources.location_area_detail
 import space.opensensor.device.resources.location_area_km2
 import space.opensensor.device.resources.location_area_m2
@@ -197,14 +194,16 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
     val draft = loc.draft
     val title = stringResource(Res.string.location_title)
     val request = rememberDeviceLocationRequest()
-    val scope = rememberCoroutineScope()
-    var locating by remember { mutableStateOf(false) }
-    var fixJob by remember { mutableStateOf<Job?>(null) }
-    var fixFailed by remember { mutableStateOf(false) }
+    // The controller runs the fix (#315). The picker only draws its state.
+    val fix = state.phoneFix
+    val locating = fix.locating
     // The board's own fresh GNSS cell comes first. The map opens on it, and the owner still confirms it.
     var focus by remember { mutableStateOf(loc.gnssCell?.takeIf { draft.cell.isEmpty() }?.let { CellFocus(it, 1) }) }
+    // Each fix that found a cell moves the map once. It never drafts a cell by itself.
+    LaunchedEffect(fix.serial) { fix.cell?.let { focus = CellFocus(it, (focus?.serial ?: 0) + 1) } }
+    val latestOnAction by rememberUpdatedState(onAction)
     val close = {
-        fixJob?.cancel()
+        latestOnAction(DeviceConfigAction.StopLocating)
         onClose()
     }
     AccessDialogs(
@@ -217,22 +216,8 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
         )
     )
     val locate = {
-        request.access.run(onDeclined = { fixFailed = true }) {
-            locating = true
-            fixFailed = false
-            fixJob = scope.launch {
-                try {
-                    val cell = withTimeoutOrNull(FIX_TIMEOUT_MS) { request.cell(DeviceLocationDraft.RESOLUTION) }
-                    if (cell == null) fixFailed = true else focus = CellFocus(cell, (focus?.serial ?: 0) + 1)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    fixFailed = true
-                } finally {
-                    locating = false
-                    fixJob = null
-                }
-            }
+        request.access.run(onDeclined = { latestOnAction(DeviceConfigAction.LocationDeclined) }) {
+            latestOnAction(DeviceConfigAction.Locate(request.cell))
         }
     }
     val canPick = state.canEdit && !loc.working
@@ -242,7 +227,7 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = close, enabled = !loc.working) {
-                        Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_cancel))
+                        Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.device_back))
                     }
                     FitText(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
                     InfoButton(InfoContent(title, listOf(stringResource(Res.string.location_info), stringResource(Res.string.location_precision_info))))
@@ -261,7 +246,7 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
                         PickerLocateButton(
                             onClick = {
                                 if (locating) {
-                                    fixJob?.cancel()
+                                    onAction(DeviceConfigAction.StopLocating)
                                 } else if (canPick) {
                                     locate()
                                 }
@@ -276,7 +261,7 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
                     // One status line, read out as a cell is picked or a fix lands or fails.
                     val status = when {
                         locating -> stringResource(Res.string.location_locating)
-                        fixFailed -> stringResource(Res.string.location_fix_failed)
+                        fix.failed -> stringResource(Res.string.location_fix_failed)
                         draft.needsFix -> stringResource(Res.string.location_fresh_required)
                         draft.cell.isNotEmpty() -> stringResource(Res.string.location_set)
                         else -> stringResource(Res.string.location_placement)
@@ -322,8 +307,6 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
         }
     }
 }
-
-private const val FIX_TIMEOUT_MS = 25_000L
 
 /** The area of one cell at [resolution] in words, with the H3 resolution added at [detailed]. */
 @Composable
