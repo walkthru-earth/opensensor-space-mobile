@@ -34,6 +34,7 @@ enum class PlanStepKind {
  * `firmware.setup`, and null for the location step the app adds itself. [acked] is that bit as the
  * device reports it for the plan's [SetupPlan.version]. [satisfied] is the fact the step needs, read
  * from page 1 (a cell for a fixed Thing's location, a known mobility), true for a step that needs none.
+ * [label] is the template's title of a board step, null for a catalog step, which has its own.
  */
 data class PlanStep(
     val id: StepId,
@@ -43,6 +44,7 @@ data class PlanStep(
     val acked: Boolean,
     val satisfied: Boolean,
     val fields: List<PlanField> = emptyList(),
+    val label: LocalizedText? = null,
 ) {
     /** The fact holds and, for a declared step, the device holds its bit. */
     val done: Boolean get() = kind != PlanStepKind.UNSUPPORTED && satisfied && (ackIndex == null || acked)
@@ -128,8 +130,8 @@ data class SetupPlan(val steps: List<PlanStep>, val version: Int?, private val d
                     else -> {
                         val fields = fieldsOf(manifest, entry.keys)
                         when {
-                            fields.isNotEmpty() -> PlanStep(entry.id, PlanStepKind.GENERIC, entry.required, index, acked, satisfied = true, fields = fields)
-                            entry.required -> PlanStep(entry.id, PlanStepKind.UNSUPPORTED, required = true, ackIndex = index, acked = acked, satisfied = false)
+                            fields.isNotEmpty() -> PlanStep(entry.id, PlanStepKind.GENERIC, entry.required, index, acked, satisfied = true, fields = fields, label = entry.label)
+                            entry.required -> PlanStep(entry.id, PlanStepKind.UNSUPPORTED, required = true, ackIndex = index, acked = acked, satisfied = false, label = entry.label)
                             else -> null
                         }
                     }

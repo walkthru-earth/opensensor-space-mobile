@@ -195,14 +195,14 @@ internal object ModelJson {
     private fun stepOf(e: JsonElement): ManifestStep? {
         val o = e as? JsonObject ?: return null
         val id = idOf(o) ?: return null
-        return ManifestStep(id, required = (o["req"] as? JsonPrimitive)?.booleanOrNull == true, keys = keysOf(o))
+        return ManifestStep(id, required = (o["req"] as? JsonPrimitive)?.booleanOrNull == true, keys = keysOf(o), label = labelOf(o))
     }
 
     /** A `firmware.settings` entry, or null when it is not an object with a non-empty string `id`. */
     private fun sectionOf(e: JsonElement): ManifestSection? {
         val o = e as? JsonObject ?: return null
         val id = idOf(o) ?: return null
-        return ManifestSection(id, keys = keysOf(o))
+        return ManifestSection(id, keys = keysOf(o), label = labelOf(o))
     }
 
     private fun idOf(o: JsonObject): StepId? = (o["id"] as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotEmpty() }?.let { StepId(it.content) }
@@ -219,16 +219,24 @@ internal object ModelJson {
         val o = e as? JsonObject ?: return null
         if (key.isEmpty()) return null
         val type = stringOf(o["type"]) ?: return null
-        val label = stringOf(o["label"])
-        val i18n = (o["label_i18n"] as? JsonObject).orEmpty().mapNotNull { (lang, v) -> stringOf(v)?.let { lang to it } }.toMap()
         return ConfigKeySpec(
             key = key,
             type = ConfigKeyType(type),
             values = valuesOf(o["values"]),
             applies = stringOf(o["applies"])?.let(::ConfigApplies),
             page = (o["page"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull,
-            label = (if (label != null) mapOf(LocalizedText.UNTAGGED to label) + i18n else i18n).takeIf { it.isNotEmpty() }?.let(::LocalizedText),
+            label = labelOf(o),
         )
+    }
+
+    /**
+     * The `label` (untagged) with the `label_i18n` languages beside it, or null when neither gives a
+     * text. A language whose value is not a non-empty string is left out.
+     */
+    private fun labelOf(o: JsonObject): LocalizedText? {
+        val label = stringOf(o["label"])
+        val i18n = (o["label_i18n"] as? JsonObject).orEmpty().mapNotNull { (lang, v) -> stringOf(v)?.let { lang to it } }.toMap()
+        return (if (label != null) mapOf(LocalizedText.UNTAGGED to label) + i18n else i18n).takeIf { it.isNotEmpty() }?.let(::LocalizedText)
     }
 
     private fun stringOf(e: JsonElement?): String? = (e as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotEmpty() }?.content

@@ -34,11 +34,15 @@ data class SetupManifest(
 /**
  * One `firmware.setup` entry. [required] (`req`) is true when setup cannot finish without the step.
  * [keys] lists the `config_keys` a generic step shows, empty for a catalog step that needs none.
+ * [label] is the page title of a board step, in the same shape as [ConfigKeySpec.label].
  */
-data class ManifestStep(val id: StepId, val required: Boolean = false, val keys: List<String> = emptyList())
+data class ManifestStep(val id: StepId, val required: Boolean = false, val keys: List<String> = emptyList(), val label: LocalizedText? = null)
 
-/** One `firmware.settings` entry, a Device settings section and the `config_keys` it shows. */
-data class ManifestSection(val id: StepId, val keys: List<String> = emptyList())
+/**
+ * One `firmware.settings` entry, a Device settings section and the `config_keys` it shows. [label] is
+ * the card title of a board section, in the same shape as [ConfigKeySpec.label].
+ */
+data class ManifestSection(val id: StepId, val keys: List<String> = emptyList(), val label: LocalizedText? = null)
 
 /**
  * The id of a setup step or settings section. A [KNOWN] id names a component of the app's fixed
