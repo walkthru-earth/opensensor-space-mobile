@@ -3,7 +3,6 @@ package space.opensensor.family.air
 import space.opensensor.model.AppProfile
 import space.opensensor.model.BoardTemplate
 import space.opensensor.model.BundledCatalog
-import space.opensensor.model.Family
 import space.opensensor.model.Thing
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,9 +48,61 @@ class AirFamilyTest {
         assertTrue(particles())
     }
 
+    private val crowpanel = BundledCatalog.templates.single { it.id == "crowpanel-epaper-telemetry-v1" }
+
     @Test
-    fun `a profile of another family has no particle cards`() {
-        assertFalse(particles(profile = overlay.copy(family = Family.GENERIC)))
+    fun `the CrowPanel is air by its properties with no bundled profile`() {
+        val thing = Thing.join("c", crowpanel)
+        assertTrue(AirFamily.PARTICLES in AirFamily.capabilitiesOf(thing))
+        assertFalse(AirFamily.BATCH_ESTIMATE in AirFamily.capabilitiesOf(thing))
+        assertEquals("pm25_mass_ug_m3", thing.air?.pm25?.name)
+    }
+
+    @Test
+    fun `a Sensirion board gets no EPA correction and a Plantower board does`() {
+        assertTrue(AirFamily.derive(crowpanel).isEmpty())
+        assertEquals(false, AirColumns.of(crowpanel)?.epa)
+        assertEquals(true, AirColumns.of(waveshare)?.epa)
+        val cores3 = assertNotNull(BundledCatalog.template("3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"))
+        assertEquals(AirFamily.PM25_ATMOSPHERIC, AirFamily.derive(cores3).single().viewOf)
+    }
+
+    @Test
+    fun `the PM2_5 metrics resolve per Thing`() {
+        val panel = Thing.join("c", crowpanel)
+        assertEquals("pm25_mass_ug_m3", AirMetrics.pm25(panel)?.column)
+        assertEquals(null, AirMetrics.pm25Corrected(panel), "a Sensirion PM2.5 has no EPA view")
+        val board = Thing.join("w", waveshare, overlay)
+        assertEquals(AirFamily.PM25_ATMOSPHERIC, AirMetrics.pm25(board)?.column)
+        assertEquals(AirFamily.PM25_CORRECTED_ID, AirMetrics.pm25Corrected(board)?.id)
+    }
+
+    @Test
+    fun `a CF1 PM2_5 from a sensor the correction was not fitted on derives nothing`() {
+        val other = waveshare.copy(
+            datastreams = waveshare.datastreams.map { ds ->
+                if (ds.name == AirFamily.PM25_CF1) ds.copy(sensor = ds.sensor?.copy(procedure = "other-sensor")) else ds
+            },
+        )
+        assertTrue(AirFamily.derive(other).isEmpty())
+    }
+
+    @Test
+    fun `a template without a PM2_5 property has no air surface`() {
+        val noPm = waveshare.copy(datastreams = waveshare.datastreams.map { if (it.property?.id == AirProperty.PM25) it.copy(property = null) else it })
+        assertEquals(null, AirColumns.of(noPm))
+        assertEquals(null, AirFamily.rowCheck(noPm))
+        assertTrue(AirFamily.capabilitiesOf(Thing.join("t", noPm)).isEmpty())
+    }
+
+    @Test
+    fun `the air columns are found by property in size order`() {
+        val air = assertNotNull(AirColumns.of(assertNotNull(BundledCatalog.template("3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"))))
+        assertEquals(AirFamily.PARTICLE_BINS, air.bins.map { it.name })
+        assertEquals(AirFamily.PARTICLE_BINS.first(), air.gt03?.name)
+        assertEquals(listOf(">0.3", ">0.5", ">1", ">2.5", ">5", ">10"), air.bins.map { AirProperty.binLabel(it.property!!.id) })
+        assertEquals(AirFamily.PM25_CF1, air.cf1[1]?.name)
+        assertEquals(AirFamily.RELATIVE_HUMIDITY, air.humidity?.name)
     }
 
     @Test

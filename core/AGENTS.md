@@ -28,7 +28,7 @@ one phone-derived stream with its own id and `sourceColumns`, referencing a boar
 `ObservedProperty` and a `Sensor` of procedure and board), `AppProfile` (app owned, keyed by `dict`,
 derived from the template when none is bundled), `ThingCollection`, `Scale`, `ValidityGate`, and
 `Thing.join`, which joins them. A thing keeps every datastream whatever its role, the profile
-picks what shows first. `Aggregate`, `Role` and `Family` are open value classes, so an unknown value
+picks what shows first. `Aggregate` and `Role` are open value classes, so an unknown value
 parses (an unknown aggregate rolls up as `point`). A template column also carries display hints,
 `title` with `opensensor:title_i18n`, `description` with `opensensor:description_i18n`,
 `opensensor:decimals` (0 to 9), `opensensor:group` (`DisplayGroup`, open), `opensensor:scale` and

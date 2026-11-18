@@ -345,7 +345,6 @@ internal val CORES3_COLLECTION = """
 internal val CORES3_PROFILE = """
 {
   "dict": "$CORES3_DICT",
-  "family": "air",
   "hero": "mood",
   "hidden": ["accel_z_g"],
   "unknown_field": true

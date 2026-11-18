@@ -40,7 +40,6 @@ class BundledCatalogTest {
         BundledCatalog.profiles.forEach { profile ->
             assertNotNull(BundledCatalog.template(profile.dict), "no bundled template for profile ${profile.dict}")
             val joined = assertNotNull(BundledCatalog.thing("s1", profile.dict), profile.dict).profile
-            assertEquals(profile.family, joined.family, profile.dict)
             assertEquals(profile.hero, joined.hero, profile.dict)
             assertEquals(profile.hidden, joined.hidden, profile.dict)
         }
@@ -102,7 +101,7 @@ class BundledCatalogTest {
     @Test
     fun theBundledJoinReadsTheRegistry() {
         val thing = assertNotNull(BundledCatalog.thing("s1", waveshareDict))
-        assertEquals(Family("air"), thing.profile.family)
+        assertEquals("air-mood", thing.profile.hero)
         assertEquals("pm25_atmospheric_ug_m3", thing.primary?.name)
         val pm25 = thing.datastream("pm25_atmospheric_ug_m3")!!
         assertEquals("PM2.5 mass concentration", pm25.label("en"))
@@ -116,7 +115,7 @@ class BundledCatalogTest {
     @Test
     fun theCrowPanelDerivesItsProfileFromTheRegistry() {
         val thing = assertNotNull(BundledCatalog.thing("s1", crowpanelDict))
-        assertEquals(Family.GENERIC, thing.profile.family)
+        assertNull(thing.profile.hero)
         // No template primary, so the first measurement with a registry scale.
         assertEquals("pm25_mass_ug_m3", thing.primary?.name)
         val pm25 = thing.datastream("pm25_mass_ug_m3")!!
@@ -136,7 +135,7 @@ class BundledCatalogTest {
         val json = BundledFiles.files.getValue(waveshareFile).replace(waveshareDict, unknownDict)
         val served = BoardTemplate.parse(json, desc = DESC_B)
         val thing = assertNotNull(BundledCatalog.thing("s1", unknownDict, desc = DESC_B, served = listOf(served)))
-        assertEquals(Family.GENERIC, thing.profile.family)
+        assertNull(thing.profile.hero)
         assertEquals("PM2.5 mass concentration", thing.datastream("pm25_atmospheric_ug_m3")!!.label("en"))
         assertEquals("µg/m³", thing.datastream("pm25_atmospheric_ug_m3")!!.displayUnit)
         assertEquals("°C", thing.datastream("ambient_temperature_c")!!.displayUnit)

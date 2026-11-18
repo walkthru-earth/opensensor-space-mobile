@@ -105,9 +105,10 @@ sealed interface NowReading {
             if (live == null) return Waiting
             val state = live.pmState ?: return Waiting
             if (!state.valid) return SensorNotReady(state, hint(state))
-            val raw = live.value(AirFamily.PM25_ATMOSPHERIC)
-            // The correction reads the CF=1 PM2.5 and the sensor's RH, the inputs it was fitted on.
-            val corrected = EpaPm25Correction.correct(live.value(AirFamily.PM25_CF1), live.value(AirFamily.RELATIVE_HUMIDITY))
+            val air = live.thing.air ?: return Waiting
+            val raw = live.value(air.pm25.name)
+            // The correction reads the Plantower CF=1 PM2.5 and the sensor's RH, the inputs it was fitted on.
+            val corrected = if (air.epa) EpaPm25Correction.correct(air.pm25Cf1?.let { live.value(it.name) }, air.humidity?.let { live.value(it.name) }) else null
             val pm = corrected ?: raw ?: return Waiting
             val liveBasis = if (corrected != null) Pm25Basis.CORRECTED else Pm25Basis.RAW
             nowCast?.let { cast ->

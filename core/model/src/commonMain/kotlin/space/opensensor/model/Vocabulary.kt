@@ -47,18 +47,6 @@ value class Aggregate(val id: String) {
 }
 
 /**
- * The device family an app profile routes to (`air`, `weather`, `soil` and so on), which picks a
- * family plugin. Open, a family with no plugin renders with generic cards.
- */
-@JvmInline
-value class Family(val id: String) {
-    companion object {
-        /** The family of a profile derived from a template, no plugin. */
-        val GENERIC = Family("generic")
-    }
-}
-
-/**
  * Something a thing can do or show, such as `live` or `config`. Screens ask for a capability instead
  * of comparing schema strings, key names or families. Open, so a family plugin adds its own id
  * without a code change here.

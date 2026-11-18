@@ -2,6 +2,7 @@ package space.opensensor.today
 
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.LiveSample
+import space.opensensor.family.air.AirFamily
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.TodayCard.BOARD
 import space.opensensor.today.TodayCard.CLOCK
@@ -21,8 +22,13 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class FamilyPresenterTest {
+    init {
+        AirFamily.install()
+    }
+
     private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809")
     private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9")
+    private val crowpanel = DeviceInfo(proto = 3, schema = "crowpanel-epaper-telemetry-v1", dict = "e7279c4edbe87071e4a51889124a43d7ffcd1977c79c8575887ae35bdee10903")
     private val soilSample = LiveSample.parse("""{"sm":0.31,"st":18.5,"pct":80}""")
 
     private fun state(info: DeviceInfo?, live: LiveSample?, level: DetailLevel) = TodayUiState(TodaySnapshot(info = info, live = live), level)
@@ -34,6 +40,15 @@ class FamilyPresenterTest {
         assertSame(AirPresenter, HeroRegistry.presenterFor(HeroRegistry.AIR_MOOD))
         assertSame(GenericPresenter, HeroRegistry.presenterFor(null))
         assertSame(GenericPresenter, HeroRegistry.presenterFor("soil-dial"))
+        assertSame(AirPresenter, HeroRegistry.presenterFor(null, setOf(AirFamily.PARTICLES)))
+    }
+
+    @Test
+    fun aBoardWithNoProfileThatShowsPm25GetsTheAirHero() {
+        // The CrowPanel has no bundled profile, its PM2.5 property alone makes it air.
+        val state = state(crowpanel, null, DetailLevel.SIMPLE)
+        assertTrue(AirFamily.PARTICLES in state.capabilities.capabilities)
+        assertSame(AirPresenter, state.presenter)
     }
 
     @Test

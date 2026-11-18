@@ -26,5 +26,6 @@ fun DeviceCapabilities.showsBatchEstimate(boardBatchCandidate: Int?): Boolean = 
 fun DeviceCapabilities.showsAirCards(sample: LiveSample?): Boolean {
     if (AirFamily.PARTICLES !in capabilities) return false
     val reading = reading(sample) ?: return false
-    return reading.carriesStateOf(AirFamily.PM25_ATMOSPHERIC) && reading.pmState?.absent != true
+    val pm25 = reading.thing.air?.pm25 ?: return false
+    return reading.carriesStateOf(pm25.name) && reading.pmState?.absent != true
 }

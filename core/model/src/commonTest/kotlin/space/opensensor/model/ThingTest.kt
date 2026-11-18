@@ -14,7 +14,6 @@ class ThingTest {
     @Test
     fun parsesTheAppProfileOverlay() {
         assertEquals(CORES3_DICT, profile.dict)
-        assertEquals(Family("air"), profile.family)
         assertEquals("mood", profile.hero)
         assertEquals(setOf("accel_z_g"), profile.hidden)
         assertTrue(profile.labels.isEmpty())
@@ -43,7 +42,6 @@ class ThingTest {
     fun joinLaysTheOverlayOnTheDerivedProfile() {
         val thing = Thing.join("3f2b9c1e", cores3, profile, collection, deviceId = 7, h3Cell = "887576970bfffff")
         assertEquals(CORES3_DICT, thing.dict)
-        assertEquals(Family("air"), thing.profile.family)
         assertEquals("mood", thing.profile.hero)
         // The Collection scale makes PM2.5 the first measurement with a scale.
         assertEquals("pm25_atmospheric_ug_m3", thing.primary?.name)
@@ -104,7 +102,6 @@ class ThingTest {
     @Test
     fun derivedProfileWhenNoneIsBundled() {
         val thing = Thing.join("3f2b9c1e", cores3)
-        assertEquals(Family.GENERIC, thing.profile.family)
         assertNull(thing.profile.hero)
         // The first physicalMeasurement column with a registry scale.
         assertEquals("pm25_atmospheric_ug_m3", thing.primary?.name)
@@ -135,7 +132,7 @@ class ThingTest {
     fun profileForAnotherDictionaryIsNotUsed() {
         val other = BoardTemplate.parse(template("""{"name": "pm25_atmospheric_ug_m3", "type": "int32", "roles": ["physicalMeasurement"]}"""))
         val thing = Thing.join("s", other, profile)
-        assertEquals(Family.GENERIC, thing.profile.family)
+        assertNull(thing.profile.hero)
         assertEquals(OTHER_DICT, thing.profile.dict)
     }
 
@@ -188,7 +185,7 @@ class ThingTest {
 
     @Test
     fun rejectsBadProfilesAndCollections() {
-        assertFailsWith<IllegalArgumentException> { AppProfile.parse("""{"dict": "abc", "family": "air"}""") }
+        assertFailsWith<IllegalArgumentException> { AppProfile.parse("""{"dict": "abc"}""") }
         assertFailsWith<IllegalArgumentException> { ThingCollection.parse("""{"type": "Feature", "id": "x"}""") }
     }
 
