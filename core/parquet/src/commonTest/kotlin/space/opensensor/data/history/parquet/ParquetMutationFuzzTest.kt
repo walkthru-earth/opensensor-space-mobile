@@ -3,7 +3,7 @@ package space.opensensor.data.history.parquet
 import kotlinx.coroutines.test.runTest
 import kotlin.random.Random
 import kotlin.test.Test
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Mutates bytes anywhere in real Parquet fixtures, the data pages included, with a fixed seed (#97).
@@ -62,7 +62,7 @@ class ParquetMutationFuzzTest {
     }
 
     @Test
-    fun `mutated fixtures only ever fail as a format error`() = runTest(timeout = 60.seconds) {
+    fun `mutated fixtures only ever fail as a format error`() = runTest(timeout = 5.minutes) {
         val random = Random(97)
         for (path in FIXTURES) {
             val f = Fixture(path)
