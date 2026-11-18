@@ -3,12 +3,18 @@ package space.opensensor.setup
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.navigationevent.DirectNavigationEventInput
 import androidx.navigationevent.NavigationEventDispatcher
@@ -173,6 +179,35 @@ class SetupScreenTest {
         waitForIdle()
         assertFalse(run.controller!!.state.value.askClose)
         assertEquals(1, run.closes)
+    }
+
+    @Test
+    fun aCloseAfterTheHostSwappedItsLambdaCallsTheNewOne() = runComposeUiTest {
+        val calls = ArrayList<String>()
+        var onClose by mutableStateOf<() -> Unit>({ calls += "first" })
+        var controller: SetupController? = null
+        setContent {
+            CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides owner) {
+                MaterialTheme {
+                    val scope = rememberCoroutineScope()
+                    val c = controller ?: SetupController(scope, FakePort()).also { controller = it }
+                    SetupScreen(controller = c, config = null, bluetooth = null, onConfigAction = {}, onClose = onClose, onOpenSensor = {})
+                }
+            }
+        }
+        waitForIdle()
+        onClose = { calls += "second" }
+        waitForIdle()
+        back.backCompleted()
+        waitForIdle()
+        assertEquals(listOf("second"), calls)
+    }
+
+    @Test
+    fun theToolbarArrowSaysBack() = runComposeUiTest {
+        show(FakePort())
+        onNodeWithContentDescription("Back").assertHasClickAction()
+        onAllNodes(hasContentDescription("Close")).assertCountEquals(0)
     }
 
     @Test

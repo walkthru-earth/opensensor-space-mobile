@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -153,6 +154,7 @@ fun NearMeButton(
     val location = nearMe.location
     val reduce = LocalReduceMotion.current
     var missed by remember { mutableStateOf(false) }
+    val latestTarget by rememberUpdatedState(target)
     LaunchedEffect(nearMe.recenter, location) {
         missed = false
         if (nearMe.recenter == 0 || location == null) return@LaunchedEffect
@@ -161,7 +163,7 @@ fun NearMeButton(
             missed = true
             return@LaunchedEffect
         }
-        val centre = target(fix.position.latitude, fix.position.longitude) ?: return@LaunchedEffect
+        val centre = latestTarget(fix.position.latitude, fix.position.longitude) ?: return@LaunchedEffect
         mapState.moveCamera(Position(longitude = centre.lng, latitude = centre.lat), NEAR_ME_ZOOM, reduce)
     }
     // The miss is shown beside the button as well as spoken. The note takes no width of its own, so

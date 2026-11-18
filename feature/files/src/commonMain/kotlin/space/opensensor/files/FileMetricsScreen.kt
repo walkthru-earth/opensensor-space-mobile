@@ -23,6 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -283,7 +285,8 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
 /** One page of decoded rows, each row one line of its cells in column order, with paging by row index. */
 @Composable
 private fun RowsCard(state: RowsState, onPage: (Long) -> Unit) {
-    LaunchedEffect(Unit) { if (state == RowsState.Idle) onPage(0) }
+    val latestOnPage by rememberUpdatedState(onPage)
+    LaunchedEffect(Unit) { if (state == RowsState.Idle) latestOnPage(0) }
     SectionCard(stringResource(Res.string.fm_rows_page), modifier = Modifier.padding(top = 8.dp)) {
         val page = when (state) {
             RowsState.Idle, RowsState.Loading -> {

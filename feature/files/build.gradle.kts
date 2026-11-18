@@ -25,6 +25,8 @@ kotlin {
             implementation(project(":ui:strings"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
+            // Reads the time zone again on each resume (SystemTimeZone).
+            implementation(libs.jetbrains.lifecycle.runtime.compose)
         }
         androidMain.dependencies {
             // The save picker (CreateDocument) and the share chooser.
