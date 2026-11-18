@@ -63,11 +63,6 @@ import space.opensensor.data.ble.RawFrameRecord
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.debug.resources.Res
 import space.opensensor.debug.resources.action_back
-import space.opensensor.debug.resources.ago_days
-import space.opensensor.debug.resources.ago_hours
-import space.opensensor.debug.resources.ago_just_now
-import space.opensensor.debug.resources.ago_minutes
-import space.opensensor.debug.resources.ago_seconds
 import space.opensensor.debug.resources.conn_connecting
 import space.opensensor.debug.resources.conn_disconnected
 import space.opensensor.debug.resources.debug_archive
@@ -133,6 +128,7 @@ import space.opensensor.designsystem.SectionCard
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.TickingText
 import space.opensensor.designsystem.WarningNote
+import space.opensensor.strings.rememberAgoFormatter
 import kotlin.time.Instant
 
 private const val NO_VALUE = "n/a"
@@ -159,7 +155,7 @@ fun DebugScreen(
 ) {
     val state by controller.state.collectAsState()
     val listState = rememberLazyListState()
-    val ago = agoFormatter()
+    val ago = rememberAgoFormatter()
 
     // Null while the stored level loads. Any confirmed level below Developer leaves at once.
     val latestOnBack by rememberUpdatedState(onBack)
@@ -463,31 +459,6 @@ private fun files(n: Int): String = pluralStringResource(Res.plurals.scan_files,
 
 @Composable
 private fun rows(n: Long): String = pluralStringResource(Res.plurals.fm_rows_count, n.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), n)
-
-/** Marker that stands in for the count, so a non-composable ticking lambda can fill it in. */
-private const val COUNT = ""
-
-/** "just now", "12 s ago" and so on, from the module's catalogue. */
-@Composable
-private fun agoFormatter(): (Long) -> String {
-    val now = stringResource(Res.string.ago_just_now)
-    val s = stringResource(Res.string.ago_seconds, COUNT)
-    val m = stringResource(Res.string.ago_minutes, COUNT)
-    val h = stringResource(Res.string.ago_hours, COUNT)
-    val d = stringResource(Res.string.ago_days, COUNT)
-    return remember(now, s, m, h, d) { { ageMs -> formatAgo(ageMs, now, s, m, h, d) } }
-}
-
-internal fun formatAgo(ageMs: Long, now: String, s: String, m: String, h: String, d: String): String {
-    val sec = ageMs / 1000
-    return when {
-        ageMs < 0 -> now
-        sec < 60 -> s.replace(COUNT, sec.toString())
-        sec < 3600 -> m.replace(COUNT, (sec / 60).toString())
-        sec < 86_400 -> h.replace(COUNT, (sec / 3600).toString())
-        else -> d.replace(COUNT, (sec / 86_400).toString())
-    }
-}
 
 /** True once the stored level is known and is below Developer. Null (still loading) stays. */
 internal fun leavesDebug(developer: Boolean?): Boolean = developer == false

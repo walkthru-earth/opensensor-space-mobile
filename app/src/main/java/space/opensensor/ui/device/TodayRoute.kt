@@ -8,7 +8,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalResources
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import space.opensensor.data.lan.LanDevice
@@ -50,7 +49,6 @@ fun TodayRoute(
     val controller = viewModel.controller
     val state by controller.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val res = LocalResources.current
     val context = LocalContext.current
     // Asked only from a tap. A previously enrolled sensor may reconnect over the discovered LAN.
     val bluetooth = rememberBluetoothAccess()
@@ -61,7 +59,7 @@ fun TodayRoute(
     val notificationPermission = rememberNotificationPermission()
 
     // The clock question reaches the shared controller through the TodaySource notices.
-    CollectEvents(viewModel.events) { ev -> snackbar.showDeviceEvent(res, ev) }
+    CollectEvents(viewModel.events) { ev -> snackbar.showDeviceEvent(ev) }
     // The repository dropped the session (user disconnected, or another device was picked).
     val current = state.snapshot.address
     LaunchedEffect(current) {

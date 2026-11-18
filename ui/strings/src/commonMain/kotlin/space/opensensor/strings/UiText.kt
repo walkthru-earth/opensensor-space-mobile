@@ -3,6 +3,8 @@ package space.opensensor.strings
 import androidx.compose.runtime.Composable
 import org.jetbrains.compose.resources.PluralStringResource
 import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.getPluralString
+import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -21,7 +23,7 @@ sealed interface UiText {
      */
     data class Plain(val text: String) : UiText
 
-    /** A catalogue string with its format arguments (`%1$s`, `%1$d`). */
+    /** A catalogue string with its format arguments (`%1$s`, `%1$d`). An argument that is a [UiText] is resolved first. */
     data class Resource(val res: StringResource, val args: List<Any> = emptyList()) : UiText
 
     /** A catalogue plural chosen by [count], with its format arguments. */
@@ -47,6 +49,19 @@ sealed interface UiText {
 fun UiText.resolve(): String = when (this) {
     UiText.None -> ""
     is UiText.Plain -> text
-    is UiText.Resource -> stringResource(res, *args.toTypedArray())
-    is UiText.Plural -> pluralStringResource(res, count, *args.toTypedArray())
+    is UiText.Resource -> stringResource(res, *resolvedArgs(args))
+    is UiText.Plural -> pluralStringResource(res, count, *resolvedArgs(args))
 }
+
+/** [resolve] outside composition, for a snackbar or a notice shown from a coroutine. */
+suspend fun UiText.load(): String = when (this) {
+    UiText.None -> ""
+    is UiText.Plain -> text
+    is UiText.Resource -> getString(res, *loadedArgs(args))
+    is UiText.Plural -> getPluralString(res, count, *loadedArgs(args))
+}
+
+@Composable
+private fun resolvedArgs(args: List<Any>): Array<Any> = args.map { if (it is UiText) it.resolve() else it }.toTypedArray()
+
+private suspend fun loadedArgs(args: List<Any>): Array<Any> = args.map { if (it is UiText) it.load() else it }.toTypedArray()

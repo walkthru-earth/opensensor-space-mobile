@@ -29,8 +29,8 @@ import space.opensensor.units.byteSize
 /** Shown where a value is missing or not read yet. Never a long dash (copy rules). */
 const val NO_VALUE = "n/a"
 
-/** A byte count as [UiText], `1.5 KB` or `1.5 كيلوبايت`, through the shared [byteSize] that Files uses too. */
-fun bytesText(bytes: Long): UiText {
+/** A byte count, `1.5 KB` or `1.5 كيلوبايت`, through the shared [byteSize] that Files uses too, for notifications built outside composition. */
+fun formatBytes(bytes: Long, res: Resources): String {
     val size = byteSize(bytes)
     val id = when (size.unit) {
         ByteUnit.B -> R.string.unit_bytes
@@ -38,11 +38,8 @@ fun bytesText(bytes: Long): UiText {
         ByteUnit.MB -> R.string.unit_megabytes
         ByteUnit.GB -> R.string.unit_gigabytes
     }
-    return UiText.Res(id, listOf(size.number))
+    return res.getString(id, size.number)
 }
-
-/** [bytesText] resolved, for notifications built outside composition. */
-fun formatBytes(bytes: Long, res: Resources): String = bytesText(bytes).resolve(res)
 
 fun formatAgo(ageMs: Long, res: Resources): String {
     val s = ageMs / 1000

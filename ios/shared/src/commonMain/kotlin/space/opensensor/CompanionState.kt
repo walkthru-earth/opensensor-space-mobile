@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import space.opensensor.collection.SyncEndReason
+import space.opensensor.data.DeviceMessage
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.data.protocol.DeviceInfo
@@ -18,8 +19,6 @@ import space.opensensor.permissions.IosAuthorization
 import space.opensensor.strings.UiText
 import space.opensensor.strings.resources.Res
 import space.opensensor.strings.resources.companion_connecting_pin
-import space.opensensor.strings.resources.companion_firmware_update
-import space.opensensor.strings.resources.companion_firmware_update_unknown
 import space.opensensor.strings.resources.companion_info_invalid
 import space.opensensor.strings.resources.companion_lan_denied
 import space.opensensor.strings.resources.companion_lan_found
@@ -31,6 +30,7 @@ import space.opensensor.strings.resources.companion_live
 import space.opensensor.strings.resources.companion_live_unreadable
 import space.opensensor.strings.resources.companion_status_unreadable
 import space.opensensor.strings.resources.now_waiting
+import space.opensensor.strings.text
 import kotlin.time.Clock
 
 /** One scan result. [advertFlags] is the advert flags byte, null without service data. [seenMs] is when it was heard. */
@@ -514,8 +514,7 @@ class CompanionState {
         if (gate is ProtoGate.UpdateFirmware) {
             outdatedId = selectedId
             close(
-                gate.reported?.let { UiText.of(Res.string.companion_firmware_update, it, gate.required) }
-                    ?: UiText.of(Res.string.companion_firmware_update_unknown, gate.required),
+                DeviceMessage.FirmwareUpdateRequired(gate.reported, gate.required).text(),
             )
             return false
         }

@@ -60,15 +60,6 @@ class TodayFormatTest {
     }
 
     @Test
-    fun agoPicksTheLargestWholeUnit() {
-        assertEquals(AgoUnit.JUST_NOW to 0L, agoParts(-5))
-        assertEquals(AgoUnit.SECONDS to 12L, agoParts(12_400))
-        assertEquals(AgoUnit.MINUTES to 2L, agoParts(150_000))
-        assertEquals(AgoUnit.HOURS to 3L, agoParts(3 * 3_600_000L + 1))
-        assertEquals(AgoUnit.DAYS to 2L, agoParts(2 * 86_400_000L))
-    }
-
-    @Test
     fun fillReplacesEitherPlaceholder() {
         assertEquals("12 s ago", fill("%1\$s s ago", "12"))
         assertEquals("قبل 12 ث", fill("قبل %1\$d ث", "12"))

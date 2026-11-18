@@ -1,0 +1,109 @@
+# Keys still in more than one English catalogue, one per line with the modules that hold them.
+# CopyLintTest.repeatedKeysOnlyShrink keeps this list exact. Remove a line when its copies become one.
+action_back feature/debug feature/files ui/strings
+action_cancel app feature/device feature/today ui/strings
+action_not_now app ui/strings
+action_reconnect app feature/device feature/today
+ago_days app ui/strings
+ago_hours app ui/strings
+ago_just_now app ui/strings
+ago_minutes app ui/strings
+ago_seconds app ui/strings
+app_name app ui/strings
+autosync_title app ui/strings
+batch_value feature/today ui/strings
+board_title feature/device feature/today
+chart_touch app feature/history
+conn_connecting feature/debug feature/today ui/strings
+conn_disconnected feature/debug feature/today ui/strings
+conn_failed feature/devices feature/today ui/strings
+conn_link_lost feature/devices feature/today
+conn_pairing feature/devices feature/today
+conn_pairing_repair feature/today ui/strings
+conn_ready feature/today ui/strings
+device_boot app feature/today
+device_config_read app feature/today
+device_connected_over app feature/today
+device_default app feature/today
+device_dictionary app feature/today
+device_firmware app feature/today
+device_id app feature/today
+device_link app feature/today
+device_max_read app feature/today
+device_payload app feature/today
+device_protocol app feature/today
+device_refresh app feature/device
+device_schema app feature/today
+device_schema_cols app feature/today
+device_screen_title app feature/device
+device_thing app feature/today
+device_title app feature/today
+device_unnamed app feature/today
+files_bytes_of app feature/files
+files_stop app feature/files
+fm_rows_count app feature/debug feature/files
+history_of feature/files feature/history
+info_privacy feature/devices feature/settings
+msg_background_owns_command feature/debug ui/strings
+msg_bonds_cleared feature/device ui/strings
+msg_busy feature/device feature/today ui/strings
+msg_config_rejected_lan feature/device ui/strings
+msg_config_rejected_location feature/device ui/strings
+msg_config_rejected_other feature/device ui/strings
+msg_config_rejected_pairing feature/device ui/strings
+msg_config_rejected_sensor feature/device ui/strings
+msg_config_rejected_site feature/device ui/strings
+msg_config_rejected_wifi feature/device ui/strings
+msg_failed_flush feature/today ui/strings
+msg_failed_get_config feature/device ui/strings
+msg_failed_get_token feature/device ui/strings
+msg_failed_reboot feature/device ui/strings
+msg_failed_rotate_token feature/device ui/strings
+msg_failed_set_config feature/device ui/strings
+msg_finalized feature/today ui/strings
+msg_lan_off feature/device ui/strings
+msg_lan_on feature/device ui/strings
+msg_lan_token_stored feature/device ui/strings
+msg_pairing_saved feature/device ui/strings
+msg_rebooting feature/device ui/strings
+msg_rejected_flush feature/today ui/strings
+msg_rejected_get_config feature/device ui/strings
+msg_rejected_get_token feature/device ui/strings
+msg_rejected_reboot feature/device ui/strings
+msg_rejected_rotate_token feature/device ui/strings
+msg_rejected_set_config feature/device ui/strings
+msg_saved_after_reboot feature/device ui/strings
+msg_secret_needs_bluetooth feature/device ui/strings
+msg_token_rotated_fetch feature/device ui/strings
+msg_token_rotated_stored feature/device ui/strings
+msg_wifi_off feature/device ui/strings
+msg_wifi_on feature/device ui/strings
+msg_wifi_sent feature/device ui/strings
+nav_back app feature/today
+nav_debug feature/debug feature/today ui/strings
+nav_disconnect app feature/today ui/strings
+notif_device app ui/strings
+notif_failures app ui/strings
+notif_problems app ui/strings
+notif_synced app ui/strings
+notif_verified app ui/strings
+now_waiting feature/today ui/strings
+perm_bt_body app feature/devices
+perm_bt_settings_body app feature/devices
+perm_bt_settings_title app feature/devices
+perm_bt_title app feature/devices
+perm_continue app ui/strings
+perm_lan_body app feature/device
+perm_open_settings app ui/strings
+row_groups feature/files feature/today
+scan_files feature/debug feature/devices feature/files
+sensor_scan_unavailable app ui/strings
+sensor_scan_unrecognized app ui/strings
+sync_some_failed feature/today ui/strings
+transport_ble feature/debug feature/today
+transport_fake feature/debug feature/today
+transport_lan feature/debug feature/today
+unit_bytes app feature/files ui/strings
+unit_gigabytes app feature/files ui/strings
+unit_kilobytes app feature/files ui/strings
+unit_megabytes app feature/files ui/strings

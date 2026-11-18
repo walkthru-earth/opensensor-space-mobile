@@ -33,7 +33,8 @@ layer. `components/` keeps only what still needs app types or `R.string`.
   dialogs. Timing table in `docs/screens.md`.
 - Android only copy lives in `res/values/strings.xml`, with plurals for counts. Shared copy lives
   in the Compose resources of each shared module. Data-layer snackbars arrive as `DeviceMessage`
-  codes and are mapped in `components/DeviceMessages.kt`.
+  codes, mapped once for both phones by `DeviceMessageText.kt` in `:ui:strings` and shown by
+  `components/DeviceMessages.kt`.
 - Android notifications use coloured large peacock portraits and a monochrome peacock small icon
   for system tinting.
 - Routes keep light and dark previews at Simple and Developer (`ScreenPreviews.kt`).

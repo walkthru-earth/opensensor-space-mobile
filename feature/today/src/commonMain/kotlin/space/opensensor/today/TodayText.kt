@@ -1,7 +1,6 @@
 package space.opensensor.today
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.ble.ConnectionState
@@ -15,11 +14,6 @@ import space.opensensor.family.air.PmsStatus
 import space.opensensor.family.air.formatPm
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.resources.Res
-import space.opensensor.today.resources.ago_days
-import space.opensensor.today.resources.ago_hours
-import space.opensensor.today.resources.ago_just_now
-import space.opensensor.today.resources.ago_minutes
-import space.opensensor.today.resources.ago_seconds
 import space.opensensor.today.resources.conn_connecting
 import space.opensensor.today.resources.conn_disconnected
 import space.opensensor.today.resources.conn_discovering
@@ -105,48 +99,9 @@ internal fun formatUptime(seconds: Long): String {
     }
 }
 
-/** Which "ago" string an age uses and the number it carries, a pure rule for tests. */
-internal fun agoParts(ageMs: Long): Pair<AgoUnit, Long> {
-    val s = ageMs / 1000
-    return when {
-        ageMs < 0 -> AgoUnit.JUST_NOW to 0L
-        s < 60 -> AgoUnit.SECONDS to s
-        s < 3600 -> AgoUnit.MINUTES to s / 60
-        s < 86_400 -> AgoUnit.HOURS to s / 3600
-        else -> AgoUnit.DAYS to s / 86_400
-    }
-}
-
-internal enum class AgoUnit { JUST_NOW, SECONDS, MINUTES, HOURS, DAYS }
-
 /** Fills the first `%1$s` or `%1$d` of a template read once, for leaf lambdas that tick each second. */
 internal fun fill(template: String, value: String): String =
     template.replace("%1\$s", value).replace("%1\$d", value)
-
-/**
- * "12 s ago" as a plain function bound to the current language, for `TickingText` lambdas. The
- * templates are read once per composition, the lambda only fills in the number.
- */
-@Composable
-internal fun agoFormatter(): (Long) -> String {
-    val justNow = stringResource(Res.string.ago_just_now)
-    val seconds = stringResource(Res.string.ago_seconds)
-    val minutes = stringResource(Res.string.ago_minutes)
-    val hours = stringResource(Res.string.ago_hours)
-    val days = stringResource(Res.string.ago_days)
-    return remember(justNow, seconds, minutes, hours, days) {
-        { ageMs ->
-            val (unit, n) = agoParts(ageMs)
-            when (unit) {
-                AgoUnit.JUST_NOW -> justNow
-                AgoUnit.SECONDS -> fill(seconds, n.toString())
-                AgoUnit.MINUTES -> fill(minutes, n.toString())
-                AgoUnit.HOURS -> fill(hours, n.toString())
-                AgoUnit.DAYS -> fill(days, n.toString())
-            }
-        }
-    }
-}
 
 @Composable
 internal fun AirMood.titleText(): String = moodWord(step)

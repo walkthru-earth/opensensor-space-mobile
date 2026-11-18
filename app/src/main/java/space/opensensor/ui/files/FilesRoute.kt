@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -39,7 +38,6 @@ fun FilesRoute(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val device by viewModel.deviceFiles.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val res = LocalResources.current
     val level = state.detailLevel
 
     // The sync runs under a dataSync foreground service whose notification needs POST_NOTIFICATIONS
@@ -48,7 +46,7 @@ fun FilesRoute(
     val notificationPermission = rememberNotificationPermission()
 
     CollectEvents(viewModel.events) { ev ->
-        snackbar.showScreenMessage(res, ev)
+        snackbar.showScreenMessage(ev)
     }
 
     FilesScreen(

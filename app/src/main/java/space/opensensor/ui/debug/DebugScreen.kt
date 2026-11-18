@@ -5,7 +5,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalResources
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import space.opensensor.ui.components.CollectEvents
@@ -27,9 +26,8 @@ fun DebugScreen(
     val developer by viewModel.developer.collectAsStateWithLifecycle()
     val sessionAddress by viewModel.sessionAddress.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val res = LocalResources.current
     CollectEvents(viewModel.events) { ev ->
-        snackbar.showDeviceEvent(res, ev)
+        snackbar.showDeviceEvent(ev)
     }
     LaunchedEffect(sessionAddress) {
         if (sessionAddress != null && sessionAddress != address) onDisconnected()
