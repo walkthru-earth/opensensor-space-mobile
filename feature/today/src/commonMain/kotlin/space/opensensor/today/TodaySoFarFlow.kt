@@ -54,7 +54,7 @@ fun todayMetrics(capabilities: DeviceCapabilities): List<MetricSpec> {
             .map { if (it.id == AirFamily.PM25_ATMOSPHERIC && it.basis == null) it.copy(basis = Basis.RAW) else it }
         if (pm.isNotEmpty()) return pm
     }
-    val primary = thing.primary.firstOrNull() ?: return emptyList()
+    val primary = thing.primary ?: return emptyList()
     return listOfNotNull(specs.firstOrNull { it.id == primary.name })
 }
 

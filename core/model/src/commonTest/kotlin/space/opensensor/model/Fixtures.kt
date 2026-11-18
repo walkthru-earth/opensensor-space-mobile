@@ -341,15 +341,13 @@ internal val CORES3_COLLECTION = """
 }
 """
 
-/** A bundled app profile for the CoreS3 dictionary. */
+/** A bundled app profile overlay for the CoreS3 dictionary. */
 internal val CORES3_PROFILE = """
 {
   "dict": "$CORES3_DICT",
   "family": "air",
-  "primary": ["pm25_atmospheric_ug_m3", "no_such_column", "pm10_atmospheric_ug_m3"],
   "hero": "mood",
-  "display_step": {"pm25_atmospheric_ug_m3": 1, "imu_temperature_c": 0.5},
-  "labels": {"pm25_atmospheric_ug_m3": {"en": "PM2.5", "ar": "جسيمات 2.5"}},
+  "hidden": ["accel_z_g"],
   "unknown_field": true
 }
 """

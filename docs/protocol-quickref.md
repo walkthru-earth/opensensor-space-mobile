@@ -181,11 +181,11 @@ Only the current digest of each board is bundled, at the firmware version the bu
 sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
 because they are always null on CoreS3. Waveshare (`a8605aaf…`) sends `t`, ambient air
 temperature, `rh` and `bstate`, the battery health code. A new firmware digest is a copy of the
-published templates, a profile file swap and a fixture refresh, with no code change. Any other digest, older ones included,
-has no LIVE view, and Today says so only after `INFO` arrived. A board whose template it served
-but whose dict has no reviewed profile has no LIVE view either, because the derived profile only
-names raw columns (`DeviceCapabilities.from`). History still reads its files through the served
-template. `LiveKeyFixturesTest`
+published templates and a fixture refresh, with no code change. A board whose template it served,
+or a file footer href fetched, has a LIVE view as soon as the bytes verify against the desc, with
+labels, decimals and units from the template and the registry (`DeviceCapabilities.from`). Any other
+digest has no LIVE view, and Today says so only after `INFO` arrived. The `utc` key is nanoseconds,
+so it is never a shown value and never fills the microsecond `event_time_utc_us` column. `LiveKeyFixturesTest`
 holds every digest from opensensor-space-firmware `tools/fixtures/live_keys/`, checks the bundled template live keys
 against the current ones and lists the retired ones, and the weekly `live-key-drift` workflow fails
 when opensensor-space-firmware main has a digest missing there. LIVE is a snapshot, not archive data.

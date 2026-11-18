@@ -7,7 +7,6 @@ import space.opensensor.model.Derivation
 import space.opensensor.model.DerivedMetric
 import space.opensensor.model.DerivedMetricProvider
 import space.opensensor.model.Family
-import space.opensensor.model.HealthScale
 import space.opensensor.model.Role
 import space.opensensor.model.RowCheck
 import space.opensensor.model.RowFormula
@@ -17,8 +16,8 @@ import space.opensensor.publicfeed.DiscoverCollection
 /**
  * The air family, what it adds to the generic core through [DerivedMetricProvider]. A template that
  * stores CF=1 PM2.5 and RH gets the US EPA corrected PM2.5 ([EpaPm25Correction], #92), a corrected
- * view of the atmospheric PM2.5 that shares its scale and primary flag. Nothing stored changes. The
- * profile scale ids `pm25` and `pm10` read the WHO 2021 scales ([WhoGuidelines]). An air Thing gets
+ * view of the atmospheric PM2.5 that shares its scale and primary flag. Nothing stored changes. Scales
+ * come from the template and the registries, never from this family. An air Thing gets
  * [BATCH_ESTIMATE] and [PARTICLES].
  *
  * The EPA NowCast for short PM windows ([PmNowCast], #93) and the quality checks for suspect PM
@@ -33,12 +32,6 @@ object AirFamily : DerivedMetricProvider {
 
     /** An air profile whose LIVE shows a physical PM2.5 on the PM2.5 scale, the particle cards. */
     val PARTICLES = Capability("particles")
-
-    /** The profile scale id of PM2.5. */
-    const val PM25_SCALE = "pm25"
-
-    /** The profile scale id of PM10. */
-    const val PM10_SCALE = "pm10"
 
     /** The corrected PM2.5 id, a stable tier key. */
     const val PM25_CORRECTED_ID = "pm25_epa"
@@ -71,8 +64,6 @@ object AirFamily : DerivedMetricProvider {
         return listOf(DerivedMetric(corrected, label = "PM2.5 corrected", formula = EpaFormula, viewOf = PM25_ATMOSPHERIC))
     }
 
-    override val scales: Map<String, HealthScale> = mapOf(PM25_SCALE to WhoGuidelines.PM25, PM10_SCALE to WhoGuidelines.PM10)
-
     /**
      * The stored quality checks ([AirQc], #91) for a template that writes the atmospheric PM2.5, with
      * the count bins it declares. Every other template gets none.
@@ -88,7 +79,7 @@ object AirFamily : DerivedMetricProvider {
     }
 
     /**
-     * Installs the air family where the generic core reads families. History's metrics, scales and
+     * Installs the air family where the generic core reads families. History's metrics and
      * capabilities ([Metrics.install], with [others] after it) and the scales Discover ships for a feed
      * without a Collection ([DiscoverCollection.installBundled]). It is the one install path of both
      * apps. Android's ThingModule and iOS's launchThingKinds call it once at launch with their Thing
@@ -100,9 +91,9 @@ object AirFamily : DerivedMetricProvider {
         DiscoverCollection.installBundled(AirDiscover.COLLECTION)
     }
 
-    /** A physical PM2.5 measurement on the PM2.5 scale that LIVE shows. */
+    /** A physical PM2.5 measurement on the WHO PM2.5 scale that LIVE shows. */
     private fun Thing.showsPm25Live(): Boolean = datastreams.any {
-        it.scaleId == PM25_SCALE && it.datastream.role == Role.PHYSICAL_MEASUREMENT && it.datastream.liveKey in live.keys
+        it.scale?.id == WhoGuidelines.PM25.id && it.datastream.role == Role.PHYSICAL_MEASUREMENT && it.datastream.liveKey in live.keys
     }
 
     private object EpaFormula : RowFormula {

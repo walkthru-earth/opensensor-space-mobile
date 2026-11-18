@@ -332,7 +332,7 @@ class HistorySourcesTest {
         assertEquals(DaySpan(1, dayStart, dayStart), tiers.observeDays(thing).first())
         val metrics = tiers.observeMetricsWithData(thing).first()
         assertTrue(AirMetrics.PM25.id in metrics)
-        assertTrue(AirMetrics.BOARD_TEMP.id in metrics)
+        assertTrue(LightMetric.id in metrics)
         assertEquals(DaySpan(), tiers.observeDays("nobody").first())
     }
 
@@ -408,7 +408,7 @@ class HistorySourcesTest {
         }
         assertTrue(AirMetrics.PM25.id !in before!!)
         gate.cancel()
-        assertTrue(AirMetrics.BOARD_TEMP.id in metrics)
+        assertTrue(LightMetric.id in metrics)
         assertEquals(indexed, index.get(r.key))
     }
 

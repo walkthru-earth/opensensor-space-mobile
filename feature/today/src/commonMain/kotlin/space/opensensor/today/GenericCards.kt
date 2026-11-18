@@ -24,7 +24,6 @@ import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.StatusDot
 import space.opensensor.family.air.stepOf
-import space.opensensor.model.AppProfile
 import space.opensensor.model.ThingDatastream
 import space.opensensor.today.resources.Res
 import space.opensensor.today.resources.env_unsupported
@@ -36,7 +35,7 @@ import space.opensensor.today.resources.now_waiting
 import space.opensensor.units.UnitFormatter
 
 /**
- * [value] in [column]'s display units, rounded to the profile's display step. A unit the reader's
+ * [value] in [column]'s display units, shown with the profile's decimals. A unit the reader's
  * system converts keeps its own decimals.
  */
 internal fun formatReading(value: Double?, column: ThingDatastream, units: UnitFormatter): String {
@@ -45,7 +44,7 @@ internal fun formatReading(value: Double?, column: ThingDatastream, units: UnitF
     column.datastream.classes.takeIf { it.isNotEmpty() }?.let { _ ->
         return column.datastream.classOf(shown.toLong())?.takeUnless { it.nodata }?.name ?: NO_VALUE
     }
-    return units.format(value!!, unit, column.displayStep, AppProfile.decimalsOf(column.displayStep))
+    return units.format(value!!, unit, column.decimals)
 }
 
 /** The ARGB of a `#RRGGBB` colour hint, or null for any other text. */

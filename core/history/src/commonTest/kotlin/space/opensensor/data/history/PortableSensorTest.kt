@@ -18,7 +18,7 @@ class PortableSensorTest {
     @Test fun invalidSensorDoesNotBecomeZero() {
         assertEquals(NowReading.Waiting, NowReading.of(LiveFixtures.waveshare("""{"pms":4}""")))
         assertIs<NowReading.SensorNotReady>(NowReading.of(LiveFixtures.waveshare("""{"pms":1,"pm25":0.0}""")))
-        assertNull(AirMetrics.BOARD_TEMP.moodOf(-12.0))
+        assertNull(LightMetric.moodOf(-12.0))
     }
 
     @Test fun sharedBandsHaveIdenticalBoundaries() {

@@ -80,8 +80,8 @@ object GenericPresenter : FamilyPresenter {
     override fun Hero(state: TodayUiState, modifier: Modifier) = GenericMetricHero(state, modifier)
 }
 
-/** The column the generic hero shows, the first primary column of [thing], or null when it has none. */
-fun heroColumn(thing: Thing): ThingDatastream? = thing.primary.firstOrNull()
+/** The column the generic hero shows, the primary of [thing], or null when it measures nothing. */
+fun heroColumn(thing: Thing): ThingDatastream? = thing.primary
 
 /**
  * The columns [TodayCard.METRICS] lists for [thing]. The primary columns after the hero, then every
@@ -91,5 +91,5 @@ fun heroColumn(thing: Thing): ThingDatastream? = thing.primary.firstOrNull()
 fun otherReadings(thing: Thing): List<ThingDatastream> {
     val skip = BoardPower.of(thing).let { listOfNotNull(heroColumn(thing), it.battery, it.millivolts, it.usbMillivolts, it.state) }.map { it.name }.toSet()
     val measured = thing.datastreams.filter { it.datastream.role == Role.PHYSICAL_MEASUREMENT && it.name !in thing.profile.hidden }
-    return (thing.primary + measured).distinctBy { it.name }.filter { it.name !in skip && it.datastream.liveKey in thing.live.keys }
+    return (listOfNotNull(thing.primary) + measured).distinctBy { it.name }.filter { it.name !in skip && it.datastream.liveKey in thing.live.keys }
 }

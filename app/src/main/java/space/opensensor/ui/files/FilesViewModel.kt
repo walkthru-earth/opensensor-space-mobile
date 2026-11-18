@@ -103,7 +103,7 @@ internal data class FileSummaryRequest(val thing: String, val files: List<Archiv
  * #92. The metrics the Files chart offers, the same rule as History. Corrected PM2.5 comes first and
  * is the default. Once the files are read and none has a humidity reading, corrected is dropped and raw
  * leads. Simple never offers raw next to corrected, Detailed always does. Simple offers only the
- * profile primary metrics, Detailed every metric.
+ * primary metric and its corrected view, Detailed every metric.
  */
 internal fun fileChartMetrics(summaries: List<FileSummary>, detailed: Boolean): List<MetricSpec> {
     val corrected = summaries.isEmpty() || summaries.any { (it.agg(AirMetrics.PM25_CORRECTED)?.n ?: 0) > 0 }

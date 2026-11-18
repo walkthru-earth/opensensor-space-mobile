@@ -4,6 +4,18 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../opensensor-space-firmware/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-11-18, metrics from template hints and the registry (code only)
+
+Host tests and the iOS simulator only. No phone or board run is recorded.
+
+- `AppProfile.derive` builds labels, decimals, display units, scales and the primary from the
+  template hints, the Thing Collection and the bundled property and scale registries. Bundled profiles
+  only add the family, hero and hidden columns. Scales come from the column or the registry, never a
+  column name.
+- LIVE shows for any template whose SHA-256 verifies, CrowPanel and served templates included.
+- Board temperature and battery are auxiliary columns, so History and Files no longer chart them.
+- To check on phones. CrowPanel LIVE and Today, and the History default metric of each board.
+
 ## 2026-11-17, CrowPanel template at opensensor-space-firmware e2eb30b (code only)
 
 Host tests and the iOS simulator only. No phone or board run is recorded.
@@ -95,11 +107,11 @@ Host tests and the iOS simulator only. No phone run is recorded.
 
 Host tests and the iOS simulator. One Android phone check, below.
 
-- Today cards come from the template and the app profile `primary` list (#221, #187). The profile
+- Today cards come from the template and its primary column (#221, #187). The profile
   `hero` picks the hero through `HeroRegistry`. The bundled air boards name `air-mood`, the peacock
-  with WHO moods. Any other thing gets `GenericMetricHero`, its first primary reading at the
-  profile display step, and a metrics card for the rest. My devices rows show the last day mean of
-  the thing's main metric (`LatestDays`) at its display step, on Android and iOS. Forget moved
+  with WHO moods. Any other thing gets `GenericMetricHero`, its primary reading at its
+  decimals, and a metrics card for the rest. My devices rows show the last day mean of
+  the thing's main metric (`LatestDays`) at its decimals, on Android and iOS. Forget moved
   from the My devices rows to the Today menu, and a Forget confirmed while Collect all holds the
   link runs once the link frees. The board card shows the battery state from the template
   classes, Waveshare `bstate` and CoreS3 `chg` (#90).
