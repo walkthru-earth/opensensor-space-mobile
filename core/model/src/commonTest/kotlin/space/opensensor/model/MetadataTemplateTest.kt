@@ -160,6 +160,24 @@ class MetadataTemplateTest {
     }
 
     @Test
+    fun aStepAndASectionCarryTheirLabelInEachLanguage() {
+        val step = acme.setup.setup.single { it.id == StepId("probe") }
+        assertEquals("Soil probe", step.label!!.get("en"))
+        assertEquals("مجس التربة", step.label!!.get("ar"))
+        assertEquals("Soil probe", step.label!!.get("de"))
+        val section = acme.setup.settings.single { it.id == StepId("probe") }
+        assertEquals("Probe", section.label!!.get("en"))
+        assertEquals("المجس", section.label!!.get("ar"))
+        assertEquals("Probe", section.label!!.get("fr"), "a label of the wrong shape is left out")
+    }
+
+    @Test
+    fun aStepOrSectionWithoutALabelHasNone() {
+        assertNull(acme.setup.setup.single { it.id == StepId("acme-mystery") }.label)
+        assertNull(acme.setup.settings.single { it.id == StepId.LOCATION }.label)
+    }
+
+    @Test
     fun configKeysParseTyped() {
         val keys = acme.setup.configKeys
         assertEquals(setOf("probe.depth_cm", "probe.mode", "probe.calibrate", "probe.future"), keys.keys)
