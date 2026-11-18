@@ -6,6 +6,7 @@ import space.opensensor.data.protocol.FrameCodec
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -125,8 +126,9 @@ class SyncWireTest {
         assertEquals(HelloVerdict.ACCEPTED, accepted.verdict)
         assertEquals(512, accepted.payloadMax)
         assertEquals(info, accepted.json)
-        assertEquals("aabbccddeeff", accepted.identity!!.device)
-        assertEquals(2048, accepted.identity!!.maxRead)
+        val identity = assertNotNull(accepted.identity)
+        assertEquals("aabbccddeeff", identity.device)
+        assertEquals(2048, identity.maxRead)
         assertEquals(HelloVerdict.ACCEPTED, check(hello(), device = "AABBCCDDEEFF").verdict)
 
         assertEquals(HelloVerdict.WRONG_KIND, check(FrameCodec.encode(Frame.Closed(1))).verdict)
