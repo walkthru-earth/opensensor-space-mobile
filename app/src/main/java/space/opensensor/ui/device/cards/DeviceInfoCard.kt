@@ -18,10 +18,10 @@ import space.opensensor.designsystem.BrandCard
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.TickingText
+import space.opensensor.designsystem.labelText
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.spokenList
 import space.opensensor.today.describe
-import space.opensensor.today.labelText
 import space.opensensor.ui.components.NO_VALUE
 import space.opensensor.ui.components.agoFormatter
 

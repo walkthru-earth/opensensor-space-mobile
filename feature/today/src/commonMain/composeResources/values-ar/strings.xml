@@ -11,9 +11,6 @@
     <string name="station_more_info">يقرأ السجل والملفات ما يحفظه هذا الهاتف، لذا يفتحان دون أن يكون المستشعر قريبًا. يفتح الترس في الأعلى إعدادات الجهاز.</string>
     <string name="station_history">السجل</string>
     <string name="station_files">الملفات</string>
-    <string name="transport_ble">Bluetooth</string>
-    <string name="transport_lan">Wi-Fi LAN</string>
-    <string name="transport_fake">جهاز وهمي</string>
     <string name="conn_disconnected">غير متصل</string>
     <string name="conn_connecting">جارٍ الاتصال…</string>
     <string name="conn_discovering">جارٍ اكتشاف الخدمات…</string>

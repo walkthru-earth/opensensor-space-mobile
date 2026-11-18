@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,22 +16,20 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import space.opensensor.app.R
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.ThingTopBar
+import space.opensensor.designsystem.headingSemantics
 import space.opensensor.device.DeviceConfigAction
 import space.opensensor.device.DeviceConfigUiState
 import space.opensensor.device.LanAccess
 import space.opensensor.device.StickerScan
 import space.opensensor.device.deviceSettingsItems
-import space.opensensor.today.TransportChip
 import space.opensensor.ui.components.ConnectionBanner
 import space.opensensor.ui.device.cards.AutoSyncCard
 import space.opensensor.ui.device.cards.DeviceInfoCard
@@ -79,19 +76,14 @@ fun DeviceScreen(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                navigationIcon = {
-                    IconButton(onClick = { onAction(DeviceAction.Back) }) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(R.string.nav_back)) }
-                },
-                title = {
-                    Column {
-                        Text(stringResource(R.string.device_screen_title), style = MaterialTheme.typography.titleLarge)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (state.detailLevel.detailed) TransportChip(state.transport)
-                            Text(state.name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+            ThingTopBar(
+                onBack = { onAction(DeviceAction.Back) },
+                backLabel = stringResource(R.string.nav_back),
+                title = { Text(stringResource(R.string.device_screen_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics()) },
+                // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.
+                transport = state.transport.takeIf { state.detailLevel.detailed },
+                subtitle = {
+                    Text(state.name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
                 actions = {
                     IconButton(onClick = { onAction(DeviceAction.RefreshConfig) }, enabled = state.ready && state.isV2) {

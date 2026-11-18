@@ -20,7 +20,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -45,7 +43,9 @@ import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockIcon
 import space.opensensor.designsystem.SectionCard
 import space.opensensor.designsystem.StatLine
+import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.WarningNote
+import space.opensensor.designsystem.headingSemantics
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.spokenList
 import space.opensensor.files.resources.Res
@@ -114,9 +114,10 @@ import space.opensensor.settings.DetailLevel
 fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String, rows: RowsState, onRowPage: (from: Long) -> Unit, onBack: () -> Unit) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(name.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() }) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back)) } },
+            ThingTopBar(
+                title = { Text(name.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium, modifier = Modifier.headingSemantics()) },
+                onBack = onBack,
+                backLabel = stringResource(Res.string.action_back),
             )
         },
     ) { padding ->

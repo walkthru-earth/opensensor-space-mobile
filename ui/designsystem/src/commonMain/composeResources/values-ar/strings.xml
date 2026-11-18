@@ -45,4 +45,7 @@
     <!-- The argument is QcRules.HIGH_HUMIDITY_PERCENT. -->
     <string name="qc_high_humidity">الرطوبة أعلى من %1$d بالمئة، مما يرفع قراءة المستشعر.</string>
     <string name="qc_note">تُعرض القيمة كما قيست.</string>
+    <string name="transport_ble">Bluetooth</string>
+    <string name="transport_lan">Wi-Fi LAN</string>
+    <string name="transport_fake">جهاز وهمي</string>
 </resources>

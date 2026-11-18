@@ -11,9 +11,6 @@
     <string name="station_more_info">History and Files read what this phone keeps, so they open without the sensor nearby. The gear at the top opens Device settings.</string>
     <string name="station_history">History</string>
     <string name="station_files">Files</string>
-    <string name="transport_ble">Bluetooth</string>
-    <string name="transport_lan">Wi-Fi LAN</string>
-    <string name="transport_fake">Fake device</string>
     <string name="conn_disconnected">Not connected</string>
     <string name="conn_connecting">Connecting…</string>
     <string name="conn_discovering">Discovering services…</string>

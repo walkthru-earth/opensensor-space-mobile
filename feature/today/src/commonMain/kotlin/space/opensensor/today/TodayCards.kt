@@ -63,6 +63,7 @@ import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.StatusDot
 import space.opensensor.designsystem.TickingText
 import space.opensensor.designsystem.WarningNote
+import space.opensensor.designsystem.labelText
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.nowEpochMillis
 import space.opensensor.designsystem.peacockExpressionFor
