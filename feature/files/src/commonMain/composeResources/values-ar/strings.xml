@@ -26,7 +26,6 @@
     <string name="files_all_synced_body">كل شيء على هذا الهاتف وتم فحصه.</string>
     <string name="files_none_simple">لا ملفات بعد. يحفظ المستشعر ملفًا كل بضع دقائق.</string>
     <string name="files_none_detailed">لا ملفات مكتملة بعد. استخدم الإنهاء في شاشة اليوم لإنشاء ملف.</string>
-    <string name="files_connect_to_list">اتصل لعرض الملفات على المستشعر.</string>
     <string name="files_listing">جارٍ قراءة قائمة الملفات…</string>
     <string name="files_list_failed_simple">تعذّرت قراءة قائمة الملفات.</string>
     <string name="files_in_archive">%1$d في الأرشيف، %2$s</string>

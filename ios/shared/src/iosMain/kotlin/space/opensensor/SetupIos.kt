@@ -50,8 +50,6 @@ private class IosSetupPort(private val devices: DevicesBridge, private val openS
     override suspend fun nickname(id: String): String? = settingsRepository.nicknames.first()[id.lowercase()]
 
     override suspend fun saveNickname(id: String, nickname: String?) = settingsRepository.setNickname(id, nickname)
-
-    override suspend fun setPending(id: String, pending: Boolean) = settingsRepository.setSetupPending(id, pending)
 }
 
 /** What the wizard sees of the iOS link to [id], read from the companion [state]. */

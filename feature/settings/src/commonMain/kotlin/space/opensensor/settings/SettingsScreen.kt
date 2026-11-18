@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -20,10 +19,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -35,7 +31,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDateRangePickerState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -45,10 +40,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -60,6 +51,8 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
+import space.opensensor.designsystem.InfoButton
+import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.MinTouchTarget
 import space.opensensor.designsystem.cardSemantics
 import space.opensensor.designsystem.listSeparator
@@ -79,7 +72,6 @@ import space.opensensor.settings.resources.settings_fonts
 import space.opensensor.settings.resources.settings_level_detailed
 import space.opensensor.settings.resources.settings_level_developer
 import space.opensensor.settings.resources.settings_level_simple
-import space.opensensor.settings.resources.settings_more_about
 import space.opensensor.settings.resources.settings_public_sensors
 import space.opensensor.settings.resources.settings_public_sensors_body
 import space.opensensor.settings.resources.settings_storage
@@ -149,7 +141,7 @@ fun SettingsScreen(
     appVersion: String,
     automaticUnits: UnitSystem,
     modifier: Modifier = Modifier,
-    infoButton: @Composable (title: String, body: List<String>, modifier: Modifier) -> Unit = { t, b, m -> SettingsInfoButton(t, b, m) },
+    infoButton: @Composable (title: String, body: List<String>, modifier: Modifier) -> Unit = { t, b, m -> InfoButton(InfoContent(t, b), m) },
 ) {
     val stored by controller.prefs.collectAsState()
     val colors = MaterialTheme.colorScheme
@@ -545,43 +537,6 @@ private fun SettingsCard(content: @Composable () -> Unit) {
 }
 
 private val SettingsCardShape = RoundedCornerShape(24.dp)
-
-/**
- * The info affordance used when the host passes none (iOS). An outlined info icon that opens a
- * sheet with the title and short paragraphs.
- */
-@Composable
-fun SettingsInfoButton(title: String, body: List<String>, modifier: Modifier = Modifier) {
-    var open by rememberSaveable { mutableStateOf(false) }
-    IconButton(onClick = { open = true }, modifier = modifier) {
-        Icon(InfoIcon, contentDescription = stringResource(Res.string.settings_more_about, title), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    if (open) {
-        ModalBottomSheet(
-            onDismissRequest = { open = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-                body.forEach {
-                    Spacer(Modifier.height(10.dp))
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-    }
-}
-
-/** Material "Info" outline (Apache 2.0), vendored so the module needs no icon library. */
-private val InfoIcon: ImageVector = ImageVector.Builder(name = "Info", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
-    .addPath(
-        pathData = addPathNodes(
-            "M11,7h2v2h-2zM11,11h2v6h-2zM12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,20c-4.41,0 -8,-3.59 -8,-8s3.59,-8 8,-8 8,3.59 8,8 -3.59,8 -8,8z",
-        ),
-        fill = SolidColor(Color.Black),
-    )
-    .build()
 
 internal fun levelLabel(level: DetailLevel): StringResource = when (level) {
     DetailLevel.SIMPLE -> Res.string.level_simple

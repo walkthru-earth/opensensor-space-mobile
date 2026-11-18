@@ -188,7 +188,7 @@ object FeedPaths {
 /**
  * The sample feed that ships in the app, in the live layout and read through the same
  * [FeedReader]. [load] returns the bytes of a bundled file by its path under [root]. `latest.json`
- * stands in for the S3 listing until the live feed exists. Loaded files stay in a least recently used
+ * stands in for the S3 listing of the live feed. Loaded files stay in a least recently used
  * cache of [budgetBytes], which [trim] shrinks or drops on [MemoryPressure] (#61).
  */
 class BundledSampleFeed(

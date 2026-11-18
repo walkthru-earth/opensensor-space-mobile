@@ -8,7 +8,7 @@ import java.util.UUID
 class SyncWorkerNotificationIdTest {
     @Test
     fun `notification id is stable per work request and never hits a fixed id`() {
-        val fixed = setOf(SyncNotifications.FOREGROUND_ID, SyncNotifications.WORKER_ID, SyncNotifications.SUMMARY_ID)
+        val fixed = setOf(SyncNotifications.FOREGROUND_ID, SyncNotifications.SUMMARY_ID)
         val random = java.util.Random(42)
         repeat(10_000) {
             val id = UUID(random.nextLong(), random.nextLong())

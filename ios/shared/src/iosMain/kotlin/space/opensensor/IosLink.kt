@@ -482,12 +482,8 @@ class IosLink internal constructor(
         /** The peer closed the stream or the peripheral disconnected. */
         const val REASON_PEER_CLOSED = 0
 
-        /** The peer reset the socket. */
-        const val REASON_RESET = 1
-
-        /** Bluetooth or Wi-Fi went away on the phone. */
+        /** Bluetooth went away on the phone. */
         const val REASON_RADIO_BLUETOOTH = 2
-        const val REASON_RADIO_WIFI = 3
 
         /** The phone's own stack failed, for example a write or the liveness deadline. */
         const val REASON_LOCAL = 4
@@ -500,9 +496,7 @@ class IosLink internal constructor(
 
         internal fun causeOf(reason: Int): DisconnectCause = when (reason) {
             REASON_PEER_CLOSED -> DisconnectCause.PeerClosed()
-            REASON_RESET -> DisconnectCause.PeerReset
             REASON_RADIO_BLUETOOTH -> DisconnectCause.RadioLost(Radio.BLUETOOTH)
-            REASON_RADIO_WIFI -> DisconnectCause.RadioLost(Radio.WIFI)
             REASON_APP -> DisconnectCause.Deliberate("native close")
             REASON_BOND_MISSING -> DisconnectCause.Auth(AuthKind.BOND_MISSING)
             else -> DisconnectCause.LocalAbort()

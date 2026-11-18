@@ -303,7 +303,7 @@ class DevicesBridgeTest {
         bridge.forgetNow(a)
         assertEquals(listOf<Pair<String, String?>>(a to "aabbccddeeff"), calls.forgotten, "Swift removes the credential of this hardware id")
         assertEquals(listOf(listOf("st-a")), calls.placesForgotten, "the Discover cell of its Thing goes too")
-        assertEquals(listOf(a), calls.settingsForgotten, "its nickname and setup flag go too")
+        assertEquals(listOf(a), calls.settingsForgotten, "its nickname goes too")
         assertEquals(listOf(b), bridge.knownNow().map { it.id })
         assertTrue(IosKnown.decode(storage.text).isEmpty())
         assertTrue(bridge(storage = storage).knownNow().isEmpty(), "forgotten stays forgotten after a restart")

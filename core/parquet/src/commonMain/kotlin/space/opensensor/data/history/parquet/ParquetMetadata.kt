@@ -101,12 +101,6 @@ data class BoundingBox(
 ) {
     val wrapsAntimeridian: Boolean get() = xmin > xmax
 
-    /** True when a point may lie inside (X honouring the wrap rule). Nulls in Z/M are ignored. */
-    fun mayContain(x: Double, y: Double): Boolean {
-        val xIn = if (wrapsAntimeridian) x >= xmin || x <= xmax else x in xmin..xmax
-        return xIn && y in ymin..ymax
-    }
-
     /** The union of two boxes (no antimeridian reasoning: a wrapped input yields a wrapped output only when identical). */
     fun union(other: BoundingBox): BoundingBox = BoundingBox(
         minOf(xmin, other.xmin),
@@ -199,8 +193,6 @@ class ColumnStatistics(
     fun maxLong(type: ParquetType): Long? = maxValue?.let { decodeLong(it, type) }
     fun minFloat(): Float? = minValue?.takeIf { it.size == 4 }?.let { Float.fromBits(leInt(it, 0)) }
     fun maxFloat(): Float? = maxValue?.takeIf { it.size == 4 }?.let { Float.fromBits(leInt(it, 0)) }
-    fun minDouble(): Double? = minValue?.takeIf { it.size == 8 }?.let { Double.fromBits(leLong(it, 0)) }
-    fun maxDouble(): Double? = maxValue?.takeIf { it.size == 8 }?.let { Double.fromBits(leLong(it, 0)) }
 
     internal fun decodeLegacy(bytes: ByteArray, type: ParquetType): Long? = decodeLong(bytes, type)
 

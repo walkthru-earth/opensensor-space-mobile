@@ -482,10 +482,10 @@ class DeviceSessionTest {
                 emit(Frame.ConfigChunk(0, bytes.size, 0, bytes.copyOfRange(0, 40)), Frame.ConfigChunk(0, bytes.size, 40, bytes.copyOfRange(40, bytes.size)))
             }
         }
-        assertEquals("85283083fffffff", session.getLocation()?.cell)
-        assertContentEquals(Request.GetLocation.encode(), p.bodies.single())
+        assertEquals("85283083fffffff", session.getLocationPage()?.location?.cell)
+        assertContentEquals(Request.GetConfigPage(Request.GetConfigPage.LOCATION).encode(), p.bodies.single())
         p.reply = { op, _ -> if (op == Opcode.GET_CONFIG) emit(Frame.Config(0, "{}")) }
-        assertNull(session.getLocation())
+        assertNull(session.getLocationPage()?.location)
     }
 
     // ------------------------------------------------------------------ owner site (#272)

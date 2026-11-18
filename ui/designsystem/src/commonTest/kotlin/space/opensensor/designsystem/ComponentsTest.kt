@@ -20,8 +20,8 @@ class ComponentsTest {
     private val rounded = with(AppIcons) {
         listOf(
             ArrowBack, ArrowForward, BatteryChargingFull, BatteryStd, Bluetooth, BugReport, CheckCircle, ChevronLeft,
-            ChevronRight, CloudOff, CloudSync, Download, Error, IosShare, Link, LinkOff, Lock, LockOpen, MoreVert, Radar,
-            Refresh, RestartAlt, Schedule, Send, Settings, Stop, Storage, Sync, SyncLock, TableChart, Visibility,
+            ChevronRight, CloudOff, CloudSync, Download, Error, IosShare, LinkOff, Lock, LockOpen, MoreVert, Radar,
+            Refresh, RestartAlt, Schedule, Send, Settings, Stop, Storage, Sync, TableChart, Visibility,
             VisibilityOff, Warning, Wifi,
         )
     }
@@ -30,7 +30,7 @@ class ComponentsTest {
     @Test
     fun everyVendoredIconIsAMaterialSizedVectorWithFilledPaths() {
         val all = rounded + outlined
-        assertEquals(38, all.size)
+        assertEquals(36, all.size)
         assertEquals(all.size, all.map { it.name }.toSet().size, "icon names are unique")
         for (icon in all) {
             assertEquals(24.dp, icon.defaultWidth, icon.name)

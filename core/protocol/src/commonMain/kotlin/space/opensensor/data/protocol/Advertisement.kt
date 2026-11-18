@@ -45,7 +45,6 @@ data class Advertisement(
 
     companion object {
         const val VERSION = 1
-        const val LENGTH = 10
         const val FLAG_NO_UTC = 1 shl 0
         const val FLAG_NEW_FILES = 1 shl 1
         const val FLAG_SD = 1 shl 2
@@ -55,9 +54,6 @@ data class Advertisement(
 
         /** Bit 6 `setup`, set from CoreS3 `v6.24` and Waveshare `v2.18`, 0 on older firmware. See [needsSetup]. */
         const val FLAG_SETUP = 1 shl 6
-
-        /** Offset of the flags byte, for `ScanFilter.setServiceData(uuid, data, mask)`. */
-        const val FLAGS_OFFSET = 1
 
         /**
          * Decode the service-data bytes for [DeviceGatt.SERVICE]. Null for a pre-2.1 device (no service

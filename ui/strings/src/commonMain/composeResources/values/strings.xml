@@ -86,14 +86,12 @@
     <string name="msg_sync_aborted">Sync stopped early. It resumes on the next sync.</string>
     <string name="msg_hardware_in_use">This sensor is already connected another way.</string>
     <string name="msg_busy">Wait for the current sensor task to finish.</string>
-    <string name="msg_token_needs_ble">The token comes over Bluetooth only. Reconnect over Bluetooth first.</string>
     <!-- iOS only, Android shows one notice per file instead. -->
     <string name="companion_sync_storage_failed">Some files could not be saved on this phone. Check free space and try again.</string>
 
     <!-- Link and Wi-Fi access notices, the Android keys and words. -->
     <string name="msg_busy_before_sync">Wait for the current sensor task to finish before syncing.</string>
     <string name="msg_verification_failed">Could not verify the sensor. Try again.</string>
-    <string name="msg_identity_enroll_ble">Connect this sensor over Bluetooth first.</string>
     <string name="msg_identity_thing_ble">The sensor ID changed. Reconnect over Bluetooth to check it.</string>
     <string name="msg_identity_hardware_changed">This is different hardware. Pair it as a new sensor.</string>
     <string name="msg_lan_token_stored">Wi-Fi token stored on this phone.</string>

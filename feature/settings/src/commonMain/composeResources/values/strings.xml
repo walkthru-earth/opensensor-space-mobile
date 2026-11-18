@@ -75,5 +75,4 @@
     <string name="settings_about_body">opensensor.space %1$s</string>
     <string name="info_privacy">Bluetooth and your local Wi-Fi reach only your own sensors. No account, no analytics and no uploads. Approximate location is used only when you tap Near me, to move the map. Your files stay on this phone unless you share them.</string>
     <string name="settings_fonts">Quicksand and Cairo fonts under the SIL Open Font License 1.1. Peacock mascot from opensensor.space.</string>
-    <string name="settings_more_about">More about %1$s</string>
 </resources>

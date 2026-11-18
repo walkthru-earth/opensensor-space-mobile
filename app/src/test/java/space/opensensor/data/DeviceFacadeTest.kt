@@ -404,7 +404,7 @@ class DeviceFacadeTest {
     }
 
     @Test
-    fun `forgetting a sensor drops its nickname and setup flag`() = harnessTest { h ->
+    fun `forgetting a sensor drops its nickname`() = harnessTest { h ->
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         assertTrue(h.forgottenSettings.isEmpty())
@@ -573,7 +573,7 @@ class DeviceFacadeTest {
         h.until { (h.repo.collectionState.value as? CollectionState.Preparing)?.step == PrepareStep.LIST }
         h.owner.forget(ADDRESS)
         assertNotNull(h.knownDao.get(ADDRESS))
-        assertTrue("a refused forget keeps the nickname and setup flag", h.forgottenSettings.isEmpty())
+        assertTrue("a refused forget keeps the nickname", h.forgottenSettings.isEmpty())
         assertTrue(h.repo.collectionState.value.active)
         h.repo.stop(StopSource.USER)
         h.until { !h.repo.busy.value }
@@ -665,7 +665,7 @@ class DeviceFacadeTest {
         assertEquals(1, h.factory.requests.count { it == Opcode.SET_TIME })
         assertEquals("the automatic SET_TIME on connect", 1, h.clockAnchorsBeforeList.size)
 
-        h.repo.smartSync()
+        h.repo.syncAll()
         h.until { h.repo.collectionState.value is CollectionState.Done && !h.repo.busy.value }
         assertEquals("a run on the same connection does not set it again", 1, h.factory.requests.count { it == Opcode.SET_TIME })
     }
@@ -708,7 +708,7 @@ class DeviceFacadeTest {
         val newer = h.newFile()
         h.device.files += newer
 
-        h.repo.smartSync()
+        h.repo.syncAll()
         h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
 
         assertTrue(h.repo.sync.value.outcomes.any { it.name == newer.name })
@@ -744,7 +744,7 @@ class DeviceFacadeTest {
         val before = h.factory.requests.count { it == Opcode.LIST }
 
         h.repo.syncAll()
-        h.repo.smartSync()
+        h.repo.syncAll()
         h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
 
         assertTrue(h.events.any { it == DeviceEvent.Info(DeviceMessage.Busy) || it == DeviceEvent.Info(DeviceMessage.BusyBeforeSync) })
@@ -1195,7 +1195,7 @@ class DeviceFacadeTest {
         assertEquals(1, h.factory.fakeConnects)
         lent.release()
         runCurrent()
-        assertTrue(h.repo.isConnectedTo(ADDRESS))
+        assertTrue(h.repo.connectionState.value.isReady)
     }
 
     @Test
@@ -1207,7 +1207,7 @@ class DeviceFacadeTest {
         assertEquals("the UI reuses the lent link", 1, h.factory.fakeConnects)
         lent.release()
         runCurrent()
-        assertTrue(h.repo.isConnectedTo(ADDRESS))
+        assertTrue(h.repo.connectionState.value.isReady)
     }
 
     @Test
@@ -1525,7 +1525,7 @@ class DeviceFacadeTest {
         var clockEpochOffset = 0L
         var developer = false
 
-        /** Addresses whose nickname and setup flag the owner dropped. */
+        /** Addresses whose nickname the owner dropped. */
         val forgottenSettings = mutableListOf<String>()
         var partialFailuresRemaining = 0
         val failedStorageNames = mutableListOf<String>()
@@ -1947,9 +1947,7 @@ class DeviceFacadeTest {
             return 1
         }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
-        override fun observeTotalBytes(): Flow<Long> = flowOf(rows.sumOf { it.bytes })
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
-        override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
         override suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long) = emptyList<ArchivedFile>()
         override suspend fun indexedForThing(thing: String) = rows.filter { it.thing == thing && it.isIndexed }
         override suspend fun things() = rows.map { it.thing }.distinct()

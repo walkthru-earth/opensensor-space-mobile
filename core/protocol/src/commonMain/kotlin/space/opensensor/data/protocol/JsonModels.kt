@@ -117,10 +117,8 @@ data class DeviceStatus(
     val sdFull: Boolean get() = sdState == SD_FULL
 
     companion object {
-        const val SD_READY: Int = 0
         const val SD_DEGRADED: Int = 1
         const val SD_FULL: Int = 2
-        const val SD_RETRY: Int = 3
 
         fun parse(text: String): DeviceStatus = WireJson.decodeFromString(serializer(), text)
     }

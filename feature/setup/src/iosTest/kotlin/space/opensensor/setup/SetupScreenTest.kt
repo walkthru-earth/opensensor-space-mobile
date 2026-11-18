@@ -133,7 +133,6 @@ class SetupScreenTest {
         assertTrue(c.state.value.askClose)
         assertEquals(SetupFlows.LOCATION, c.state.value.page)
         assertEquals(0, run.closes)
-        assertEquals(setOf("AA"), port.pending)
     }
 
     @Test

@@ -154,7 +154,6 @@
     <string name="msg_config_rejected_other">The sensor refused this setting. Nothing was changed.</string>
     <string name="msg_secret_needs_bluetooth">Passwords and PINs go over Bluetooth only.</string>
     <string name="msg_rebooting">The sensor is restarting. Reconnecting…</string>
-    <string name="msg_no_reboot_syncing">Not restarting while a sync runs. Stop the sync first.</string>
     <string name="msg_rejected_get_token">The sensor refused to share its Wi-Fi token.</string>
     <string name="msg_rejected_get_config">The sensor refused to share its settings.</string>
     <string name="msg_rejected_set_config">The sensor refused the settings. Nothing was changed.</string>

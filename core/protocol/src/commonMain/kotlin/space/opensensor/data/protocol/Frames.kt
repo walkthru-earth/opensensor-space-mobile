@@ -233,12 +233,6 @@ sealed interface Request {
         override fun encode(): ByteArray = byteArrayOf(opcode.toByte())
     }
 
-    /** Location configuration page. Legacy GET_CONFIG remains its one-byte request. */
-    data object GetLocation : Request {
-        override val opcode: Int = Opcode.GET_CONFIG
-        override fun encode(): ByteArray = byteArrayOf(opcode.toByte(), 1)
-    }
-
     /** One `GET_CONFIG` page by number, the opcode and its page byte. */
     data class GetConfigPage(val page: Int) : Request {
         init {
@@ -249,6 +243,9 @@ sealed interface Request {
         override fun encode(): ByteArray = byteArrayOf(opcode.toByte(), page.toByte())
 
         companion object {
+            /** The `location` and `thing` objects. */
+            const val LOCATION = 1
+
             /** `owner.title`, `owner.provider`, `owner.url` and `thing.deployment_id` (firmware #148). */
             const val SITE = 5
 

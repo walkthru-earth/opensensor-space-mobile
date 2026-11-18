@@ -32,7 +32,6 @@
     <string name="conn_link_lost_detail">Link lost (%1$s). Reconnecting, attempt %2$d of %3$d…</string>
     <string name="conn_bluetooth_settings">Bluetooth settings</string>
     <string name="action_cancel">Cancel</string>
-    <string name="action_not_now">Not now</string>
     <string name="flush">Finalize buffered rows</string>
     <string name="flush_confirm">Writes the readings waiting in memory to a short file now, so you can sync them.</string>
     <string name="flush_button">Finalize</string>

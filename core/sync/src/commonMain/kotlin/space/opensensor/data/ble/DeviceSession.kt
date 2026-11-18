@@ -101,7 +101,7 @@ data class LogTail(val text: String, val totalBytesSinceBoot: Long, val returned
     val complete: Boolean get() = returned == receivedBytes
 }
 
-/** A debug raw command named an opcode in [DeviceSession.RAW_COMMAND_DENYLIST]; nothing was sent. */
+/** A debug raw command named an opcode in [RawCommandPolicy.DENYLIST]; nothing was sent. */
 class RawCommandRefusedException(val op: Int) : IllegalArgumentException("${Opcode.name(op)} is not sent from the raw command; use the Device screen, which asks for confirmation")
 
 /** The device sent a reply that breaks the contract, for example a LIST whose count does not match. */
@@ -414,15 +414,12 @@ class DeviceSession(
     /** `GET_CONFIG` → `CONFIG`. */
     suspend fun getConfig(): ConfigSnapshot = config(Request.GetConfig, "GET_CONFIG")
 
-    /** Null on firmware which ignores the page selector; malformed-request also means unsupported. */
-    suspend fun getLocation(): space.opensensor.data.protocol.LocationConfig? = getLocationPage()?.location
-
     /**
-     * The whole `GET_CONFIG` location page, its `location` and `thing` objects, or null where
-     * [getLocation] is null.
+     * The whole `GET_CONFIG` location page, its `location` and `thing` objects. Null on firmware
+     * that refuses the page selector as a malformed request or an unknown opcode.
      */
     suspend fun getLocationPage(): space.opensensor.data.protocol.DeviceConfig? = try {
-        config(Request.GetLocation, "GET_CONFIG location").config
+        config(Request.GetConfigPage(Request.GetConfigPage.LOCATION), "GET_CONFIG location").config
     } catch (e: DeviceErrorException) {
         if (e.protocolError == ProtocolError.MALFORMED_REQUEST || e.protocolError == ProtocolError.UNKNOWN_OPCODE) null else throw e
     }
@@ -635,13 +632,6 @@ class DeviceSession(
 
         /** How long a raw command waits for a first or next frame before it shows what came. */
         val RAW_QUIET: Duration = 1.5.seconds
-
-        /**
-         * Opcodes the debug raw command never sends: `REBOOT` restarts the logger and `SET_CONFIG`
-         * can rotate the token, forget bonds or disable the passkey. Both need the Device screen's
-         * confirmation (root `AGENTS.md`).
-         */
-        val RAW_COMMAND_DENYLIST: Set<Int> get() = RawCommandPolicy.DENYLIST
 
         /**
          * A view over [transport] with its own unopened [LinkSession], run by a

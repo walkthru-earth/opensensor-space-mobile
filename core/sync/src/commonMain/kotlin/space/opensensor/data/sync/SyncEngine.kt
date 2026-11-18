@@ -85,20 +85,10 @@ class SyncEngine(
     /** Where partial files are written, one file at a time. Tests pass their virtual-time dispatcher. */
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    suspend fun download(
-        session: DeviceSession,
-        thing: String,
-        sourceDevice: String,
-        name: String,
-        expectedBytes: Long,
-        maxRead: Int,
-        onProgress: (FileProgress) -> Unit,
-    ): FileOutcome = download(session, thing, sourceDevice, name, expectedBytes, maxRead, onSettled = {}, onProgress = onProgress)
-
     /**
-     * Reports each settled file once, before the cancellable CLOSE. A Synced result means verified
-     * bytes are committed and indexed, even when Stop cancels the wait for CLOSED afterwards.
-     * This overload keeps existing positional progress callbacks source-compatible.
+     * Reports each settled file once to [onSettled], before the cancellable CLOSE. A Synced result
+     * means verified bytes are committed and indexed, even when Stop cancels the wait for CLOSED
+     * afterwards.
      */
     suspend fun download(
         session: DeviceSession,
@@ -107,7 +97,7 @@ class SyncEngine(
         name: String,
         expectedBytes: Long,
         maxRead: Int,
-        onSettled: (FileOutcome) -> Unit,
+        onSettled: (FileOutcome) -> Unit = {},
         onProgress: (FileProgress) -> Unit,
     ): FileOutcome {
         if (!ArchiveLayout.isArchiveName(name)) return FileOutcome.Failed(name, "refusing unsafe name").also(onSettled)

@@ -38,8 +38,8 @@ import space.opensensor.ui.scan.NearbyAdverts
 /**
  * The Android [SetupPort] behind the shared wizard. Find scans like the Devices list, Pair opens the
  * same [DeviceConnectionManager] link the Device page uses, so the known row is written by the link
- * owner only once the identity check passed. The nickname and the pending flag stay in
- * [SettingsRepository] on the phone.
+ * owner only once the identity check passed. The nickname stays in [SettingsRepository] on the
+ * phone.
  */
 @HiltViewModel(assistedFactory = SetupViewModel.Factory::class)
 class SetupViewModel @AssistedInject constructor(
@@ -124,8 +124,6 @@ class SetupViewModel @AssistedInject constructor(
         override suspend fun nickname(id: String): String? = settings.nicknames.first()[id.lowercase()]
 
         override suspend fun saveNickname(id: String, nickname: String?) = settings.setNickname(id, nickname)
-
-        override suspend fun setPending(id: String, pending: Boolean) = settings.setSetupPending(id, pending)
     }
 
     private fun bluetoothReady() = hasBluetoothPermissions(context) && BluetoothStatus.isEnabled(context)

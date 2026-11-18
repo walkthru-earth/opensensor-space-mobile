@@ -18,7 +18,6 @@
     <string name="files_all_synced_body">Everything is on this phone and checked.</string>
     <string name="files_none_simple">No files yet. The sensor saves one every few minutes.</string>
     <string name="files_none_detailed">No finished files yet. Use Finalize on Today to make one.</string>
-    <string name="files_connect_to_list">Connect to list the files on the sensor.</string>
     <string name="files_listing">Reading the file list…</string>
     <string name="files_list_failed_simple">Could not read the file list.</string>
     <string name="files_in_archive">%1$d in archive, %2$s</string>

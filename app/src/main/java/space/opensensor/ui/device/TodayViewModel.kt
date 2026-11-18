@@ -179,7 +179,7 @@ private class RepositoryTodaySource(
     override val notices: Flow<TodayNotice> = emptyFlow()
 
     /** Collection applies the automatic clock rule. */
-    override fun sync() = repository.smartSync()
+    override fun sync() = repository.syncAll()
 
     override fun flush() = repository.flush()
 

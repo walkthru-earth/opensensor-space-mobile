@@ -56,7 +56,7 @@ class StopAndBackpressureTest {
 
     private suspend fun SyncEngine.pull(session: DeviceSession, fake: FakeArchiveDevice, at: Int, progress: (FileProgress) -> Unit = {}): FileOutcome {
         val f = fake.files[at]
-        return download(session, fake.thing, fake.address, f.name, f.bytes.size.toLong(), fake.maxRead, progress)
+        return download(session, fake.thing, fake.address, f.name, f.bytes.size.toLong(), fake.maxRead, onProgress = progress)
     }
 
     @Test

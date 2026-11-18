@@ -197,7 +197,7 @@ class DeviceConfigTest {
         assertEquals(37.79, location.lat)
         assertEquals("US", location.country)
         assertEquals(listOf(Opcode.GET_CONFIG.toByte()), Request.GetConfig.encode().toList())
-        assertEquals(listOf(Opcode.GET_CONFIG.toByte(), 1.toByte()), Request.GetLocation.encode().toList())
+        assertEquals(listOf(Opcode.GET_CONFIG.toByte(), 1.toByte()), Request.GetConfigPage(Request.GetConfigPage.LOCATION).encode().toList())
         val patch = ConfigPatch.build { location("8828308281fffff", "US") }
         assertEquals("location.cell=8828308281fffff\nlocation.resolution=8\nlocation.country=US\n", patch.encode())
         assertFalse("37.79" in patch.encode())

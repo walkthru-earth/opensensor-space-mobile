@@ -101,34 +101,6 @@ class ArchivedFileDaoTest {
     }
 
     @Test
-    fun `count and exists are per thing`() = runBlocking {
-        assertEquals(0, dao.observeCountForThing("a").first())
-        assertFalse(dao.observeAnyForThing("a").first())
-
-        dao.upsert(file("a", "1.parquet"))
-        dao.upsert(file("a", "2.parquet"))
-        dao.upsert(file("b", "3.parquet"))
-
-        assertEquals(2, dao.observeCountForThing("a").first())
-        assertEquals(1, dao.observeCountForThing("b").first())
-        assertTrue(dao.observeAnyForThing("a").first())
-        assertFalse(dao.observeAnyForThing("c").first())
-    }
-
-    @Test
-    fun `unindexed count is per thing and counts failed rows`() = runBlocking {
-        dao.upsert(file("a", "new.parquet"))
-        dao.upsert(file("a", "failed.parquet", indexedAt = 5, indexError = "bad footer"))
-        dao.upsert(file("a", "done.parquet", indexedAt = 5))
-        dao.upsert(file("b", "other.parquet"))
-
-        assertEquals(2, dao.observeUnindexedCountForThing("a").first())
-        assertEquals(1, dao.observeUnindexedCountForThing("b").first())
-        assertEquals(0, dao.observeUnindexedCountForThing("c").first())
-        assertEquals(3, dao.observeUnindexedCount().first())
-    }
-
-    @Test
     fun `thing glances aggregate count, last sync and newest data`() = runBlocking {
         assertEquals(emptyList<ThingArchiveGlance>(), dao.observeThingGlances().first())
 
@@ -189,7 +161,7 @@ class ArchivedFileDaoTest {
             assertTrue(awaitItem())
             dao.update("a", "new.parquet") { it.copy(indexedAtEpochMs = 10, indexError = "bad footer") }
             assertFalse(awaitItem())
-            assertEquals(1, dao.observeUnindexedCount().first())
+            assertEquals(1, dao.unindexed(10).size)
             dao.upsert(file("b", "new.parquet"))
             assertTrue(awaitItem())
             dao.delete("b", "new.parquet")

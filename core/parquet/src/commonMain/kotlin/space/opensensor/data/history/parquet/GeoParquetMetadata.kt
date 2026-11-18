@@ -107,9 +107,6 @@ sealed class Crs {
     /** `srid:0`, `geo.crs = null`, or a form nobody understands. [raw] is what the file said. */
     data class Unknown(val raw: String?) : Crs()
 
-    /** True for plain longitude/latitude data — what the map needs. */
-    val isLonLat: Boolean get() = this is LonLatWgs84
-
     companion object {
         /**
          * Interprets the `crs` property of a GEOMETRY/GEOGRAPHY logical type. [keyValueMetadata] resolves the

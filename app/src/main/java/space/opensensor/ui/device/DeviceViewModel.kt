@@ -99,19 +99,11 @@ data class DeviceUiState(
 
     /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
     val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(info)
-    val advancedMode: Boolean get() = detailLevel.developer
     val isV2: Boolean get() = capabilities.configurable
     val ready: Boolean get() = connection.isReady
-    val canEdit: Boolean get() = ready && isV2 && !busy && !heldInBackground
 
     /** The status every thing page reads, the same rule Today and Files use. */
     val thing: ThingStatus get() = ThingStatus(connection, syncRunning = syncRunning, heldInBackground = heldInBackground)
-
-    /**
-     * Actions that drop the link (reboot, rotate token, forget bonds) are also refused while a
-     * transfer runs: a `REBOOT` mid-sync would kill the download and finalize the RAM batch under it.
-     */
-    val canDisrupt: Boolean get() = canEdit && !thing.busy
     val overBle: Boolean get() = transport == TransportKind.BLE || transport == TransportKind.FAKE
 
     /** What the shared Device section reads. The LAN token itself never leaves the repository. */

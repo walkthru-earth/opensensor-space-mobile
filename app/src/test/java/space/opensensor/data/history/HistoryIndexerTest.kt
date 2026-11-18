@@ -112,7 +112,6 @@ class HistoryIndexerTest {
             return 1
         }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
-        override fun observeTotalBytes(): Flow<Long> = flowOf(rows.sumOf { it.bytes })
         override suspend fun upsert(file: ArchivedFile) {
             rows.removeAll { it.thing == file.thing && it.name == file.name }
             rows += file
@@ -126,7 +125,6 @@ class HistoryIndexerTest {
             rows.removeAll { it.thing == thing && it.name == name }
         }
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.sortedBy { it.indexedAtEpochMs != null }.take(limit)
-        override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
         override suspend fun withUtcBetween(thing: String, fromNs: Long, toNs: Long) =
             rows.filter { it.thing == thing && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs }
         override suspend fun indexedForThing(thing: String) = rows.filter { it.thing == thing && it.isIndexed }

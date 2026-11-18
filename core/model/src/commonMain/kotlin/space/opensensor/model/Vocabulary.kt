@@ -16,7 +16,6 @@ value class Role(val id: String) {
         val AUXILIARY_INFORMATION = Role("auxiliaryInformation")
         val QUALITY_INFORMATION = Role("qualityInformation")
         val MODEL_RESULT = Role("modelResult")
-        val REFERENCE_INFORMATION = Role("referenceInformation")
         val COORDINATE = Role("coordinate")
     }
 }

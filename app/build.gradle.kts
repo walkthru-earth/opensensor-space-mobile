@@ -54,9 +54,6 @@ android {
         versionName = ciVersionName ?: "1.0"
 
         testInstrumentationRunner = "space.opensensor.HiltTestRunner"
-        vectorDrawables {
-            useSupportLibrary = true
-        }
         // The ABIs every native library ships for. x86 and x86_64 lack h3, so they are not packaged (#61).
         // tools/check_apk_abis.py fails CI when the APK carries any other set.
         ndk {
@@ -281,9 +278,6 @@ dependencies {
     // Hilt and instrumented tests.
     androidTestImplementation(libs.hilt.android.testing)
     kspAndroidTest(libs.hilt.android.compiler)
-    // Hilt and Robolectric tests.
-    testImplementation(libs.hilt.android.testing)
-    kspTest(libs.hilt.android.compiler)
 
     // Arch Components
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -324,8 +318,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 
-    // SAF helpers. Icons are vendored vectors in :ui:designsystem (AppIcons), not material-icons-extended.
-    implementation(libs.androidx.documentfile)
     // System-hosted barcode UI; no app camera permission. Manual entry remains available offline.
     implementation(libs.google.code.scanner)
 
