@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import space.opensensor.data.protocol.DeviceConfig
+import space.opensensor.model.SetupManifest
 
 /**
  * One sensor in the foreground Bluetooth scan. [advertFlags] is the advert flags byte, null when the
@@ -21,14 +22,14 @@ data class SetupNeed(val id: String, val opened: Boolean)
 
 /**
  * Which sensors ask for setup, the same on both phones (#272). [ThingSetupPolicy] decides for each
- * sensor from its advert flags and the last CONFIG page 1 the phone read from it.
+ * sensor from its advert flags, the last CONFIG page 1 the phone read from it and the setup manifest
+ * of its template.
  *
  * - Platforms only feed it. The scan gives [SetupSighting]s, a connected sensor's page 1 read gives
  *   [pageRead], and the app leaving the foreground calls [endSession]. Nothing here reads or writes
  *   a sensor, so no page 1 read happens because of it.
- * - Page 1 is the fallback for firmware whose advert has no setup flag. An advert counts only when
- *   it was heard after the last page 1 read of that sensor, so a cached advert with bit 6 cannot
- *   undo the page that says setup is done.
+ * - An advert counts only when it was heard after the last page 1 read of that sensor, so a cached
+ *   advert with bit 6 cannot undo the page that says setup is done.
  * - [opened] marks a sensor whose wizard ran this foreground session, by itself or from a tap, so it
  *   shows a resume entry instead of opening again. Ids match case insensitively.
  * - The wizard opens by itself at most once per foreground session across all sensors.
@@ -48,9 +49,12 @@ class ThingSetupWatch {
 
     private val session = MutableStateFlow(Session())
 
-    /** A connected sensor [id] returned page 1 [config] at [readMs], from Device settings or the wizard. */
-    fun pageRead(id: String, config: DeviceConfig, readMs: Long) {
-        session.update { it.copy(pages = it.pages + (id.lowercase() to Page(id, config, readMs))) }
+    /**
+     * A connected sensor [id] returned page 1 [config] at [readMs], from Device settings or the wizard.
+     * [manifest] is the setup manifest of its template, [SetupPlan.manifestOf].
+     */
+    fun pageRead(id: String, config: DeviceConfig, readMs: Long, manifest: SetupManifest) {
+        session.update { it.copy(pages = it.pages + (id.lowercase() to Page(id, config, readMs, manifest))) }
     }
 
     /** The wizard opened for [id]. It will not open by itself for that sensor again this session. */
@@ -73,7 +77,7 @@ class ThingSetupWatch {
 
     /**
      * The app left the foreground at [atMs]. The next session starts with nothing read and nothing
-     * opened, so firmware without the setup flag asks again only after a fresh page 1 read. It counts
+     * opened, so a sensor whose advert has no setup flag asks again only after a fresh page 1 read. It counts
      * only sightings heard after [atMs].
      */
     fun endSession(atMs: Long) {
@@ -84,8 +88,8 @@ class ThingSetupWatch {
     fun needs(sightings: Flow<List<SetupSighting>>): Flow<List<SetupNeed>> =
         combine(sightings, session) { seen, s -> decide(seen, s.pages.values.toList(), s.opened, s.sinceMs) }
 
-    /** Page 1 of [id] as read at [readMs], the input of [decide]. */
-    data class Page(val id: String, val config: DeviceConfig, val readMs: Long)
+    /** Page 1 of [id] as read at [readMs] with its template [manifest], the input of [decide]. */
+    data class Page(val id: String, val config: DeviceConfig, val readMs: Long, val manifest: SetupManifest = SetupManifest.NONE)
 
     companion object {
         /**
@@ -104,11 +108,11 @@ class ThingSetupWatch {
                 // The policy takes advert flags only from an advert newer than the last page 1 read.
                 val fresh = page == null || (s.seenMs != null && s.seenMs > page.readMs)
                 val flags = s.advertFlags.takeIf { fresh }
-                if (ThingSetupPolicy.needsSetup(flags, page?.config)) out[key] = SetupNeed(s.id, key in opened)
+                if (ThingSetupPolicy.needsSetup(flags, page?.config, page?.manifest ?: SetupManifest.NONE)) out[key] = SetupNeed(s.id, key in opened)
             }
             for ((key, page) in byId) {
                 if (key in out || sightings.any { it.id.equals(key, ignoreCase = true) }) continue
-                if (ThingSetupPolicy.needsSetup(null, page.config)) out[key] = SetupNeed(page.id, key in opened)
+                if (ThingSetupPolicy.needsSetup(null, page.config, page.manifest)) out[key] = SetupNeed(page.id, key in opened)
             }
             return out.values.toList()
         }

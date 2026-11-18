@@ -157,14 +157,14 @@ internal val ACME_SOIL_PROBE_TEMPLATE = """
       {"id": "name", "req": false},
       {"id": "location", "req": true},
       {"id": "wifi"},
-      {"id": "probe", "req": true, "keys": ["probe.depth_cm", "probe.mode", "probe.not_declared"]},
+      {"id": "probe", "req": true, "keys": ["probe.depth_cm", "probe.mode", "probe.not_declared"], "label": "Soil probe", "label_i18n": {"ar": "مجس التربة"}},
       {"id": "acme-mystery", "req": true},
       {"req": true},
       "not a step"
     ],
     "settings": [
       {"id": "location"},
-      {"id": "probe", "keys": ["probe.depth_cm", "probe.mode", "probe.calibrate"]},
+      {"id": "probe", "keys": ["probe.depth_cm", "probe.mode", "probe.calibrate"], "label_i18n": {"en": "Probe", "ar": "المجس", "fr": 7}},
       {"id": ""}
     ],
     "config_keys": {

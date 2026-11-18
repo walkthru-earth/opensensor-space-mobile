@@ -190,7 +190,7 @@ class DevicesControllerTest {
         assertTrue(opens.isEmpty())
 
         // Device settings read page 1 of B, out of range now, and it has no cell.
-        watch.pageRead("B", DeviceConfig.parse("""{"location":{"cell":"","resolution":8},"thing":{"mobility":"fixed"}}"""), 6)
+        watch.pageRead("B", DeviceConfig.parse("""{"location":{"cell":"","resolution":8},"thing":{"mobility":"fixed"}}"""), 6, space.opensensor.model.SetupManifest.NONE)
         assertEquals(listOf(SetupRequest("B", "Balcony", known = true, auto = true)), opens)
         assertTrue(controller.state.value.list.known.single { it.id == "B" }.needsSetup)
         assertFalse(controller.state.value.list.nearby.single().needsSetup)

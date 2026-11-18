@@ -29,9 +29,11 @@ import space.opensensor.data.ble.InvalidConfigException
 import space.opensensor.data.ble.SecretNeedsBluetoothException
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.ble.WifiUnavailableException
+import space.opensensor.data.history.ServedTemplates
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
+import space.opensensor.data.sync.SetupPlan
 import space.opensensor.data.sync.ThingPlaces
 import space.opensensor.data.sync.recordFrom
 import space.opensensor.device.DeviceConfigChange
@@ -296,7 +298,7 @@ internal class IosDeviceConfigSource(
         val thing = devices.thingFor(address)
         val read = now()
         if (page != null && !thing.isNullOrBlank()) places.recordFrom(thing, page, read)
-        if (page != null) devices.setup.pageRead(address, page, read)
+        if (page != null) devices.setup.pageRead(address, page, read, SetupPlan.manifestOf(snapshot.value.info, ServedTemplates.shared.all.value))
         return page?.takeIf { it.location != null }
     }
 
