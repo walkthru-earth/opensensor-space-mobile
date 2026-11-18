@@ -25,7 +25,8 @@ for lifecycle and validation limits.
 One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
 keeps the file in its app database directory. iOS keeps it at
 `Application Support/database/opensensor.db`, excluded from backup, and uses only `archived_file`,
-`pruned_file`, `list_cursor`, `thing_source` and `thing_place`. Exported schemas live in `core/database/schemas/`.
+`pruned_file`, `list_cursor`, `thing_source`, `thing_place`, `known_device` and `thing_epoch`. Its
+`known_device` rows never hold a LAN token, which stays in the Keychain (#303). Exported schemas live in `core/database/schemas/`.
 
 ```mermaid
 erDiagram

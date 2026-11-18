@@ -14,9 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import okhttp3.OkHttpClient
 import space.opensensor.archive.ArchiveIndex
@@ -34,13 +32,10 @@ import space.opensensor.data.sync.ThingPlaces
 import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.discover.DiscoverController
+import space.opensensor.discover.DiscoverPorts
 import space.opensensor.discover.DiscoverScreen
-import space.opensensor.discover.OWN_TRACK_SPAN_NS
-import space.opensensor.discover.OwnThing
 import space.opensensor.discover.bundledSampleFeed
-import space.opensensor.discover.knownOwnThings
-import space.opensensor.discover.observeOwnStatus
-import space.opensensor.discover.observeOwnTracks
+import space.opensensor.discover.followPhone
 import space.opensensor.net.BlockCache
 import space.opensensor.net.OkHttpRangeEngine
 import space.opensensor.publicfeed.OpenAqAggregatesFeed
@@ -77,34 +72,23 @@ class DiscoverViewModel @Inject constructor(
     )
 
     init {
-        // The controller outlives the screen, so the switch reaches a read in flight even while
-        // Settings is open. Turning public sensors off cancels it before another request leaves.
-        combine(settings.discoverSource, settings.showPublicSensors, ::Pair)
-            .onEach { (source, publicSensors) -> controller.onSourceSettings(source, publicSensors) }
-            .launchIn(viewModelScope)
-        // The user's own Things, each at its saved cell (#226). Read from the phone only.
-        combine(places.observeAll(), known.observeAll()) { saved, devices ->
-            val names = devices.mapNotNull { d -> d.thing?.let { it to d.name } }.toMap()
-            knownOwnThings(saved.map { OwnThing(it.thing, "", it.cell, it.updatedEpochMs, it.moving) }, names)
-        }
-            .onEach(controller::showOwnThings)
-            .launchIn(viewModelScope)
-        // A moving Thing's last day of rows, its own cell per row, read from this phone (#263).
-        val tracks = CellTrackReader(archive, index, io)
-        val moving = places.observeAll().map { saved -> saved.filter { it.moving }.mapTo(mutableSetOf()) { it.thing } }
-        observeOwnTracks(moving) { thing -> tracks.observe(thing, OWN_TRACK_SPAN_NS) { System.currentTimeMillis() * 1_000_000 } }
-            .onEach(controller::showOwnTracks)
-            .launchIn(viewModelScope)
-        // Each own Thing's newest reading from this phone's history, Live while a BLE or LAN link
-        // is ready, and whether a file of it went up (#273). Read from the phone only.
+        // Every source is local. The public feed stays inside the controller (#303).
         val linked = combine(connections.snapshots, known.observeAll()) { snapshots, devices ->
             val ready = snapshots.filter { it.connection is ConnectionState.Ready }.mapTo(mutableSetOf()) { it.address }
             devices.filter { it.address in ready }.mapNotNullTo(mutableSetOf()) { it.thing }
         }.distinctUntilChanged()
-        val things = places.observeAll().map { saved -> saved.mapTo(mutableSetOf()) { it.thing } }
-        observeOwnStatus(history.tiers, things, linked, index.observeUploadedThings())
-            .onEach(controller::showOwnStatus)
-            .launchIn(viewModelScope)
+        val ports = DiscoverPorts(
+            source = settings.discoverSource,
+            publicSensors = settings.showPublicSensors,
+            places = places,
+            knownNames = known.observeAll().map { devices -> devices.mapNotNull { d -> d.thing?.let { it to d.name } }.toMap() },
+            linked = linked,
+            tiers = history.tiers,
+            uploaded = index.observeUploadedThings(),
+            tracks = CellTrackReader(archive, index, io),
+            nowNs = { System.currentTimeMillis() * 1_000_000 },
+        )
+        followPhone(controller, viewModelScope, ports)
     }
 
     /** The saved Discover source. Sample until it is read, so nothing is fetched before then. */

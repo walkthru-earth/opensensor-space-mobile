@@ -97,7 +97,6 @@
     <string name="msg_lan_token_stored">حُفظ رمز الوصول عبر Wi-Fi على هذا الهاتف.</string>
     <string name="msg_failed_get_token">تعذّر الحصول على رمز الوصول عبر Wi-Fi. حاول مرة أخرى.</string>
     <string name="msg_rejected_get_token">رفض المستشعر مشاركة رمز الوصول عبر Wi-Fi.</string>
-    <string name="autosync_title">المزامنة التلقائية</string>
     <string name="notif_device">مستشعر</string>
     <plurals name="notif_synced">
         <item quantity="zero">تمت مزامنة %1$d ملف جديد من %2$s · %3$s</item>
@@ -117,7 +116,6 @@
         <item quantity="other">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
     </plurals>
     <string name="notif_verified">تم التحقق منها وحفظها في الأرشيف على هذا الهاتف.</string>
-    <string name="autosync_ios_hint">يختار iOS وقت التشغيل.</string>
     <string name="autosync_progress_title">جارٍ الجمع من المستشعرات</string>
     <plurals name="autosync_sensors">
         <item quantity="zero">%1$d مستشعر</item>

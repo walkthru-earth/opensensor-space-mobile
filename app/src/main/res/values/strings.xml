@@ -52,15 +52,6 @@
     <string name="device_link">link</string>
     <string name="device_config_read">settings read</string>
 
-    <string name="autosync_title">Auto-sync</string>
-    <plurals name="autosync_on">
-        <item quantity="one">On. Every %1$d minute, even with the app closed.</item>
-        <item quantity="other">On. Every %1$d minutes, even with the app closed.</item>
-    </plurals>
-    <plurals name="autosync_off">
-        <item quantity="one">Off</item>
-        <item quantity="other">Off</item>
-    </plurals>
     <string name="autosync_unreachable">Connect once over Bluetooth first.</string>
     <string name="autosync_wifi">Wi-Fi</string>
     <string name="autosync_wifi_token">token stored, tried first on this network</string>

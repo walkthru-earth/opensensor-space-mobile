@@ -97,7 +97,6 @@
     <string name="msg_rejected_get_token">The sensor refused to share its Wi-Fi token.</string>
 
     <!-- Auto-sync and its summary notification (#23). Android keys keep the Android words. -->
-    <string name="autosync_title">Auto-sync</string>
     <string name="notif_device">sensor</string>
     <plurals name="notif_synced">
         <item quantity="one">Synced %1$d new file from %2$s · %3$s</item>
@@ -110,7 +109,6 @@
     </plurals>
     <string name="notif_verified">Verified and stored in the archive on this phone.</string>
     <!-- iOS only. -->
-    <string name="autosync_ios_hint">iOS picks when it runs.</string>
     <string name="autosync_progress_title">Collecting from sensors</string>
     <plurals name="autosync_sensors">
         <item quantity="one">%1$d sensor</item>
