@@ -16,8 +16,8 @@ import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.MetricSpec
-import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.family.air.AirFamily
@@ -152,7 +152,7 @@ class TodayFormatTest {
         // The tiers bind each catalog spec to a file with inTemplate, which skips a changed unit, so
         // no tier holds this column and Today must not label buckets with it.
         assertEquals(emptyList(), metrics.filter { it.id == AirFamily.PM25_ATMOSPHERIC }, "a column in another unit is not tiered")
-        metrics.forEach { assertEquals(Metrics.tiered(it, other), it, "${it.id} is the spec the tiers aggregate") }
+        metrics.forEach { assertEquals(MetricCatalog.shared.tiered(it, other), it, "${it.id} is the spec the tiers aggregate") }
     }
 
     @Test

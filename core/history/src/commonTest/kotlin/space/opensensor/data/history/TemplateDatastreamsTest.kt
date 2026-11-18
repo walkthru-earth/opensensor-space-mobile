@@ -131,7 +131,7 @@ class TemplateDatastreamsTest {
     }
 
     private fun hour(files: FileTemplates, bytes: ByteArray = soilFile(), list: List<MetricSpec> = metrics): Bucket =
-        Aggregator(thing, setOf(Resolution.HOUR), list, files).apply { add(ParquetFile.wrap(bytes)) }.buckets().single()
+        Aggregator(thing, setOf(Resolution.HOUR), files, list).apply { add(ParquetFile.wrap(bytes)) }.buckets().single()
 
     @Test
     fun theMetricListIsTheTemplatesMeasuredColumnsWithTheProfilePrimaryFirst() {
@@ -151,7 +151,7 @@ class TemplateDatastreamsTest {
         val profile = AppProfile(soil.dict, Family.GENERIC, primary = "soil_temperature_c")
         assertEquals("soil_temperature_c", Metrics.defaultOf(Metrics.of(soil, profile))?.id)
         // A bundled air board opens on PM2.5, its corrected view where the board stores RH (#92).
-        assertEquals(AirMetrics.PM25_CORRECTED.id, Metrics.default.id)
+        assertEquals(AirMetrics.PM25_CORRECTED.id, Metrics.defaultOf(MetricCatalog.shared.union.value)?.id)
         assertEquals(AirMetrics.PM25_CORRECTED.id, Metrics.defaultOf(Metrics.of(coreS3Template))?.id)
         assertEquals(AirMetrics.PM25.id, Metrics.defaultOf(Metrics.of(coreS3Template).filter { it.auxColumn == null })?.id)
     }
@@ -198,7 +198,7 @@ class TemplateDatastreamsTest {
         val bundled = hour(FileTemplates.BUNDLED)
         assertEquals(8, bundled.rows)
         assertEquals(emptyMap(), bundled.metrics)
-        assertEquals(emptyMap(), hour(FileTemplates.BUNDLED, list = Metrics.all).metrics)
+        assertEquals(emptyMap(), hour(FileTemplates.BUNDLED, list = MetricCatalog.shared.union.value).metrics)
         // The soil file indexes with its row count and no valid rows to show.
         val summary = ParquetIndexer.index(ParquetFile.wrap(soilFile()), FileTemplates.BUNDLED)
         assertEquals(8L, summary.rows)

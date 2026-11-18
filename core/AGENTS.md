@@ -35,7 +35,7 @@ Rules that hold across modules.
 - `ParquetFile` and `ByteReader` are `AutoCloseable`, open them with `use`.
 - Each app builds the `ThingKinds` registry as a plain list, Android in `data/di/ThingModule` and
   iOS in `ThingKindsIos.kt`, with no self registration, and hands `ThingKinds.metricProviders` to
-  `AirFamily.install`.
+  `AirFamily.install`, which passes them to `Metrics.install` and rebuilds `MetricCatalog.shared`.
 - An Item or Collection the phone builds must equal the board's as JSON values
   (`CanonicalJson.difference`). `PublishGate` is the only caller of `FileItems.build`, and only a
   `Cleared` check carries a `Publication`.
@@ -62,7 +62,8 @@ Rules that hold across modules.
   and the profile (`Metrics.of`), plus the derived metrics of each
   `DerivedMetricProvider` (`AirFamily` for corrected PM2.5), and reads each file by the template of its
   `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by
-  `TemplateIndex.resolve`, the same rule LIVE uses (#259).
+  `TemplateIndex.resolve`, the same rule LIVE uses (#259). `MetricCatalog.shared.union` is every metric of the
+  bundled and served templates, and only grows. History opens on a Thing's own primary.
   `AppProfile.derive` labels, rounds, scales and picks the primary of every column from the template
   display hints, the Thing Collection and the bundled property and scale registries. A bundled profile
   only overlays the family, hero and hidden columns. LIVE shows for any template whose SHA-256 is

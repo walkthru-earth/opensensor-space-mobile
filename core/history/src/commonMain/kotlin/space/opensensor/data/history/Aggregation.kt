@@ -71,8 +71,8 @@ data class Bucket(
 class Aggregator(
     private val thing: String,
     resolutions: Set<Resolution> = Resolution.entries.toSet(),
-    private val metrics: List<MetricSpec> = Metrics.all,
     private val templates: FileTemplates = FileTemplates.SERVED,
+    private val metrics: List<MetricSpec> = templates.metrics,
 ) {
     private val res: Array<Resolution> = resolutions.toTypedArray()
     private val m = metrics.size

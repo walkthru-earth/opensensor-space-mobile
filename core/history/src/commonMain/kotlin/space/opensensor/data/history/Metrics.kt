@@ -117,31 +117,29 @@ data class MetricSpec(
 }
 
 /**
- * Builds History's metrics from board templates and app profiles. The bundled templates give the
- * [catalog] the screens pick from. The tiers and readers take any list, so a template the app does
- * not bundle aggregates the same way once something resolves it. Nothing here names a column. Labels,
- * decimals and scales come from the profile, and family knowledge from the [providers] of derived metrics.
+ * Builds History's metrics from board templates and app profiles. [MetricCatalog] holds what the
+ * screens pick from, one Thing's metrics and the union of every known template. The tiers and readers
+ * take any list, so a template the app does not bundle aggregates the same way once something resolves
+ * it. Nothing here names a column. Labels, decimals and scales come from the profile, and family
+ * knowledge from the [providers] of derived metrics.
  */
 object Metrics {
-    /** The installed providers and the catalog built from them on first read. */
-    private class Installed(val providers: List<DerivedMetricProvider>) {
-        val catalog: List<MetricSpec> by lazy { catalogOf(BundledCatalog.templates, providers) }
-    }
-
     /** No family until an app entry point installs its own, so every column stays neutral. */
     @Volatile
-    private var installed = Installed(emptyList())
+    private var installed: List<DerivedMetricProvider> = emptyList()
 
-    /** The derived metric providers the catalog applies, in order. */
-    val providers: List<DerivedMetricProvider> get() = installed.providers
+    /** The derived metric providers every catalog applies, in order. */
+    val providers: List<DerivedMetricProvider> get() = installed
 
     /**
-     * Makes [providers] the ones the [catalog] applies, the app's families and then the derived
-     * metrics of its Thing kinds. A family's own install calls it once at each app's launch, before
-     * any screen reads a metric, since a family's named specs keep what they first read.
+     * Makes [providers] the ones every catalog applies, the app's families and then the derived
+     * metrics of its Thing kinds, and builds [MetricCatalog.shared] again under them. A family's own
+     * install calls it once at each app's launch, before any screen reads a metric, since a family's
+     * named specs keep what they first read.
      */
     fun install(providers: List<DerivedMetricProvider>) {
-        installed = Installed(providers.distinct())
+        installed = providers.distinct()
+        MetricCatalog.shared.rebuild()
     }
 
     /** The axis floor of [metric]'s health scale, so the guideline stays in view, or null for a neutral metric. */
@@ -227,13 +225,11 @@ object Metrics {
     }
 
     /**
-     * Every metric of the bundled templates, each id once, in the order the first profile lists it.
-     * Where two boards describe one column, the first keeps its unit and aggregate and the plausible
-     * ranges join. A board that stores it otherwise gives it no values ([MetricSpec.inTemplate]).
+     * Every metric of [templates] under their bundled or derived profiles and [providers], each id once,
+     * in the order the first profile lists it. Where two boards describe one column, the first keeps its
+     * unit and aggregate and the plausible ranges join. A board that stores it otherwise gives it no
+     * values ([MetricSpec.inTemplate]).
      */
-    val catalog: List<MetricSpec> get() = installed.catalog
-
-    /** The catalog of [templates] under their bundled or derived profiles and [providers], see [catalog]. */
     fun catalogOf(templates: List<BoardTemplate>, providers: List<DerivedMetricProvider> = this.providers): List<MetricSpec> =
         merge(templates.sortedBy { it.dict }.map { of(it, providers = providers) })
 
@@ -257,24 +253,6 @@ object Metrics {
     private fun join(a: PlausibleRange?, b: PlausibleRange?): PlausibleRange? =
         if (a == null || b == null) a ?: b else PlausibleRange(minOf(a.min, b.min), maxOf(a.max, b.max))
 
-    /** Every metric the tiers keep, the [catalog]. Order is picker order. */
-    val all: List<MetricSpec> get() = catalog
-
-    fun byId(id: String): MetricSpec? = catalog.firstOrNull { it.id == id }
-
-    /**
-     * [spec] as the tiers hold it for a thing of [template], the [catalog] metric of its id bound to that
-     * template ([MetricSpec.inTemplate]), the spec the tiers aggregate each file of that template with.
-     * Null when [template] stores the column in another unit or rolls it up another way, since its files
-     * then add no buckets under that id. [spec] itself when the catalog has no metric of its id, and the
-     * tiers then hold no buckets for it, so a reader gets an empty series rather than a wrong one. A
-     * reader of the tiers asks through it, so a served template that changes a unit never labels old buckets.
-     */
-    fun tiered(spec: MetricSpec, template: BoardTemplate): MetricSpec? {
-        val kept = byId(spec.id) ?: return spec
-        return kept.inTemplate(template)
-    }
-
     /**
      * The metric History opens on for [metrics], the first primary stored column, or its corrected
      * view when one exists (#92). The first metric when nothing is primary, null for an empty list.
@@ -283,7 +261,4 @@ object Metrics {
         val first = metrics.firstOrNull { it.primary && !it.derived } ?: return metrics.firstOrNull()
         return metrics.firstOrNull { it.derived && it.property == first.property && first.basis == Basis.RAW } ?: first
     }
-
-    /** The metric History opens on, [defaultOf] the [catalog]. */
-    val default: MetricSpec get() = checkNotNull(defaultOf(catalog)) { "the bundled templates measure nothing" }
 }

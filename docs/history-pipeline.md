@@ -210,14 +210,15 @@ then 0 for an integer column and 2 otherwise), its display unit (`UcumDisplay`) 
 scale is the column `opensensor:scale`, then the registry scale of its `opensensor:property`, else
 none, never a column name. The primary is the Collection `opensensor:primary`, then the template's,
 then the first `physicalMeasurement` column with a scale, then the first `physicalMeasurement`
-column. It comes first, and `Metrics.defaultOf` opens History on it. Auxiliary columns, such as
+column. It comes first, and History opens on it (`Metrics.defaultOf` over the metrics of the
+template the Thing's newest file resolves) until the user picks another metric. Auxiliary columns, such as
 the board temperature and battery, are not metrics.
 
 **Derived metrics come from providers.** A `DerivedMetricProvider` (`:core:model`) reads a template
 and returns `DerivedMetric`s, each a derived `Datastream` with a label, a `RowFormula` over its
 `derived.from` columns and an optional stored column it is a view of. `Metrics.providers` lists them.
 Each app installs its sensor families and its Thing kinds' providers at launch with one call,
-`AirFamily.install(kinds.metricProviders)`. That call runs `Metrics.install` itself, which rebuilds the catalog. Nothing is
+`AirFamily.install(kinds.metricProviders)`. That call runs `Metrics.install` itself, which rebuilds `MetricCatalog.shared`. Nothing is
 installed by default, so every column stays neutral until then. Today the one family is `AirFamily`
 in `:family:air`, which derives `pm25_epa` when the template stores `pm25_cf1_ug_m3` and
 `relative_humidity_percent`. A provider also names its health scales (`DerivedMetricProvider.scales`,
@@ -226,9 +227,13 @@ template without PM columns builds its metrics and the catalog (`Metrics.catalog
 metric. The named air specs (`AirMetrics.PM25` and the rest in `:family:air`) resolve from the
 catalog on every read, never while it is built.
 
-`Metrics.all` is the union of the bundled templates. Where two boards describe one column, the first
-keeps its unit and aggregate. Tiers, daily files, the History picker and the charts iterate these
-specs and never name a column. A spec whose column a file lacks yields **no values, never zeros**.
+`MetricCatalog.of(thing)` gives one Thing's metrics from its template. `MetricCatalog.shared.union`
+holds every metric of the bundled templates and of each template a board served, the cache loaded or
+an href fetched, since each joins through `ServedTemplates.add`. The union only grows, so a metric
+never leaves while a file of its template is indexed. Where two boards describe one column, the first
+by dict keeps its unit and aggregate. Tiers, daily files, Files, Stations and the History picker read
+the union (`FileTemplates.metrics`, a flow where they observe), so a served board's columns aggregate
+with no app change. A spec whose column a file lacks yields **no values, never zeros**.
 
 **Each file is read by its own template (`FileTemplates`).** A file carries one footer key of ours,
 `opensensor`, whose value is compact JSON (stac-opensensor `PROFILE.md` "Parquet footer", version
