@@ -48,6 +48,25 @@ class UcumDisplayTest {
     }
 
     @Test
+    fun exponentDigitsShowAsSuperscripts() {
+        assertEquals("m³/m³", UcumDisplay.of("m3/m3"))
+        assertEquals("m²", UcumDisplay.of("m2"))
+        assertEquals("cm³", UcumDisplay.of("cm3"))
+        assertEquals("s⁻¹", UcumDisplay.of("s-1"))
+        assertEquals("mol/m²/s", UcumDisplay.of("mol/m2/s"))
+        assertEquals("kg.m⁻²", UcumDisplay.of("kg.m-2"))
+        assertEquals("[in_i]²", UcumDisplay.of("[in_i]2"))
+    }
+
+    @Test
+    fun factorsAndAnnotationDigitsKeepTheirDigits() {
+        assertEquals("10*3/uL", UcumDisplay.of("10*3/uL"))
+        assertEquals("h3 index/m²", UcumDisplay.of("{h3_index}/m2"))
+        assertEquals("", UcumDisplay.of("{h3_index}"))
+        assertEquals("1/min", UcumDisplay.of("1/min"))
+    }
+
+    @Test
     fun anAnnotationInsideACodeReadsUnderscoresAsSpaces() {
         assertEquals("raw count/s", UcumDisplay.of("{raw_count}/s"))
     }
