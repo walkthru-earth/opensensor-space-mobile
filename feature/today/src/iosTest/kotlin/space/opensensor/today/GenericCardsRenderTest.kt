@@ -33,7 +33,7 @@ class GenericCardsRenderTest {
             setContent { MaterialTheme { GenericMetricHero(state) } }
             onAllNodesWithText(label(state, SoilFixture.MOISTURE), useUnmergedTree = true).assertCountEquals(1)
             onAllNodesWithText("0.31", useUnmergedTree = true).assertCountEquals(1)
-            onAllNodesWithText("m3/m3", useUnmergedTree = true).assertCountEquals(1)
+            onAllNodesWithText("m³/m³", useUnmergedTree = true).assertCountEquals(1)
             onAllNodesWithText(label(state, SoilFixture.TEMPERATURE), useUnmergedTree = true).assertCountEquals(0)
         }
     }
