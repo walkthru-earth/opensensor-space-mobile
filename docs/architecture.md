@@ -59,9 +59,12 @@ flowchart TB
 ```
 
 No `:core` module names air quality. `:family:air` (#188) holds the WHO 2021 scales and palette,
-the EPA PM2.5 correction, the moods, the named air metrics, the PM sensor status and sticker, the
+the EPA PM2.5 correction, the moods, the air metrics of each Thing, the PM sensor status and sticker, the
 public cell summary, the PM NowCast (`PmNowCast`) and the quality checks (`QcRules`, `LiveQc`). It plugs in through the generic seams. `AirFamily` is a
-`DerivedMetricProvider` that names its scales and capabilities, and `AirDiscover.COLLECTION` is the
+`DerivedMetricProvider` that names its scales and capabilities. It finds its columns by
+`opensensor:property` (`AirColumns`), never by name, so any board that declares a PM2.5 property is
+air with no profile, and the EPA correction applies only to a Plantower CF=1 PM2.5 with RH. A board
+whose profile names no hero gets the air hero from the `particles` capability. `AirDiscover.COLLECTION` is the
 bundled Discover scale set (`DiscoverCollection.installBundled`). Each app entry point installs it
 at launch with one call, `AirFamily.install(kinds.metricProviders)`, when it builds its Thing kinds
 (`ThingModule` on Android, `ThingKindsIos.kt` on iOS). Core

@@ -6,7 +6,6 @@ import space.opensensor.model.Capability
 import space.opensensor.model.Derivation
 import space.opensensor.model.DerivedMetric
 import space.opensensor.model.DerivedMetricProvider
-import space.opensensor.model.Family
 import space.opensensor.model.Role
 import space.opensensor.model.RowCheck
 import space.opensensor.model.RowFormula
@@ -14,23 +13,21 @@ import space.opensensor.model.Thing
 import space.opensensor.publicfeed.DiscoverCollection
 
 /**
- * The air family, what it adds to the generic core through [DerivedMetricProvider]. A template that
- * stores CF=1 PM2.5 and RH gets the US EPA corrected PM2.5 ([EpaPm25Correction], #92), a corrected
- * view of the atmospheric PM2.5 that shares its scale and primary flag. Nothing stored changes. Scales
- * come from the template and the registries, never from this family. An air Thing gets
- * [BATCH_ESTIMATE] and [PARTICLES].
+ * The air family, what it adds to the generic core through [DerivedMetricProvider]. It finds its
+ * columns by `opensensor:property` ([AirColumns]), never by name, so any board that declares those
+ * properties gets it with no app change. A template that stores a Plantower CF=1 PM2.5 and RH gets the
+ * US EPA corrected PM2.5 ([EpaPm25Correction], #92), a corrected view of its PM2.5 that shares its
+ * scale and primary flag. Nothing stored changes. Scales come from the template and the registries,
+ * never from this family. A Thing gets [BATCH_ESTIMATE] and [PARTICLES] by property too.
  *
  * The EPA NowCast for short PM windows ([PmNowCast], #93) and the quality checks for suspect PM
  * readings ([QcRules], [LiveQc], #91) live here too, next to the correction.
  */
 object AirFamily : DerivedMetricProvider {
-    /** The family id of an air profile. */
-    val FAMILY = Family("air")
-
-    /** The board writes the unvalidated Plantower batch estimate column ([AirMetrics.BATCH_ESTIMATE_COLUMN]). */
+    /** The board writes the unvalidated Plantower batch estimate ([AirProperty.BATCH_ESTIMATE]). */
     val BATCH_ESTIMATE = Capability("batch-estimate")
 
-    /** An air profile whose LIVE shows a physical PM2.5 on the PM2.5 scale, the particle cards. */
+    /** A Thing whose LIVE shows a physical PM2.5 ([AirProperty.PM25]) on the PM2.5 scale, the particle cards. */
     val PARTICLES = Capability("particles")
 
     /** The corrected PM2.5 id, a stable tier key. */
@@ -39,43 +36,46 @@ object AirFamily : DerivedMetricProvider {
     /** The `derived.method` of the corrected PM2.5. */
     const val EPA_METHOD = "us-epa-pm25-2021"
 
+    /*
+     * The bundled CoreS3 and Waveshare column names, for tests, previews and the benchmark. The family
+     * itself reads columns by property ([AirColumns]).
+     */
     const val PM25_CF1 = "pm25_cf1_ug_m3"
     const val PM25_ATMOSPHERIC = "pm25_atmospheric_ug_m3"
     const val RELATIVE_HUMIDITY = "relative_humidity_percent"
     const val PM1_ATMOSPHERIC = "pm1_atmospheric_ug_m3"
     const val PM10_ATMOSPHERIC = "pm10_atmospheric_ug_m3"
 
-    /**
-     * The Plantower particle count bins, per 0.1 L, from the smallest size up. A board writes the
-     * ones its template declares, the CoreS3 all six and the Waveshare the first four.
-     */
+    /** The bundled CoreS3 count bin names, per 0.1 L, from the smallest size up, for tests. */
     val PARTICLE_BINS: List<String> = listOf("gt03", "gt05", "gt10", "gt25", "gt50", "gt100").map { "particles_${it}_per_01l" }
 
     override fun derive(template: BoardTemplate): List<DerivedMetric> {
-        val cf1 = template.datastream(PM25_CF1) ?: return emptyList()
-        if (template.datastream(RELATIVE_HUMIDITY) == null) return emptyList()
+        val air = AirColumns.of(template)?.takeIf { it.epa } ?: return emptyList()
+        val cf1 = air.pm25Cf1 ?: return emptyList()
+        val rh = air.humidity ?: return emptyList()
         val corrected = cf1.copy(
             name = PM25_CORRECTED_ID,
             fieldId = null,
             liveKey = null,
             unitLabel = null,
-            derived = Derivation(listOf(PM25_CF1, RELATIVE_HUMIDITY), EPA_METHOD),
+            derived = Derivation(listOf(cf1.name, rh.name), EPA_METHOD),
         )
-        return listOf(DerivedMetric(corrected, label = "PM2.5 corrected", formula = EpaFormula, viewOf = PM25_ATMOSPHERIC))
+        return listOf(DerivedMetric(corrected, label = "PM2.5 corrected", formula = EpaFormula, viewOf = air.pm25.name))
     }
 
     /**
-     * The stored quality checks ([AirQc], #91) for a template that writes the atmospheric PM2.5, with
-     * the count bins it declares. Every other template gets none.
+     * The stored quality checks ([AirQc], #91) for a template that stores a PM2.5, with the PM1, PM10,
+     * RH and count bins it declares. Every other template gets none.
      */
     override fun rowCheck(template: BoardTemplate): RowCheck? {
-        if (template.datastream(PM25_ATMOSPHERIC) == null) return null
-        return AirQc(PARTICLE_BINS.filter { template.datastream(it) != null })
+        val air = AirColumns.of(template) ?: return null
+        return AirQc(air.pm1?.name, air.pm25.name, air.pm10?.name, air.humidity?.name, air.bins.map { it.name })
     }
 
     override fun capabilitiesOf(thing: Thing): Set<Capability> = buildSet {
-        if (thing.datastream(AirMetrics.BATCH_ESTIMATE_COLUMN) != null) add(BATCH_ESTIMATE)
-        if (thing.profile.family == FAMILY && thing.showsPm25Live()) add(PARTICLES)
+        val air = thing.air ?: return@buildSet
+        if (air.batchEstimate != null) add(BATCH_ESTIMATE)
+        if (thing.showsPm25Live(air)) add(PARTICLES)
     }
 
     /**
@@ -91,9 +91,10 @@ object AirFamily : DerivedMetricProvider {
         DiscoverCollection.installBundled(AirDiscover.COLLECTION)
     }
 
-    /** A physical PM2.5 measurement on the WHO PM2.5 scale that LIVE shows. */
-    private fun Thing.showsPm25Live(): Boolean = datastreams.any {
-        it.scale?.id == WhoGuidelines.PM25.id && it.datastream.role == Role.PHYSICAL_MEASUREMENT && it.datastream.liveKey in live.keys
+    /** The PM2.5 of [air] is a physical measurement on the WHO PM2.5 scale that LIVE shows. */
+    private fun Thing.showsPm25Live(air: AirColumns): Boolean {
+        val pm25 = datastream(air.pm25.name) ?: return false
+        return pm25.scale?.id == WhoGuidelines.PM25.id && pm25.datastream.role == Role.PHYSICAL_MEASUREMENT && pm25.datastream.liveKey in live.keys
     }
 
     private object EpaFormula : RowFormula {

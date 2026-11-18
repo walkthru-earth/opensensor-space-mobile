@@ -146,8 +146,8 @@ data class TodayUiState(
     /** The board opted in to the unvalidated batch estimate and its dictionary is reviewed. */
     val showsBatchEstimate: Boolean get() = capabilities.showsBatchEstimate(snapshot.config?.config?.sensor?.batchCandidate)
 
-    /** The family presenter the app profile's `hero` names, see [HeroRegistry]. */
-    val presenter: FamilyPresenter = HeroRegistry.presenterFor(capabilities.thing?.profile?.hero)
+    /** The family presenter the app profile's `hero` or the Thing's capabilities pick, see [HeroRegistry]. */
+    val presenter: FamilyPresenter = HeroRegistry.presenterFor(capabilities.thing?.profile?.hero, capabilities.capabilities)
 
     /** The board's power columns, found by observed property. */
     val power: BoardPower = BoardPower.of(capabilities.thing)
