@@ -23,10 +23,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to a pull request replaces its run. A run on main always finishes, so every commit
-# there gets its iOS jobs and saves the caches.
+# A newer push to a pull request replaces its run. Every other run gets its own group, because a
+# shared group would still replace a queued main run. So every commit on main gets its iOS jobs and
+# saves the caches.
 concurrency:
-  group: verify-${{ github.ref }}
+  group: verify-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
