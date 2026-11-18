@@ -2,7 +2,7 @@
 
 Generated with the built-in image generation tool. Every variant used `ui/designsystem/src/commonMain/composeResources/drawable/peacock.webp` as its identity reference and requested a true transparent background. Confused and working also used the initial generated portrait as an edit reference to bring the wing gesture beside the face. The selected square portraits were resized and exported to lossless 512 × 512 WebP with the generated alpha preserved (`exact=True`); no illustration was redrawn during export.
 
-At 48 and 96 pixels, a light and dark background review confirmed the closed eye and wing tuck for sleeping, tilted head and shrugging wing for confused, and focused eyes with directional raised wing for working. Raw source PNGs and the review sheet are kept outside the repository in `/private/tmp/opensensor-peacock-source/`.
+At 48 and 96 pixels, a light and dark background review confirmed the closed eye and wing tuck for sleeping, tilted head and shrugging wing for confused, and focused eyes with directional raised wing for working. Raw source PNGs and the review sheet are kept outside the repository.
 
 ## confused
 

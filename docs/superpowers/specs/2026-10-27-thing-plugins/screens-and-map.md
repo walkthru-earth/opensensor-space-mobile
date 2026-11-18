@@ -9,9 +9,8 @@ Part of [Thing plugins](README.md). Proposal, 2026-10-27.
 - Hardcoded to air.
   - Only `GENERIC` and `AIR` families exist (`Vocabulary.kt`).
   - The device row reads `ArchiveGlance.lastDay`, a `LatestDay` of the thing's main metric from `LatestDays` (`core/history/.../LatestDay.kt`). Only a banded metric such as PM2.5 shows a WHO mood, any other shows a neutral line at its display step. Day tiers still bucket only the bundled `Metrics.all` catalog, so a served soil board has no day line yet.
-  - The Today hero is PM2.5 only (`feature/today/.../TodayCards.kt`). Mood words are tied to WHO steps.
-  - `profile.hero` is parsed (`ModelJson.kt:91`) and read by no screen.
-- Stations cards and the shared Station page are spec only ([2026-10-12-stations-ux-design.md](../2026-10-12-stations-ux-design.md) slice 2).
+  - The Today hero comes from the presenter the app profile's `hero` names (`feature/today/.../FamilyPresenters.kt`). Air keeps the peacock hero with WHO moods, and every other id gets `GenericPresenter`.
+- Stations cards and the shared Station page are built (`:feature:devices`, `:feature:today`).
 
 ## 2. Cards and Station page from template plus profile
 
