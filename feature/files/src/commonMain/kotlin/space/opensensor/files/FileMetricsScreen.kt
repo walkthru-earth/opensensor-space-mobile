@@ -29,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,16 +36,20 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
+import space.opensensor.designsystem.CardGap
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.InfoNote
+import space.opensensor.designsystem.MonoFamily
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockIcon
+import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.designsystem.SectionCard
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.WarningNote
 import space.opensensor.designsystem.headingSemantics
 import space.opensensor.designsystem.listSeparator
+import space.opensensor.designsystem.mono
 import space.opensensor.designsystem.spokenList
 import space.opensensor.files.resources.Res
 import space.opensensor.files.resources.action_back
@@ -115,7 +118,7 @@ fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String,
     Scaffold(
         topBar = {
             ThingTopBar(
-                title = { Text(name.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium, modifier = Modifier.headingSemantics()) },
+                title = { Text(name.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium.mono(), modifier = Modifier.headingSemantics()) },
                 onBack = onBack,
                 backLabel = stringResource(Res.string.action_back),
             )
@@ -143,7 +146,7 @@ fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String,
                         },
                     ),
                 )
-                if (level.developer) state.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (level.developer) state.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall.mono(), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (state.reason != FailReason.NOT_IN_ARCHIVE) InfoNote(stringResource(Res.string.fm_failed_archive_safe))
             }
             is FileMetricsState.Loaded -> Loaded(state, padding, level.developer, rows, onRowPage)
@@ -156,12 +159,12 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
     val idx = s.index
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(ScreenPadding),
+        verticalArrangement = Arrangement.spacedBy(CardGap),
     ) {
         item(key = "file") {
             SectionCard(stringResource(Res.string.fm_file)) {
-                Text(s.name, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(s.name, style = MaterialTheme.typography.bodySmall.mono(), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 StatLine(
                     stringResource(Res.string.fm_size),
@@ -273,7 +276,7 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                         // Key and value read as one element.
                         Column(Modifier.semantics(mergeDescendants = true) {}) {
                             Text(k, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(v, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                            Text(v, style = MaterialTheme.typography.bodySmall.mono())
                         }
                         Spacer(Modifier.height(4.dp))
                     }
@@ -316,7 +319,7 @@ private fun RowsCard(state: RowsState, onPage: (Long) -> Unit) {
             Text(
                 "#${page.from + k}  " + cells.joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = MonoFamily,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -344,6 +347,6 @@ private fun RowScope.Cell(text: String, weight: Float, mono: Boolean = false) {
     BodyText(
         text,
         modifier = Modifier.weight(weight).padding(end = 4.dp),
-        style = MaterialTheme.typography.bodySmall.copy(fontFamily = if (mono) FontFamily.Monospace else null),
+        style = MaterialTheme.typography.bodySmall.copy(fontFamily = if (mono) MonoFamily else null),
     )
 }

@@ -47,7 +47,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -114,10 +113,13 @@ import space.opensensor.debug.resources.nav_debug
 import space.opensensor.debug.resources.scan_files
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
+import space.opensensor.designsystem.CardGap
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.InfoNote
+import space.opensensor.designsystem.MonoFamily
+import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.designsystem.SectionCard
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.ThingTopBar
@@ -125,6 +127,7 @@ import space.opensensor.designsystem.TickingText
 import space.opensensor.designsystem.WarningNote
 import space.opensensor.designsystem.headingSemantics
 import space.opensensor.designsystem.labelText
+import space.opensensor.designsystem.mono
 import space.opensensor.strings.rememberAgoFormatter
 import kotlin.time.Instant
 
@@ -170,7 +173,7 @@ fun DebugScreen(
                 title = { Text(stringResource(Res.string.nav_debug), style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics()) },
                 transport = state.link.transport,
                 subtitle = {
-                    Text(state.link.endpoint ?: address, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(state.link.endpoint ?: address, style = MaterialTheme.typography.labelSmall.mono(), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
             )
         },
@@ -189,8 +192,8 @@ fun DebugScreen(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = padding.calculateBottomPadding() + 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 4.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+                verticalArrangement = Arrangement.spacedBy(CardGap),
             ) {
                 item(key = "link") { LinkCard(state.link) }
                 state.syncTrace?.let { trace -> item(key = "sync-diagnostics") { SyncCard(trace) } }
@@ -291,7 +294,7 @@ private fun FramesCard(frames: List<RawFrameRecord>, onClear: () -> Unit) {
                         Text(
                             line,
                             style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = MonoFamily,
                             maxLines = 1,
                             modifier = Modifier.horizontalScroll(rememberScrollState()),
                         )
@@ -365,7 +368,7 @@ private fun RawCard(state: DebugUiState, ready: Boolean, onSend: (String) -> Uni
         Text(
             stringResource(Res.string.debug_raw_examples),
             style = MaterialTheme.typography.bodySmall,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = MonoFamily,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
@@ -475,7 +478,7 @@ private fun MonoBox(text: String, maxHeight: Int) {
             Text(
                 text,
                 style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = MonoFamily,
                 modifier = Modifier
                     .heightIn(max = maxHeight.dp)
                     .verticalScroll(rememberScrollState())

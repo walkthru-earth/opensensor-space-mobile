@@ -35,7 +35,9 @@ import space.opensensor.data.protocol.ConfigProblem
 import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.data.sync.PlanField
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.CardGap
 import space.opensensor.designsystem.InfoNote
+import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.headingSemantics
 import space.opensensor.device.resources.Res
@@ -449,8 +451,8 @@ fun DeviceConfigScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+            verticalArrangement = Arrangement.spacedBy(CardGap),
         ) {
             if (!state.ready) {
                 item(key = "not_ready") { InfoNote(stringResource(Res.string.device_not_ready)) }

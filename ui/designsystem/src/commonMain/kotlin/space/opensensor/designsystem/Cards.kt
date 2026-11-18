@@ -30,13 +30,18 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** How loud a card is. Hero is the one card per screen that carries the answer. */
-enum class CardTone { PLAIN, SOFT, HERO }
+/**
+ * How loud a card is. Hero is the one card per screen that carries the answer, Alert carries a
+ * problem the user can act on.
+ */
+enum class CardTone { PLAIN, SOFT, HERO, ALERT }
 
 /**
  * The website's rounded panel (`.brand-panel`, 2rem corners, thin border) as a card, on the one
  * content card radius [CardShape]. [CardTone.HERO] sits on the soft brand blue, [CardTone.SOFT] on
- * the surface tint, [CardTone.PLAIN] on the low container with a thin outline.
+ * the surface tint, [CardTone.PLAIN] on the low container with a thin outline, [CardTone.ALERT] on
+ * the error container. Every content card on every screen is a [BrandCard] or wraps one, the
+ * `ThemeLintTest` in `:ui:strings` keeps raw card radii, fonts and colours out of the screens.
  */
 @Composable
 fun BrandCard(
@@ -50,6 +55,7 @@ fun BrandCard(
         CardTone.HERO -> scheme.primaryContainer to scheme.onPrimaryContainer
         CardTone.SOFT -> scheme.surfaceContainerHigh to scheme.onSurface
         CardTone.PLAIN -> scheme.surfaceContainerLow to scheme.onSurface
+        CardTone.ALERT -> scheme.errorContainer to scheme.onErrorContainer
     }
     Surface(
         shape = CardShape,
@@ -62,23 +68,22 @@ fun BrandCard(
     }
 }
 
-/** Card wrapper used by the Device and Debug screens: an eyebrow title, an optional trailing control, then the body. */
+/** A [BrandCard] with an eyebrow title and an optional trailing control above the body. */
 @Composable
 fun SectionCard(
     title: String,
     modifier: Modifier = Modifier,
+    tone: CardTone = CardTone.PLAIN,
     trailing: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Eyebrow(title, heading = true, modifier = Modifier.weight(1f))
-                trailing?.invoke()
-            }
-            Spacer(Modifier.height(8.dp))
-            content()
+    BrandCard(modifier = modifier, tone = tone, contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Eyebrow(title, heading = true, modifier = Modifier.weight(1f))
+            trailing?.invoke()
         }
+        Spacer(Modifier.height(8.dp))
+        content()
     }
 }
 

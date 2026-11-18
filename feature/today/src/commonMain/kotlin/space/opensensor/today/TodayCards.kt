@@ -27,7 +27,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -53,6 +52,7 @@ import space.opensensor.designsystem.CardTone
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.InfoContent
+import space.opensensor.designsystem.MonoFamily
 import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockPortrait
@@ -643,7 +643,7 @@ internal fun ClockCard(status: DeviceStatus?, live: LiveReading?, modifier: Modi
                 stringResource(Res.string.clock_last_sample, instant.toString()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = MonoFamily,
             )
         }
     }
