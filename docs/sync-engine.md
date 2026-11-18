@@ -574,11 +574,15 @@ through `SetupAck`) and the app floors into the ordered steps both wizards walk.
   plus their own.
 - `SetupPlan.manifestOf(info, served)` resolves the manifest from the board's served or bundled
   template, or `SetupManifest.NONE`.
+- The wizard sets the bits. Next on a step, after any save, and Skip send
+  `ConfigPatch.Builder.setupAck(setup_v, ack)` with the step's bit and the bits of steps hidden at
+  this detail level, through `DeviceConfigController.ackSetup`. The page moves on only when the page 1
+  read back holds those bits for that `setup_v`. A step with no bit, or a plan with no declared steps,
+  sends nothing. Done sends the hidden bits still clear before it closes.
 
 A caller passes advert flags only from an advert newer than its last page 1 read. Right after a
 save, a cached advert can still carry bit 6 while a fresh page 1 already says setup is done. The
-setup wizard confirms completion by reading page 1 `thing.setup` again after its SET_CONFIG and
-checking it is 0, as the firmware
+setup wizard confirms each step by reading page 1 again after its `setup_ack` write, as the firmware
 [migration note](../../opensensor-space-firmware/docs/shared/mobile-migration.md) asks.
 
 The bit does not enter `changeKey`, so it never starts a sync by itself.
@@ -601,7 +605,7 @@ it.
   count chip that opens Find, and never opens the wizard by itself.
 - `TabNavigator.finishSetup` acts only while the My devices root is on top. An automatic open always
   lands on Find with the sensor offered (`SetupKey.offer`), added or not, so nothing connects until
-  the user taps it. A tap on "Finish setup" resumes an added sensor at Location. Any wizard run for a
+  the user taps it. A tap on "Finish setup" resumes an added sensor at its first step not done. Any wizard run for a
   sensor spends its open (`opened`).
 - Leaving the foreground calls `endSession`, which forgets the page 1 reads, the opens and the cap,
   and skips any advert heard before it. A scan result kept from the last session cannot open the

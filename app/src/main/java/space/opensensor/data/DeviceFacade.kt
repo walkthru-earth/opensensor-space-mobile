@@ -445,6 +445,8 @@ class DeviceFacade internal constructor(
     suspend fun writeLocation(patch: ConfigPatch) = linkOwner.writeLocation(patch)
     suspend fun readSite() = linkOwner.readSite()
     suspend fun writeSite(patch: ConfigPatch) = linkOwner.writeSite(patch)
+    suspend fun readBoardSettings() = linkOwner.readBoardSettings()
+    suspend fun writeBoardSettings(patch: ConfigPatch) = linkOwner.writeBoardSettings(patch)
     fun startWifiScan() = linkOwner.startWifiScan()
     fun clearWifiScan() = linkOwner.clearWifiScan()
     fun rebootAndReconnect() = linkOwner.rebootAndReconnect()

@@ -14,6 +14,7 @@ import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.protocol.BleConfig
+import space.opensensor.data.protocol.BoardSettings
 import space.opensensor.data.protocol.ConfigFields
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.ConfigProblem
@@ -24,11 +25,19 @@ import space.opensensor.data.protocol.LanConfig
 import space.opensensor.data.protocol.LocationConfig
 import space.opensensor.data.protocol.PairMode
 import space.opensensor.data.protocol.SensorConfig
+import space.opensensor.data.protocol.SetupAck
 import space.opensensor.data.protocol.ThingConfig
 import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.data.protocol.WifiConfig
+import space.opensensor.model.ConfigApplies
+import space.opensensor.model.ConfigKeySpec
+import space.opensensor.model.ConfigKeyType
+import space.opensensor.model.ConfigValues
+import space.opensensor.model.ManifestStep
+import space.opensensor.model.SetupManifest
 import space.opensensor.model.SiteField
 import space.opensensor.model.SiteProblem
+import space.opensensor.model.StepId
 import space.opensensor.model.ThingSite
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
@@ -85,12 +94,42 @@ private class FakeSource(
 
     /** Page 1 `thing.mobility`. Null is firmware that does not report it. */
     var mobilityAnswer: ThingMobility? = null
-    private fun page1() = locationAnswer?.let { DeviceConfig(location = it, thing = mobilityAnswer?.let { m -> ThingConfig(mobility = m.wire) }) }
+
+    /** Page 1 `thing.setup_v` and `thing.setup_ack`, and whether the board keeps a sent record. */
+    var setupV: Int? = null
+    var setupAck: Int? = null
+    var keepsSetup = true
+    private fun page1() = locationAnswer?.let {
+        val thing = ThingConfig(mobility = mobilityAnswer?.wire, setupAck = setupAck, setupV = setupV).takeIf { t -> t != ThingConfig() }
+        DeviceConfig(location = it, thing = thing)
+    }
     override suspend fun readLocation(): DeviceConfig? = page1()
     override suspend fun writeLocation(patch: ConfigPatch): DeviceConfig? {
         wire += patch.encode()
+        if (keepsSetup) {
+            val sent = lines(patch)
+            sent[ConfigFields.THING_SETUP_V]?.let { setupV = it.toInt() }
+            sent[ConfigFields.THING_SETUP_ACK]?.let { setupAck = it.toInt() }
+        }
         return page1()
     }
+
+    /** Page 7 as the board answers it. Null is a source without board settings. */
+    var boardAnswer: BoardSettings? = null
+    var boardReads = 0
+    var keepsBoard = true
+    override suspend fun readBoardSettings(): BoardSettings? {
+        boardReads++
+        return boardAnswer
+    }
+    override suspend fun writeBoardSettings(patch: ConfigPatch): BoardSettings? {
+        wire += patch.encode()
+        if (keepsBoard) boardAnswer = BoardSettings((boardAnswer?.values ?: emptyMap()) + lines(patch))
+        return boardAnswer
+    }
+
+    private fun lines(patch: ConfigPatch): Map<String, String> =
+        patch.encode().lines().filter { it.isNotEmpty() }.associate { it.substringBefore('=') to it.substringAfter('=') }
     val recorded = mutableListOf<String>()
 
     /** Pages 5 and 6 as the board answers them. Null is firmware without site keys. */
@@ -173,9 +212,13 @@ private class FakeSource(
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DeviceConfigControllerTest {
-    private fun TestScope.controller(source: FakeSource, level: DetailLevel = DetailLevel.DETAILED): DeviceConfigController {
+    private fun TestScope.controller(
+        source: FakeSource,
+        level: DetailLevel = DetailLevel.DETAILED,
+        manifest: SetupManifest = SetupManifest.NONE,
+    ): DeviceConfigController {
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        return DeviceConfigController(scope, source, MutableStateFlow(level))
+        return DeviceConfigController(scope, source, MutableStateFlow(level), templates = MutableStateFlow(emptyList()), manifestOf = { _, _ -> manifest })
     }
 
     @Test
@@ -887,5 +930,146 @@ class DeviceConfigControllerTest {
         source.siteAnswer = roof
         c.saveSite()
         assertEquals(listOf("refresh"), source.calls, "only once")
+    }
+
+    private val theme = ConfigKeySpec("panel.theme", ConfigKeyType.ENUM, ConfigValues.Choices(listOf("light", "dark")), ConfigApplies.IMMEDIATELY, page = 7)
+    private val reset = ConfigKeySpec("panel.reset", ConfigKeyType.BOOLEAN, null, ConfigApplies.ACTION, page = 7)
+
+    /** Name, a required location and a board step with one setting and one action. */
+    private val board = SetupManifest(
+        setup = listOf(ManifestStep(StepId.NAME, false, emptyList()), ManifestStep(StepId.LOCATION, true, emptyList()), ManifestStep(StepId("panel"), false, listOf("panel.theme", "panel.reset"))),
+        configKeys = mapOf(theme.key to theme, reset.key to reset),
+    )
+    private val boardV = SetupAck.version(listOf("name", "location", "panel"))
+
+    private fun located(source: FakeSource, cell: String = "") = source.apply {
+        locationAnswer = LocationConfig(cell = cell, resolution = 8, country = "")
+        mobilityAnswer = ThingMobility.FIXED
+    }
+
+    @Test
+    fun thePlanFollowsPageOneAndTheTemplate() = runTest {
+        val source = located(FakeSource())
+        val c = controller(source, manifest = board)
+        val plan = assertNotNull(c.state.value.setupPlan)
+        assertEquals(listOf(StepId.NAME, StepId.LOCATION, StepId("panel")), plan.steps.map { it.id })
+        assertFalse(assertNotNull(plan.step(StepId.LOCATION)).satisfied)
+        assertEquals(boardV, plan.version)
+    }
+
+    @Test
+    fun noPlanBeforePageOneIsRead() = runTest {
+        val c = controller(FakeSource(), manifest = board)
+        assertNull(c.state.value.setupPlan)
+    }
+
+    @Test
+    fun anAckSendsTheVersionWithTheBitsAndReadsThemBack() = runTest {
+        val source = located(FakeSource())
+        val c = controller(source, manifest = board)
+        assertTrue(c.ackSetup(listOf(StepId.NAME)))
+        assertEquals(listOf("thing.setup_v=$boardV\nthing.setup_ack=1\n"), source.wire)
+        assertTrue(assertNotNull(c.state.value.setupPlan?.step(StepId.NAME)).acked)
+        // A step already acked, or one without a bit, sends nothing more.
+        assertTrue(c.ackSetup(listOf(StepId.NAME, StepId.SITE)))
+        assertEquals(1, source.wire.size)
+        assertTrue(c.ackSetup(listOf(StepId("panel"))))
+        assertEquals("thing.setup_v=$boardV\nthing.setup_ack=5\n", source.wire.last())
+    }
+
+    @Test
+    fun withoutDeclaredStepsAnAckSendsNothing() = runTest {
+        val source = located(FakeSource(), cell = CELL8)
+        val c = controller(source)
+        assertTrue(c.ackSetup(listOf(StepId.LOCATION)))
+        assertEquals(emptyList(), source.wire)
+    }
+
+    @Test
+    fun anAckTheBoardDoesNotKeepFails() = runTest {
+        val source = located(FakeSource()).apply { keepsSetup = false }
+        val c = controller(source, manifest = board)
+        val notices = collectNotices(c)
+        assertFalse(c.ackSetup(listOf(StepId.NAME)))
+        assertEquals(listOf<DeviceConfigNotice>(DeviceConfigNotice.Failed(DeviceConfigCommand.SET_CONFIG)), notices)
+    }
+
+    @Test
+    fun anAckWaitsForAnEditableLink() = runTest {
+        val source = located(FakeSource())
+        val c = controller(source, manifest = board)
+        val notices = collectNotices(c)
+        source.snapshot.value = source.snapshot.value.copy(busy = true)
+        assertFalse(c.ackSetup(listOf(StepId.NAME)))
+        assertEquals(emptyList(), source.wire)
+        assertEquals(listOf<DeviceConfigNotice>(DeviceConfigNotice.Busy), notices)
+    }
+
+    @Test
+    fun pageSevenIsReadOnlyForATemplateWithBoardKeys() = runTest {
+        val plain = located(FakeSource()).apply { boardAnswer = BoardSettings(mapOf("panel.theme" to "light")) }
+        controller(plain)
+        assertEquals(0, plain.boardReads)
+        val source = located(FakeSource()).apply { boardAnswer = BoardSettings(mapOf("panel.theme" to "light")) }
+        val c = controller(source, manifest = board)
+        assertEquals(1, source.boardReads)
+        assertEquals("light", c.state.value.board.value("panel.theme"))
+    }
+
+    @Test
+    fun aBoardSaveSendsOnlyChangedValuesAndChecksTheReadback() = runTest {
+        val source = located(FakeSource()).apply { boardAnswer = BoardSettings(mapOf("panel.theme" to "light")) }
+        val c = controller(source, manifest = board)
+        val fields = assertNotNull(c.state.value.setupPlan?.step(StepId("panel"))).fields
+        assertTrue(c.saveBoardAndWait(fields), "nothing changed")
+        assertEquals(emptyList(), source.wire)
+        c.editBoard("panel.theme", "dark")
+        assertTrue(c.saveBoardAndWait(fields))
+        assertEquals(listOf("panel.theme=dark\n"), source.wire)
+        assertEquals(DeviceBoardResult.SAVED, c.state.value.board.result)
+        assertEquals("dark", c.state.value.board.value("panel.theme"))
+        source.keepsBoard = false
+        c.editBoard("panel.theme", "light")
+        assertFalse(c.saveBoardAndWait(fields))
+        assertEquals(DeviceBoardResult.NOT_CONFIRMED, c.state.value.board.result)
+    }
+
+    @Test
+    fun aBoardValueOutsideItsTypeIsNeverSent() = runTest {
+        val source = located(FakeSource()).apply { boardAnswer = BoardSettings(mapOf("panel.theme" to "light")) }
+        val c = controller(source, manifest = board)
+        val notices = collectNotices(c)
+        val fields = assertNotNull(c.state.value.setupPlan?.step(StepId("panel"))).fields
+        c.editBoard("panel.theme", "neon")
+        assertFalse(c.saveBoardAndWait(fields))
+        assertEquals(emptyList(), source.wire)
+        assertEquals(listOf<DeviceConfigNotice>(DeviceConfigNotice.Problem(ConfigProblem.FIELD_VALUE)), notices)
+    }
+
+    @Test
+    fun aBoardActionAlwaysConfirmsFirst() = runTest {
+        val source = located(FakeSource()).apply { boardAnswer = BoardSettings(emptyMap()) }
+        val c = controller(source, manifest = board)
+        val action = assertNotNull(c.state.value.setupPlan?.step(StepId("panel"))).fields.single { it.field.key == "panel.reset" }
+        c.requestBoardAction(action)
+        assertEquals(DeviceConfigDialog.BoardAction(action), c.dialog.value)
+        assertEquals(emptyList(), source.wire)
+        c.dismiss()
+        assertEquals(emptyList(), source.wire)
+        c.requestBoardAction(action)
+        c.confirm()
+        assertEquals(listOf("panel.reset=1\n"), source.wire)
+        assertNull(c.dialog.value)
+    }
+
+    @Test
+    fun aBoardActionWaitsForAQuietLink() = runTest {
+        val source = located(FakeSource(syncRunning = true)).apply { boardAnswer = BoardSettings(emptyMap()) }
+        val c = controller(source, manifest = board)
+        val action = assertNotNull(c.state.value.setupPlan?.step(StepId("panel"))).fields.single { it.field.key == "panel.reset" }
+        c.requestBoardAction(action)
+        assertNull(c.dialog.value)
+        c.requestBoardAction(assertNotNull(c.state.value.setupPlan?.step(StepId("panel"))).fields.first())
+        assertNull(c.dialog.value, "only an action opens the dialog")
     }
 }

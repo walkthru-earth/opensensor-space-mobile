@@ -75,6 +75,7 @@ import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.local.database.ThingEpoch
 import space.opensensor.data.local.database.ThingEpochDao
 import space.opensensor.data.local.security.LanCredentialStore
+import space.opensensor.data.protocol.ConfigFields
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
@@ -1602,6 +1603,27 @@ class DeviceLinkOwner @Inject constructor(
         try {
             _config.value = session.setConfig(patch)
             return session.getSite()
+        } finally { endCommand() }
+    }
+
+    /** Page 7, the keys the board template declares. Read only when the template declares one. */
+    suspend fun readBoardSettings(): space.opensensor.data.protocol.BoardSettings {
+        val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
+        if (!tryBeginCommand()) throw IllegalStateException("link busy")
+        try { return session.getBoardSettings() } finally { endCommand() }
+    }
+
+    /**
+     * Sends declared board keys in their own `SET_CONFIG` and reads page 7 back. Only a confirmed
+     * user action calls this. The values are never logged.
+     */
+    suspend fun writeBoardSettings(patch: ConfigPatch): space.opensensor.data.protocol.BoardSettings {
+        require(patch.keys.none { ConfigFields.isReserved(it) || it in ConfigFields.SECRET_KEYS }) { "only declared board keys" }
+        val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
+        if (!tryBeginCommand()) throw IllegalStateException("link busy")
+        try {
+            _config.value = session.setConfig(patch)
+            return session.getBoardSettings()
         } finally { endCommand() }
     }
 
