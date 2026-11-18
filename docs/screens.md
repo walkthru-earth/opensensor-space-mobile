@@ -53,14 +53,16 @@ device, and nothing is asked at launch.
   ([sync-engine.md](sync-engine.md#thing-setup)), one page per step in the board template's order.
   Name, Location or Mobility, Site, Wi-Fi, Pairing and Paired phones are the Device settings cards.
   Pairing and Paired phones show from Detailed, and LAN never has a page. A board step is a
-  `GenericFieldsForm` of its declared keys, and its action keys always confirm first. A required step
+  `GenericFieldsForm` of its declared keys titled with its template `label` in the app language, or
+  "Sensor settings" without one, and its action keys always confirm first. A required step
   this app cannot draw says to update the app and offers Leave. Location has no Skip on a fixed
   Thing. Its area is picked on the full screen area map, the same one Device settings opens
   ([device-location.md](device-location.md)), and Moving needs no cell
   ([device-location.md](device-location.md#mobility-and-gnss)). Next waits until the sensor confirms
   a saved H3 cell or Moving. Next on Site or a board step saves the changed values and moves on once
   the sensor confirms them. Next and Skip then set the step's bit in `thing.setup_ack` and move on
-  only once the sensor reads it back. A setup left before Done resumes at the first step not done.
+  only once the sensor reads it back. When it does not, the page says the sensor did not confirm the
+  step and Retry sends only the bit again. A setup left before Done resumes at the first step not done.
   After pairing, the close arrow and system back both ask
   "Leave setup?" first, and old firmware fails on Find with the update message. A sensor under Nearby
   on My devices that this phone has not added opens the wizard with it picked, never Today, so setup

@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -75,6 +76,7 @@ import space.opensensor.model.StepId
 import space.opensensor.permissions.RuntimeAccess
 import space.opensensor.settings.DetailLevel
 import space.opensensor.setup.resources.Res
+import space.opensensor.setup.resources.setup_ack_failed
 import space.opensensor.setup.resources.setup_added
 import space.opensensor.setup.resources.setup_back
 import space.opensensor.setup.resources.setup_board_title
@@ -168,7 +170,7 @@ fun SetupScreen(
                     }
                 },
                 title = {
-                    FitText(stringResource(pageTitle(s)), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                    FitText(pageTitle(s), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                 },
             )
         },
@@ -190,7 +192,11 @@ fun SetupScreen(
     }
 }
 
-private fun pageTitle(s: SetupUiState): StringResource = when (val page = s.page) {
+/** A board step's template label in the app language, else the page's own title. */
+@Composable
+private fun pageTitle(s: SetupUiState): String = s.title(Locale.current.language) ?: stringResource(pageTitleRes(s))
+
+private fun pageTitleRes(s: SetupUiState): StringResource = when (val page = s.page) {
     SetupPage.Find, SetupPage.Loading -> Res.string.setup_title
     SetupPage.Done -> Res.string.setup_done_title
     is SetupPage.Step -> when {
@@ -375,7 +381,8 @@ private fun DoneCard(s: SetupUiState, onOpenSensor: (String) -> Unit) {
 /**
  * Back, Skip and Next. Next on a page with unsaved values is the explicit save. Site sends its keys
  * in their own `SET_CONFIG` and a board step its declared keys, and the page moves on once the board
- * confirms them and keeps the step's bit. Skip sends only the bit, and is off while a save runs. An
+ * confirms them and keeps the step's bit. Skip sends only the bit, and is off while a save runs. A bit
+ * the sensor did not confirm says so above the buttons, and Retry sends only the bit again. An
  * unsupported required step offers Leave, setup stays pending until the app is updated.
  */
 @Composable
@@ -387,41 +394,49 @@ private fun SetupNav(s: SetupUiState, config: DeviceConfigUiState?, controller: 
     val savesSite = step?.id == StepId.SITE && site?.dirty == true
     val boardFields = step?.takeIf { it.kind == PlanStepKind.GENERIC }?.fields.orEmpty()
     val savesBoard = config != null && config.board.changes(boardFields).isNotEmpty()
-    Row(
-        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (s.canGoBack) {
-            TextButton(onClick = controller::back, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(Res.string.setup_back)) }
-        }
-        Spacer(Modifier.weight(1f))
-        val working = config?.location?.working == true || site?.working == true || config?.board?.working == true
-        if (step?.skippable == true) {
-            TextButton(onClick = { controller.skip(ack) }, enabled = s.canSkip && !working, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(Res.string.setup_skip))
+    val working = config?.location?.working == true || site?.working == true || config?.board?.working == true
+    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (s.ackFailed) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }) {
+                    WarningNote(stringResource(Res.string.setup_ack_failed))
+                }
+                TextButton(onClick = { controller.retryAck(ack) }, enabled = !s.saving && !working, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(Res.string.setup_retry))
+                }
             }
         }
-        if (step?.kind == PlanStepKind.UNSUPPORTED) {
-            PillButton(stringResource(Res.string.setup_leave), onClick = controller::finish)
-            return@Row
-        }
-        val busy = working || config?.snapshot?.busy == true
-        val canSave = when {
-            savesSite -> config?.canSaveSite == true
-            savesBoard -> config?.canEditBoard == true
-            else -> true
-        }
-        PillButton(
-            stringResource(if (s.page == SetupPage.Done) Res.string.setup_close else Res.string.setup_next),
-            onClick = {
-                when {
-                    savesSite -> controller.next(save = { device?.saveSiteAndWait() == DeviceSiteResult.SAVED }, ack = ack)
-                    savesBoard -> controller.next(save = { device?.saveBoardAndWait(boardFields) == true }, ack = ack)
-                    else -> controller.next(ack = ack)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (s.canGoBack) {
+                TextButton(onClick = controller::back, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(Res.string.setup_back)) }
+            }
+            Spacer(Modifier.weight(1f))
+            if (step?.skippable == true) {
+                TextButton(onClick = { controller.skip(ack) }, enabled = s.canSkip && !working, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(Res.string.setup_skip))
                 }
-            },
-            enabled = s.canAdvance && !busy && canSave,
-        )
+            }
+            if (step?.kind == PlanStepKind.UNSUPPORTED) {
+                PillButton(stringResource(Res.string.setup_leave), onClick = controller::finish)
+                return@Row
+            }
+            val busy = working || config?.snapshot?.busy == true
+            val canSave = when {
+                savesSite -> config?.canSaveSite == true
+                savesBoard -> config?.canEditBoard == true
+                else -> true
+            }
+            PillButton(
+                stringResource(if (s.page == SetupPage.Done) Res.string.setup_close else Res.string.setup_next),
+                onClick = {
+                    when {
+                        savesSite -> controller.next(save = { device?.saveSiteAndWait() == DeviceSiteResult.SAVED }, ack = ack)
+                        savesBoard -> controller.next(save = { device?.saveBoardAndWait(boardFields) == true }, ack = ack)
+                        else -> controller.next(ack = ack)
+                    }
+                },
+                enabled = s.canAdvance && !busy && canSave,
+            )
+        }
     }
 }
