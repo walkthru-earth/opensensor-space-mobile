@@ -190,6 +190,12 @@ class ThingCollectionsTest {
             """{"opensensor:decimals":true}""",
             """{"opensensor:group":1}""",
             """{"opensensor:title_i18n":{"ar":1}}""",
+            """{"title":""}""",
+            """{"description":""}""",
+            """{"opensensor:group":""}""",
+            """{"opensensor:scale":""}""",
+            """{"opensensor:title_i18n":{"ar":""}}""",
+            """{"opensensor:description_i18n":{}}""",
             """{"description":[]}"""
         )) {
             assertFailsWith<IllegalArgumentException>(column) { ThingOwner.parse("""{"prefix":"p","columns":{"a":$column}}""") }

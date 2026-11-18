@@ -51,7 +51,7 @@ data class ColumnLabel(val hints: JsonObject) {
             val ok = when (key) {
                 "title", "description", GROUP, ThingCollections.SCALE -> value.isText()
                 DECIMALS -> (value as? JsonPrimitive)?.takeUnless { it.isString }?.content?.let(::decimalsOf) != null
-                TITLE_I18N, DESCRIPTION_I18N -> value is JsonObject && value.values.all { it.isText() }
+                TITLE_I18N, DESCRIPTION_I18N -> value is JsonObject && value.isNotEmpty() && value.values.all { it.isText() }
                 else -> throw IllegalArgumentException("a column adds $key, which is not a display hint")
             }
             require(ok) { "the display hint $key has a value of another type" }
@@ -66,7 +66,8 @@ data class ColumnLabel(val hints: JsonObject) {
         const val TITLE_I18N = "opensensor:title_i18n"
         const val DESCRIPTION_I18N = "opensensor:description_i18n"
 
-        private fun JsonElement.isText() = this is JsonPrimitive && isString
+        /** A nonempty string. The profile gives every text hint `minLength` 1, so an empty one would replace the template's. */
+        private fun JsonElement.isText() = this is JsonPrimitive && isString && content.isNotEmpty()
 
         private val JSON_NUMBER = Regex("""-?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?""")
 
