@@ -25,6 +25,14 @@ class FormChecksTest {
     }
 
     @Test
+    fun aPassphraseWithAControlCharacterSaysSoBeforeSave() {
+        assertEquals(PskProblem.CONTROL, pskProblem("aaaa\taaaa"))
+        assertEquals(PskProblem.CONTROL, pskProblem("aaaa\naaaa"))
+        assertEquals(PskProblem.CONTROL, pskProblem("aaaa\u007Faaaa"))
+        assertFalse(pskSavable("aaaa\taaaa"))
+    }
+
+    @Test
     fun onlyAFittingPassphraseCanBeSaved() {
         assertFalse(pskSavable(""))
         assertFalse(pskSavable("short"))

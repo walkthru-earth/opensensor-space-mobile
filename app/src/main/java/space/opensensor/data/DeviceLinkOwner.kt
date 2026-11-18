@@ -83,6 +83,7 @@ import space.opensensor.data.protocol.LiveSample
 import space.opensensor.data.protocol.hexToBytes
 import space.opensensor.data.protocol.toHex
 import space.opensensor.data.settings.DeveloperLevel
+import space.opensensor.data.settings.SensorSettings
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.data.sync.ReadWindow
 import space.opensensor.data.sync.SyncListing
@@ -201,6 +202,8 @@ class DeviceLinkOwner @Inject constructor(
     private val setupWatch: ThingSetupWatch,
     /** Below Developer a sensor's Wi-Fi sync is switched back on once per connection. */
     private val developerLevel: DeveloperLevel,
+    /** The nickname and setup flag of a sensor, which go when it is forgotten. */
+    private val sensorSettings: SensorSettings,
 ) {
     /**
      * Child of the process scope: one failed child never cancels its siblings, and cancelling the
@@ -1805,6 +1808,7 @@ class DeviceLinkOwner @Inject constructor(
                 known?.companionAssociationId?.let { companionPresence.disassociate(address, it) }
                 // No cell of a forgotten Thing stays on the phone, from any of its epochs.
                 (listOfNotNull(known?.thing) + thingEpochDao.forDevice(address).map { it.thing }).distinct().forEach { places.remove(it) }
+                sensorSettings.forget(address)
                 knownDeviceDao.delete(address)
                 true
             }

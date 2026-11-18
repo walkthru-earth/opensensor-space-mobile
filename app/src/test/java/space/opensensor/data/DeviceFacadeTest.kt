@@ -404,6 +404,16 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `forgetting a sensor drops its nickname and setup flag`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.until { h.repo.plan.value != null && !h.repo.busy.value }
+        assertTrue(h.forgottenSettings.isEmpty())
+        h.repo.forget(ADDRESS)
+        assertNull(h.knownDao.get(ADDRESS))
+        assertEquals(listOf(ADDRESS), h.forgottenSettings)
+    }
+
+    @Test
     fun `a connect while a forget runs is refused and the forget completes`() = harnessTest { h ->
         h.repo.connect(ADDRESS, "OS-6b40", fake = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
@@ -563,6 +573,7 @@ class DeviceFacadeTest {
         h.until { (h.repo.collectionState.value as? CollectionState.Preparing)?.step == PrepareStep.LIST }
         h.owner.forget(ADDRESS)
         assertNotNull(h.knownDao.get(ADDRESS))
+        assertTrue("a refused forget keeps the nickname and setup flag", h.forgottenSettings.isEmpty())
         assertTrue(h.repo.collectionState.value.active)
         h.repo.stop(StopSource.USER)
         h.until { !h.repo.busy.value }
@@ -1513,6 +1524,9 @@ class DeviceFacadeTest {
 
         var clockEpochOffset = 0L
         var developer = false
+
+        /** Addresses whose nickname and setup flag the owner dropped. */
+        val forgottenSettings = mutableListOf<String>()
         var partialFailuresRemaining = 0
         val failedStorageNames = mutableListOf<String>()
         val committedNames = mutableListOf<String>()
@@ -1570,6 +1584,7 @@ class DeviceFacadeTest {
                 places = places,
                 setupWatch = setupWatch,
                 developerLevel = { developer },
+                sensorSettings = { forgottenSettings += it },
             )
             val delegateStore = FileArchiveStore(fileArchive, dispatcher)
             val store = object : ArchiveStore by delegateStore {

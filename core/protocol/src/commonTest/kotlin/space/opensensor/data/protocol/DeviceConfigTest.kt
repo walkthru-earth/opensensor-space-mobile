@@ -136,6 +136,32 @@ class DeviceConfigTest {
     }
 
     @Test
+    fun `psk follows the WPA2 length rule in bytes`() {
+        ConfigPatch.build { wifiPsk("a".repeat(ConfigPatch.PSK_MIN_BYTES)) }
+        for (short in listOf("a", "a".repeat(ConfigPatch.PSK_MIN_BYTES - 1), "ééé")) {
+            val e = assertFailsWith<ConfigValidationException> { ConfigPatch.build { wifiPsk(short) } }
+            assertEquals(ConfigProblem.PSK_TOO_SHORT, e.problem)
+        }
+        // Four 2 byte letters reach the 8 byte floor.
+        ConfigPatch.build { wifiPsk("éééé") }
+        val long = assertFailsWith<ConfigValidationException> { ConfigPatch.build { wifiPsk("a".repeat(ConfigPatch.PSK_MAX_BYTES + 1)) } }
+        assertEquals(ConfigProblem.PSK_TOO_LONG, long.problem)
+    }
+
+    @Test
+    fun `wifi values refuse every control character`() {
+        val controls = (0x00 until 0x20).map { it.toChar() } + '\u007F'
+        for (c in controls) {
+            val ssid = assertFailsWith<ConfigValidationException>("ssid ${c.code}") { ConfigPatch.build { wifiSsid("aaaa${c}aaaa") } }
+            assertEquals(ConfigProblem.LINE_BREAK, ssid.problem)
+            val psk = assertFailsWith<ConfigValidationException>("psk ${c.code}") { ConfigPatch.build { wifiPsk("aaaa${c}aaaa") } }
+            assertEquals(ConfigProblem.LINE_BREAK, psk.problem)
+        }
+        // Space, tilde and non ASCII letters stay allowed.
+        ConfigPatch.build { wifiSsid("a b~é"); wifiPsk("aaaa aaaa~é") }
+    }
+
+    @Test
     fun `sensor identity refuses a line break in any field`() {
         for (bad in listOf("a\nb", "a\rb", "a\u0000b")) {
             val cases = listOf<ConfigPatch.Builder.() -> Unit>(

@@ -3,7 +3,8 @@ import Foundation
 import OpenSensorShared
 import UIKit
 
-/// BLE reader. Core Bluetooth owns pairing; no firmware-changing requests are sent. User actions run
+/// BLE reader. Core Bluetooth owns pairing. The shared upkeep sets the clock, fetches a missing Wi-Fi
+/// token and switches Wi-Fi sync back on, once per connection, and every other change to the sensor is a user action. User actions run
 /// in the foreground. Off screen only a sync or Debug request already running, and an Auto-sync step
 /// for a known sensor (#23), keep a link. Each connection gets one shared [IosLink] once INFO named the
 /// sensor. Sync, commands, Debug, Device settings and Files take leases of it, so a reply left over

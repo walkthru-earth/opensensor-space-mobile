@@ -9,7 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -23,6 +23,7 @@ import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveStore
 import space.opensensor.data.DeviceConnectionManager
 import space.opensensor.data.ble.ConnectionState
+import space.opensensor.data.coroutines.IoDispatcher
 import space.opensensor.data.history.CellTrackReader
 import space.opensensor.data.history.HistoryRepository
 import space.opensensor.data.local.database.KnownDeviceDao
@@ -61,6 +62,7 @@ class DiscoverViewModel @Inject constructor(
     connections: DeviceConnectionManager,
     index: ArchiveIndex,
     archive: ArchiveStore,
+    @IoDispatcher io: CoroutineDispatcher,
 ) : ViewModel() {
     val controller = DiscoverController(
         scope = viewModelScope,
@@ -88,7 +90,7 @@ class DiscoverViewModel @Inject constructor(
             .onEach(controller::showOwnThings)
             .launchIn(viewModelScope)
         // A moving Thing's last day of rows, its own cell per row, read from this phone (#263).
-        val tracks = CellTrackReader(archive, index, Dispatchers.IO)
+        val tracks = CellTrackReader(archive, index, io)
         val moving = places.observeAll().map { saved -> saved.filter { it.moving }.mapTo(mutableSetOf()) { it.thing } }
         observeOwnTracks(moving) { thing -> tracks.observe(thing, OWN_TRACK_SPAN_NS) { System.currentTimeMillis() * 1_000_000 } }
             .onEach(controller::showOwnTracks)

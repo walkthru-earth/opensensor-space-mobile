@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import space.opensensor.data.ble.ConnectionState
+import space.opensensor.data.ble.DeviceSession
 import space.opensensor.data.ble.DeviceTransport
 import space.opensensor.data.ble.TransportException
 import space.opensensor.data.ble.TransportKind
@@ -30,12 +31,12 @@ import java.nio.ByteOrder
 import kotlin.random.Random
 
 /**
- * An in-process CoreS3 that speaks protocol v2 over the [DeviceTransport] interface, so every screen
+ * An in-process CoreS3 that speaks protocol 3 over the [DeviceTransport] interface, so every screen
  * and the whole sync path can be exercised without hardware.
  *
  * It serves three small `PAR1…PAR1` files plus one 1 MiB benchmark file, all with correct CRC-32s, emits `live` JSON every 10 s and
  * `status` after every sample, honours `max_read`, and answers `SET_TIME` / `FLUSH` like the
- * firmware would. v2: a fake config (pairing mode, Wi-Fi, LAN), a fake Wi-Fi scan list, a fake
+ * firmware would. It also has a fake config (pairing mode, Wi-Fi, LAN), a fake Wi-Fi scan list, a fake
  * token, a fake serial log ring, and `REBOOT` that drops the link and resets boot state. Enabled
  * from the debug-only menu entry on the scan screen.
  *
@@ -89,7 +90,7 @@ class FakeTransport(
     private var clockGen = 0
     private var finalized: Long
 
-    // ---- v2 configuration state (mirrors config::Settings in the firmware)
+    // ---- configuration state (mirrors config::Settings in the firmware)
     private var pairMode = "random"
     private var pin = 123_456
     private var pendingPairMode: String? = null
@@ -113,7 +114,7 @@ class FakeTransport(
     private var wifiJob: Job? = null
     private val bootTimeMs = System.currentTimeMillis()
 
-    /** 8 KiB ring of "serial" output, like the firmware's debug_log. */
+    /** A ring of "serial" output, as long as the most a `LOG_TAIL` returns. */
     private val log = StringBuilder()
     private var logTotal = 0L
 
@@ -334,7 +335,7 @@ class FakeTransport(
             }
             Opcode.STATUS -> _status.tryEmit(statusJson().encodeToByteArray())
 
-            // ------------------------------------------------------------ v2
+            // ---------------------------------------------- config, Wi-Fi, log, token
             Opcode.GET_CONFIG -> send(Frame.Config(configFlags(), if (buf.hasRemaining() && buf.get().toInt() == 1) locationJson() else configJson()))
             Opcode.SET_CONFIG -> {
                 val text = String(ByteArray(buf.remaining()).also { buf.get(it) }, Charsets.UTF_8)
@@ -402,7 +403,7 @@ class FakeTransport(
         }
     }
 
-    // ------------------------------------------------------------- v2 helpers
+    // ---------------------------------------------------------- config helpers
 
     private fun configFlags(): Int = if (pendingPairMode != null || pendingPin != null) 1 else 0
 
@@ -558,7 +559,7 @@ class FakeTransport(
         const val FAKE_ADDRESS = "FA:KE:00:00:00:01"
         const val FAKE_LAN_ADDRESS = "FA:KE:00:00:00:02"
         private const val SD_KIB = 31_166_976L
-        private const val LOG_RING = 8192
+        private const val LOG_RING = DeviceSession.LOG_RING_BYTES
         private const val LAN_PORT = 47390
 
         /** The bundled CoreS3 dictionary, so the fake board resolves like a current CoreS3. */

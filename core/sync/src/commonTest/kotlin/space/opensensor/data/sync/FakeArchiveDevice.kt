@@ -58,6 +58,9 @@ class FakeArchiveDevice(
     /** Leading CHUNKs of the k-th READ window to drop, as a lossy BLE link does. READ_END still says the true offset. */
     var dropLeadingChunks: (readIndex: Int) -> Int = { 0 }
 
+    /** Bytes the k-th READ (1-based) sends in one more CHUNK after the last byte it was asked for. */
+    var overrunBytes: (readIndex: Int) -> Int = { 0 }
+
     /** True for a READ (1-based) that sends no frame until an `ABORT` stops it, as a stalled link does. */
     var stallRead: (readIndex: Int) -> Boolean = { false }
 
@@ -260,6 +263,11 @@ class FakeArchiveDevice(
                     if (chunkDelayMs > 0) delay(chunkDelayMs)
                 }
                 streaming = 0
+                val extra = overrunBytes(readCount)
+                if (extra > 0) {
+                    send(Frame.Chunk(handle, pos, ByteArray(extra) { 0x55 }))
+                    pos += extra
+                }
                 send(Frame.ReadEnd(handle, pos, 0))
             }
             Opcode.CLOSE -> {

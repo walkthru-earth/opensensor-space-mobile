@@ -121,13 +121,13 @@ confirm gate. `SECRET_KEYS` and the Device settings confirmations come from that
 schema may only make a known key stricter.
 
 `ble.pair` (random / fixed / none) · `ble.pin` (six ASCII digits, **write-only**. `CONFIG.ble`
-reports only `pin_set` and `pin_default`) · `ble.clear_bonds=1` · `wifi.on` · `wifi.ssid` (1–32 bytes) · `wifi.psk` (≤ 63 bytes,
+reports only `pin_set` and `pin_default`) · `ble.clear_bonds=1` · `wifi.on` · `wifi.ssid` (1–32 bytes) · `wifi.psk` (empty or 8–63 bytes,
 **write-only, never echoed or logged**) · `lan.on` · `lan.rotate_token=1` · Waveshare
 `sensor.vendor=Plantower`, `sensor.model=PMS5003T`, `sensor.serial=PMS5003T-YYYYMMDD` plus 1–9 unit digits,
 `sensor.batch_candidate=0|1`. `CONFIG.sensor` echoes these four fields. A mismatched physical
 model is rejected; the batch estimate is enabled only for the reviewed `PMS5003T-20260408` batch.
 It is a stored candidate alongside unchanged raw fields, not a reference calibration. No line breaks in
-values; validated on the phone before sending. `CONFIG.flags` bit 0 = `ble.*` change pending
+values, and no control character (below 0x20, or 0x7F) in `wifi.ssid` or `wifi.psk`. Validated on the phone before sending. `CONFIG.flags` bit 0 = `ble.*` change pending
 until reboot.
 
 BLE may return ordered `CONFIG_CHUNK` frames instead of one `CONFIG`: flags u8, total JSON

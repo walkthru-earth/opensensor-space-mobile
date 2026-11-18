@@ -179,6 +179,7 @@ import space.opensensor.device.resources.wifi_open_network
 import space.opensensor.device.resources.wifi_over_lan
 import space.opensensor.device.resources.wifi_passphrase
 import space.opensensor.device.resources.wifi_passphrase_label
+import space.opensensor.device.resources.wifi_psk_control
 import space.opensensor.device.resources.wifi_psk_long
 import space.opensensor.device.resources.wifi_psk_open
 import space.opensensor.device.resources.wifi_psk_short
@@ -647,6 +648,7 @@ fun WifiCard(
                                             when (problem) {
                                                 PskProblem.SHORT -> Res.string.wifi_psk_short
                                                 PskProblem.LONG -> Res.string.wifi_psk_long
+                                                PskProblem.CONTROL -> Res.string.wifi_psk_control
                                             },
                                         ),
                                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
