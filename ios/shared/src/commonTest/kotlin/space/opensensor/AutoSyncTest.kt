@@ -20,12 +20,18 @@ class AutoSyncTest {
     private val a = "11111111-1111-1111-1111-111111111111"
     private val b = "22222222-2222-2222-2222-222222222222"
 
-    private class Memory(var text: String? = null) :
-        AutoSyncStorage,
-        KnownRecordStorage {
+    private class Memory(var text: String? = null) : AutoSyncStorage {
         override fun load(): String? = text
         override fun save(text: String) {
             this.text = text
+        }
+    }
+
+    private class Records : KnownRecordStorage {
+        private var records = emptyList<KnownRecord>()
+        override fun load(): List<KnownRecord> = records
+        override fun save(records: List<KnownRecord>) {
+            this.records = records
         }
     }
 
@@ -35,7 +41,7 @@ class AutoSyncTest {
     private fun settings(storage: AutoSyncStorage = Memory(), status: Long = 0) =
         AutoSyncSettings(storage, { clock }, { status }, { it() }, { changes++ })
 
-    private fun devices() = DevicesBridge(CompanionState(), emptyFlow(), Memory(), { clock }, {}, {}, {}, {}, { _, _ -> }, { _, _ -> }).also {
+    private fun devices() = DevicesBridge(CompanionState(), emptyFlow(), Records(), { clock }, {}, {}, {}, {}, { _, _ -> }, { _, _ -> }).also {
         it.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff")
         it.sensorOpened(b, "Garden", "st-b", "112233445566")
     }

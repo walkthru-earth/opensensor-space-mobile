@@ -20,11 +20,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import platform.Foundation.NSBundle
 import platform.Foundation.NSCurrentLocaleDidChangeNotification
 import platform.Foundation.NSDate
@@ -50,14 +47,11 @@ import space.opensensor.devices.MyDevicesScreen
 import space.opensensor.devices.SetupRequest
 import space.opensensor.devices.bluetoothAccessTexts
 import space.opensensor.discover.DiscoverController
+import space.opensensor.discover.DiscoverPorts
 import space.opensensor.discover.DiscoverScreen
-import space.opensensor.discover.OWN_TRACK_SPAN_NS
-import space.opensensor.discover.OwnThing
 import space.opensensor.discover.UserDefaultsDiscoverPrefs
 import space.opensensor.discover.bundledSampleFeed
-import space.opensensor.discover.knownOwnThings
-import space.opensensor.discover.observeOwnStatus
-import space.opensensor.discover.observeOwnTracks
+import space.opensensor.discover.followPhone
 import space.opensensor.files.FileMetricsController
 import space.opensensor.files.FileMetricsScreen
 import space.opensensor.files.FilesController
@@ -135,30 +129,19 @@ private class DiscoverHolder(known: Flow<List<KnownRecord>>, linked: Flow<Set<St
     )
 
     init {
-        // The controller outlives the screen, so the switch reaches a read in flight even while
-        // Settings is open. Turning public sensors off cancels it before another request leaves.
-        combine(settingsRepository.discoverSource, settingsRepository.showPublicSensors, ::Pair)
-            .onEach { (source, publicSensors) -> controller.onSourceSettings(source, publicSensors) }
-            .launchIn(viewModelScope)
-        // The user's own Things, each at its saved cell (#226). Read from the phone only.
-        combine(IosArchive.places.observeAll(), known) { saved, records ->
-            val names = records.filter { it.thing.isNotBlank() }.associate { it.thing to it.name }
-            knownOwnThings(saved.map { OwnThing(it.thing, "", it.cell, it.updatedEpochMs, it.moving) }, names)
-        }
-            .onEach(controller::showOwnThings)
-            .launchIn(viewModelScope)
-        // A moving Thing's last day of rows, its own cell per row, read from this phone (#263).
-        val tracks = CellTrackReader(IosArchive.store, IosArchive.index, Dispatchers.Default)
-        val moving = IosArchive.places.observeAll().map { saved -> saved.filter { it.moving }.mapTo(mutableSetOf()) { it.thing } }
-        observeOwnTracks(moving) { thing -> tracks.observe(thing, OWN_TRACK_SPAN_NS) { (NSDate().timeIntervalSince1970 * 1e9).toLong() } }
-            .onEach(controller::showOwnTracks)
-            .launchIn(viewModelScope)
-        // Each own Thing's newest reading from this phone's history, Live while a Bluetooth or LAN
-        // link is up, and whether a file of it went up (#273). Read from the phone only.
-        val things = IosArchive.places.observeAll().map { saved -> saved.mapTo(mutableSetOf()) { it.thing } }
-        observeOwnStatus(IosArchive.tiers, things, linked, IosArchive.index.observeUploadedThings())
-            .onEach(controller::showOwnStatus)
-            .launchIn(viewModelScope)
+        // Every source is local. The public feed stays inside the controller (#303).
+        val ports = DiscoverPorts(
+            source = settingsRepository.discoverSource,
+            publicSensors = settingsRepository.showPublicSensors,
+            places = IosArchive.places,
+            knownNames = known.map { records -> records.filter { it.thing.isNotBlank() }.associate { it.thing to it.name } },
+            linked = linked,
+            tiers = IosArchive.tiers,
+            uploaded = IosArchive.index.observeUploadedThings(),
+            tracks = CellTrackReader(IosArchive.store, IosArchive.index, Dispatchers.Default),
+            nowNs = { (NSDate().timeIntervalSince1970 * 1e9).toLong() },
+        )
+        followPhone(controller, viewModelScope, ports)
     }
 }
 

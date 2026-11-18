@@ -15,6 +15,8 @@ import space.opensensor.archive.LegacyReceiptImport
 import space.opensensor.archive.PrunedFile
 import space.opensensor.archive.PrunedFiles
 import space.opensensor.data.local.database.AppDatabase
+import space.opensensor.data.local.database.KnownDeviceDao
+import space.opensensor.data.local.database.ThingEpochDao
 import space.opensensor.data.local.database.checkpointDurably
 import space.opensensor.data.local.database.openAppDatabase
 import space.opensensor.data.sync.ListCursorState
@@ -109,6 +111,16 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
         override suspend fun put(place: ThingPlace) = ready().let { roomPlaces.put(place) }
         override suspend fun remove(thing: String) = ready().let { roomPlaces.remove(thing) }
     }
+
+    /**
+     * The known sensors of My devices, the table Android keeps (#303). The LAN token column stays
+     * empty, the token stays in the Keychain. Read without waiting for the receipt import, so the
+     * bridge that starts the app never blocks on it.
+     */
+    val knownDevices: KnownDeviceDao get() = database.knownDeviceDao()
+
+    /** Each known sensor's thing generations, beside [knownDevices]. */
+    val thingEpochs: ThingEpochDao get() = database.thingEpochDao()
 
     /** Closes the database, for tests. The app keeps it open for the life of the process. */
     fun close() {

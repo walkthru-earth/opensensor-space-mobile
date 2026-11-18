@@ -251,4 +251,15 @@
     <string name="board_action_confirm">ينفّذ الجهاز هذا الآن وقد ينقطع الاتصال لحظة.</string>
     <string name="board_action_button">تنفيذ</string>
     <string name="msg_board_action_sent">نفّذ الجهاز الإجراء</string>
+    <string name="autosync_title">المزامنة التلقائية</string>
+    <plurals name="autosync_on">
+        <item quantity="zero">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
+        <item quantity="one">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
+        <item quantity="two">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
+        <item quantity="few">مفعّلة. كل %1$d دقائق، حتى والتطبيق مغلق.</item>
+        <item quantity="many">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
+        <item quantity="other">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
+    </plurals>
+    <string name="autosync_off">متوقفة</string>
+    <string name="autosync_on_system">مفعّلة. يختار iOS وقت التشغيل.</string>
 </resources>

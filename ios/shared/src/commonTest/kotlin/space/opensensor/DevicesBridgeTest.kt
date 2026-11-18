@@ -38,10 +38,10 @@ class DevicesBridgeTest {
     private val a = "11111111-1111-1111-1111-111111111111"
     private val b = "22222222-2222-2222-2222-222222222222"
 
-    private class MemoryStorage(var text: String? = null) : KnownRecordStorage {
-        override fun load(): String? = text
-        override fun save(text: String) {
-            this.text = text
+    private class MemoryStorage(var records: List<KnownRecord> = emptyList()) : KnownRecordStorage {
+        override fun load(): List<KnownRecord> = records
+        override fun save(records: List<KnownRecord>) {
+            this.records = records
         }
     }
 
@@ -136,31 +136,24 @@ class DevicesBridgeTest {
         )
     }
 
-    @Test fun codecRoundTripsAndDropsDamagedLines() {
-        val records = listOf(
-            KnownRecord(a, "Kit\tchen\n2", "st-a", "aabbccddeeff", 10),
-            KnownRecord(b, null, "st-b", "112233445566", null),
-        )
-        val text = IosKnown.encode(records)
-        val back = IosKnown.decode(text + "\nbroken line\n\t\t\t\t")
-        assertEquals(2, back.size)
-        assertEquals("Kit chen 2", back[0].name)
-        assertNull(back[1].name)
-        assertNull(back[1].lastSeenMs)
-        assertEquals(emptyList(), IosKnown.decode(null))
-        assertEquals(emptyList(), IosKnown.decode("$a\tKitchen\tst-a\taabbccddeeff\t10").single().olderThings, "old saved records still load")
+    @Test fun savedRecordsLoadBeforeAnySensorOpens() {
+        val saved = KnownRecord(a, "Kitchen", "st-a", "aabbccddeeff", 10, olderThings = listOf("st-old"))
+        val bridge = bridge(storage = MemoryStorage(listOf(saved)))
+        assertEquals(listOf("st-a", "st-old"), bridge.thingsFor(a))
+        val rejected = bridge.sensorOpened(a, "Other", "st-other", "112233445566")
+        assertFalse(rejected.accepted, "the saved hardware id guards the first open")
     }
 
     @Test fun changedHardwareCannotReplaceSavedIdentityOrItsArchiveThing() {
         val storage = MemoryStorage()
         val bridge = bridge(storage = storage)
         assertTrue(bridge.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff").accepted)
-        val saved = storage.text
+        val saved = storage.records
         val rejected = bridge.sensorOpened(a, "Other", "st-other", "112233445566")
         assertFalse(rejected.accepted)
         assertEquals(CompanionNotice.HARDWARE_CHANGED, rejected.notice)
         assertNull(rejected.credentialToRemove)
-        assertEquals(saved, storage.text)
+        assertEquals(saved, storage.records)
         assertEquals(listOf("st-a"), bridge.thingsFor(a))
         assertEquals("aabbccddeeff", bridge.deviceFor(a))
     }
@@ -298,14 +291,14 @@ class DevicesBridgeTest {
         bridge.credentialsChanged(listOf(a, b), listOf("st-a", "st-b"), listOf("aabbccddeeff", "112233445566"))
         assertEquals(listOf(a, b), bridge.knownNow().map { it.id })
         assertEquals(42L, bridge.knownNow().first().lastSeenMs)
-        assertEquals("Kitchen", IosKnown.decode(storage.text).single().name, "the record is saved")
+        assertEquals("Kitchen", storage.records.single().name, "the record is saved")
 
         bridge.forgetNow(a)
         assertEquals(listOf<Pair<String, String?>>(a to "aabbccddeeff"), calls.forgotten, "Swift removes the credential of this hardware id")
         assertEquals(listOf(listOf("st-a")), calls.placesForgotten, "the Discover cell of its Thing goes too")
         assertEquals(listOf(a), calls.settingsForgotten, "its nickname goes too")
         assertEquals(listOf(b), bridge.knownNow().map { it.id })
-        assertTrue(IosKnown.decode(storage.text).isEmpty())
+        assertTrue(storage.records.isEmpty())
         assertTrue(bridge(storage = storage).knownNow().isEmpty(), "forgotten stays forgotten after a restart")
     }
 
@@ -343,12 +336,12 @@ class DevicesBridgeTest {
         val forgetting = launch { bridge.forgetNow(a) }
         runCurrent()
         assertEquals(listOf(a), bridge.knownNow().map { it.id }, "a Forget stopped before its cells are gone runs again")
-        assertEquals("st-a", IosKnown.decode(storage.text).single().thing)
+        assertEquals("st-a", storage.records.single().thing)
 
         removed.complete(Unit)
         forgetting.join()
         assertTrue(bridge.knownNow().isEmpty())
-        assertTrue(IosKnown.decode(storage.text).isEmpty())
+        assertTrue(storage.records.isEmpty())
     }
 
     @Test fun aFailedRemovalKeepsTheRecordAndEndsQuietly() = runTest {
@@ -373,7 +366,7 @@ class DevicesBridgeTest {
 
         bridge.forgetLater(a).join()
         assertEquals(listOf(a), bridge.knownNow().map { it.id }, "Forget can run again")
-        assertEquals("st-a", IosKnown.decode(storage.text).single().thing)
+        assertEquals("st-a", storage.records.single().thing)
         assertTrue(calls.forgotten.isEmpty(), "the Wi-Fi access stays with the record")
     }
 

@@ -134,7 +134,8 @@ Issue #23. Host and simulator evidence only so far. No iPhone run.
 **Code:** `ios/App/BackgroundSync.swift` (`AutoSync`, the OS side), `AppDelegate.swift`
 (`AppServices` owns the adapters, so a launch without a screen works), the Auto-sync extensions in
 `BluetoothCompanion.swift` and `LanDiscovery.swift`, `ios/shared/.../AutoSync.kt`
-(`AutoSyncSettings`, `BackgroundSyncBridge`, `BackgroundSteps`), `AutoSyncSwitch.kt` (the lead of the Device section), and the shared
+(`AutoSyncSettings`, `BackgroundSyncBridge`, `BackgroundSteps`), `AutoSyncSwitch.kt` (the lead of the Device section, over the shared `AutoSyncCard` of
+`:feature:device` that Android shows too), and the shared
 `BackgroundSyncRunner` and `BackgroundSyncPolicy` in `:core:sync`.
 **Tests:** `AutoSyncTest` (switch store, due rules, the bridge over fake Swift ports, step mapping),
 `BackgroundSyncRunnerTest` in `:core:sync`. The Swift scheduler, wakes and notifications are phone only.
