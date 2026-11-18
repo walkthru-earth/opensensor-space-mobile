@@ -11,8 +11,8 @@ import space.opensensor.designsystem.moodWord
 import space.opensensor.family.air.AirMood
 import space.opensensor.family.air.Averaging
 import space.opensensor.family.air.NowReading
-import space.opensensor.family.air.PmsStatus
 import space.opensensor.family.air.formatPm
+import space.opensensor.model.SensorState
 import space.opensensor.settings.DetailLevel
 import space.opensensor.today.resources.Res
 import space.opensensor.today.resources.ago_days
@@ -59,6 +59,8 @@ import space.opensensor.today.resources.pms_error_hint
 import space.opensensor.today.resources.pms_error_title
 import space.opensensor.today.resources.pms_mismatch_hint
 import space.opensensor.today.resources.pms_mismatch_title
+import space.opensensor.today.resources.pms_other_hint
+import space.opensensor.today.resources.pms_other_title
 import space.opensensor.today.resources.pms_sleeping_hint
 import space.opensensor.today.resources.pms_sleeping_title
 import space.opensensor.today.resources.pms_stale_hint
@@ -198,29 +200,33 @@ internal fun AirMood.comparisonText(): String = stringResource(
     },
 )
 
+/** The title of a particle sensor state, keyed by its class name, else the class title or name. */
 @Composable
-internal fun PmsStatus.titleText(): String = stringResource(
-    when (this) {
-        PmsStatus.ABSENT -> Res.string.pms_absent_title
-        PmsStatus.WARMING -> Res.string.pms_warming_title
-        PmsStatus.STALE -> Res.string.pms_stale_title
-        PmsStatus.ERROR -> Res.string.pms_error_title
-        PmsStatus.MODEL_MISMATCH -> Res.string.pms_mismatch_title
-        PmsStatus.SLEEPING -> Res.string.pms_sleeping_title
-        PmsStatus.VALID -> Res.string.pms_valid_title
-    },
-)
+internal fun SensorState.titleText(): String = when {
+    absent -> stringResource(Res.string.pms_absent_title)
+    else -> when (cls?.name) {
+        "warming" -> stringResource(Res.string.pms_warming_title)
+        "stale" -> stringResource(Res.string.pms_stale_title)
+        "sensor-error" -> stringResource(Res.string.pms_error_title)
+        "model-mismatch" -> stringResource(Res.string.pms_mismatch_title)
+        "sleeping" -> stringResource(Res.string.pms_sleeping_title)
+        else -> if (valid) stringResource(Res.string.pms_valid_title) else label ?: stringResource(Res.string.pms_other_title)
+    }
+}
 
+/** The hint of a particle sensor state, keyed by its class name, with one line for any other class. */
 @Composable
-internal fun PmsStatus.hintText(): String = stringResource(
-    when (this) {
-        PmsStatus.ABSENT -> Res.string.pms_absent_hint
-        PmsStatus.WARMING -> Res.string.pms_warming_hint
-        PmsStatus.STALE -> Res.string.pms_stale_hint
-        PmsStatus.ERROR -> Res.string.pms_error_hint
-        PmsStatus.MODEL_MISMATCH -> Res.string.pms_mismatch_hint
-        PmsStatus.SLEEPING -> Res.string.pms_sleeping_hint
-        PmsStatus.VALID -> Res.string.pms_valid_title
+internal fun SensorState.hintText(): String = stringResource(
+    when {
+        absent -> Res.string.pms_absent_hint
+        else -> when (cls?.name) {
+            "warming" -> Res.string.pms_warming_hint
+            "stale" -> Res.string.pms_stale_hint
+            "sensor-error" -> Res.string.pms_error_hint
+            "model-mismatch" -> Res.string.pms_mismatch_hint
+            "sleeping" -> Res.string.pms_sleeping_hint
+            else -> Res.string.pms_other_hint
+        }
     },
 )
 

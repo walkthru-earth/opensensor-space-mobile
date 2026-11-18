@@ -89,6 +89,8 @@
     <string name="pms_error_hint">The sensor reports an error, so its numbers are not shown.</string>
     <string name="pms_mismatch_hint">The fitted sensor is not the model this board expects, so its numbers are not shown.</string>
     <string name="pms_sleeping_hint">The sensor is resting between readings.</string>
+    <string name="pms_other_title">Not ready</string>
+    <string name="pms_other_hint">The sensor is not ready, so its numbers are not shown.</string>
     <string name="env_title">Temperature and humidity</string>
     <string name="env_unsupported">This app version cannot read live values from this sensor yet. Synced files still work.</string>
     <string name="today_so_far">Today so far</string>

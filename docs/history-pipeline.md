@@ -461,7 +461,9 @@ as WHO states them ("at or below 15 meets the guideline"): `FRESH` "Fresh air" (
 (IT-4) · `HAZY` "Getting hazy" (IT-3) · `POOR` (IT-2) · `SMOKY` (IT-1) · `THICK` "Thick smoke" (above
 IT-1). The edges are never repeated in `:core` or the app. Each has a
 title, one line of advice and a comparison, colour is never the only carrier. `NowReading.of(reading)`
-puts the sensor state first (`pms_status ≠ 4` → words, never a number). "Right now" is a 10-second
+puts the sensor state first. A `SensorState` reads the status column the PM2.5 gate names
+(`valid_when` `equals`) through its `classification:classes`, and a state the gate rejects shows its
+class words, never a number. "Right now" is a 10-second
 snapshot; "Today so far" is the **local** day folded from the hourly tier with its coverage.
 **No "AQI" anywhere** (a named index needs validated averaging rules). Live and archived mood
 indicators use the shared static `AirQualityPeacock` portraits from `:ui:designsystem`, derived
