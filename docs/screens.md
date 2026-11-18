@@ -219,7 +219,14 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   `TypographyTest` checks the Arabic-script and right-to-left rule, the tabular display styles and that every
   weight sits inside the bundled axis. License texts ship in `composeResources/files/licenses/`.
 - **Shape and components.** One content card radius, 32 dp (`CardShape`, used by `BrandCard`,
-  tones Plain, Soft, Hero). The components live in `:ui:designsystem` for both apps. Every
+  tones Plain, Soft, Hero and Alert). Every content card on every screen is a `BrandCard` or
+  wraps one (`SectionCard` adds an eyebrow title), list rows included. Screen lists pad their
+  sides by `ScreenPadding` (16 dp) and space their cards by `CardGap` (12 dp). File names,
+  endpoints and logs use the theme's `mono()` style. `ThemeLintTest` in `:ui:strings` fails on a
+  raw card radius, `RoundedCornerShape`, `FontFamily`, `sp` size or `Color(0x` literal in a
+  screen, and on a screen list without the two tokens, with a short allowlist for map swatches,
+  map labels, a sensor declared colour and the connection banner. History joins the rule when
+  its metrics work lands. The components live in `:ui:designsystem` for both apps. Every
   control uses a curved card, never a circle or full pill. `PillButton` (Signal blue with ink
   text and a trailing arrow, the one primary action) and `OutlinePillButton` use
   `FloatingControl.Shape`. Chips, `MoodPill`, small buttons and segmented rows use

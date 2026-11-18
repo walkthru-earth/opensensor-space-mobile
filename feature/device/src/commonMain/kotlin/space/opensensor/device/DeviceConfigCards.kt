@@ -3,6 +3,7 @@ package space.opensensor.device
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -59,6 +60,7 @@ import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.BrandCard
 import space.opensensor.designsystem.CardHeader
+import space.opensensor.designsystem.CardTone
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoContent
@@ -606,73 +608,71 @@ fun WifiCard(
 
         picked?.let { network ->
             Spacer(Modifier.height(12.dp))
-            Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(stringResource(Res.string.wifi_join, network), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
-                    if (pickedOpen) {
-                        Text(stringResource(Res.string.wifi_open_network), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        // Same capture rules as the PIN (#160, #164).
-                        val captured = rememberCredentialCaptureGuard(onScreenshot = { showPsk = false })
-                        // Leaving the join form or the page drops the passphrase and hides it again.
-                        DisposableEffect(Unit) {
-                            onDispose {
-                                psk = ""
-                                showPsk = false
-                            }
+            BrandCard(tone = CardTone.SOFT, contentPadding = PaddingValues(16.dp)) {
+                Text(stringResource(Res.string.wifi_join, network), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
+                if (pickedOpen) {
+                    Text(stringResource(Res.string.wifi_open_network), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    // Same capture rules as the PIN (#160, #164).
+                    val captured = rememberCredentialCaptureGuard(onScreenshot = { showPsk = false })
+                    // Leaving the join form or the page drops the passphrase and hides it again.
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            psk = ""
+                            showPsk = false
                         }
-                        val revealed = showPsk && !captured
-                        Spacer(Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = psk,
-                            onValueChange = { psk = it },
-                            label = { Text(stringResource(Res.string.wifi_passphrase_label)) },
-                            singleLine = true,
-                            visualTransformation = if (revealed) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            trailingIcon = {
-                                IconButton(onClick = { showPsk = !showPsk }, enabled = !captured) {
-                                    Icon(
-                                        if (revealed) AppIcons.VisibilityOff else AppIcons.Visibility,
-                                        contentDescription = stringResource(if (revealed) Res.string.wifi_hide_passphrase else Res.string.wifi_show_passphrase),
-                                    )
-                                }
-                            },
-                            isError = pskProblem(psk) != null,
-                            // Says why Save is off, and is read out when it appears or changes.
-                            supportingText = pskProblem(psk)?.let { problem ->
-                                {
-                                    Text(
-                                        stringResource(
-                                            when (problem) {
-                                                PskProblem.SHORT -> Res.string.wifi_psk_short
-                                                PskProblem.LONG -> Res.string.wifi_psk_long
-                                            },
-                                        ),
-                                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                                    )
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = state.canEdit,
-                        )
                     }
-                    Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        PillButton(
-                            stringResource(Res.string.wifi_save_connect),
-                            onClick = {
-                                onJoin(WifiJoin(network, psk, pickedOpen))
-                                picked = null
-                                psk = ""
-                            },
-                            enabled = state.canEdit && (pickedOpen || pskSavable(psk)),
-                        )
-                        TextButton(onClick = {
+                    val revealed = showPsk && !captured
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = psk,
+                        onValueChange = { psk = it },
+                        label = { Text(stringResource(Res.string.wifi_passphrase_label)) },
+                        singleLine = true,
+                        visualTransformation = if (revealed) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { showPsk = !showPsk }, enabled = !captured) {
+                                Icon(
+                                    if (revealed) AppIcons.VisibilityOff else AppIcons.Visibility,
+                                    contentDescription = stringResource(if (revealed) Res.string.wifi_hide_passphrase else Res.string.wifi_show_passphrase),
+                                )
+                            }
+                        },
+                        isError = pskProblem(psk) != null,
+                        // Says why Save is off, and is read out when it appears or changes.
+                        supportingText = pskProblem(psk)?.let { problem ->
+                            {
+                                Text(
+                                    stringResource(
+                                        when (problem) {
+                                            PskProblem.SHORT -> Res.string.wifi_psk_short
+                                            PskProblem.LONG -> Res.string.wifi_psk_long
+                                        },
+                                    ),
+                                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = state.canEdit,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PillButton(
+                        stringResource(Res.string.wifi_save_connect),
+                        onClick = {
+                            onJoin(WifiJoin(network, psk, pickedOpen))
                             picked = null
                             psk = ""
-                        }) { Text(stringResource(Res.string.action_cancel)) }
-                    }
+                        },
+                        enabled = state.canEdit && (pickedOpen || pskSavable(psk)),
+                    )
+                    TextButton(onClick = {
+                        picked = null
+                        psk = ""
+                    }) { Text(stringResource(Res.string.action_cancel)) }
                 }
             }
         }

@@ -27,6 +27,12 @@ import space.opensensor.designsystem.resources.quicksand
 /** Tabular figures where a font has them, so live numbers do not jitter as digits change. */
 const val TABULAR = "tnum"
 
+/** The one fixed width face, for file names, endpoints, frames and logs. Screens reach it through [mono]. */
+val MonoFamily: FontFamily = FontFamily.Monospace
+
+/** [this] style set in [MonoFamily]. */
+fun TextStyle.mono(): TextStyle = copy(fontFamily = MonoFamily)
+
 /**
  * Shared line and scale limits so system font scaling up to 200 percent wraps instead of clipping
  * headings, labels, and display numerals on 320 dp phones. Labels that fit to one line use
