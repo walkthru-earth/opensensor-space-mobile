@@ -46,6 +46,7 @@ import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import space.opensensor.data.sync.PlanStepKind
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.BrandCard
@@ -55,20 +56,29 @@ import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.InfoNote
 import space.opensensor.designsystem.PillButton
 import space.opensensor.designsystem.WarningNote
+import space.opensensor.device.BondsCard
 import space.opensensor.device.DeviceConfigAction
 import space.opensensor.device.DeviceConfigController
 import space.opensensor.device.DeviceConfigEffects
 import space.opensensor.device.DeviceConfigUiState
 import space.opensensor.device.DeviceLocationForm
+import space.opensensor.device.DeviceLocationResult
 import space.opensensor.device.DeviceSiteForm
 import space.opensensor.device.DeviceSiteResult
+import space.opensensor.device.GenericFieldsForm
+import space.opensensor.device.PairingCard
 import space.opensensor.device.ReconnectOverBluetooth
 import space.opensensor.device.WifiCard
+import space.opensensor.device.canEditBoard
 import space.opensensor.device.canSaveSite
+import space.opensensor.model.StepId
 import space.opensensor.permissions.RuntimeAccess
+import space.opensensor.settings.DetailLevel
 import space.opensensor.setup.resources.Res
 import space.opensensor.setup.resources.setup_added
 import space.opensensor.setup.resources.setup_back
+import space.opensensor.setup.resources.setup_board_title
+import space.opensensor.setup.resources.setup_bonds_title
 import space.opensensor.setup.resources.setup_close
 import space.opensensor.setup.resources.setup_done_open
 import space.opensensor.setup.resources.setup_done_title
@@ -97,14 +107,17 @@ import space.opensensor.setup.resources.setup_site_title
 import space.opensensor.setup.resources.setup_skip
 import space.opensensor.setup.resources.setup_stay
 import space.opensensor.setup.resources.setup_title
+import space.opensensor.setup.resources.setup_unsupported
 import space.opensensor.setup.resources.setup_waiting
 import space.opensensor.setup.resources.setup_wifi_title
 
 /**
- * The setup wizard, full screen with no bottom bar. [config] is the Device settings controller of the
- * picked sensor, so Location and Wi-Fi send exactly what the settings cards send. [bluetooth] is the
- * access [SetupFlows] binds to Find, asked for from Look for sensors. [onConfigAction] runs a card
- * action the way the platform's Device settings does. Setup never asks for local network.
+ * The setup wizard, full screen with no bottom bar. It walks the sensor's [SetupPlan], read from its
+ * board template and its page 1 setup record by [config], the Device settings controller of the
+ * picked sensor, so every page sends exactly what the settings cards send. [bluetooth] is asked for
+ * from Look for sensors. [onConfigAction] runs a card action the way the platform's Device settings
+ * does. Setup never asks for local network. Next and Skip set the step's bit in the device's setup
+ * record through [DeviceConfigController.ackSetup], and the page moves on only once the board kept it.
  */
 @Composable
 fun SetupScreen(
@@ -129,12 +142,11 @@ fun SetupScreen(
     // The snackbar's Bluetooth reconnect goes through the platform route too, which asks for Bluetooth.
     if (config != null) DeviceConfigEffects(config, snackbar) { onConfigAction(DeviceConfigAction.ReconnectOverBluetooth) }
     val configState = config?.state?.collectAsState()?.value
-    // Only the board's confirmed answer counts, never an unsaved draft.
-    val located = configState?.location?.located == true
-    LaunchedEffect(located) { controller.onLocated(located) }
-    // Page 5's answer. A board without site keys leaves the Site page out.
-    val siteSupported = configState?.site?.supported
-    LaunchedEffect(siteSupported) { controller.onSiteSupport(siteSupported) }
+    // The plan follows the board's confirmed page 1 and its template, never an unsaved draft. Page 1
+    // can be read before pairing ends, so pairing hands the plan over again.
+    val plan = configState?.setupPlan
+    val level = configState?.level ?: DetailLevel.SIMPLE
+    LaunchedEffect(plan, level, s.paired) { controller.onPlan(plan, level) }
     if (s.askClose) {
         AlertDialog(
             onDismissRequest = controller::dismissClose,
@@ -156,11 +168,11 @@ fun SetupScreen(
                     }
                 },
                 title = {
-                    FitText(stringResource(pageTitle(s.page)), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                    FitText(stringResource(pageTitle(s)), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                 },
             )
         },
-        bottomBar = { SetupNav(s, configState, controller, saveSite = { config?.saveSiteAndWait() == DeviceSiteResult.SAVED }) },
+        bottomBar = { SetupNav(s, configState, controller, config) },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         LazyColumn(
@@ -169,29 +181,75 @@ fun SetupScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             when (val page = s.page) {
-                SetupStep.Find -> findItems(s, controller, bluetooth)
-                SetupStep.Name -> item(key = "name") { NameCard(s, controller) }
-                is SetupStep.Location -> {
-                    configItem(configState) { state -> DeviceLocationForm(state, onConfigAction) }
-                    if (page.required && !s.located) item(key = "location-needed") { InfoNote(stringResource(Res.string.setup_location_needed)) }
-                }
-                SetupStep.Site -> configItem(configState) { state -> DeviceSiteForm(state, onConfigAction, showSave = false) }
-                is SetupStep.Fields -> configItem(configState) { state -> WifiForm(state, onConfigAction) }
-                SetupStep.Done -> item(key = "done") { DoneCard(s, onOpenSensor) }
-                is SetupStep.Permission, SetupStep.Pair -> Unit
+                SetupPage.Find -> findItems(s, controller, bluetooth)
+                SetupPage.Loading -> item(key = "loading") { LoadingCard(configState, onConfigAction) }
+                is SetupPage.Step -> stepItems(page.id, s, controller, configState, onConfigAction)
+                SetupPage.Done -> item(key = "done") { DoneCard(s, onOpenSensor) }
             }
         }
     }
 }
 
-private fun pageTitle(page: SetupStep): StringResource = when (page) {
-    SetupStep.Find -> Res.string.setup_title
-    SetupStep.Name -> Res.string.setup_name_title
-    is SetupStep.Location -> Res.string.setup_location_title
-    SetupStep.Site -> Res.string.setup_site_title
-    is SetupStep.Fields -> Res.string.setup_wifi_title
-    SetupStep.Done -> Res.string.setup_done_title
-    is SetupStep.Permission, SetupStep.Pair -> Res.string.setup_title
+private fun pageTitle(s: SetupUiState): StringResource = when (val page = s.page) {
+    SetupPage.Find, SetupPage.Loading -> Res.string.setup_title
+    SetupPage.Done -> Res.string.setup_done_title
+    is SetupPage.Step -> when {
+        s.step?.kind == PlanStepKind.UNSUPPORTED -> Res.string.setup_title
+        s.step?.kind == PlanStepKind.GENERIC -> Res.string.setup_board_title
+        else -> when (page.id) {
+            StepId.NAME -> Res.string.setup_name_title
+            StepId.LOCATION, StepId.MOBILITY -> Res.string.setup_location_title
+            StepId.SITE -> Res.string.setup_site_title
+            StepId.WIFI -> Res.string.setup_wifi_title
+            StepId.PAIRING -> Res.string.setup_pairing
+            StepId.BONDS -> Res.string.setup_bonds_title
+            else -> Res.string.setup_title
+        }
+    }
+}
+
+/** The page of one plan step, the same card or form Device settings shows for it. */
+private fun LazyListScope.stepItems(
+    id: StepId,
+    s: SetupUiState,
+    controller: SetupController,
+    config: DeviceConfigUiState?,
+    onConfigAction: (DeviceConfigAction) -> Unit,
+) {
+    val step = s.step
+    when {
+        step?.kind == PlanStepKind.UNSUPPORTED -> item(key = "unsupported") { WarningNote(stringResource(Res.string.setup_unsupported)) }
+        step?.kind == PlanStepKind.GENERIC -> configItem(config) { state -> GenericFieldsForm(state, step.fields, onConfigAction) }
+        id == StepId.NAME -> item(key = "name") { NameCard(s, controller) }
+        id == StepId.LOCATION || id == StepId.MOBILITY -> {
+            configItem(config) { state -> DeviceLocationForm(state, onConfigAction) }
+            if (step?.required == true && !step.satisfied) item(key = "location-needed") { InfoNote(stringResource(Res.string.setup_location_needed)) }
+        }
+        id == StepId.SITE -> configItem(config) { state -> DeviceSiteForm(state, onConfigAction, showSave = false) }
+        id == StepId.WIFI -> configItem(config) { state -> WifiForm(state, onConfigAction) }
+        id == StepId.PAIRING -> readyItem(config) { state ->
+            PairingCard(state, onSave = { onConfigAction(DeviceConfigAction.SavePairing(it)) }, onReboot = { onConfigAction(DeviceConfigAction.RequestReboot) })
+        }
+        id == StepId.BONDS -> readyItem(config) { state -> BondsCard(state, onForgetAll = { onConfigAction(DeviceConfigAction.RequestForgetBonds) }) }
+        // A catalog step this screen draws nothing for. Next still sets its bit.
+        else -> Unit
+    }
+}
+
+/**
+ * Pairing done, the plan not read yet. Page 1 is read once the link is ready. When that read failed
+ * it offers a new one, which sends nothing to the board.
+ */
+@Composable
+private fun LoadingCard(config: DeviceConfigUiState?, onConfigAction: (DeviceConfigAction) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        InfoNote(stringResource(Res.string.setup_waiting))
+        if (config?.location?.result == DeviceLocationResult.FAILED && config.location.working.not()) {
+            TextButton(onClick = { onConfigAction(DeviceConfigAction.Refresh) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(Res.string.setup_retry))
+            }
+        }
+    }
 }
 
 private fun LazyListScope.findItems(s: SetupUiState, controller: SetupController, bluetooth: RuntimeAccess?) {
@@ -278,12 +336,13 @@ private fun NameCard(s: SetupUiState, controller: SetupController) {
 
 /** A form that needs the sensor's config. Until the link is ready it says so. */
 private fun LazyListScope.configItem(state: DeviceConfigUiState?, content: @Composable (DeviceConfigUiState) -> Unit) {
+    readyItem(state) { ready -> BrandCard { content(ready) } }
+}
+
+/** A card that draws its own frame, once the link is ready. */
+private fun LazyListScope.readyItem(state: DeviceConfigUiState?, content: @Composable (DeviceConfigUiState) -> Unit) {
     item(key = "config") {
-        if (state == null || !state.ready) {
-            InfoNote(stringResource(Res.string.setup_waiting))
-        } else {
-            BrandCard { content(state) }
-        }
+        if (state == null || !state.ready) InfoNote(stringResource(Res.string.setup_waiting)) else content(state)
     }
 }
 
@@ -314,40 +373,55 @@ private fun DoneCard(s: SetupUiState, onOpenSensor: (String) -> Unit) {
 }
 
 /**
- * Back, Skip and Next. On Site with changed values Next is the explicit save ([saveSite]). The setup
- * controller sends the site keys in their own `SET_CONFIG` and moves on once the board's pages 5 and
- * 6 confirm them. Skip moves on and sends nothing, and is off while a save runs.
+ * Back, Skip and Next. Next on a page with unsaved values is the explicit save. Site sends its keys
+ * in their own `SET_CONFIG` and a board step its declared keys, and the page moves on once the board
+ * confirms them and keeps the step's bit. Skip sends only the bit, and is off while a save runs. An
+ * unsupported required step offers Leave, setup stays pending until the app is updated.
  */
 @Composable
-private fun SetupNav(s: SetupUiState, config: DeviceConfigUiState?, controller: SetupController, saveSite: suspend () -> Boolean) {
-    if (s.page == SetupStep.Find) return
+private fun SetupNav(s: SetupUiState, config: DeviceConfigUiState?, controller: SetupController, device: DeviceConfigController?) {
+    if (s.page == SetupPage.Find) return
+    val ack: suspend (Collection<StepId>) -> Boolean = { ids -> device?.ackSetup(ids) ?: false }
+    val step = s.step
     val site = config?.site
-    val savesSite = s.page == SetupStep.Site && site?.dirty == true
+    val savesSite = step?.id == StepId.SITE && site?.dirty == true
+    val boardFields = step?.takeIf { it.kind == PlanStepKind.GENERIC }?.fields.orEmpty()
+    val savesBoard = config != null && config.board.changes(boardFields).isNotEmpty()
     Row(
         Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (s.page != SetupStep.Done && !(s.page == SetupStep.Name && s.paired)) {
+        if (s.canGoBack) {
             TextButton(onClick = controller::back, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(Res.string.setup_back)) }
         }
         Spacer(Modifier.weight(1f))
-        if (s.page.skippable) {
-            TextButton(onClick = controller::skip, enabled = !s.siteSaving && site?.working != true, modifier = Modifier.heightIn(min = 48.dp)) {
+        val working = config?.location?.working == true || site?.working == true || config?.board?.working == true
+        if (step?.skippable == true) {
+            TextButton(onClick = { controller.skip(ack) }, enabled = s.canSkip && !working, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(stringResource(Res.string.setup_skip))
             }
         }
-        val busy = s.siteSaving || config?.location?.working == true || site?.working == true || config?.snapshot?.busy == true
+        if (step?.kind == PlanStepKind.UNSUPPORTED) {
+            PillButton(stringResource(Res.string.setup_leave), onClick = controller::finish)
+            return@Row
+        }
+        val busy = working || config?.snapshot?.busy == true
+        val canSave = when {
+            savesSite -> config?.canSaveSite == true
+            savesBoard -> config?.canEditBoard == true
+            else -> true
+        }
         PillButton(
-            stringResource(if (s.page == SetupStep.Done) Res.string.setup_close else Res.string.setup_next),
+            stringResource(if (s.page == SetupPage.Done) Res.string.setup_close else Res.string.setup_next),
             onClick = {
-                if (savesSite) {
-                    controller.saveSiteThenNext(saveSite)
-                } else {
-                    controller.next()
+                when {
+                    savesSite -> controller.next(save = { device?.saveSiteAndWait() == DeviceSiteResult.SAVED }, ack = ack)
+                    savesBoard -> controller.next(save = { device?.saveBoardAndWait(boardFields) == true }, ack = ack)
+                    else -> controller.next(ack = ack)
                 }
             },
-            enabled = s.canAdvance && !busy && (!savesSite || config?.canSaveSite == true),
+            enabled = s.canAdvance && !busy && canSave,
         )
     }
 }

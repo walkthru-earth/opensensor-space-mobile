@@ -30,6 +30,7 @@ import space.opensensor.data.ble.SecretNeedsBluetoothException
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.ble.WifiUnavailableException
 import space.opensensor.data.history.ServedTemplates
+import space.opensensor.data.protocol.ConfigFields
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.DeviceConfig
 import space.opensensor.data.protocol.DeviceInfo
@@ -287,6 +288,25 @@ internal class IosDeviceConfigSource(
                 it.getSite() ?: SITE_UNSUPPORTED
             } ?: throw IllegalStateException("link busy")
             return result.takeUnless { it === SITE_UNSUPPORTED }
+        } finally { working.value = false }
+    }
+
+    /** Page 7, the keys the board template declares. Read only when the template declares one. */
+    override suspend fun readBoardSettings(): space.opensensor.data.protocol.BoardSettings? {
+        if (state.syncBusy) throw IllegalStateException("a sync holds the link")
+        return borrow { it.getBoardSettings() } ?: throw IllegalStateException("link busy")
+    }
+
+    /** Declared board keys in their own `SET_CONFIG`, then page 7 read back. Only a confirmed user action calls this. */
+    override suspend fun writeBoardSettings(patch: ConfigPatch): space.opensensor.data.protocol.BoardSettings? {
+        require(patch.keys.none { ConfigFields.isReserved(it) || it in ConfigFields.SECRET_KEYS }) { "only declared board keys" }
+        if (state.syncBusy || working.value) throw IllegalStateException("link busy")
+        working.value = true
+        try {
+            return borrow {
+                config.value = it.setConfig(patch)
+                it.getBoardSettings()
+            } ?: throw IllegalStateException("link busy")
         } finally { working.value = false }
     }
 

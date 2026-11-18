@@ -28,6 +28,8 @@ import space.opensensor.device.DeviceConfigController
 import space.opensensor.device.DeviceConfigNotice
 import space.opensensor.device.DeviceConfigSnapshot
 import space.opensensor.device.DeviceConfigSource
+import space.opensensor.model.SetupManifest
+import space.opensensor.model.StepId
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -63,7 +65,7 @@ private class LocationSource(var location: LocationConfig, var mobility: String?
     override fun reconnectOverBluetooth() = Unit
 }
 
-/** System back and the saved location, through the real screen and its Navigation Event handler. */
+/** System back and the plan from page 1, through the real screen and its Navigation Event handler. */
 @OptIn(ExperimentalTestApi::class)
 class SetupScreenTest {
     private val dispatcher = NavigationEventDispatcher()
@@ -93,7 +95,15 @@ class SetupScreenTest {
     private fun Screen(run: Run, port: FakePort, source: LocationSource?, pick: SetupCandidate?) {
         val scope = rememberCoroutineScope()
         val c = run.controller ?: SetupController(scope, port, pick = pick).also { run.controller = it }
-        val config = source?.let { s -> run.config ?: DeviceConfigController(scope, s, MutableStateFlow(DetailLevel.SIMPLE)).also { run.config = it } }
+        val config = source?.let { s ->
+            run.config ?: DeviceConfigController(
+                scope,
+                s,
+                MutableStateFlow(DetailLevel.SIMPLE),
+                templates = MutableStateFlow(emptyList()),
+                manifestOf = { _, _ -> SetupManifest.NONE },
+            ).also { run.config = it }
+        }
         SetupScreen(
             controller = c,
             config = config,
@@ -111,27 +121,34 @@ class SetupScreenTest {
         waitForIdle()
         port.ready("AA")
         waitForIdle()
-        assertEquals(SetupStep.Name, c.state.value.page)
     }
 
     @Test
-    fun systemBackAfterPairingAsksBeforeLeavingOnEveryPage() = runComposeUiTest {
+    fun systemBackAfterPairingAsksBeforeLeavingWhileThePlanLoads() = runComposeUiTest {
         val port = FakePort()
         val run = show(port)
         val c = run.controller!!
         pair(port, c)
+        assertEquals(SetupPage.Loading, c.state.value.page, "no page 1 yet, so no plan")
         back.backCompleted()
         waitForIdle()
         assertTrue(c.state.value.askClose)
         assertFalse(c.state.value.closed)
-        c.dismissClose()
-        c.next()
-        waitForIdle()
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        assertEquals(0, run.closes)
+    }
+
+    @Test
+    fun systemBackOnTheFirstStepAsksBeforeLeaving() = runComposeUiTest {
+        val port = FakePort()
+        val run = show(port, LocationSource(LocationConfig(cell = "", resolution = 8, country = "")))
+        val c = run.controller!!
+        pair(port, c)
+        // Page 1 was read before pairing ended, and the plan still reaches the wizard.
+        assertEquals(SetupPage.Step(StepId.LOCATION), c.state.value.page)
         back.backCompleted()
         waitForIdle()
         assertTrue(c.state.value.askClose)
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        assertEquals(SetupPage.Step(StepId.LOCATION), c.state.value.page)
         assertEquals(0, run.closes)
     }
 
@@ -165,26 +182,28 @@ class SetupScreenTest {
         val source = LocationSource(LocationConfig(cell = "", resolution = 8, country = "GH"))
         val run = show(port, source)
         val c = run.controller!!
-        waitForIdle()
+        pair(port, c)
         assertEquals(true, run.config!!.state.value.location.supported)
-        assertFalse(c.state.value.located)
+        assertEquals(false, c.state.value.step?.satisfied)
+        assertFalse(c.state.value.canAdvance, "a fixed Thing needs its cell")
         source.location = LocationConfig(cell = "85283083fffffff", resolution = 5, cellResolution = 5, country = "")
         run.config!!.refresh()
         waitForIdle()
-        assertTrue(c.state.value.located)
+        assertEquals(true, c.state.value.step?.satisfied)
+        assertTrue(c.state.value.canAdvance)
     }
 
     @Test
-    fun aMovingThingIsLocatedWithoutACell() = runComposeUiTest {
+    fun aMovingThingNeedsNoCell() = runComposeUiTest {
         val port = FakePort()
         val source = LocationSource(LocationConfig(cell = "", resolution = 8, country = ""), mobility = "fixed")
         val run = show(port, source)
         val c = run.controller!!
-        waitForIdle()
-        assertFalse(c.state.value.located)
+        pair(port, c)
+        assertFalse(c.state.value.canAdvance)
         source.mobility = "moving"
         run.config!!.refresh()
         waitForIdle()
-        assertTrue(c.state.value.located, "a moving Thing takes its cell from its own receiver")
+        assertTrue(c.state.value.canAdvance, "a moving Thing takes its cell from its own receiver")
     }
 }

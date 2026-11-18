@@ -49,13 +49,19 @@ device, and nothing is asked at launch.
   with their own back arrow.
 - "Add your sensor" on Discover opens the Add sensor wizard over the My devices root, so closing it
   lands on My devices. A device screen that loses its session returns there too. Settings is reached only from the bottom bar.
-  The wizard's Location page has no Skip. Its area is picked on the full screen area map, the same
-  one Device settings opens ([device-location.md](device-location.md)). On firmware that reports
-  `thing.mobility` the page offers Fixed (default) or Moving, and Moving needs no cell
-  ([device-location.md](device-location.md#mobility-and-gnss)). Next waits until the sensor confirms a saved H3 cell or Moving, and a
-  setup left before Done resumes at Location. The optional Site page follows, with Skip. Next saves
-  any changed site value and moves on once the sensor confirms it. A sensor without site keys
-  never shows the page ([device-location.md](device-location.md#site)). After pairing, the close arrow and system back both ask
+  After pairing the wizard waits for page 1, then walks the sensor's `SetupPlan`
+  ([sync-engine.md](sync-engine.md#thing-setup)), one page per step in the board template's order.
+  Name, Location or Mobility, Site, Wi-Fi, Pairing and Paired phones are the Device settings cards.
+  Pairing and Paired phones show from Detailed, and LAN never has a page. A board step is a
+  `GenericFieldsForm` of its declared keys, and its action keys always confirm first. A required step
+  this app cannot draw says to update the app and offers Leave. Location has no Skip on a fixed
+  Thing. Its area is picked on the full screen area map, the same one Device settings opens
+  ([device-location.md](device-location.md)), and Moving needs no cell
+  ([device-location.md](device-location.md#mobility-and-gnss)). Next waits until the sensor confirms
+  a saved H3 cell or Moving. Next on Site or a board step saves the changed values and moves on once
+  the sensor confirms them. Next and Skip then set the step's bit in `thing.setup_ack` and move on
+  only once the sensor reads it back. A setup left before Done resumes at the first step not done.
+  After pairing, the close arrow and system back both ask
   "Leave setup?" first, and old firmware fails on Find with the update message. A sensor under Nearby
   on My devices that this phone has not added opens the wizard with it picked, never Today, so setup
   always comes first on both platforms. Find lists the picked sensor with its Pairing state before
@@ -66,7 +72,7 @@ device, and nothing is asked at launch.
   from that sensor, with the board template's setup steps. The automatic open lands on Find with the sensor
   offered at the top, and nothing connects until the user taps it. Backing out spends the open, and
   the row keeps a compact "Finish setup" chip (added) or a "needs setup" tag (not added). A tap on
-  "Finish setup" resumes an added sensor at Location. When two or more sensors ask, My devices shows
+  "Finish setup" resumes an added sensor at its first step not done. When two or more sensors ask, My devices shows
   one "N sensors need setup" chip that opens Find, and never opens the wizard by itself. Leaving the
   foreground ends the session (Android `MainActivity.onStop`, iOS `sceneDidEnterBackground`). The
   watch only reads, so it sends nothing to the sensor.
