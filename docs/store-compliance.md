@@ -1,29 +1,32 @@
 # Store compliance checklist (Google Play and App Store)
 
-**Scope:** what the store forms ask and how this app answers today. Permission timing, purpose
+**Scope:** what the store forms ask and how this app answers. Permission timing, purpose
 strings, privacy manifest, Data safety and privacy label answers, and the conservative decisions taken for
 Discover and uploads before the first store submission.
 **Code:** `app/src/main/AndroidManifest.xml`, `ui/permissions/`, `ios/App/Info.plist`,
 `ios/App/PrivacyInfo.xcprivacy`, `PlatformNeedsTable` in `:core:thing`. **Related:** [screens.md](screens.md) (permission timing table),
 [devices-and-discovery.md](devices-and-discovery.md) (network boundary, public feed, uploads).
 
-State as of 2026-10-09. Re-check the linked store pages before each submission. They change yearly.
+Re-check the linked store pages before each submission. They change yearly.
 
 ## Current data posture
 
 - Bluetooth LE and the local Wi-Fi (mDNS `_ossync._tcp`) reach only the user's own sensors.
 - Readings and Parquet files stay on the phone. They leave only when the user shares or exports them
   through the system share sheet or document picker.
-- A sensor nickname and its setup pending flag from the Add sensor wizard stay in app settings
-  on the phone. Neither is sent to the sensor or anywhere else.
+- A sensor nickname from the Add sensor wizard stays in app settings on the phone. It is not
+  sent to the sensor or anywhere else.
 - No account, no analytics, no crash reporting SDK, no ads. The only location permission is
   approximate, asked from Discover Near me or the area map's Use phone location.
   Both only move the map. The area map turns a temporary fix into a cell to centre on,
   and the owner taps the cell to send, which reaches the owner's sensor only after Save.
   The original fix is never stored or sent. No background location is requested.
   See [device-location.md](device-location.md).
-- No server today. The planned Discover feed (anonymous read-only GETs) and per-device opt-in
-  uploads change the answers below. See "Before Discover or uploads ship".
+- The app has no server of its own. Discover reads anonymous public files with read-only GETs
+  (the OpenAQ aggregates and the basemap on `data.source.coop`, map glyphs and sprites on
+  `protomaps.github.io`), all under the "Show public sensors" switch. Per-device uploads are not
+  built. When they ship they change the answers below, see
+  [Decisions for Discover and uploads](#decisions-for-discover-and-uploads).
 - Under the same "Show public sensors" switch, the app may make an anonymous, read-only GET for a
   board template a synced file names and the phone lacks, from the firmware template host on
   `raw.githubusercontent.com`, and keeps it only when its SHA-256 matches the file footer. Each
@@ -46,7 +49,7 @@ State as of 2026-10-09. Re-check the linked store pages before each submission. 
 | Data deletion | Not applicable, no account. Forget removes a sensor's enrollment and access credentials. Archived readings stay until app storage is cleared or the app is uninstalled. Settings removes old format files on request | `DeviceLinkOwner.forget`, `DevicesBridge.forgetNow`, `AppDelegate.forget` |
 | Account deletion | Not applicable, no account | |
 | Foreground service | `connectedDevice` for a transfer from the user's own sensor, `dataSync` when Android refuses it and for Auto-sync. Fill the Play Console foreground service declaration with this use and a short video of a sync with its notification. Android 15+ limits `dataSync` to 6 hours a day, far above one transfer | Manifest comment, `SyncForegroundService` |
-| `POST_NOTIFICATIONS` | Asked when the user starts a sync or turns on Auto-sync or wake when nearby. A denial only hides the progress notification | `TodayRoute`, `FilesScreen`, `DeviceRoute`, `ScanScreen` |
+| `POST_NOTIFICATIONS` | Asked when the user starts a sync or turns on Auto-sync or wake when nearby. A denial only hides the progress notification | `TodayRoute`, `FilesRoute`, `DeviceRoute`, `ScanScreen` |
 | `ACCESS_LOCAL_NETWORK` (API 37) | Asked from My devices Scan or a Wi-Fi action on the Device screen. A denial leaves Bluetooth available | `ScanScreen`, `DeviceRoute` |
 | Companion device permissions | Normal permissions, effective only while an associated sensor is near, after the user approves the system dialog | Manifest comment |
 | `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK` | Re-arm the Wi-Fi trigger after boot. Wi-Fi lock only during a LAN transfer | Manifest comment |
@@ -60,8 +63,8 @@ State as of 2026-10-09. Re-check the linked store pages before each submission. 
 | Purpose strings | `NSBluetoothAlwaysUsageDescription` "Finds and connects to your opensensor devices nearby to copy their readings." `NSLocalNetworkUsageDescription` "Finds your opensensor devices on your Wi-Fi to sync faster." `NSBonjourServices` `_ossync._tcp` only. `NSLocationWhenInUseUsageDescription` "Centres the public map or sets an approximate sensor area when you ask. Only the selected area is sent to your sensor." with `NSLocationDefaultAccuracyReduced` true, asked only from the Discover Near me or area map Use phone location tap. `NSCameraUsageDescription` "Reads the barcode on your sensor sticker. No picture is kept.", asked only from the Scan tap on the sensor sticker card | `ios/App/Info.plist` |
 | Purpose strings, Arabic | The same purpose strings in Arabic, in the `InfoPlist.xcstrings` string catalog, which Xcode compiles to `ar.lproj/InfoPlist.strings`. English stays identical to `Info.plist` (`TranslationsTest`) | `ios/App/InfoPlist.xcstrings` |
 | Languages | App Store localizations English and Arabic. `CFBundleLocalizations` lists en and ar, `knownRegions` adds ar, so iOS offers Arabic in the app's Language setting | `ios/App/Info.plist`, `project.pbxproj` |
-| Prompt timing | `CBCentralManager` is created on the first My devices Scan tap. At launch it is created only when iOS restores Bluetooth state, or when an Auto-sync switch is on and Bluetooth is already allowed, so no prompt shows. `NWBrowser` starts from My devices Scan, from an automatic My devices scan when Bluetooth access was already held. The first real browse can trigger the Local Network prompt. Notifications are asked only from the tap that turns an Auto-sync switch on, and only while iOS has never asked. A denial keeps the switch on and only hides the summary. The camera is asked only from the Scan tap on the sensor sticker card in Device settings (`UserAction.SCAN_STICKER`, `AccessKind.CAMERA`), straight to the system prompt with no in-app rationale, as for Bluetooth, Local Network and location. A refusal leaves a note on the card, a later tap offers Settings, a restricted camera gets the note only, and typing the sticker always works. Launch shows no prompt | `BluetoothCompanion.swift`, `LanDiscovery.swift`, `AutoSyncSwitch.kt`, `StickerScan.kt`, `StickerScanner.swift`, `AppDelegate.swift` |
-| Privacy manifest | `PrivacyInfo.xcprivacy` in the app bundle. Tracking false, no tracking domains, no collected data types. Required reason APIs, file timestamp `C617.1` (`stat`, `fstat`, `attributesOfItem` on files in the app container) system boot time `35F9.1` (`ProcessInfo.systemUptime` for elapsed transfer timing) UserDefaults `CA92.1` (`NSUserDefaults` holds the Discover map camera, chip choices, app settings, the Auto-sync switches with their last run times, and the retry count, read only by this app) and disk space `E174.1` (volume available capacity keys in `IosStorageBudget` and `IosExportSpace`, checked before writing archive and export files, never shown or sent). No keyboard APIs found in the binary. The camera (VisionKit `DataScannerViewController`, AVFoundation authorization status) is not a required reason API, so the sticker scan adds no entry. No collected data type either, since frames stay inside VisionKit and only the parsed sticker text is kept on the phone and sent to the user's own sensor (reviewed 2026-10-09, #21) | [Apple required reason APIs](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api) |
+| Prompt timing | `CBCentralManager` is created at launch only when Bluetooth access is already allowed, so no prompt shows. Without access it is created on the first tap that needs Bluetooth, such as My devices Scan. `NWBrowser` starts from My devices Scan, from an automatic My devices scan when Bluetooth access was already held. The first real browse can trigger the Local Network prompt. Notifications are asked only from the tap that turns an Auto-sync switch on, and only while iOS has never asked. A denial keeps the switch on and only hides the summary. The camera is asked only from the Scan tap on the sensor sticker card in Device settings (`UserAction.SCAN_STICKER`, `AccessKind.CAMERA`), straight to the system prompt with no in-app rationale, as for Bluetooth, Local Network and location. A refusal leaves a note on the card, a later tap offers Settings, a restricted camera gets the note only, and typing the sticker always works. Launch shows no prompt | `BluetoothCompanion.swift`, `LanDiscovery.swift`, `AutoSyncSwitch.kt`, `StickerScan.kt`, `StickerScanner.swift`, `AppDelegate.swift` |
+| Privacy manifest | `PrivacyInfo.xcprivacy` in the app bundle. Tracking false, no tracking domains, no collected data types. Required reason APIs, file timestamp `C617.1` (`stat`, `fstat`, `attributesOfItem` on files in the app container) system boot time `35F9.1` (`ProcessInfo.systemUptime` for elapsed transfer timing) UserDefaults `CA92.1` (`NSUserDefaults` holds the Discover map camera, chip choices, app settings, the Auto-sync switches with their last run times, and the retry count, read only by this app) and disk space `E174.1` (volume available capacity keys in `IosStorageBudget` and `IosExportSpace`, checked before writing archive and export files, never shown or sent). No keyboard APIs found in the binary. The camera (VisionKit `DataScannerViewController`, AVFoundation authorization status) is not a required reason API, so the sticker scan adds no entry. No collected data type either, since frames stay inside VisionKit and only the parsed sticker text is kept on the phone and sent to the user's own sensor | [Apple required reason APIs](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api) |
 | Privacy nutrition label | "Data Not Collected" | [App privacy details](https://developer.apple.com/app-store/app-privacy-details/) |
 | Export compliance | `ITSAppUsesNonExemptEncryption` false. Only OS encryption (BLE pairing, Keychain, file protection) | `Info.plist` |
 | Background modes | `processing` and `bluetooth-central`, used only while a sensor's Auto-sync switch is on. No `fetch`, `audio` or `location` mode. `BGTaskSchedulerPermittedIdentifiers` lists `space.opensensor.app.autosync` (the scheduled `BGProcessingTask`) and `space.opensensor.app.sync.*` (Collect all as a `BGContinuedProcessingTask` on iOS 26 and later) | `Info.plist`, `BackgroundSync.swift` |
@@ -98,15 +101,16 @@ declared yet.
   row in the same release as the feature, with its row in the store tables above and an updated
   review note.
 
-## Decisions for Discover and uploads (conservative defaults, 2026-10-08)
+## Decisions for Discover and uploads
 
-Owner decisions of 2026-10-08 are recorded in
+Uploads are not built. Decisions 3 and 9 and the upload parts of decision 1 are the rules for
+when they ship. Owner decisions are recorded in
 [devices-and-discovery.md](devices-and-discovery.md#owner-decisions-and-open-questions). Where a
 question was still open, the safest choice is taken. These are product rules, not legal advice.
 Have counsel read the privacy policy before the first public release.
 
-1. **Published cells are H3 resolution 8** (owner decision 2026-11-04, on average about 0.74 km²
-   with an edge of about 530 m). This replaces the earlier resolution 7 cap. Every published Thing, fixed or
+1. **Published cells are H3 resolution 8** (owner decision, on average about 0.74 km²
+   with an edge of about 530 m). Every published Thing, fixed or
    moving, carries res 8, and no publisher coarsens it. Play's Data safety guidance treats
    location finer than about 3 km² as precise, so a published res 8 cell is declared as precise
    location on Play once upload ships. Apple calls location precise from about three decimal
@@ -122,7 +126,7 @@ Have counsel read the privacy policy before the first public release.
    cannot be avoided, declare them. Play Data safety "Device or other IDs" and Apple "Device ID", both for
    App functionality, not linked to the user, no tracking. Never add a tracking domain to the
    privacy manifest.
-3. **Uploads stay opt-in per device, off by default**, with one confirmation that lists what is
+3. **Uploads, not built, stay opt-in per device and off by default**, with one confirmation that lists what is
    shared (readings, the resolution 8 cell, the public name) and what never is (exact location,
    thing UUID, MAC address, Wi-Fi, PIN, token), and states that published data is released
    under CC BY 4.0 and cannot be withdrawn (owner decision). "Stop sharing" lives in that
@@ -141,7 +145,7 @@ Have counsel read the privacy policy before the first public release.
 5. **Privacy policy.** [privacy-policy.md](privacy-policy.md) is the draft to host at a public URL
    and link in Play Console, App Store Connect and the app's Settings About line. The owner
    commits to it at publish time, not before. It describes
-   today's behaviour and already covers the opt-in sharing rules above.
+   what the app does and says that sharing is not available yet.
 6. **Children.** Target audience 13 and over in Play's target audience form, and no claims of
    being made for children, so the Families policy and COPPA rules for child-directed apps do not
    apply.
@@ -153,13 +157,13 @@ Have counsel read the privacy policy before the first public release.
 8. **"Near me"** (owner decision). Android declares only `ACCESS_COARSE_LOCATION`, asked on the
    tap, never in the background. iOS uses When In Use with `NSLocationDefaultAccuracyReduced`.
    The fix only moves the map and may preselect the sharing cell, it is never stored or sent, so
-   it is not collected. Built 2026-10-09. `ManifestPermissionsTest` expects `ACCESS_COARSE_LOCATION`
+   it is not collected. `ManifestPermissionsTest` expects `ACCESS_COARSE_LOCATION`
    and rejects fine and background location. The Android 17 location button (Jetpack
    `androidx.core.locationbutton`) is optional, not a targetSdk 37 rule, and it grants one time
    precise location, so the app keeps the standard coarse runtime prompt. The iOS privacy
    manifest needs no change, since the fix is not collected and location is not a required
    reason API.
-9. **Upload identity.** No accounts or passkeys. A per-device P-256 key in the Android Keystore
+9. **Upload identity, not built.** No accounts or passkeys. A per-device P-256 key in the Android Keystore
    or iOS Keychain signs uploads. Platform signing for authentication keeps the export exemption.
 
 ## Gate before each submission
@@ -171,15 +175,12 @@ Have counsel read the privacy policy before the first public release.
 - [ ] At publish time, the privacy policy URL is live and matches what the release does.
 - [ ] At publish time, the Play foreground service declaration has its video.
 
-## Private thing provisioning (2026-10-09)
+## Private thing provisioning
 
-This is a local sensor configuration action, not a developer-server upload. The
-owner selects the resolution and taps Save before the cell leaves the phone.
-Resolution 8 is the default; finer cells can identify a particular location even
-with an approximate OS fix. The location purpose string and trigger table include
-both map centering and device setup. No phone coordinates, background tracking or
-remote reverse geocoding is introduced. The earlier map-only statement that no
-location-derived value ever leaves the phone is superseded by this explicit
-cell-only device action. Recheck store disclosures before submission rather than
-assuming every permitted H3 resolution counts as approximate. Public upload policy
-remains a separate flow with its own precision cap and consent.
+This is a local sensor configuration action, not a developer-server upload. The owner taps a
+cell on the area map and taps Save before the cell leaves the phone, and it goes only to the
+owner's sensor. The resolution is fixed at 8, with no resolution menu
+([device-location.md](device-location.md)). The location purpose string and trigger table include
+both map centering and device setup. No phone coordinates, background tracking or remote reverse
+geocoding is involved. Recheck store disclosures before submission. Public upload policy is a
+separate flow with its own consent.

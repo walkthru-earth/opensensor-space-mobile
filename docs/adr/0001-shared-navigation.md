@@ -1,6 +1,6 @@
 # ADR 0001. Shared shell and navigation
 
-- Status. Accepted (lead agent decision, owner review pending)
+- Status. Accepted. Both apps run on it
 - Date. 2026-10-09
 - Issue. #12
 
@@ -25,7 +25,7 @@ Discover root Back closes the app. `TabNavigatorTest` and `AppNavConfigTest` cov
   inside `NavController`, which are hard to test without Compose, and the version paired with CMP
   was a beta.
 - An own host over `TabNavigator`. It re-implements ViewModel store clearing, saved state and the
-  predictive pop animation. Kept as the iOS fallback only.
+  predictive pop animation. No such host exists in the code.
 
 ## Rules that follow
 
