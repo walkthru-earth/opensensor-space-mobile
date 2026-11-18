@@ -10,6 +10,7 @@ import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetSink
 import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.history.parquet.ParquetWriter
+import space.opensensor.model.Aggregate
 import space.opensensor.model.GateValue
 import space.opensensor.model.ValidityGate
 
@@ -33,10 +34,13 @@ private class LegacyGate(private val gate: ValidityGate, private val column: Col
     }
 }
 
+/** The union metrics the two-pass oracle aggregates. It knew only means, so a point column such as `last_write_us` stays out. */
+internal val MEAN_METRICS: List<MetricSpec> get() = MetricCatalog.shared.union.value.filter { it.aggregate == Aggregate.MEAN }
+
 internal class LegacyAggregator(
     private val thing: String,
     private val resolutions: Set<Resolution> = Resolution.entries.toSet(),
-    private val metrics: List<MetricSpec> = MetricCatalog.shared.union.value,
+    private val metrics: List<MetricSpec> = MEAN_METRICS,
 ) {
     private class Acc(metricCount: Int) {
         var rows = 0

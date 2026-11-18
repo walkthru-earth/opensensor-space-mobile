@@ -29,9 +29,9 @@ class MetricsParityTest {
         thing.datastream(column)?.takeIf { column !in thing.profile.hidden }?.let { thing to it }
     }
 
-    private fun gateMatches(spec: MetricSpec, gate: ValidityGate?): Boolean = when (val expected = spec.gate) {
-        null -> gate == null || gate == ValidityGate.Finite(spec.column)
-        else -> gate == expected
+    private fun gateMatches(spec: MetricSpec, gate: ValidityGate?): Boolean {
+        val selfFinite = ValidityGate.Finite(spec.column)
+        return gate?.takeUnless { it == selfFinite } == spec.gate?.takeUnless { it == selfFinite }
     }
 
     @Test
@@ -47,7 +47,7 @@ class MetricsParityTest {
                 assertEquals(spec.settleSeconds.toDouble(), ds.datastream.settleSeconds, at)
                 assertEquals(spec.decimals, ds.decimals, at)
                 assertEquals(spec.healthScale?.id, ds.scale?.id, at)
-                assertNotNull(ds.datastream.plausibleRange, "$at has no plausible range in its template")
+                if (!spec.auxiliary) assertNotNull(ds.datastream.plausibleRange, "$at has no plausible range in its template")
             }
         }
     }

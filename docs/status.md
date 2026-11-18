@@ -117,10 +117,13 @@ No phone run of these changes is recorded.
   decimals, display units, scales and the primary from the template hints, the Thing Collection and
   the bundled property and scale registries. Bundled profiles only overlay the family, hero and
   hidden columns. Scales come from the column or the registry, never a column name. LIVE shows for
-  any template whose SHA-256 verifies, CrowPanel and served templates included. Board temperature
-  and battery are auxiliary columns, so History and Files no longer chart them. A served template
-  joins the metric union (`MetricCatalog`), so its columns aggregate into tiers and show in Files
-  and Stations with no app change. History opens on the Thing's own primary.
+  any template whose SHA-256 verifies, CrowPanel and served templates included. Every numeric column
+  with a unit that shows a symbol charts in History and Files; auxiliary columns, such as the
+  CoreS3 board temperature and battery, list after the measurements and only in Detailed and
+  Developer, and each picker lists the Thing's own template order first, then the rest of the
+  union. A served template joins the metric union (`MetricCatalog`), so its columns aggregate into
+  tiers and show in Files and Stations with no app change. History opens on the Thing's own
+  primary.
 - 2026-11-19, part of #350. The bundled templates are byte copies of opensensor-space-firmware
   a5545b4 `docs/shared/templates`, and CI checks out the firmware at that commit. The CoreS3
   dictionary is `f4f81218…`, which adds `lst` to LIVE, and its profile follows it. The templates

@@ -36,10 +36,12 @@ import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.history.ArchiveQueryResult
 import space.opensensor.data.history.DerivedStore
 import space.opensensor.data.history.FileSummary
+import space.opensensor.data.history.FileTemplates
 import space.opensensor.data.history.HistoryDeriver
 import space.opensensor.data.history.HistoryRepository
 import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.MetricSpec
+import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.archiveQueryResults
 import space.opensensor.data.local.database.ArchivedFile
 import space.opensensor.data.local.database.ArchivedFileDao
@@ -50,6 +52,7 @@ import space.opensensor.family.air.AirMetrics
 import space.opensensor.files.DeviceFiles
 import space.opensensor.files.FileMetricsController
 import space.opensensor.files.FilesController
+import space.opensensor.model.BoardTemplate
 import space.opensensor.storage.DerivedQuota
 import space.opensensor.ui.components.ScreenMessage
 import java.io.File
@@ -103,11 +106,12 @@ internal data class FileSummaryRequest(val thing: String, val files: List<Archiv
  * #92. The metrics the Files chart offers, the same rule as History. Corrected PM2.5 comes first and
  * is the default. Once the files are read and none has a humidity reading, corrected is dropped and raw
  * leads. Simple never offers raw next to corrected, Detailed always does. Simple offers only the
- * primary metric and its corrected view, Detailed every metric of [catalog] ([MetricCatalog.union]).
+ * primary metric and its corrected view, Detailed every metric of [catalog] ([MetricCatalog.union]),
+ * in the stable order of the thing's own [template] ([Metrics.pickerOrder]).
  */
-internal fun fileChartMetrics(summaries: List<FileSummary>, detailed: Boolean, catalog: List<MetricSpec>): List<MetricSpec> {
+internal fun fileChartMetrics(summaries: List<FileSummary>, detailed: Boolean, catalog: List<MetricSpec>, template: BoardTemplate? = null): List<MetricSpec> {
     val corrected = summaries.isEmpty() || summaries.any { (it.agg(AirMetrics.PM25_CORRECTED)?.n ?: 0) > 0 }
-    return catalog.filter { m ->
+    return Metrics.pickerOrder(catalog, template).filter { m ->
         when (m) {
             AirMetrics.PM25_CORRECTED -> corrected
             AirMetrics.PM25 -> detailed || !corrected
@@ -123,11 +127,15 @@ internal fun fileChartState(
     request: FileSummaryRequest?,
     result: ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>,
     catalog: List<MetricSpec>,
+    templates: FileTemplates = FileTemplates.SERVED,
 ): FileChartState {
     val list = result.forQuery(request).orEmpty()
     val lastPageStart = maxOf(0, list.size - FilesViewModel.FILE_CHART_PAGE)
     val start = (offset ?: lastPageStart).coerceIn(0, lastPageStart)
-    val metrics = fileChartMetrics(list, detailed, catalog)
+    // The newest file's template orders the chips, as History does.
+    val template = request?.files.orEmpty().sortedByDescending { it.lastUtcNs ?: Long.MIN_VALUE }
+        .firstNotNullOfOrNull { templates.template(it.dictionarySha256, it.templateSha256) }
+    val metrics = fileChartMetrics(list, detailed, catalog, template)
     return FileChartState(
         // A choice the level no longer offers (raw after switching to Simple) falls back to the default.
         metric = choice?.takeIf { it in metrics } ?: metrics.first(),
