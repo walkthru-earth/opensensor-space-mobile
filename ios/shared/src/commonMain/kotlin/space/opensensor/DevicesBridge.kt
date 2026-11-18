@@ -232,6 +232,8 @@ class DevicesBridge internal constructor(
     private val latestDay: (thing: String) -> Flow<LatestDay?> = { flowOf(null) },
     /** Drops the saved Discover cells of a forgotten sensor's things, current and older. */
     private val forgetPlaces: suspend (things: List<String>) -> Unit = {},
+    /** Drops the phone only nickname and setup flag of a forgotten sensor. */
+    private val forgetSettings: suspend (id: String) -> Unit = {},
     /** Outlives every screen, as Android's app scope does, so leaving Today never cancels a Forget. */
     private val forgetScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
 ) {
@@ -475,13 +477,14 @@ class DevicesBridge internal constructor(
     }
 
     /**
-     * The cells go before the record. A record kept while they are removed lets a Forget that
-     * stopped halfway run again, so no cell outlives its sensor.
+     * The cells, the nickname and the setup flag go before the record. A record kept while they are
+     * removed lets a Forget that stopped halfway run again, so none of them outlives its sensor.
      */
     internal suspend fun forgetNow(id: String) {
         val device = (records.value + credentials.value).firstOrNull { it.peripheral.equals(id, ignoreCase = true) }?.device
         val credentialThings = credentials.value.filter { it.peripheral.equals(id, ignoreCase = true) }.map { it.thing }
         forgetPlaces((thingsFor(id) + credentialThings).distinct())
+        forgetSettings(id)
         save(IosKnown.forget(records.value, id))
         credentials.value = IosKnown.forget(credentials.value, id)
         forget(id, device)

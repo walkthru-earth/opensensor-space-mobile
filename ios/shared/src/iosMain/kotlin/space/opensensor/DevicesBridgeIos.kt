@@ -46,6 +46,7 @@ fun devicesBridge(
     collect = collect,
     latestDay = { LatestDays.observe(IosArchive.tiers, it) },
     forgetPlaces = IosArchive::forgetPlaces,
+    forgetSettings = settingsRepository::forgetSensor,
 )
 
 /**

@@ -5,14 +5,16 @@ import android.content.ComponentCallbacks2
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
 import space.opensensor.data.background.AutoSyncScheduler
 import space.opensensor.data.background.SyncTriggers
+import space.opensensor.data.coroutines.ApplicationScope
+import space.opensensor.data.coroutines.IoDispatcher
 import space.opensensor.data.coroutines.suspendRunCatching
 import space.opensensor.data.history.HistoryDeriver
 import space.opensensor.data.history.HistoryStartup
@@ -62,7 +64,12 @@ class OpenSensorApplication :
     @Inject
     lateinit var settings: SettingsRepository
 
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // The process scope logs a failure of the startup work below instead of ending the process.
+    @Inject @ApplicationScope
+    lateinit var appScope: CoroutineScope
+
+    @Inject @IoDispatcher
+    lateinit var io: CoroutineDispatcher
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
@@ -73,7 +80,7 @@ class OpenSensorApplication :
         // temps and stale partials and adopts orphan finals (#60), the feed block quota applies, then
         // old indexes backfill and History derives, and again whenever a record waits for its index.
         // Screen navigation only observes Room; syncs derive after newly archived files arrive.
-        historyStartup.start(appScope + Dispatchers.IO, deriveThings = { historyDeriver.deriveStale(it) }) { historyDeriver.deriveStale() }
+        historyStartup.start(appScope + io, deriveThings = { historyDeriver.deriveStale(it) }) { historyDeriver.deriveStale() }
         // Shared Compose screens read the first default locale. Make it the language `res/` chose.
         AppLanguage.alignDefault(this)
         // The basemap tile cache stays in cacheDir under its cap, set before any map runs (#61).

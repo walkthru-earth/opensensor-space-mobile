@@ -37,6 +37,7 @@ import space.opensensor.link.LinkClosedException
 import space.opensensor.link.TimeoutPhase
 import space.opensensor.storage.FakeStorageBudget
 import kotlin.concurrent.AtomicInt
+import kotlin.concurrent.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.random.Random
@@ -112,10 +113,16 @@ class SensorSyncTest {
     private fun u32(b: ByteArray, at: Int) = u16(b, at).toLong() or (u16(b, at + 2).toLong() shl 16)
     private var open: String? = null
 
+    /** The `epochNanos` of the last `TIME_SET` sent, which echoes its `SET_TIME` as the contract says. */
+    private val acknowledged = AtomicLong(0)
+
+    private fun timeSetFor(req: ByteArray) =
+        Frame.TimeSet(u32(req, 1), 12_345_678L, if (req.size == 13) u32(req, 9).toInt() else null).also { acknowledged.value = it.epochNanos }
+
     private fun respond(link: IosLink, req: ByteArray) {
         when (val op = req[0].toInt() and 0xFF) {
             Opcode.STATUS -> link.offerStatus("{\"utc\":0,\"clk\":0}")
-            Opcode.SET_TIME -> link.reply(Frame.TimeSet(1_789_581_931L, 12_345_678L, 123_000))
+            Opcode.SET_TIME -> link.reply(timeSetFor(req))
             Opcode.LIST -> {
                 files.forEach { (name, bytes) -> link.reply(Frame.File(bytes.size.toLong(), name)) }
                 link.reply(Frame.ListEnd(files.size.toLong(), 0, 0, 0))
@@ -305,7 +312,7 @@ class SensorSyncTest {
         val done = CompletableDeferred<SyncResult>()
         runner.start(link, thing, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
         assertEquals(SyncEnd.COMPLETE, withTimeout(20_000) { done.await() }.end)
-        assertEquals(listOf(Anchor(thing, "full-boot-identity", 1_789_581_931_123_000_000L, 12_345_678L)), anchors)
+        assertEquals(listOf(Anchor(thing, "full-boot-identity", acknowledged.value, 12_345_678L)), anchors)
     }
 
     @Test

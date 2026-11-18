@@ -4,8 +4,8 @@
 #   assets replaced after upload), so the newest build is at .../releases/tag/latest.
 # - A `v*` tag (e.g. `v1.2.0`) publishes a proper, permanent release with the same assets.
 #
-# One APK carries the two ARM ABIs every native library ships (x86 lacks h3, #61). Room uses the platform's SQLite;
-# the Parquet reader is pure Kotlin and delegates ZSTD decompression to that bundled library.
+# One APK carries the two ARM ABIs every native library ships (x86 lacks h3, #61). Room uses the bundled SQLite
+# driver. The Parquet reader is pure Kotlin and delegates ZSTD decompression to the bundled zstd library.
 # `minSdk 31` → Android 12 and newer, phones and tablets.
 #
 # Signing is fail-closed: four keystore secrets plus RELEASE_CERT_SHA256 are mandatory.
@@ -45,6 +45,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # for the commit list in the release notes
+          persist-credentials: false
+      # FirmwareTemplatesTest compares core/model/bundled/templates with the firmware templates at the
+      # commit pinned in `ref` below, the same commit as in verify.yml (#261). Bump both with each copy.
+      # OPENSENSOR_FIRMWARE_DIR on the build step makes a missing checkout fail the test instead of
+      # skipping it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: walkthru-earth/opensensor-space-firmware
+          ref: e2eb30b6b1fb30b3e237d63e24ff5683a50cd185
+          path: opensensor-space-firmware
+          persist-credentials: false
+          sparse-checkout: docs/shared/templates
 
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
       - id: jdk
@@ -60,8 +72,9 @@ jobs:
           # can neither be influenced by nor poison a cache entry of its own.
           cache-read-only: true
 
-      - name: Cache Kotlin Native toolchain
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore only, like the Gradle cache above. verify.yml saves this cache on main.
+      - name: Restore Kotlin Native toolchain
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'build-logic/src/**', 'core/*/build.gradle.kts', 'feature/*/build.gradle.kts', 'ui/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
@@ -129,6 +142,7 @@ jobs:
           OPENSENSOR_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           OPENSENSOR_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           OPENSENSOR_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          OPENSENSOR_FIRMWARE_DIR: ${{ github.workspace }}/opensensor-space-firmware
         run: |
           set -euo pipefail
           # Maven may redirect a Kotlin compiler artifact to a GitHub release asset.

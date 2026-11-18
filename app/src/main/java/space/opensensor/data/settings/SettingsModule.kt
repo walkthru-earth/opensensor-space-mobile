@@ -29,6 +29,9 @@ object SettingsModule {
     @Provides
     fun provideDeveloperLevel(settings: SettingsRepository): DeveloperLevel =
         DeveloperLevel { settings.detailLevel.first().developer }
+
+    @Provides
+    fun provideSensorSettings(settings: SettingsRepository): SensorSettings = SensorSettings { settings.forgetSensor(it) }
 }
 
 /**
@@ -37,4 +40,9 @@ object SettingsModule {
  */
 fun interface DeveloperLevel {
     suspend fun developer(): Boolean
+}
+
+/** The phone only settings kept per sensor, its nickname and setup flag, dropped when it is forgotten. */
+fun interface SensorSettings {
+    suspend fun forget(address: String)
 }

@@ -172,8 +172,9 @@
     <string name="config_problem_pin">The PIN is exactly 6 digits.</string>
     <string name="config_problem_ssid_empty">Enter the network name.</string>
     <string name="config_problem_ssid_long">The network name is too long. The limit is 32 bytes.</string>
+    <string name="config_problem_psk_short">The password is too short. The minimum is 8 bytes.</string>
     <string name="config_problem_psk_long">The password is too long. The limit is 63 bytes.</string>
-    <string name="config_problem_line_break">Line breaks are not allowed here.</string>
+    <string name="config_problem_line_break">Line breaks and control characters are not allowed here.</string>
     <string name="device_back">Back</string>
     <string name="device_not_ready">Connect to the sensor to read and change its settings.</string>
     <string name="location_title">Device location</string>
@@ -196,6 +197,7 @@
     <string name="location_stop">Stop</string>
     <string name="location_country">Country code</string>
     <string name="location_country_info">Optional. Two letters, such as GH.</string>
+    <string name="wifi_psk_control">No tabs, line breaks or other control characters</string>
     <string name="wifi_psk_long">Too long. Use a shorter passphrase.</string>
     <string name="wifi_psk_short">At least 8 characters</string>
     <string name="location_fresh_required">Pick the area again before saving</string>

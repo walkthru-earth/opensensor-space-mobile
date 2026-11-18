@@ -7,8 +7,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
- * The digests and LIVE keys frozen in opensensor-space-firmware `tools/fixtures/live_keys/cores3.json` and
- * `waveshare.json`, copied as test data in board key order. The app bundles one template per board,
+ * The digests and LIVE keys frozen in opensensor-space-firmware `tools/fixtures/live_keys/cores3.json`,
+ * `waveshare.json` and `crowpanel.json`, copied as test data in board key order. The app bundles one template per board,
  * for its current digest, and its `live_keys` list the keys in the same order (opensensor-space-firmware#86). When
  * firmware ships a new digest, copy opensensor-space-firmware `docs/shared/templates` again, move the old digest to
  * [retired] and copy the new build here. The weekly `live-key-drift` workflow fails while opensensor-space-firmware
@@ -20,6 +20,7 @@ class LiveKeyFixturesTest {
     private val current = listOf(
         FixtureBuild("cores3", "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "n5", "n10", "imu_t", "als", "vbus", "bat", "pct", "chg", "t", "rh")),
         FixtureBuild("waveshare", "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
+        FixtureBuild("crowpanel", "e7279c4edbe87071e4a51889124a43d7ffcd1977c79c8575887ae35bdee10903", listOf("seq", "mono", "utc", "sen", "m1", "m25", "m4", "m10", "t", "rh", "co2")),
     )
 
     /** Released digests the app no longer bundles. Boards on them get no LIVE view until reflashed. */

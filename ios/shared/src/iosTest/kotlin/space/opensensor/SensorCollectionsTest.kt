@@ -41,6 +41,7 @@ import space.opensensor.link.UnavailableKind
 import space.opensensor.model.ThingId
 import space.opensensor.storage.FakeStorageBudget
 import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.coroutines.CoroutineContext
@@ -111,6 +112,9 @@ class SensorCollectionsTest {
         var anchored = false
         val lists = AtomicInt(0)
         val timeSets = AtomicInt(0)
+
+        /** The `epochNanos` of the last `TIME_SET` this board sent. */
+        val acknowledged = AtomicLong(0)
         val dials = AtomicInt(0)
         var current: IosLink? = null
 
@@ -148,7 +152,10 @@ class SensorCollectionsTest {
                 Opcode.SET_TIME -> {
                     timeSets.incrementAndFetch()
                     anchored = true
-                    reply(Frame.TimeSet(1_789_581_931L, 12_345_678L, 123_000))
+                    // The contract echoes the request, and the phone keeps no anchor for any other value.
+                    val epoch = (1..4).fold(0L) { acc, i -> acc or ((req[i].toLong() and 0xFF) shl (8 * (i - 1))) }
+                    val micros = if (req.size == 13) (9..12).fold(0L) { acc, i -> acc or ((req[i].toLong() and 0xFF) shl (8 * (i - 9))) }.toInt() else null
+                    reply(Frame.TimeSet(epoch, 12_345_678L, micros).also { acknowledged.store(it.epochNanos) })
                 }
                 Opcode.LIST -> {
                     lists.incrementAndFetch()
@@ -585,7 +592,7 @@ class SensorCollectionsTest {
         assertEquals(1, board.dials.load())
         assertEquals(2, board.lists.load(), "every attempt plans from a fresh LIST")
         assertEquals(1, board.timeSets.load())
-        assertEquals(listOf(Frame.TimeSet(1_789_581_931L, 12_345_678L, 123_000).epochNanos), anchors)
+        assertEquals(listOf(board.acknowledged.load()), anchors)
         assertFalse(board.current!!.leased)
         assertEquals(1, seen.finishes.load())
         assertEquals("finished", seen.events.last())

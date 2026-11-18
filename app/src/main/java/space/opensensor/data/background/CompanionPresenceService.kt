@@ -18,7 +18,7 @@ import javax.inject.Inject
 /**
  * Bound by the system while an associated logger is in BLE range (see [CompanionPresence]). The
  * only thing it does on "appeared" is enqueue the same expedited [SyncWorker] run as "Sync now in
- * background" for that device, provided its Auto-sync switch is on — every existing guard (interactive
+ * background" for that device, provided its Auto-sync switch is on. Every existing guard (interactive
  * session wins, bonded-only Bluetooth, one link at a time, `dataSync` notification) applies unchanged.
  * "Disappeared" does nothing: a device that walked away mid-transfer is handled by the worker's own
  * connect and read timeouts, and cancelling here would race a transfer over LAN that does not care

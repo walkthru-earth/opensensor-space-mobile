@@ -40,6 +40,39 @@ class FrameCodecTest {
     }
 
     @Test
+    fun aTimeSetOutsideTheSupportedClockRangeIsADecodeError() {
+        fun decode(epochSeconds: Long, monotonicMicros: Long) =
+            FrameCodec.decode(FrameCodec.encode(Frame.TimeSet(epochSeconds, monotonicMicros, 999_999))) as Frame.TimeSet
+
+        val first = decode(FrameCodec.TIME_SET_EPOCH_MIN, 0)
+        assertEquals(1_577_836_800_999_999_000L, first.epochNanos)
+        val last = decode(FrameCodec.TIME_SET_EPOCH_MAX, FrameCodec.TIME_SET_MONOTONIC_MAX)
+        assertEquals(4_102_444_799_999_999_000L, last.epochNanos)
+
+        assertFailsWith<FrameDecodeException> { decode(FrameCodec.TIME_SET_EPOCH_MIN - 1, 0) }
+        assertFailsWith<FrameDecodeException> { decode(FrameCodec.TIME_SET_EPOCH_MAX + 1, 0) }
+        // An epoch whose nanoseconds do not fit a signed 64 bit value.
+        assertFailsWith<FrameDecodeException> { decode(Long.MAX_VALUE / 1_000_000_000L + 1, 0) }
+        assertFailsWith<FrameDecodeException> { decode(-1, 0) }
+        assertFailsWith<FrameDecodeException> { decode(1_789_581_931L, -1) }
+        assertFailsWith<FrameDecodeException> { decode(1_789_581_931L, FrameCodec.TIME_SET_MONOTONIC_MAX + 1) }
+    }
+
+    @Test
+    fun readAndCloseRefuseValuesThatDoNotFitTheirWireFields() {
+        assertEquals("03" + "ffff" + "ffffffff" + "ffffffff", Request.Read(0xFFFF, 0xFFFF_FFFFL, 0xFFFF_FFFFL).encode().toHex())
+        assertEquals("04ffff", Request.Close(0xFFFF).encode().toHex())
+        assertFailsWith<IllegalArgumentException> { Request.Read(-1, 0, 1) }
+        assertFailsWith<IllegalArgumentException> { Request.Read(0x1_0000, 0, 1) }
+        assertFailsWith<IllegalArgumentException> { Request.Read(1, -1, 1) }
+        assertFailsWith<IllegalArgumentException> { Request.Read(1, 0x1_0000_0000L, 1) }
+        assertFailsWith<IllegalArgumentException> { Request.Read(1, 0, -1) }
+        assertFailsWith<IllegalArgumentException> { Request.Read(1, 0, 0x1_0000_0000L) }
+        assertFailsWith<IllegalArgumentException> { Request.Close(-1) }
+        assertFailsWith<IllegalArgumentException> { Request.Close(0x1_0000) }
+    }
+
+    @Test
     fun malformedClockFractionAndLengthAreRejected() {
         assertFailsWith<IllegalArgumentException> { Request.SetTime(1, 1_000_000) }
         assertFailsWith<FrameDecodeException> { FrameCodec.decode("306bdaaa6a00000000e1ac03110000000040420f00".hexToBytes()) }

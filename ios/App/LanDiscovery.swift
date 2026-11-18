@@ -197,7 +197,7 @@ final class LanDiscovery {
         }
     }
 
-    /// Protocol 2 sensors in a browse result, by service name. Thing and hardware id come from TXT.
+    /// The sensors in a browse result, by service name. Thing and hardware id come from TXT.
     private func sensors(in results: Set<NWBrowser.Result>) -> [String: Device] {
         var devices: [String: Device] = [:]
         for result in results {

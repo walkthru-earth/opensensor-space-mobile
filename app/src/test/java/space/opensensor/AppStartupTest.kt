@@ -4,6 +4,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,6 +16,7 @@ import space.opensensor.archive.ArchiveRecord
 import space.opensensor.archive.ArchiveStore
 import space.opensensor.archive.PartialMeta
 import space.opensensor.archive.PartialWriter
+import space.opensensor.data.di.CoroutinesModule
 import space.opensensor.data.history.ArchiveIndexRepair
 import space.opensensor.data.history.HistoryOrchestrator
 import space.opensensor.data.history.HistoryStartup
@@ -79,12 +83,36 @@ class AppStartupTest {
         val app = OpenSensorApplication()
         app.skipHiltInject()
         app.historyStartup = startup
+        val injected = CoroutinesModule.provideApplicationScope(Dispatchers.Unconfined)
+        app.appScope = injected
+        app.io = Dispatchers.Unconfined
         assertFalse(startup.started)
 
         // The steps after the History start touch Android framework parts the JVM stub lacks.
         runCatching { app.onCreate() }
 
         assertTrue("onCreate starts the shared History start", startup.started)
-        startup.start(CoroutineScope(Dispatchers.Unconfined)) {}.cancel()
+        val history = startup.start(CoroutineScope(Dispatchers.Unconfined)) {}
+        assertTrue("the History start runs in the injected application scope", history in injected.coroutineContext.job.children)
+        history.cancel()
+    }
+
+    @Test
+    fun aFailureInStartupWorkIsLoggedAndLeavesTheApplicationScopeRunning() {
+        val uncaught = ArrayList<Throwable>()
+        val before = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { _, e -> uncaught += e }
+        try {
+            val scope = CoroutinesModule.provideApplicationScope(Dispatchers.Unconfined)
+            scope.launch { error("startup collector failed") }
+            var sibling = false
+            scope.launch { sibling = true }
+
+            assertTrue("no failure reaches the thread's uncaught handler, which ends the process", uncaught.isEmpty())
+            assertTrue(scope.isActive)
+            assertTrue("work launched after the failure still runs", sibling)
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(before)
+        }
     }
 }

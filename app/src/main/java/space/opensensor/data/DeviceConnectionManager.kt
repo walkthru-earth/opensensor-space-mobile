@@ -1,9 +1,8 @@
 package space.opensensor.data
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -11,8 +10,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.plus
 import space.opensensor.collection.StopSource
 import space.opensensor.data.ble.ConnectionState
+import space.opensensor.data.coroutines.ApplicationScope
+import space.opensensor.data.coroutines.IoDispatcher
 import space.opensensor.data.lan.LanDiscoveryState
 import java.util.concurrent.locks.ReentrantLock
 import javax.inject.Inject
@@ -27,8 +29,10 @@ class DeviceConnectionManager @Inject constructor(
     private val factory: Provider<DeviceFacade>,
     private val discovery: LanDiscoveryState,
     private val admission: CollectionAdmission,
+    @ApplicationScope appScope: CoroutineScope,
+    @IoDispatcher io: CoroutineDispatcher,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = appScope + io
     private val controllers = MutableStateFlow<Map<String, DeviceFacade>>(emptyMap())
 
     private val lock = ReentrantLock()

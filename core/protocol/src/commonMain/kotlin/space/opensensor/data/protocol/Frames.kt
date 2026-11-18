@@ -1,7 +1,8 @@
 package space.opensensor.data.protocol
 
 /**
- * Binary `control` requests and `response` frames from docs/ble-sync-protocol.md (protocol v3).
+ * Binary `control` requests and `response` frames from the firmware repository's
+ * `docs/shared/ble-sync-protocol.md` (protocol v3).
  * Protocol 3 widens `LIST_END.count` to u32 and adds `GET_DIAG`, `ABORT`, `BYE`, `DIAG` and
  * `ABORTED`. A proto 2 `LIST_END` is rejected. `GET_DESCRIPTOR` and `DESCRIPTOR_CHUNK` serve the
  * board template. `LIST_SINCE` and `LIST_SINCE_END` list only the files new since a saved cursor.
@@ -142,7 +143,7 @@ enum class ProtocolError(val code: Int, val label: String) {
     OPEN_FAILED(4, "open failed"),
     BAD_HANDLE(5, "bad handle"),
     RANGE_OUTSIDE_FILE(6, "range outside file"),
-    BUSY(7, "busy (command queue full or transfer in progress)"),
+    BUSY(7, "busy (queue full, a transfer, a listing, a card remount or an update in progress)"),
     STORAGE_UNAVAILABLE(8, "storage unavailable"),
     INVALID_EPOCH(9, "invalid epoch (outside 2020–2100)"),
     NOTHING_TO_FLUSH(10, "nothing to flush"),
@@ -181,6 +182,12 @@ sealed interface Request {
 
     /** `handle` u16, `offset` u32, `length` u32. */
     data class Read(val handle: Int, val offset: Long, val length: Long) : Request {
+        init {
+            require(handle in 0..0xFFFF) { "handle must fit u16" }
+            require(offset in 0..0xFFFF_FFFFL) { "offset must fit u32" }
+            require(length in 0..0xFFFF_FFFFL) { "length must fit u32" }
+        }
+
         override val opcode: Int = Opcode.READ
         override fun encode(): ByteArray = WireBuffer.allocate(11)
             .put(opcode.toByte())
@@ -191,6 +198,10 @@ sealed interface Request {
     }
 
     data class Close(val handle: Int) : Request {
+        init {
+            require(handle in 0..0xFFFF) { "handle must fit u16" }
+        }
+
         override val opcode: Int = Opcode.CLOSE
         override fun encode(): ByteArray = WireBuffer.allocate(3)
             .put(opcode.toByte()).putShort(handle.toShort()).array()
@@ -268,7 +279,7 @@ sealed interface Request {
         override fun encode(): ByteArray = byteArrayOf(opcode.toByte())
     }
 
-    /** `max_bytes` u16; the device clips to its ring size (8192). */
+    /** `max_bytes` u16. The device clips to the bytes it retains, at most 65535. */
     data class LogTail(val maxBytes: Int) : Request {
         init {
             require(maxBytes in 0..0xFFFF) { "max_bytes must fit u16" }
@@ -521,6 +532,13 @@ class FrameDecodeException(message: String) : Exception(message)
 const val LAN_TOKEN_BYTES: Int = 32
 
 object FrameCodec {
+    /** The first and last `TIME_SET.epoch_s` accepted, 2020-01-01 to the last second of 2099. */
+    const val TIME_SET_EPOCH_MIN: Long = 1_577_836_800L
+    const val TIME_SET_EPOCH_MAX: Long = 4_102_444_799L
+
+    /** The largest `TIME_SET.monotonic_us` accepted, which still fits nanoseconds in an i64. */
+    const val TIME_SET_MONOTONIC_MAX: Long = Long.MAX_VALUE / 1_000L
+
     /** Decode one `response` notification. Throws [FrameDecodeException] on truncated/unknown frames. */
     fun decode(raw: ByteArray): Frame {
         if (raw.isEmpty()) throw FrameDecodeException("empty frame")
@@ -558,6 +576,8 @@ object FrameCodec {
                     val mono = buf.long
                     val micros = if (buf.remaining() == 4) buf.u32() else null
                     if (micros != null && micros > 999_999) throw FrameDecodeException("invalid TIME_SET fraction")
+                    if (seconds !in TIME_SET_EPOCH_MIN..TIME_SET_EPOCH_MAX) throw FrameDecodeException("TIME_SET epoch outside 2020 to 2100")
+                    if (mono !in 0..TIME_SET_MONOTONIC_MAX) throw FrameDecodeException("invalid TIME_SET monotonic time")
                     Frame.TimeSet(seconds, mono, micros?.toInt())
                 }
                 FrameType.FLUSHED -> Frame.Flushed(rows = buf.u16(), filesFinalized = buf.u32())
