@@ -19,16 +19,24 @@ import space.opensensor.archive.PartialMeta
 import space.opensensor.archive.PartialWriter
 import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.DaySpan
+import space.opensensor.data.history.FileTemplates
 import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeriesReader
 import space.opensensor.data.history.HistoryTiers
 import space.opensensor.data.history.LocationSource
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.Resolution
+import space.opensensor.data.history.ServedTemplates
 import space.opensensor.data.history.TierBucket
 import space.opensensor.data.history.TrackRow
+import space.opensensor.data.history.UtcColumns
 import space.opensensor.data.history.parquet.ByteReader
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
+import space.opensensor.model.BoardTemplate
+import space.opensensor.model.Datastream
+import space.opensensor.model.Role
+import space.opensensor.model.TemplateKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -98,6 +106,30 @@ class HistoryControllerTest {
         override fun now(): Instant = Instant.fromEpochSeconds(nowS)
     }
 
+    /**
+     * A board no bundled template describes, served in the test, with its `opensensor:primary` on its
+     * own column. Its dict sorts after every bundled one, so the union lists the bundled primaries first.
+     */
+    private val soil = BoardTemplate(
+        key = TemplateKey("ff".repeat(32), desc = "ee".repeat(32)),
+        id = "acme-soil-v1",
+        schema = "acme-soil-v1",
+        title = null,
+        keywords = emptyList(),
+        instruments = emptyList(),
+        defaultSampleIntervalS = 10.0,
+        protoMin = 1,
+        primaryDatetime = UtcColumns.EVENT_NS,
+        datastreams = listOf(
+            Datastream(UtcColumns.EVENT_NS, "int64", Role("auxiliaryInformation")),
+            Datastream("soil_temperature_c", "float", Role.PHYSICAL_MEASUREMENT, unit = "Cel"),
+            Datastream("soil_moisture_percent", "float", Role.PHYSICAL_MEASUREMENT, unit = "%"),
+        ),
+        liveKeys = emptyMap(),
+        dictionaryHref = null,
+        primary = "soil_moisture_percent",
+    )
+
     private fun record(thing: String) = ArchiveRecord(
         thing = thing,
         name = "thing=$thing/year=2026/month=09/day=20/data_1300.parquet",
@@ -118,6 +150,7 @@ class HistoryControllerTest {
         current: String = "s1",
         things: List<String> = listOf("s1"),
         trackWindow: ((String, Long, Long) -> Flow<CellTrack>)? = null,
+        served: ServedTemplates = ServedTemplates(catalog = MetricCatalog()),
     ): HistoryController {
         val store = Store()
         val tiers = Tiers(metricIds)
@@ -127,6 +160,8 @@ class HistoryControllerTest {
             reader = reader,
             tiers = tiers,
             index = index,
+            catalog = served.catalog,
+            templates = FileTemplates.over(served),
             currentThing = flowOf(current),
             things = flowOf(things),
             zone = TimeZone.UTC,
@@ -198,6 +233,29 @@ class HistoryControllerTest {
         val s = c.state.first { !it.initializing && it.toS == lastDayEndS }
         assertEquals(AirMetrics.PM25_CORRECTED, s.metric)
         assertEquals(listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25), s.availableMetrics.take(2))
+    }
+
+    @Test
+    fun opensOnThePrimaryOfTheThingsServedTemplate() = runTest {
+        val served = ServedTemplates(catalog = MetricCatalog()).apply { add(soil) }
+        val ids = setOf(AirMetrics.PM25.id, "soil_temperature_c", "soil_moisture_percent")
+        val soilFile = record("s1").copy(dictionarySha256 = soil.dict, templateSha256 = soil.key.desc)
+        val c = controller(metricIds = ids, index = Index(listOf(soilFile)), served = served)
+        val s = c.state.first { !it.initializing && it.toS == lastDayEndS }
+        assertEquals("soil_moisture_percent", s.metric.id)
+        assertTrue(AirMetrics.PM25 in s.availableMetrics)
+        assertTrue(s.availableMetrics.any { it.id == "soil_temperature_c" })
+    }
+
+    @Test
+    fun aPickedMetricStaysWhileTheUnionGrows() = runTest {
+        val served = ServedTemplates(catalog = MetricCatalog())
+        val c = controller(metricIds = setOf(AirMetrics.AMBIENT_TEMP.id, AirMetrics.HUMIDITY.id, "soil_moisture_percent"), served = served)
+        c.state.first { !it.initializing && it.metric == AirMetrics.AMBIENT_TEMP }
+        c.setMetric(AirMetrics.HUMIDITY)
+        served.add(soil)
+        val s = c.state.first { st -> st.availableMetrics.any { it.id == "soil_moisture_percent" } }
+        assertEquals(AirMetrics.HUMIDITY, s.metric)
     }
 
     @Test

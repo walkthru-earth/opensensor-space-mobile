@@ -19,27 +19,28 @@ class LatestReadingTest {
 
     private val corrected = AirMetrics.PM25_CORRECTED.id
     private val raw = AirMetrics.PM25.id
+    private val union get() = MetricCatalog.shared.union.value
 
     @Test
     fun `the newest valid quarter of the main metric wins and ends its bucket`() {
-        val out = LatestReadings.latest(mapOf(raw to listOf(quarter(900, 7f), quarter(1_800, 9f), quarter(0, 5f))))
+        val out = LatestReadings.latest(mapOf(raw to listOf(quarter(900, 7f), quarter(1_800, 9f), quarter(0, 5f))), union)
         assertEquals(Triple(raw, 9f, 2_700L), out?.let { Triple(it.metric.id, it.mean, it.endEpochS) })
         // The same quarter in both, the corrected view wins the tie.
-        val tie = LatestReadings.latest(mapOf(corrected to listOf(quarter(1_800, 8f)), raw to listOf(quarter(1_800, 11f))))
+        val tie = LatestReadings.latest(mapOf(corrected to listOf(quarter(1_800, 8f)), raw to listOf(quarter(1_800, 11f))), union)
         assertEquals(corrected, tie?.metric?.id)
         // The humidity sensor stopped, the newest quarter is raw only.
-        val later = LatestReadings.latest(mapOf(corrected to listOf(quarter(900, 8f)), raw to listOf(quarter(1_800, 11f))))
+        val later = LatestReadings.latest(mapOf(corrected to listOf(quarter(900, 8f)), raw to listOf(quarter(1_800, 11f))), union)
         assertEquals(raw to 11f, later?.let { it.metric.id to it.mean })
     }
 
     @Test
     fun `quarters without a finite valid mean and other metrics never stand for the thing`() {
-        assertNull(LatestReadings.latest(emptyMap()))
-        assertNull(LatestReadings.latest(mapOf(raw to listOf(quarter(900, 3f, valid = 0)))))
+        assertNull(LatestReadings.latest(emptyMap(), union))
+        assertNull(LatestReadings.latest(mapOf(raw to listOf(quarter(900, 3f, valid = 0))), union))
         // The newest quarter is NaN, the one before it shows.
-        assertEquals(900L + 900L, LatestReadings.latest(mapOf(raw to listOf(quarter(1_800, Float.NaN), quarter(900, 4f))))?.endEpochS)
+        assertEquals(900L + 900L, LatestReadings.latest(mapOf(raw to listOf(quarter(1_800, Float.NaN), quarter(900, 4f))), union)?.endEpochS)
         // Humidity is never the main metric while PM2.5 has a reading.
-        val out = LatestReadings.latest(mapOf(AirMetrics.HUMIDITY.id to listOf(quarter(9_000, 60f)), raw to listOf(quarter(900, 5f))))
+        val out = LatestReadings.latest(mapOf(AirMetrics.HUMIDITY.id to listOf(quarter(9_000, 60f)), raw to listOf(quarter(900, 5f))), union)
         assertEquals(raw, out?.metric?.id)
     }
 
@@ -54,7 +55,7 @@ class LatestReadingTest {
             override fun observeDays(thing: String) = flowOf(DaySpan(3, 8 * 86_400L, 10 * 86_400L))
             override fun observeMetricsWithData(thing: String) = flowOf(setOf(raw, corrected, AirMetrics.HUMIDITY.id))
         }
-        val out = LatestReadings.observe(tiers, "t").first()
+        val out = LatestReadings.observe(tiers, "t", flowOf(union)).first()
         assertEquals(raw to 10 * 86_400L + 1_800, out?.let { it.metric.id to it.endEpochS })
         val window = 9 * 86_400L to 11 * 86_400L
         // Each banded mean also reads its clean companion, and the flag companion once (#91).
@@ -79,7 +80,7 @@ class LatestReadingTest {
             override fun observeDays(thing: String) = flowOf(DaySpan(7, 4 * day, 10 * day))
             override fun observeMetricsWithData(thing: String) = flowOf(setOf(raw, AirMetrics.HUMIDITY.id))
         }
-        val out = LatestReadings.observe(tiers, "t").first()
+        val out = LatestReadings.observe(tiers, "t", flowOf(union)).first()
         assertEquals(raw to 6 * day + 1_800, out?.let { it.metric.id to it.endEpochS })
         assertEquals(Triple(raw, Resolution.DAY, 4 * day to 9 * day), tiers.asked.first { it.second == Resolution.DAY })
         assertEquals(Triple(raw, Resolution.MIN15, 6 * day to 7 * day), tiers.asked.last { it.first == raw })
@@ -101,12 +102,12 @@ class LatestReadingTest {
             override fun observeDays(thing: String) = flowOf(DaySpan(1, 10 * 86_400L, 10 * 86_400L))
             override fun observeMetricsWithData(thing: String) = flowOf(setOf(raw))
         }
-        val out = LatestReadings.observe(tiers, "t").first()
+        val out = LatestReadings.observe(tiers, "t", flowOf(union)).first()
         assertEquals(20f, out?.mean)
         assertEquals(listOf(9, 9), listOf(out?.flaggedRows, out?.flags))
         assertEquals(12f, out?.passedMean)
         // Without flagged rows the reading passes as measured.
-        assertEquals(7f, LatestReadings.latest(mapOf(raw to listOf(quarter(900, 7f))))?.passedMean)
+        assertEquals(7f, LatestReadings.latest(mapOf(raw to listOf(quarter(900, 7f))), union)?.passedMean)
     }
 
     @Test
@@ -116,6 +117,6 @@ class LatestReadingTest {
             override fun observeDays(thing: String) = flowOf(DaySpan())
             override fun observeMetricsWithData(thing: String) = flowOf(setOf(raw))
         }
-        assertNull(LatestReadings.observe(tiers, "t").first())
+        assertNull(LatestReadings.observe(tiers, "t", flowOf(union)).first())
     }
 }

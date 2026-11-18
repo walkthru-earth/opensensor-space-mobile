@@ -6,6 +6,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
 import space.opensensor.OpenSensorApplication
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.Metrics
 import space.opensensor.family.air.AirFamily
 import space.opensensor.publicfeed.DiscoverCollection
@@ -29,7 +30,7 @@ class ThingModuleTest {
         val kinds = ThingModule.provideThingKinds()
         assertEquals(1, kinds.size)
         assertEquals(OpenSensorBoardKind, kinds[OpenSensorBoardKind.id])
-        assertNotNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
+        assertNotNull(MetricCatalog.shared.byId(AirFamily.PM25_CORRECTED_ID))
         assertNotNull(DiscoverCollection.BUNDLED.scale("pm25"))
     }
 

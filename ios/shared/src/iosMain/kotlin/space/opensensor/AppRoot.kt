@@ -36,6 +36,8 @@ import platform.Foundation.localTimeZone
 import platform.Foundation.timeIntervalSince1970
 import space.opensensor.archive.IosExportSpace
 import space.opensensor.data.history.CellTrackReader
+import space.opensensor.data.history.FileTemplates
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.debug.DebugController
 import space.opensensor.debug.DebugScreen
 import space.opensensor.designsystem.AppIcons
@@ -155,7 +157,7 @@ private class DiscoverHolder(known: Flow<List<KnownRecord>>, linked: Flow<Set<St
         // Each own Thing's newest reading from this phone's history, Live while a Bluetooth or LAN
         // link is up, and whether a file of it went up (#273). Read from the phone only.
         val things = IosArchive.places.observeAll().map { saved -> saved.mapTo(mutableSetOf()) { it.thing } }
-        observeOwnStatus(IosArchive.tiers, things, linked, IosArchive.index.observeUploadedThings())
+        observeOwnStatus(IosArchive.tiers, things, linked, IosArchive.index.observeUploadedThings(), MetricCatalog.shared.union)
             .onEach(controller::showOwnStatus)
             .launchIn(viewModelScope)
     }
@@ -514,6 +516,8 @@ private class HistoryHolder(address: String, devices: DevicesBridge) : ViewModel
         reader = IosArchive.reader,
         tiers = IosArchive.tiers,
         index = IosArchive.index,
+        catalog = MetricCatalog.shared,
+        templates = FileTemplates.SERVED,
         currentThing = if (wholePhone) things.map { it.lastOrNull() } else devices.known.map { devices.thingFor(address) },
         things = things,
         trackWindow = CellTrackReader(IosArchive.store, IosArchive.index, Dispatchers.Default)::observeWindow,

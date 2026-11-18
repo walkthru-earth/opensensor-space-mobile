@@ -1,5 +1,6 @@
 package space.opensensor
 
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.Metrics
 import space.opensensor.family.air.AirFamily
 import space.opensensor.publicfeed.DiscoverCollection
@@ -31,7 +32,7 @@ class ThingKindsIosTest {
         assertEquals(OpenSensorBoardKind, kinds[OpenSensorBoardKind.id])
         launchThingKinds()
         assertSame(kinds, iosThingKinds)
-        assertNotNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
+        assertNotNull(MetricCatalog.shared.byId(AirFamily.PM25_CORRECTED_ID))
         assertNotNull(DiscoverCollection.BUNDLED.scale("pm25"))
     }
 }

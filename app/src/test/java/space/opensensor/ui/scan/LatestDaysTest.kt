@@ -3,7 +3,7 @@ package space.opensensor.ui.scan
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
-import space.opensensor.data.history.Metrics
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.local.database.MetricBucket
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
@@ -23,7 +23,8 @@ class LatestDaysTest {
 
     @Test
     fun `each thing shows its main metric, corrected when that is the newest day and raw otherwise`() {
-        val rows = Metrics.all.map { m ->
+        val metrics = MetricCatalog.shared.union.value
+        val rows = metrics.map { m ->
             when (m.id) {
                 corrected -> listOf(day("humid", corrected, 172_800, 8f), day("old-rh", corrected, 0, 7f))
                 raw -> listOf(
@@ -36,7 +37,7 @@ class LatestDaysTest {
                 else -> emptyList()
             }
         }
-        val out = latestDays(rows)
+        val out = latestDays(rows, metrics)
         assertEquals(corrected to 8f, out.getValue("humid").let { it.metric.id to it.mean })
         // No humidity sensor, so raw.
         assertEquals(raw to 20f, out.getValue("cores3").let { it.metric.id to it.mean })

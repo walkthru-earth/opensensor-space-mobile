@@ -86,7 +86,7 @@ Collection tests and `PublishGate` use, JSON values with 1e-9 degrees under `geo
 `OpenSensorBoardKind` (#222) and the `ThingKinds` registry. Each app builds that registry as a plain
 list, Android in `data/di/ThingModule` and iOS in `ThingKindsIos.kt` from `AppServices`, with no self
 registration. Each app hands `ThingKinds.metricProviders` to `AirFamily.install`, which passes the family and then the kinds' `DerivedMetricProvider`s to `Metrics.install`,
-which rebuilds the catalog. `PublishGate` (#224) issues a ticket only for a `Recording` kind with
+which rebuilds `MetricCatalog.shared`. `PublishGate` (#224) issues a ticket only for a `Recording` kind with
 `OptInCcBy` whose Thing the owner opted in (`UploadConsent`, none by default). Health, feeds and anything else get none.
 A ticket's files take one of two paths, both asking consent again so an opt out stops them. The writer of a
 file writes its Item (OD-2026-11-04-D). `boardFile` is for a `PullSync` Thing. It rebuilds the Item at the
@@ -124,7 +124,8 @@ root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log`
   and the profile (`Metrics.of`), plus the derived metrics of each
   `DerivedMetricProvider` (`AirFamily` for corrected PM2.5), and reads each file by the template of its
   `opensensor` footer JSON (`OpenSensorFooter`, `FileTemplates`), by
-  `TemplateIndex.resolve`, the same rule LIVE uses (#259).
+  `TemplateIndex.resolve`, the same rule LIVE uses (#259). `MetricCatalog.shared.union` is every metric of the
+  bundled and served templates, and only grows. History opens on a Thing's own primary.
   `AppProfile.derive` labels, rounds, scales and picks the primary of every column from the template
   display hints, the Thing Collection and the bundled property and scale registries. A bundled profile
   only overlays the family, hero and hidden columns. LIVE shows for any template whose SHA-256 is

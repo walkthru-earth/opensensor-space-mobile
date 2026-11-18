@@ -38,8 +38,8 @@ import space.opensensor.data.history.DerivedStore
 import space.opensensor.data.history.FileSummary
 import space.opensensor.data.history.HistoryDeriver
 import space.opensensor.data.history.HistoryRepository
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.MetricSpec
-import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.archiveQueryResults
 import space.opensensor.data.local.database.ArchivedFile
 import space.opensensor.data.local.database.ArchivedFileDao
@@ -84,7 +84,7 @@ data class FilesUiState(
 data class FileChartState(
     val metric: MetricSpec,
     /** The chips offered, from [fileChartMetrics]. */
-    val metrics: List<MetricSpec> = Metrics.all,
+    val metrics: List<MetricSpec>,
     /** Every telemetry file of the thing, oldest first (timed by first row, then untimed by name). */
     val total: Int,
     /** Index of the first column shown into the full list. */
@@ -103,11 +103,11 @@ internal data class FileSummaryRequest(val thing: String, val files: List<Archiv
  * #92. The metrics the Files chart offers, the same rule as History. Corrected PM2.5 comes first and
  * is the default. Once the files are read and none has a humidity reading, corrected is dropped and raw
  * leads. Simple never offers raw next to corrected, Detailed always does. Simple offers only the
- * primary metric and its corrected view, Detailed every metric.
+ * primary metric and its corrected view, Detailed every metric of [catalog] ([MetricCatalog.union]).
  */
-internal fun fileChartMetrics(summaries: List<FileSummary>, detailed: Boolean): List<MetricSpec> {
+internal fun fileChartMetrics(summaries: List<FileSummary>, detailed: Boolean, catalog: List<MetricSpec>): List<MetricSpec> {
     val corrected = summaries.isEmpty() || summaries.any { (it.agg(AirMetrics.PM25_CORRECTED)?.n ?: 0) > 0 }
-    return Metrics.all.filter { m ->
+    return catalog.filter { m ->
         when (m) {
             AirMetrics.PM25_CORRECTED -> corrected
             AirMetrics.PM25 -> detailed || !corrected
@@ -122,11 +122,12 @@ internal fun fileChartState(
     offset: Int?,
     request: FileSummaryRequest?,
     result: ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>,
+    catalog: List<MetricSpec>,
 ): FileChartState {
     val list = result.forQuery(request).orEmpty()
     val lastPageStart = maxOf(0, list.size - FilesViewModel.FILE_CHART_PAGE)
     val start = (offset ?: lastPageStart).coerceIn(0, lastPageStart)
-    val metrics = fileChartMetrics(list, detailed)
+    val metrics = fileChartMetrics(list, detailed, catalog)
     return FileChartState(
         // A choice the level no longer offers (raw after switching to Simple) falls back to the default.
         metric = choice?.takeIf { it in metrics } ?: metrics.first(),
@@ -217,12 +218,12 @@ class FilesViewModel @AssistedInject constructor(
 
     private val fileChart: Flow<FileChartState?> = combine(
         fileChartOn,
-        combine(fileChartMetric, settings.detailLevel) { metric, level -> metric to level.detailed },
+        combine(fileChartMetric, settings.detailLevel, MetricCatalog.shared.union) { metric, level, catalog -> Triple(metric, level.detailed, catalog) },
         fileChartOffset,
         fileSummaryRequest,
         fileSummaries,
-    ) { on, (metric, detailed), offset, request, result ->
-        if (on) fileChartState(metric, detailed, offset, request, result) else null
+    ) { on, (metric, detailed, catalog), offset, request, result ->
+        if (on) fileChartState(metric, detailed, offset, request, result, catalog) else null
     }
 
     val uiState: StateFlow<FilesUiState> = combine(

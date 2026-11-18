@@ -36,7 +36,7 @@ private class LegacyGate(private val gate: ValidityGate, private val column: Col
 internal class LegacyAggregator(
     private val thing: String,
     private val resolutions: Set<Resolution> = Resolution.entries.toSet(),
-    private val metrics: List<MetricSpec> = Metrics.all,
+    private val metrics: List<MetricSpec> = MetricCatalog.shared.union.value,
 ) {
     private class Acc(metricCount: Int) {
         var rows = 0

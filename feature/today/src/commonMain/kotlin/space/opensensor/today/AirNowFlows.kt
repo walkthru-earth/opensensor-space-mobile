@@ -13,8 +13,8 @@ import kotlinx.datetime.TimeZone
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.MetricSpec
-import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.ServedTemplates
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.designsystem.nowEpochMillis
@@ -70,14 +70,14 @@ fun pm25NowCast(
 
 /**
  * The PM2.5 metrics the NowCast tries for [capabilities], the EPA corrected one first and raw second.
- * Each is bound to the thing's template with [Metrics.tiered] and dropped when the hourly tiers do
+ * Each is bound to the thing's template with [MetricCatalog.tiered] and dropped when the hourly tiers do
  * not hold it, so a template without humidity skips the corrected metric and still reads raw. Empty
  * for a thing without particles.
  */
 internal fun nowCastMetrics(capabilities: DeviceCapabilities): List<MetricSpec> {
     val template = capabilities.thing?.template ?: return emptyList()
     if (AirFamily.PARTICLES !in capabilities) return emptyList()
-    return listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25).mapNotNull { Metrics.tiered(it, template) }
+    return listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25).mapNotNull { MetricCatalog.shared.tiered(it, template) }
 }
 
 private fun nowCastAt(

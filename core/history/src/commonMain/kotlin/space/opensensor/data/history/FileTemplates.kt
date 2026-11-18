@@ -41,6 +41,12 @@ fun interface FileTemplates {
     val changes: StateFlow<List<BoardTemplate>> get() = UNCHANGING
 
     /**
+     * The metrics a file these templates resolve is aggregated with, every metric of the templates they
+     * know ([MetricCatalog.union]). A file whose template lacks one gives it no values.
+     */
+    val metrics: List<MetricSpec> get() = MetricCatalog.shared.union.value
+
+    /**
      * Which template [record]'s footer digests resolve to now, its full desc or `dict:<dict>` for a
      * bundled one without, else null. Part of every day signature, so a template that starts or stops
      * resolving rebuilds exactly the days of its files.
@@ -91,10 +97,13 @@ fun interface FileTemplates {
          * The templates in [served], as boards served them over `GET_DESCRIPTOR` (#191), then the bundled
          * ones, by [TemplateIndex.resolve]. [served] is read at each call, so a file synced before its
          * board served the template its desc names binds its metrics at the next derive. Its [changes]
-         * are [served]'s, so a template a board serves or the cache loads derives History again.
+         * are [served]'s, so a template a board serves or the cache loads derives History again, and its
+         * [metrics] are [served]'s catalog, so that template's columns aggregate too.
          */
         fun over(served: ServedTemplates): FileTemplates = object : FileTemplates {
             override val changes: StateFlow<List<BoardTemplate>> get() = served.all
+
+            override val metrics: List<MetricSpec> get() = served.catalog.union.value
 
             override fun template(dict: String?, desc: String?): BoardTemplate? = BundledCatalog.resolve(dict, desc, served.all.value)
 

@@ -5,6 +5,7 @@ import platform.Foundation.NSDate
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.timeIntervalSince1970
 import space.opensensor.data.history.LatestDays
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.protocol.Advertisement
 
 /** The known records in UserDefaults. Names, things and ids only, never a credential. */
@@ -44,7 +45,7 @@ fun devicesBridge(
     stopScan = stopScan,
     forget = forget,
     collect = collect,
-    latestDay = { LatestDays.observe(IosArchive.tiers, it) },
+    latestDay = { LatestDays.observe(IosArchive.tiers, it, MetricCatalog.shared.union) },
     forgetPlaces = IosArchive::forgetPlaces,
     forgetSettings = settingsRepository::forgetSensor,
 )
