@@ -52,11 +52,13 @@ import space.opensensor.data.sync.PlanStepKind
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.BrandCard
+import space.opensensor.designsystem.CardGap
 import space.opensensor.designsystem.CardHeader
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.InfoNote
 import space.opensensor.designsystem.PillButton
+import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.designsystem.WarningNote
 import space.opensensor.device.BondsCard
 import space.opensensor.device.DeviceConfigAction
@@ -181,8 +183,8 @@ fun SetupScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+            verticalArrangement = Arrangement.spacedBy(CardGap),
         ) {
             when (val page = s.page) {
                 SetupPage.Find -> findItems(s, controller, bluetooth)

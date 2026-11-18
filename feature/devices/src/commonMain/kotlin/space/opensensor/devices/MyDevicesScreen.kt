@@ -3,7 +3,6 @@ package space.opensensor.devices
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -25,7 +24,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -52,6 +50,9 @@ import kotlinx.coroutines.flow.emptyFlow
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.BrandCard
+import space.opensensor.designsystem.CardGap
+import space.opensensor.designsystem.CardTone
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
@@ -60,6 +61,7 @@ import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.MascotGuide
 import space.opensensor.designsystem.PeacockExpression
+import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.devices.resources.Res
 import space.opensensor.devices.resources.devices_on_wifi
 import space.opensensor.devices.resources.info_collect_background
@@ -196,12 +198,12 @@ fun MyDevicesScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding()),
                 contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 16.dp,
+                    start = ScreenPadding,
+                    end = ScreenPadding,
                     top = padding.calculateTopPadding() + 8.dp,
                     bottom = 8.dp,
                 ),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(CardGap),
             ) {
                 if (list.active.isNotEmpty()) {
                     item(key = "active-header") { Eyebrow(stringResource(Res.string.scan_connections), heading = true) }
@@ -215,26 +217,24 @@ fun MyDevicesScreen(
                 state.scanProblem?.let { problem ->
                     item(key = "problem") {
                         // Appears while the user waits on a scan, so screen readers hear it without moving focus.
-                        Surface(
-                            color = MaterialTheme.colorScheme.errorContainer,
-                            shape = MaterialTheme.shapes.large,
-                            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+                        BrandCard(
+                            tone = CardTone.ALERT,
+                            contentPadding = PaddingValues(16.dp),
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         ) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(
-                                    stringResource(
-                                        when (problem) {
-                                            ScanProblem.BLUETOOTH_OFF -> Res.string.scan_bluetooth_off
-                                            ScanProblem.LOCAL_NETWORK_DENIED -> Res.string.scan_local_network_denied
-                                            ScanProblem.FAILED -> Res.string.scan_failed
-                                        },
-                                    ),
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                )
-                                if (problem == ScanProblem.LOCAL_NETWORK_DENIED && onOpenLocalNetworkSettings != null) {
-                                    TextButton(onClick = onOpenLocalNetworkSettings) {
-                                        Text(stringResource(SharedRes.string.perm_open_settings))
-                                    }
+                            Text(
+                                stringResource(
+                                    when (problem) {
+                                        ScanProblem.BLUETOOTH_OFF -> Res.string.scan_bluetooth_off
+                                        ScanProblem.LOCAL_NETWORK_DENIED -> Res.string.scan_local_network_denied
+                                        ScanProblem.FAILED -> Res.string.scan_failed
+                                    },
+                                ),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            if (problem == ScanProblem.LOCAL_NETWORK_DENIED && onOpenLocalNetworkSettings != null) {
+                                TextButton(onClick = onOpenLocalNetworkSettings) {
+                                    Text(stringResource(SharedRes.string.perm_open_settings))
                                 }
                             }
                         }

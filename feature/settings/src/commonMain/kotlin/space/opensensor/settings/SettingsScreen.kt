@@ -1,6 +1,5 @@
 package space.opensensor.settings
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePickerDialog
@@ -23,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -49,11 +46,15 @@ import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import space.opensensor.designsystem.BrandCard
+import space.opensensor.designsystem.CardGap
+import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoButton
 import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.MinTouchTarget
+import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.designsystem.cardSemantics
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.spokenList
@@ -162,11 +163,11 @@ fun SettingsScreen(
             Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = ScreenPadding)
                 .padding(top = 8.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(CardGap),
         ) {
-            SettingsCard {
+            BrandCard {
                 Choice(
                     label = stringResource(Res.string.settings_detail_level),
                     options = DetailLevel.entries,
@@ -176,7 +177,7 @@ fun SettingsScreen(
                 )
                 Caption(stringResource(levelCaption(prefs.detailLevel)))
             }
-            SettingsCard {
+            BrandCard {
                 Choice(
                     label = stringResource(Res.string.settings_units),
                     options = UnitSystem.entries,
@@ -188,7 +189,7 @@ fun SettingsScreen(
                     Caption(stringResource(Res.string.settings_units_auto, stringResource(unitLabel(automaticUnits))))
                 }
             }
-            SettingsCard {
+            BrandCard {
                 PublicSensorsRow(prefs.showPublicSensors, controller::setShowPublicSensors)
                 Caption(stringResource(Res.string.settings_public_sensors_body), top = 0.dp)
             }
@@ -201,7 +202,7 @@ fun SettingsScreen(
 /** A titled single choice row. Signal blue marks only the selected segment. */
 @Composable
 private fun <T> Choice(label: String, options: List<T>, selected: T, optionLabel: @Composable (T) -> String, onSelect: (T) -> Unit) {
-    Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+    Eyebrow(label, heading = true)
     Spacer(Modifier.height(8.dp))
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         options.forEachIndexed { i, option ->
@@ -250,9 +251,9 @@ private fun StorageCard(controller: SettingsController, infoButton: @Composable 
     val clearing by controller.clearing.collectAsState()
     // Measured each time the card shows, so a sync or a clear elsewhere is reflected.
     LaunchedEffect(controller) { controller.refreshStorage() }
-    SettingsCard {
-        Text(stringResource(Res.string.settings_storage), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-        val sizes = usage ?: return@SettingsCard
+    BrandCard {
+        Eyebrow(stringResource(Res.string.settings_storage), heading = true)
+        val sizes = usage ?: return@BrandCard
         StorageRow(stringResource(Res.string.storage_sensor_files), sizes.sensorFilesBytes)
         StorageRow(stringResource(Res.string.storage_history_cache), sizes.historyCacheBytes, !clearing, controller::clearHistoryCache)
         StorageRow(stringResource(Res.string.storage_map_cache), sizes.mapCacheBytes, !clearing, controller::clearMapCache)
@@ -522,21 +523,6 @@ private fun Caption(text: String, top: Dp = 8.dp) {
         modifier = Modifier.padding(top = top),
     )
 }
-
-/** One group of settings on a curved brand surface card. */
-@Composable
-private fun SettingsCard(content: @Composable () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = SettingsCardShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(Modifier.padding(16.dp)) { content() }
-    }
-}
-
-private val SettingsCardShape = RoundedCornerShape(24.dp)
 
 internal fun levelLabel(level: DetailLevel): StringResource = when (level) {
     DetailLevel.SIMPLE -> Res.string.level_simple

@@ -23,6 +23,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import space.opensensor.app.R
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.CardGap
+import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.headingSemantics
 import space.opensensor.device.DeviceConfigAction
@@ -109,8 +111,8 @@ fun DeviceScreen(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+                verticalArrangement = Arrangement.spacedBy(CardGap),
             ) {
                 item(key = "info") {
                     DeviceInfoCard(
