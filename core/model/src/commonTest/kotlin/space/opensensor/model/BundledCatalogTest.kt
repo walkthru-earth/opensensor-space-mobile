@@ -240,7 +240,7 @@ class BundledCatalogTest {
     @Test
     fun aRealFirmwareDescResolvesWithoutADict() {
         // The desc firmware writes in template.sha256 for the CoreS3 template.
-        val desc = "38b0982d1da0dfea20777af87544f30c8141ef297ed5146c402129133acbea0e"
+        val desc = "4e010301a21f994c2bf73c70922ee155657928afaa1603b8bff6ecfd8ff3778f"
         val template = assertNotNull(BundledCatalog.templateByDesc(desc))
         assertEquals(cores3Dict, template.dict)
         assertEquals(desc, template.key.desc)

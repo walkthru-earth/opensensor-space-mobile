@@ -5,10 +5,17 @@ import androidx.compose.ui.graphics.toArgb
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import space.opensensor.designsystem.BODY_TEXT_CONTRAST
+import space.opensensor.designsystem.BandInkLight
 import space.opensensor.designsystem.BrandDarkScheme
 import space.opensensor.designsystem.BrandLightScheme
 import space.opensensor.designsystem.BrandPalette
 import space.opensensor.designsystem.BrandTokens
+import space.opensensor.designsystem.LARGE_TEXT_CONTRAST
+import space.opensensor.designsystem.color
+import space.opensensor.designsystem.contrastRatio
+import space.opensensor.designsystem.onColor
+import space.opensensor.designsystem.relativeLuminance
 import space.opensensor.family.air.AirMood
 import space.opensensor.family.air.WhoStep
 

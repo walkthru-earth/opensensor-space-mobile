@@ -270,15 +270,25 @@ class SensorCollectionsTest {
 
     private fun SensorCollections.isActive(device: String) = isActive(ThingId.BleAddress(device))
 
-    /** What waits to resume, read without starting it. */
+    /**
+     * What waits to resume, read without starting it. A run's own retry after its `finished` runs on
+     * another thread in these tests, so it can call this resumer too and report the same run again. A
+     * run counts once, and a report that comes after this returns is not in the list.
+     */
     private fun SensorCollections.waiting(): List<InterruptedRun> {
-        val seen = ArrayList<InterruptedRun>()
-        resumeInterrupted {
-            seen += it
+        val lock = NSLock()
+        val seen = LinkedHashSet<InterruptedRun>()
+        resumeInterrupted { run ->
+            lock.lock()
+            seen += run
+            lock.unlock()
             ResumeOutcome.WAITING
         }
         holdInterrupted()
-        return seen
+        lock.lock()
+        val runs = seen.toList()
+        lock.unlock()
+        return runs
     }
 
     /**

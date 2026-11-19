@@ -84,6 +84,21 @@ object ArchiveLayout {
         return PartialMeta(size, crc)
     }
 
+    /**
+     * The offset a partial resumes from when the device OPENED a file with [meta]. Every store asks
+     * this, and only does the file I/O. A partial resumes at its own length only when it exists, its
+     * stored meta text decodes to the same [meta], and it is not longer than `meta.size`. Anything
+     * else gives 0, and the store resets the partial.
+     *
+     * @param existingLength the partial's length in bytes, or null when there is none.
+     * @param storedMetaText the partial's meta file as text, or null when there is none.
+     */
+    fun resumeFrom(existingLength: Long?, storedMetaText: String?, meta: PartialMeta): Long {
+        if (existingLength == null || storedMetaText == null) return 0
+        if (decodeMeta(storedMetaText) != meta || existingLength > meta.size) return 0
+        return existingLength
+    }
+
     /** `YYYY-MM-DD` of a UTC epoch day, the label in derived file names and manifests. */
     fun dayLabel(epochDay: Long): String = LocalDate.fromEpochDays(epochDay).toString()
 

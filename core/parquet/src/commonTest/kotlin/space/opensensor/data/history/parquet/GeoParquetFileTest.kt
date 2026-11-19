@@ -44,7 +44,7 @@ class GeoParquetFileTest {
         return ParquetFile.wrap(bytes, label(f), codecs)
     }
 
-    /** Built-ins plus ZSTD on the JVM (zstd-jni, as `:app` registers it); iOS skips the ZSTD fixtures. */
+    /** Built-ins plus ZSTD on the JVM (zstd-jni, tests only). iOS skips the ZSTD fixtures. */
     private val codecs = testCodecs
 
     private fun codecOf(name: String) = when (name) {

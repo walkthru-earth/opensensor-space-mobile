@@ -238,7 +238,7 @@ a retained inner Hive thing mismatch is archived/exportable but excluded from th
 history. Earlier epochs remain separately selectable. Richer producer provenance and duplicate
 old-thing downloads need an owner-contract decision ([device-identity.md](device-identity.md#files-from-another-thing-on-the-same-sd-card)).
 
-## Archive layout (`FileArchive`)
+## Archive layout (`ArchiveLayout`)
 
 ```
 filesDir/archive/<thing>/<relative hive name>          verified, immutable (drop-in mirror of the SD card / tools/export_parquet.py)
@@ -250,6 +250,11 @@ Root for names without a thing (`benchmarks/…`, `legacy-parquet/…`) is still
 `archive/<thing uuid from info>/<name>`, so dated files sit at `…/<uuid>/thing=<uuid>/year=…`,
 redundant on purpose: two devices can never collide. Partials resume by absolute offset after a
 re-`OPEN` confirms `size`/`crc32` are unchanged.
+
+`ArchiveLayout` in `core/archive` builds every path above and decides the resume once.
+`ArchiveLayout.resumeFrom` resumes at the partial's length only when the partial exists, its meta
+decodes to the OPENED size and CRC, and it is not longer than that size. Anything else gives 0 and
+the store resets the partial. Android `FileArchive` and iOS `IosArchiveStore` only do the file I/O.
 
 ## Lost window (`DeviceSession.read` + `SyncEngine`)
 

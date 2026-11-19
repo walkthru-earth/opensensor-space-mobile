@@ -41,9 +41,9 @@ import space.opensensor.data.history.localDateOf
 import space.opensensor.designsystem.AirQualityPeacock
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.metricLabel
+import space.opensensor.designsystem.preferredLanguage
 import space.opensensor.designsystem.spokenList
 import space.opensensor.family.air.AirMood
-import space.opensensor.family.air.WhoStep
 import space.opensensor.family.air.moodOf
 import space.opensensor.family.air.stepOf
 import space.opensensor.history.resources.Res
@@ -107,12 +107,13 @@ internal fun DayRing(
     // (the step only when `showStep`, Simple never names WHO), the coverage, then the highest hour.
     val average = units.value(mean, metric.unit)?.let { stringResource(Res.string.chart_average_value, fmtValue(it), units.unit(metric.unit)) }
     val separator = listSeparator()
+    val language = preferredLanguage()
     val description = spokenList(
         listOfNotNull(
             stringResource(Res.string.chart_ring_title, metricLabel(metric)),
             average ?: stringResource(Res.string.history_no_readings_short),
             mood?.titleText(),
-            if (showStep) mood?.step?.labelText() else null,
+            if (showStep) mean?.let { metric.stepName(it.toDouble(), language) } else null,
             if (mean != null) stringResource(Res.string.history_day_coverage, (coverage * 100).toInt()) else null,
             chartHighest(columns, metric, units, stepNamed = showStep) { c -> slotLabel(c, HistoryRange.DAY, zone) },
         ),
@@ -120,7 +121,6 @@ internal fun DayRing(
     )
     val estimated = stringResource(Res.string.history_estimated_time)
     val moodTitles = AirMood.entries.associateWith { it.titleText() }
-    val stepLabels = WhoStep.entries.associateWith { it.labelText() }
     val hours = columns.filter { it.mean?.isFinite() == true }.sortedBy { it.startS }
     val hourDescriptions = hours.map { col ->
         val v = col.mean!!
@@ -129,7 +129,7 @@ internal fun DayRing(
             slotLabel(col, HistoryRange.DAY, zone),
             fmtValue(units.value(v, metric.unit)) + " " + units.unit(metric.unit),
             metric.moodOf(m)?.let { moodTitles[it] },
-            if (showStep) metric.stepOf(m)?.let { stepLabels[it] } else null,
+            if (showStep) metric.stepName(m, language) else null,
             estimated.takeIf { col.estimated },
         ).let { spokenList(it, separator) }
     }

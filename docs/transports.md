@@ -197,6 +197,12 @@ phones run the same shared rules (`LanTokenPolicy`, `LanAutoEnable`) once per Bl
   Developer who needs it off for a test keeps other phones away from that sensor meanwhile.
   A switch that is cancelled, answered BUSY or left unanswered is tried again on the same
   connection. Any other error reply is the sensor's answer and keeps the once per connection claim.
+- **Last Bluetooth drop.** BLE never sends `BYE`, so after the config step each connection sends
+  `GET_DIAG` once (`DeviceSession.lastBleDropOnce`, read only). The newest Bluetooth event of the
+  ring (link 0) goes to the device log as its reason, errno or HCI code and boot, through
+  `DisconnectEvent.describe`, on Android to the sync diagnostics and on iOS to the sync log. BUSY
+  asks again on the next run of that connection. `ERROR` 7 `"mtu"` on a link too narrow for the
+  header, and any other reply, keep the claim.
 - **Token fetch on iOS.** The quiet fetch stays wanted until the link is idle and a request
   starts, so a command in flight only delays it. A fetch the user did not ask for that wedges the
   link closes it with the plain disconnected notice, never an error.

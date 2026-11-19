@@ -45,9 +45,9 @@ import space.opensensor.data.history.localDateOf
 import space.opensensor.data.history.startOfDay
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.metricLabel
+import space.opensensor.designsystem.preferredLanguage
 import space.opensensor.designsystem.spokenList
 import space.opensensor.family.air.AirMood
-import space.opensensor.family.air.WhoStep
 import space.opensensor.family.air.moodOf
 import space.opensensor.family.air.stepOf
 import space.opensensor.history.resources.Res
@@ -109,7 +109,7 @@ internal fun CalendarHeatmap(
     ).let { spokenList(it, separator) }
     val estimated = stringResource(Res.string.history_estimated_time)
     val moodTitles = AirMood.entries.associateWith { it.titleText() }
-    val stepLabels = WhoStep.entries.associateWith { it.labelText() }
+    val language = preferredLanguage()
 
     Box(modifier.fillMaxWidth().height(heightDp).semantics { isTraversalGroup = true }) {
         Canvas(
@@ -202,7 +202,7 @@ internal fun CalendarHeatmap(
                             formatEpoch(startS, zone, DAY_SPOKEN),
                             fmtValue(units.value(m, metric.unit)) + " " + units.unit(metric.unit),
                             mood?.let { moodTitles[it] },
-                            if (showStep) metric.stepOf(m.toDouble())?.let { stepLabels[it] } else null,
+                            if (showStep) metric.stepName(m.toDouble(), language) else null,
                             estimated.takeIf { col.estimated },
                         ).let { spokenList(it, separator) }
                         val order = (week * 7 + dow).toFloat()

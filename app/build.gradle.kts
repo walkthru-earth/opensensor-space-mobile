@@ -51,7 +51,6 @@ android {
         versionCode = ciVersionCode ?: 1
         versionName = ciVersionName ?: "1.0"
 
-        testInstrumentationRunner = "space.opensensor.HiltTestRunner"
         // The ABIs every native library ships for. x86 and x86_64 lack h3, so they are not packaged (#61).
         // tools/check_apk_abis.py fails CI when the APK carries any other set.
         ndk {
@@ -255,15 +254,9 @@ dependencies {
     // The Debug screen, shared Compose with iOS.
     implementation(project(":feature:debug"))
     h3Natives(libs.h3)
-    // ZSTD pages of external GeoParquet (PyArrow/GDAL default in many pipelines): the one native library,
-    // registered into :core:parquet's codec SPI by data/history/parquet/AppParquetCodecs. Prebuilt AAR;
-    // the pure module never links it (docs/parquet.md, Codecs).
-    implementation(libs.zstd.jni) { artifact { type = "aar" } }
-    testImplementation(libs.zstd.jni)
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
-    androidTestImplementation(composeBom)
 
     // Core Android dependencies
     implementation(libs.androidx.core.ktx)
@@ -273,9 +266,6 @@ dependencies {
     // Hilt Dependency Injection
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    // Hilt and instrumented tests.
-    androidTestImplementation(libs.hilt.android.testing)
-    kspAndroidTest(libs.hilt.android.compiler)
 
     // Arch Components
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -290,22 +280,13 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     // Tooling
     debugImplementation(libs.androidx.compose.ui.tooling)
-    // Instrumented tests
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     // Local tests: jUnit, coroutines, Android runner
+    testImplementation(project(":core:storage:testkit"))
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation(libs.androidx.sqlite.bundled.jvm)
-
-    // Instrumented tests: jUnit rules and runners
-
-    androidTestImplementation(libs.androidx.test.core)
-    androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.androidx.test.espresso.core)
 
     // Navigation. The shared shell brings Navigation 3 UI and the ViewModel entry decorator, which
     // resolve on Android to the androidx artifacts (docs/adr/0001-shared-navigation.md).

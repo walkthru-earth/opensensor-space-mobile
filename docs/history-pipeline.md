@@ -457,7 +457,8 @@ faces and emoji without changing measurement validity, labels, advice, WHO colou
 
 PM10 is banded on its own WHO scale (`WhoGuidelines.PM10`, 45 · 50 · 75 · 100 · 150 µg/m³) through
 `MetricSpec.healthScale`; `moodOf`/`stepOf` read the scale, so a PM10 value maps to the same six moods
-and colours. Colours are `WhoStep.color` (light to dark, colour-blind checked).
+and colours. Colours are `WhoStep.color` (light to dark, colour-blind checked), mapped once in
+`:ui:designsystem` `ColorContrast.kt`.
 
 `AirMood` is the air-quality family's scale, not the app's model of "good". Other families
 show neutral metric cards unless their dictionary names a published scale. See
@@ -493,7 +494,7 @@ Science's qualitative display advice and the South Coast AQMD accessible scale: 
 their own WHO step on a neutral background (no shaded bands), neutral ink for metrics without a
 scale, opacity = coverage, dashed outline = estimated time, whisker = peak. A caption states the
 averaging (hourly, daily or weekly means against a 24-hour guideline), and the touch readout names
-the mood and WHO step in words. Time labels
+the mood and WHO step in words, the step by its registry scale label (`MetricSpec.stepName`). Time labels
 in the phone's zone, buckets UTC-aligned. **Files › Chart by file** (`FileSummary`) is the same column style in file
 order, the diagnostic a time axis cannot give.
 

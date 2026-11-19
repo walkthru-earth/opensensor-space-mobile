@@ -28,7 +28,7 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation(libs.junit)
-            // ZSTD pages in the tests only: the module itself never links it; :app supplies the same library as an AAR.
+            // ZSTD pages in the tests only. Neither this module nor the app links it.
             implementation(libs.zstd.jni)
         }
         // This module's own JVM tests read the shared fixtures from the classpath, like every consumer.

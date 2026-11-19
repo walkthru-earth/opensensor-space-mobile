@@ -422,4 +422,21 @@ class FileItemsTest {
         )
         assertEquals(FileItemResult.NoRotationWindow, result)
     }
+
+    @Test
+    fun aRotationWindowTheProfileDoesNotAllowGetsNoItem() {
+        fun build(rotationS: Long, rows: List<Row> = rowsIn(OSU_CELL)) = FileItems.build(
+            FILE_NAME,
+            ByteArrayReader(deviceFile(rows)),
+            footer(Mobility.FIXED).copy(rotationIntervalS = rotationS),
+            coreS3Template,
+            PUBLISHED_RES,
+            h3,
+        )
+        // 300 divides an hour but is not one of 600, 900, 1800 or 3600, so stac and the board refuse it.
+        assertEquals(FileItemResult.NoRotationWindow, build(300))
+        // Checked right after the Thing and mobility, before the rows, as `scripts/canonical.mjs` does.
+        assertEquals(FileItemResult.NoRotationWindow, build(300, rows = emptyList()))
+        assertIs<FileItemResult.Item>(build(3600))
+    }
 }

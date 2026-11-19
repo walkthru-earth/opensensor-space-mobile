@@ -1,5 +1,6 @@
 package space.opensensor.family.air
 
+import space.opensensor.model.BundledCatalog
 import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -34,6 +35,17 @@ class WhoGuidelinesTest {
         assertEquals(WhoStep.IT1, s.stepOf(75.0))
         assertEquals(WhoStep.ABOVE_IT1, s.stepOf(75.1))
         assertNull(s.stepOf(Double.NaN))
+    }
+
+    @Test
+    fun stepNamesAreTheRegistryStepNames() {
+        for ((scale, id) in listOf(WhoGuidelines.PM25 to WhoGuidelines.PM25_ID, WhoGuidelines.PM10 to WhoGuidelines.PM10_ID)) {
+            assertEquals(BundledCatalog.scales[id]?.steps?.map { it.label }, scale.names, id)
+            assertEquals(BundledCatalog.scales[id]?.steps?.map { it.upper }, scale.edges + null, id)
+        }
+        assertEquals("Within the WHO guideline", WhoGuidelines.PM25.stepName(15.0, "en"))
+        assertEquals("فوق كل أهداف منظمة الصحة العالمية", WhoGuidelines.PM25.stepName(75.1, "ar"))
+        assertNull(WhoGuidelines.PM25.stepName(Double.NaN, "en"))
     }
 
     @Test

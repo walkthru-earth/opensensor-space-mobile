@@ -86,7 +86,10 @@ class DeviceFacade internal constructor(
     /** True from reservation until controller.start returned. Guarded by [lock]. */
     private var starting = false
     private lateinit var controller: CollectionController
-    val collectionState: StateFlow<CollectionState> get() = controller.state
+
+    /** The controller state, read by tests. The UI reads [sync] and [ownership]. */
+    internal val collectionState: StateFlow<CollectionState> get() = controller.state
+
     private val progress = MutableStateFlow(SyncProgress())
     val sync = progress.asStateFlow()
     private val needed = MutableStateFlow(false)
@@ -104,8 +107,8 @@ class DeviceFacade internal constructor(
     val ownership: StateFlow<DeviceOwnership> = combine(linkOwner.collectionActive, linkOwner.backgroundOwner, ::deviceOwnership)
         .stateIn(scope, SharingStarted.Eagerly, DeviceOwnership.IDLE)
 
-    /** [ownership] read straight from the link owner, without the flow's dispatch delay. */
-    fun ownershipNow(): DeviceOwnership = deviceOwnership(linkOwner.collectionActive.value, linkOwner.backgroundOwner.value)
+    /** [ownership] read straight from the link owner, without the flow's dispatch delay. Tests only. */
+    internal fun ownershipNow(): DeviceOwnership = deviceOwnership(linkOwner.collectionActive.value, linkOwner.backgroundOwner.value)
 
     internal fun bind(address: String) {
         check(this.address == null || this.address == address)
@@ -426,7 +429,10 @@ class DeviceFacade internal constructor(
         intentId?.let { controller.awaitCleanup(it) }
         linkOwner.disconnectNow(disconnectClaim)
     }
-    suspend fun lendLink(address: String, prefer: LinkPreference) = linkOwner.lendLink(address, prefer)
+
+    /** Tests only. Production lends through [DeviceLinkOwner.lendLink]. */
+    internal suspend fun lendLink(address: String, prefer: LinkPreference) = linkOwner.lendLink(address, prefer)
+
     fun refreshManifest() = linkOwner.refreshManifest()
     suspend fun setAutoSync(address: String, enabled: Boolean) = linkOwner.setAutoSync(address, enabled)
     suspend fun setCompanionAssociation(address: String, associationId: Int?) = linkOwner.setCompanionAssociation(address, associationId)

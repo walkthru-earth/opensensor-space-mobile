@@ -98,11 +98,14 @@ class DayRingSemanticsTest {
         return said
     }
 
+    /** The registry scale's own name for step [index], so a reworded registry needs no test change. */
+    private fun step(index: Int): String = AirMetrics.PM25.healthScale!!.names[index].get("en")
+
     @Test
     fun detailedReadsEachHourWithItsWhoStep() {
         val said = render(showStep = true)
-        assertEquals("00:00, 3.0 µg/m³, Fresh air, Within the WHO guideline", said.first())
-        assertTrue("12:00, 40.0 µg/m³, Poor, Within WHO interim target 2, estimated time" in said, said.joinToString("\n"))
+        assertEquals("00:00, 3.0 µg/m³, Fresh air, ${step(0)}", said.first())
+        assertTrue("12:00, 40.0 µg/m³, Poor, ${step(3)}, estimated time" in said, said.joinToString("\n"))
     }
 
     @Test

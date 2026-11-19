@@ -112,7 +112,6 @@ data class DeviceStatus(
     val utcSynced: Boolean get() = utc == 1
     val storageFailed: Boolean get() = fail == 1
     val sdMounted: Boolean get() = sd == 1
-    val lastDisconnect: DisconnectReason? get() = dr?.let(DisconnectReason::fromCode)
     val sdDegraded: Boolean get() = sdState == SD_DEGRADED
     val sdFull: Boolean get() = sdState == SD_FULL
 

@@ -38,8 +38,8 @@ The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads throug
   `forget(address, quiet)` returns false when another command held the device or a newer connect
   took the link, and a quiet try reports nothing, so a retrying caller tells the user once.
 - The clock check (`synchronizeClockQuietly`, through `synchronizeClockOnce`), the quiet token
-  fetch and `enableLanOnce` after GET_CONFIG (skipped at the Developer level, read through the
-  injected `DeveloperLevel`) report to diagnostics only. A failed LAN connect falls back to BLE
+  fetch, `enableLanOnce` after GET_CONFIG (skipped at the Developer level, read through the
+  injected `DeveloperLevel`) and the read only `lastBleDropOnce` report to diagnostics only. A failed LAN connect falls back to BLE
   silently. `DeviceMessage` has no code for the clock, the LAN fallback or a token renewal. Keep them silent.
 - Plaintext LAN tokens stay in the data layer. DAO rows carry ciphertext; only
   `LanCredentialStore` decrypts, when a LAN transport is built.

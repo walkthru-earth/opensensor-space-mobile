@@ -788,6 +788,10 @@ class DeviceLinkOwner @Inject constructor(
             suspendRunCatching { session.enableLanOnce(_config.value?.config, developerLevel.developer()) }
                 .onSuccess { snapshot -> snapshot?.let { _config.value = it; recordDiagnostic("lan", "Wi-Fi sync switched back on") } }
                 .onFailure { Log.w(TAG, "lan.on=1 failed (${it::class.simpleName})") }
+            // BLE never sends BYE, so the last Bluetooth drop is read from DIAG once per connection.
+            suspendRunCatching { session.lastBleDropOnce() }
+                .onSuccess { drop -> drop?.let { recordDiagnostic("ble", "last Bluetooth drop ${it.describe()}") } }
+                .onFailure { Log.w(TAG, "GET_DIAG failed (${it::class.simpleName})") }
             // The link is open and, on BLE, bonded. Only a desc no known template matches is fetched.
             suspendRunCatching { boardDescriptors.ensure(info, session) }
                 .onSuccess { if (it !is DescriptorOutcome.Known && it !is DescriptorOutcome.Unsupported) Log.i(TAG, "board template ${it.label()}") }

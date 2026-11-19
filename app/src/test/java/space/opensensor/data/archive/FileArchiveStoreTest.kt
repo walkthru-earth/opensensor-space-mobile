@@ -58,6 +58,31 @@ class FileArchiveStoreTest {
         val store = FileArchiveStore(FileArchive(tempDir()), Dispatchers.Unconfined)
         store.openPartial(key, meta).use { w -> w.writeAt(0, bytes.copyOfRange(0, 10)) }
         store.openPartial(key, meta.copy(crc32 = meta.crc32 xor 1)).use { w -> assertEquals(0L, w.resumeFrom) }
+        store.openPartial(key, meta).use { w -> w.writeAt(0, bytes.copyOfRange(0, 10)) }
+        store.openPartial(key, meta.copy(size = meta.size + 1)).use { w ->
+            assertEquals(0L, w.resumeFrom)
+            assertEquals(0L, w.length())
+        }
+    }
+
+    @Test
+    fun `a partial longer than the promise or without its meta restarts`() = runTest {
+        val base = tempDir()
+        val store = FileArchiveStore(FileArchive(base), Dispatchers.Unconfined)
+        store.openPartial(key, meta).use { w -> w.writeAt(0, bytes + bytes) }
+        store.openPartial(key, meta).use { w -> assertEquals(0L, w.resumeFrom) }
+        store.openPartial(key, meta).use { w -> w.writeAt(0, bytes.copyOfRange(0, 10)) }
+        assertTrue(File(base, ArchiveLayout.partialMetaPath(key)).delete())
+        store.openPartial(key, meta).use { w -> assertEquals(0L, w.resumeFrom) }
+    }
+
+    @Test
+    fun `stray files beside the partials are not listed`() = runTest {
+        val base = tempDir()
+        val store = FileArchiveStore(FileArchive(base), Dispatchers.Unconfined)
+        store.openPartial(key, meta).use { w -> w.writeAt(0, bytes.copyOfRange(0, 10)) }
+        File(base, "${ArchiveLayout.partialThingDir(thing)}/NOTES.partial").writeText("x")
+        assertEquals(mapOf(key.name to 10L), store.partialLengths(thing))
     }
 
     @Test

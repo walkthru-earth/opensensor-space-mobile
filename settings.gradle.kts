@@ -44,6 +44,8 @@ include(":core:archive")
 include(":core:database")
 // Storage classes, durable no-replace commits, free space and the startup janitor's walk (issue #60).
 include(":core:storage")
+// FakeStorageBudget for the storage, sync and app tests.
+include(":core:storage:testkit")
 include(":core:settings")
 // The STAC File Item of a synced device file, regenerated to check the board's own sidecar (#190).
 include(":core:stac")

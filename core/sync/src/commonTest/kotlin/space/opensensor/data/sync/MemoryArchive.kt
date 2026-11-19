@@ -42,9 +42,7 @@ class MemoryArchiveStore : ArchiveStore {
     override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter {
         val path = ArchiveLayout.partialPath(key)
         val metaPath = ArchiveLayout.partialMetaPath(key)
-        val stored = files[metaPath]?.decodeToString()?.let(ArchiveLayout::decodeMeta)
-        val existing = files[path]
-        val resumeFrom = if (existing != null && stored == meta && existing.size <= meta.size) existing.size.toLong() else 0L
+        val resumeFrom = ArchiveLayout.resumeFrom(files[path]?.size?.toLong(), files[metaPath]?.decodeToString(), meta)
         if (resumeFrom == 0L) files[path] = ByteArray(0)
         files[metaPath] = ArchiveLayout.encodeMeta(meta).encodeToByteArray()
         openWriters++

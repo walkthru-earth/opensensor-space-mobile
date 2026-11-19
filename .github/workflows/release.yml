@@ -5,7 +5,7 @@
 # - A `v*` tag (e.g. `v1.2.0`) publishes a proper, permanent release with the same assets.
 #
 # One APK carries the two ARM ABIs every native library ships (x86 lacks h3, #61). Room uses the bundled SQLite
-# driver. The Parquet reader is pure Kotlin and delegates ZSTD decompression to the bundled zstd library.
+# driver. The Parquet reader is pure Kotlin with no native codec.
 # `minSdk 31` → Android 12 and newer, phones and tablets.
 #
 # Signing is fail-closed: four keystore secrets plus RELEASE_CERT_SHA256 are mandatory.
@@ -56,7 +56,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: walkthru-earth/opensensor-space-firmware
-          ref: a5545b460e2495fb8403eb8fae6d0bf45e8c10ed
+          ref: b6c84e0f638603956b7829b62ebb77d33f163554
           path: opensensor-space-firmware
           persist-credentials: false
           sparse-checkout: docs/shared/templates
@@ -225,7 +225,7 @@ jobs:
             echo "**opensensor.space** \`${{ steps.meta.outputs.version_name }}\` · versionCode ${{ steps.meta.outputs.version_code }} · commit ${GITHUB_SHA::8}"
             echo
             echo "Signed with the validated project release certificate (SHA-256 \`${{ steps.keystore.outputs.cert_sha256 }}\`)."
-            echo "Universal APK for Android 12+ (minSdk 31), including the bundled ZSTD native ABIs."
+            echo "Universal APK for Android 12+ (minSdk 31), for arm64-v8a and armeabi-v7a."
             echo "Code is minified by R8. The attached \`mapping-${{ steps.meta.outputs.version_name }}.txt.gz\` is gzipped. Run \`gunzip\` on it, then retrace stack traces with the mapping."
             echo
             if [ "${{ steps.meta.outputs.channel }}" = "rolling" ]; then

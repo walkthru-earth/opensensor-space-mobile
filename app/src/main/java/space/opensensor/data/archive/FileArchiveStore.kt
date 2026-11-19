@@ -17,8 +17,7 @@ import javax.inject.Singleton
 
 /**
  * The shared [ArchiveStore] over Android's [FileArchive] in `filesDir`. File I/O only, on [io]. The
- * layout is [ArchiveLayout]'s, which `FileArchive` already writes (`archive/`, `archive-partial/`,
- * `"<size> <crc32>"` meta).
+ * paths and the resume decision are [ArchiveLayout]'s.
  */
 @Singleton
 class FileArchiveStore @Inject constructor(
@@ -29,11 +28,11 @@ class FileArchiveStore @Inject constructor(
     private val base: File get() = checkNotNull(archive.root.parentFile)
 
     override suspend fun partialLengths(thing: String): Map<String, Long> = withContext(io) {
-        archive.partialLengths(thing).filterKeys(ArchiveLayout::isArchiveName)
+        archive.partialLengths(thing)
     }
 
     override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = withContext(io) {
-        val (writer, resumeFrom) = archive.openPartial(key.thing, key.name, meta.size, meta.crc32)
+        val (writer, resumeFrom) = archive.openPartial(key, meta)
         object : PartialWriter {
             override val resumeFrom: Long = resumeFrom
             override fun writeAt(offset: Long, payload: ByteArray) = writer.writeAt(offset, payload)
@@ -43,7 +42,7 @@ class FileArchiveStore @Inject constructor(
         }
     }
 
-    override suspend fun discardPartial(key: ArchiveKey) = withContext(io) { archive.discardPartial(key.thing, key.name) }
+    override suspend fun discardPartial(key: ArchiveKey) = withContext(io) { archive.discardPartial(key) }
 
     override suspend fun exists(key: ArchiveKey): Boolean = withContext(io) { archive.exists(key.thing, key.name) }
 
@@ -51,7 +50,7 @@ class FileArchiveStore @Inject constructor(
         openArchiveFile(File(base, if (partial) ArchiveLayout.partialPath(key) else ArchiveLayout.finalPath(key)))
 
     override suspend fun commit(key: ArchiveKey) {
-        withContext(io) { archive.commit(key.thing, key.name) }
+        withContext(io) { archive.commit(key) }
     }
 
     override suspend fun listFinal(thing: String?): List<ArchiveKey> = withContext(io) {

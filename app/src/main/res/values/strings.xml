@@ -21,17 +21,6 @@
     <string name="scan_fake_lan">Debug fake device (as LAN)</string>
     <string name="scan_more">More</string>
 
-    <!-- Today -->
-
-    <!-- WHO 2021 steps, named in text so colour is never the only carrier. One set for every screen,
-         Discover included. Keep identical to feature/discover composeResources, CopyRulesTest checks. -->
-    <string name="who_step_guideline">Within the WHO guideline</string>
-    <string name="who_step_it4">Within WHO interim target 4</string>
-    <string name="who_step_it3">Within WHO interim target 3</string>
-    <string name="who_step_it2">Within WHO interim target 2</string>
-    <string name="who_step_it1">Within WHO interim target 1</string>
-    <string name="who_step_above_it1">Above every WHO target</string>
-
     <!-- Sensor states -->
 
     <!-- Device -->
@@ -81,8 +70,6 @@
 
     <string name="sensor_scan_unrecognized">This barcode is not a recognized Plantower sticker. Type it in if needed.</string>
     <string name="sensor_scan_unavailable">The scanner is not available. Type the sticker below.</string>
-
-
 
 
 

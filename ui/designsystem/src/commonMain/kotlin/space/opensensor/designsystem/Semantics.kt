@@ -65,7 +65,7 @@ fun formatValueDescription(
  * Replaces descendant text nodes with a single spoken [formatValueDescription] for TalkBack and
  * VoiceOver so the value is not read twice.
  */
-fun Modifier.valueSemantics(
+internal fun Modifier.valueSemantics(
     label: String,
     value: String,
     unit: String? = null,

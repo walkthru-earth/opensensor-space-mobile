@@ -1,7 +1,7 @@
 # Parquet, the app's own reader and writer
 
 **Scope:** `:core:parquet`: what the reader accepts and refuses, the writer, GeoParquet 2.0, codecs, storage seams, fixtures and the oracles that prove them.
-**Code:** `core/parquet/src/commonMain/…/data/history/parquet/` (JVM and iOS): `ParquetFile.kt` (`ParquetFile`), `ParquetReader.kt` (`ParquetReader`, `ScanRequest`, `FooterCache`), `ColumnDecoder.kt` (the one-pass chunk decoder), `ValueDecoders.kt` (DELTA_BINARY_PACKED and BYTE_STREAM_SPLIT), `PrimitiveColumn.kt` (`PrimitiveColumn`, `ColumnBatch`), `PageIndex.kt`, `RangeSource.kt` (`RangeSource`, `ByteView`, `SourceId`, `RangePolicy`, `MemoryRangeSource`), `RangePlanner.kt` (`RangePlanner`, `CoalescingRangeSource`), `ByteReader.kt`, `Bytes.kt`, `ParquetFooterParser.kt`, `ParquetMetadata.kt`, `ColumnValues.kt`, `ParquetWriter.kt` (`ParquetSink`), `ThriftCompact.kt` / `ThriftCompactWriter.kt`, `Lz4Block.kt`, `ParquetCodecs.kt` (SPI, Snappy, `expect` gzip), `Geometry.kt` (WKB), `GeoParquetMetadata.kt`, `LocalFile.kt`. `src/jvmMain`: `LocalFileReader` (positional `FileChannel` reads), `LocalRangeSource` (the same reads), gzip via `java.util.zip`, `ParquetWriter(OutputStream, …)`. `src/iosMain`: `LocalFileReader` (POSIX `pread`), `LocalRangeSource` (the same reads), gzip via the system zlib. `:app` `data/history/parquet/AppParquetCodecs.kt` (ZSTD via `zstd-jni`).
+**Code:** `core/parquet/src/commonMain/…/data/history/parquet/` (JVM and iOS): `ParquetFile.kt` (`ParquetFile`), `ParquetReader.kt` (`ParquetReader`, `ScanRequest`, `FooterCache`), `ColumnDecoder.kt` (the one-pass chunk decoder), `ValueDecoders.kt` (DELTA_BINARY_PACKED and BYTE_STREAM_SPLIT), `PrimitiveColumn.kt` (`PrimitiveColumn`, `ColumnBatch`), `PageIndex.kt`, `RangeSource.kt` (`RangeSource`, `ByteView`, `SourceId`, `RangePolicy`, `MemoryRangeSource`), `RangePlanner.kt` (`RangePlanner`, `CoalescingRangeSource`), `ByteReader.kt`, `Bytes.kt`, `ParquetFooterParser.kt`, `ParquetMetadata.kt`, `ColumnValues.kt`, `ParquetWriter.kt` (`ParquetSink`), `ThriftCompact.kt` / `ThriftCompactWriter.kt`, `Lz4Block.kt`, `ParquetCodecs.kt` (SPI, Snappy, `expect` gzip), `Geometry.kt` (WKB), `GeoParquetMetadata.kt`, `LocalFile.kt`. `src/jvmMain`: `LocalFileReader` (positional `FileChannel` reads), `LocalRangeSource` (the same reads), gzip via `java.util.zip`, `ParquetWriter(OutputStream, …)`. `src/iosMain`: `LocalFileReader` (POSIX `pread`), `LocalRangeSource` (the same reads), gzip via the system zlib.
 **Fixtures:** `core/parquet/src/test/resources/parquet/{device,v3,expected.json}` and `…/geoparquet/{pyarrow,duckdb,expected.json}`, `…/parquet/discover/` (page index), `…/parquet/encodings/` (DELTA and BYTE_STREAM_SPLIT) (published as `:core:parquet` test fixtures, see [Fixtures and oracles](#fixtures-and-oracles)).
 **Tools:** `tools/make_parquet_fixtures.py`, `tools/make_geoparquet_fixtures.py`, `tools/make_encoding_fixtures.py`, `tools/validate_parquet_samples.py`, run as `cd ../opensensor-space-firmware && pixi run python ../opensensor-space-mobile/tools/<script>`.
 **Related:** [history-pipeline.md](history-pipeline.md) (who reads/writes), [sync-engine.md](sync-engine.md) (PAR1/CRC verification is in `:core:protocol`, not here).
@@ -77,8 +77,8 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
 - `ColumnValues.longValues()` and `doubleValues()` hand out primitive arrays without boxing, the stored
   array when the type already matches.
 - GZIP is an `expect` function, `java.util.zip` on the JVM and `inflateInit2` from `platform.zlib` on
-  iOS (also concatenated members). ZSTD stays behind the codec SPI on Android only. iOS has no ZSTD in
-  its system libraries, which is why the public feed is written with SNAPPY or LZ4_RAW.
+  iOS (also concatenated members). No app registers ZSTD. iOS has no ZSTD in its system libraries, which is
+  why the public feed is written with SNAPPY or LZ4_RAW.
 - kotlinx-io is not used. Its API is still alpha and has no random access, so the module keeps its own
   `ByteReader` and the platform file APIs at the edges.
 
@@ -148,7 +148,7 @@ backstop for crashes nobody thought of. The unit tests prove each guard.
 | UNCOMPRESSED, **LZ4_RAW** | `builtIn`, own ~60-line block decoder + compressor (`Lz4Block`) | the firmware's codec |
 | **SNAPPY** | `builtIn`, own decoder | PyArrow / DuckDB / GDAL default |
 | **GZIP** | `builtIn`, `java.util.zip` (JVM), system zlib (iOS) | `expect fun gunzip` |
-| **ZSTD** | `AppParquetCodecs` in `:app` registers `zstd-jni` (`@aar`) | the **one native library**, kept out of `:core:*`, `AppParquetCodecsTest`. Android only |
+| **ZSTD** | not built in, refused by name. Only the JVM tests register `zstd-jni` | no app reads ZSTD pages. Device, derived and feed files never use it |
 
 `PageDecompressor.decompress(src, srcOffset, srcLength, dst, dstOffset, dstLength)`
 (`ParquetCodecs.kt`) reads only the compressed page `src[srcOffset, srcOffset + srcLength)`, a window
@@ -295,7 +295,7 @@ Regenerate fixtures when the firmware writer changes; commit the result. Writer 
 | --- | --- |
 | `ColumnDecoder` (used by `ParquetFile` and `ParquetReader`) | `ParquetIndexer`, `Aggregator`, `HistoryRepository` day rows, Metrics screen, `RealArchiveTest` |
 | `ParquetWriter` | daily derived files → re-run PyArrow/DuckDB oracle; `ParquetWriterTest` |
-| `ParquetCodecs` SPI | `AppParquetCodecs` registration order at app start; fixtures per codec |
+| `ParquetCodecs` SPI | `ParquetCodecs.builtIn` on both phones, the JVM tests that add `zstd-jni`, fixtures per codec |
 | `ParquetReader`, `RangeSource`, `RangePlanner`, `PageIndex`, `longStatistics` | `ParquetFeedReader` (Discover), `:core:net`; `PageIndexTest`, `RangePlannerTest`, `TruncatedFooterFuzzTest`, `ParquetMutationFuzzTest`, `AllocationTest` |
 | `ByteReader` | `ParquetFile` callers; `ByteReaderTest` |
 | `ThriftCompact*` | every footer read/write, the fixtures are the regression net, `FooterHardeningTest` |

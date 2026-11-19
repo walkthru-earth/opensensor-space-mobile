@@ -47,6 +47,9 @@ kotlin {
             implementation(project(":ui:strings"))
             implementation(project(":ui:permissions"))
         }
+        commonTest.dependencies {
+            implementation(project(":core:storage:testkit"))
+        }
     }
 }
 

@@ -60,7 +60,7 @@ audits through `verify`; release-only APK optimization and signer checks remain 
 `FirmwareTemplatesTest` (`:core:model`) compares `core/model/bundled/templates` with
 opensensor-space-firmware `docs/shared/templates` byte for byte (#261). The `verify.yml` gradle job
 and the `release.yml` `apk` job check the firmware out at the commit the bundle was copied from, a
-literal `ref` in each workflow (opensensor-space-firmware `a5545b4`, the merge of firmware #195), and set
+literal `ref` in each workflow (opensensor-space-firmware `b6c84e0`, the merge of firmware #203), and set
 `OPENSENSOR_FIRMWARE_DIR`. The `ref` stays a literal because CodeQL reports a checkout ref read
 from a repository file as cache poisoning. With that variable set, a missing checkout fails the test. Locally the
 test finds an `opensensor-space-firmware` folder beside the repository and skips without one. The
@@ -125,7 +125,7 @@ commit the file. The root `build.gradle.kts` configures that task to write no do
 | --- | --- |
 | Language / UI | Kotlin (`kotlin`), Jetpack Compose through its BOM (`androidxComposeBom`, material3 included), the shared `:ui:designsystem` theme and vendored icons (no dynamic color, no `material-icons-extended`), Navigation 3 (`nav3Core` and `jetbrainsNavigation3`). Versions are the `gradle/libs.versions.toml` keys named here |
 | DI / data | Hilt (`hilt`), Room (`androidxRoom`, schema `AppDatabase.version`, exported under `core/database/schemas/`), DataStore Preferences (`androidxDatastore`), WorkManager (`androidxWork`) + `androidx.hilt:hilt-work` (`androidxHilt`), kotlinx.serialization (`kotlinxSerialization`), kotlinx-datetime (`kotlinxDatetime`, shared calendar math), coroutines (`coroutines`). Versions are the `gradle/libs.versions.toml` keys named here |
-| Native | `zstd-jni` (`zstdJni`, `@aar`). Discover adds `maplibre-compose` (`maplibreCompose`) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`) and `com.uber:h3` (`h3`, JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C library (`core/publicfeed/src/nativeInterop/h3c`, its README names the version) with `xcrun clang` and binds it through cinterop. `H3VersionPinTest` (`:tools:pins`) fails when the C major and minor differ from `com.uber:h3`. The patch may differ, because h3-java numbers its own releases |
+| Native | Discover adds `maplibre-compose` (`maplibreCompose`) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`) and `com.uber:h3` (`h3`, JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C library (`core/publicfeed/src/nativeInterop/h3c`, its README names the version) with `xcrun clang` and binds it through cinterop. `H3VersionPinTest` (`:tools:pins`) fails when the C major and minor differ from `com.uber:h3`. The patch may differ, because h3-java numbers its own releases |
 | Build | Gradle as `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` names it (configuration cache on), with the daemon on JDK 25 through the Daemon JVM criteria (see Build JDK). AGP (`androidGradlePlugin`), KSP (`ksp`) and Compose Multiplatform (`composeMultiplatform`) as `gradle/libs.versions.toml` pins them. R8 for release. Every `:core` module and `:family:air` target JVM (Java 17) and iOS, except `:core:database`, which targets Android and iOS (`opensensor.kmp.android-library`). Every `:ui` and `:feature` module uses `opensensor.kmp.compose-feature`, Compose Multiplatform for Android (`com.android.kotlin.multiplatform.library`) and iOS, with no JVM target. `:ios:shared` targets iOS only |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches). One place, `build-logic` `OpenSensorConventions`, for `:app` and every shared Android target |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
@@ -264,7 +264,6 @@ keep rules live in `app/src/main/keepRules/opensensor.keep`, the source set the 
 
 | Rule | Why |
 | --- | --- |
-| `-keep class com.github.luben.zstd.** { *; }` | zstd-jni native code looks up its Java classes, fields and methods by name |
 | `-keepnames class * extends java.lang.Throwable` | messages fall back to `e::class.simpleName`, which people and diagnostics see |
 | `-keepnames` for `ConnectionState`, `Frame`, `Request` and their subtypes | their simple names appear in the Debug screen, frame log and protocol errors |
 | `-keepattributes InnerClasses,EnclosingMethod` | `getSimpleName` of a nested class reads these attributes |
@@ -286,10 +285,10 @@ The flag is refused when `CI` is set, so it can not produce a published artifact
 release can not update an installed release build, so uninstall first when testing it on a phone.
 
 `ndk.abiFilters` keeps `arm64-v8a` and `armeabi-v7a`. `tools/check_apk_abis.py` fails the verify
-and release workflows when the APK holds any other ABI or one ABI lacks MapLibre, zstd-jni or h3.
+and release workflows when the APK holds any other ABI or one ABI lacks MapLibre or h3.
 
 **R8 runtime behavior is not yet qualified on a phone.** Before the first tagged release
-with R8, install the minified APK on a phone and check BLE and LAN sync, ZSTD GeoParquet import,
+with R8, install the minified APK on a phone and check BLE and LAN sync,
 History charts, background sync, error messages and back stack restore after process death.
 
 ## Permissions (`AndroidManifest.xml`)
