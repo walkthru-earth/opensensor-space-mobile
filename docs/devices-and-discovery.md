@@ -333,8 +333,9 @@ identical on Android and iOS, and every one carries a spoken summary of its valu
   cells.
 - **Step names.** Colour never carries a step alone. The cell headline, each row of the
   cell list and each range row with a step scale name the step in text, the scale's own label in
-  the app's language. Discover, History and Today read that label from the scale the Collection
-  names (`opensensor:scale`), then the bundled registry, and the app keeps no copy of it.
+  the app's language. Discover reads that label from the scale the Collection names
+  (`opensensor:scale`), then the bundled registry. History reads it from the family's scale, which
+  carries the registry's names. The app keeps no copy of it.
 - **Range rows.** One row per other metric the cell reports, in dictionary order, grouped by
   category past five rows. Label and unit, a track for that metric's axis (zero to an edge
   with a dashed guideline tick for a step scale, the extent in view for the rest), the cell's min to max
