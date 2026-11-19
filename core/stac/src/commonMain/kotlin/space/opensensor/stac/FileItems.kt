@@ -176,24 +176,27 @@ object FileItems {
         if (times.nullCount > 0) return FileItemResult.NoUtcAnchor
         val startNs = times.values.min()
         val endNs = times.values.max()
+
+        // The cells, then the window, in the order of `scripts/canonical.mjs`, so a file with both
+        // faults gives the reason the reference gives.
+        val cells = visitedCells(file)
+        if (cells.isEmpty() && ITEM_NEEDS_LOCATION) return FileItemResult.NoLocation
+        if (cells.isNotEmpty() && !h3.available) return FileItemResult.NoH3
+        // Cell by cell in sorted order, as the reference does. A corrupt cell is a reason, not a throw
+        // out of the H3 binding.
+        for (cell in cells) {
+            if (!h3.isValidCell(cell)) return FileItemResult.InvalidCell(H3Index.toHex(cell))
+            val res = H3Index.resolution(cell)
+            if (res != publishedRes) return FileItemResult.WrongResolution(res)
+        }
+        val fixed = mobility == OpenSensorFooter.Mobility.FIXED
+        if (fixed && cells.size > 1) return FileItemResult.FixedThingMoved(cells.size)
         // HHMM names the window that holds the earliest row, as in `scripts/canonical.mjs`.
         val windowS = windowStart(startNs, rotationS)
         val named = fileName.substring(DATE_PREFIX.length, DATE_PREFIX.length + 4)
         val window = hhmm(windowS)
         if (named != window) return FileItemResult.WindowMismatch(named, window)
-
-        val cells = visitedCells(file)
-        cells.firstOrNull { H3Index.resolution(it) != publishedRes }?.let { return FileItemResult.WrongResolution(H3Index.resolution(it)) }
-        val fixed = mobility == OpenSensorFooter.Mobility.FIXED
-        // A corrupt cell is a reason, not a throw out of the H3 binding.
-        val invalid = if (h3.available) cells.firstOrNull { !h3.isValidCell(it) } else null
-        val geometry: Geometry? = when {
-            cells.isEmpty() -> if (ITEM_NEEDS_LOCATION) return FileItemResult.NoLocation else null
-            !h3.available -> return FileItemResult.NoH3
-            invalid != null -> return FileItemResult.InvalidCell(H3Index.toHex(invalid))
-            fixed && cells.size > 1 -> return FileItemResult.FixedThingMoved(cells.size)
-            else -> Geometry.of(cells, h3)
-        }
+        val geometry: Geometry? = if (cells.isEmpty()) null else Geometry.of(cells, h3)
 
         val id = fileName.removeSuffix(".parquet")
         val json = buildJsonObject {
