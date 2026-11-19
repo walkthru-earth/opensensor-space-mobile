@@ -40,8 +40,9 @@ expect fun systemUnitSystem(): UnitSystem
 
 /**
  * The one conversion table. Keys are the SI unit strings that appear in the metric registry and the
- * public feed dictionary (plus a few spellings of each). Units missing from the table (µg/m³, ppm,
- * ppb, %, dB, lux, mV, AQI, counts, indices) and every unknown string pass through untouched.
+ * public feed dictionary, the UCUM codes of the board templates (`Cel`, `m3`), plus a few spellings
+ * of each. A unit missing from the table (µg/m³, ppm, ppb, %, dB, lux, mV, AQI, counts, indices) keeps
+ * its value and shows the [UcumDisplay] symbol of its code, so an unknown string passes through.
  */
 object UnitConversion {
     private class Rule(val to: String, val decimals: Int, val forward: (Double) -> Double, val inverse: (Double) -> Double)
@@ -58,7 +59,7 @@ object UnitConversion {
     private const val IN_PER_MM = 1.0 / 25.4
 
     private val rules: Map<String, Rule> = buildMap {
-        listOf("°C", "℃", "degC").forEach { put(it, celsius) }
+        listOf("°C", "℃", "degC", "Cel").forEach { put(it, celsius) }
         put("K", kelvin)
         listOf("hPa", "mbar", "mb").forEach { put(it, scale("inHg", IN_HG_PER_HPA, 2)) }
         put("Pa", scale("inHg", IN_HG_PER_HPA / 100.0, 2))
@@ -72,7 +73,7 @@ object UnitConversion {
         listOf("mm/h", "mm/hr").forEach { put(it, scale("in/h", IN_PER_MM, 2)) }
         put("L", scale("gal", 1.0 / 3.785411784, 2))
         put("mL", scale("fl oz", 1.0 / 29.5735295625, 1))
-        put("m³", scale("ft³", 35.31466672148859, 1))
+        listOf("m³", "m3").forEach { put(it, scale("ft³", 35.31466672148859, 1)) }
         put("kg", scale("lb", 1.0 / 0.45359237, 1))
         put("g", scale("oz", 1.0 / 28.349523125, 1))
     }
@@ -84,15 +85,16 @@ object UnitConversion {
 
     /**
      * [value] in [unit] as shown under [system]: the converted value and its unit string. [system]
-     * should be resolved; [UnitSystem.AUTO] and [UnitSystem.METRIC] return the input unchanged.
+     * should be resolved. [UnitSystem.AUTO] and [UnitSystem.METRIC] keep the value and show the
+     * [UcumDisplay] symbol of [unit].
      */
     fun convert(value: Double, unit: String, system: UnitSystem): Pair<Double, String> {
-        val r = rule(unit, system) ?: return value to unit
+        val r = rule(unit, system) ?: return value to UcumDisplay.of(unit)
         return r.forward(value) to r.to
     }
 
-    /** The unit string shown under [system]. */
-    fun displayUnit(unit: String, system: UnitSystem): String = rule(unit, system)?.to ?: unit
+    /** The unit string shown under [system], the converted unit or else the [UcumDisplay] symbol. */
+    fun displayUnit(unit: String, system: UnitSystem): String = rule(unit, system)?.to ?: UcumDisplay.of(unit)
 
     /** Decimals to show for a converted value, or null when [unit] does not convert (keep the caller's). */
     fun displayDecimals(unit: String, system: UnitSystem): Int? = rule(unit, system)?.decimals

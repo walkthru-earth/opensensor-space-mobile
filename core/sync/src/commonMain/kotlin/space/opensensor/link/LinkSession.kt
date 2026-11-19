@@ -24,6 +24,7 @@ import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.FrameCodec
 import space.opensensor.data.protocol.FrameDecodeException
 import space.opensensor.data.protocol.FrameType
+import space.opensensor.data.protocol.LanProtocol
 import space.opensensor.data.protocol.Opcode
 import space.opensensor.data.protocol.ProtoGate
 import space.opensensor.data.protocol.Request
@@ -65,8 +66,11 @@ data class Heartbeat(val pingAfterIdle: Duration, val deadline: Duration) {
     }
 
     companion object {
-        /** Ping well inside the firmware's 300 s LAN idle limit. */
-        val LAN = Heartbeat(pingAfterIdle = 120.seconds, deadline = 180.seconds)
+        /**
+         * Ping after the contract's 120 s keepalive, well inside the firmware's 300 s LAN idle
+         * limit. Both phones read these through `LanHandshake`.
+         */
+        val LAN = Heartbeat(pingAfterIdle = LanProtocol.KEEPALIVE_AFTER_IDLE_MS.milliseconds, deadline = 180.seconds)
     }
 }
 
@@ -431,7 +435,7 @@ class LinkSession(
         try {
             while (true) {
                 val active = drain
-                val left = active?.let { it.bound.maxTime - it.started.elapsedNow() }
+                val left = active?.clock?.let { active.bound.maxTime - it.elapsedNow() }
                 val event = select<Event?> {
                     events.onReceiveCatching { it.getOrNull() }
                     onTimeoutOrNever(left) { Event.DrainTimeout }
@@ -446,6 +450,7 @@ class LinkSession(
                     }
                     // A late failure of an earlier drain must not end the current one.
                     is Event.OwedWriteFailed -> if (drain === event.drain) endDrain(event.drain)
+                    is Event.OwedWritten -> if (drain === event.drain) event.drain.clock = timeSource.markNow()
                     Event.ByeSeen -> refuseWaiting()
                     is Event.AbortFailed -> if (drain === event.drain) {
                         event.drain.abortPending = false
@@ -475,7 +480,7 @@ class LinkSession(
             FrameCodec.decode(raw)
         } catch (_: FrameDecodeException) {
             queue(-size)
-            if (type in KNOWN_TYPES) {
+            if (FrameType.isKnown(type)) {
                 terminate(DisconnectCause.FramingViolation("bad ${FrameType.name(type)} frame"))
             } else {
                 log.event(LinkEvent.UnknownDropped(type))
@@ -581,15 +586,19 @@ class LinkSession(
     /**
      * An owed `CLOSE` runs as a drain with no caller. Its `CLOSED`, or an `ERROR` for `CLOSE`,
      * ends it. A write that fails ends it at once, since the device then never saw the request and
-     * closes the handle on the next `OPEN` or on disconnect.
+     * closes the handle on the next `OPEN` or on disconnect. The write is bounded by its deadline,
+     * and the wait for `CLOSED` starts once the write is done, so it gets at least the reply wait
+     * of the transport ([RequestSpec.LAN_REPLY_WAIT] on LAN).
      */
     private fun sendOwedClose(handle: Int) {
-        val spec = RequestSpec.of(Request.Close(handle))
-        val d = Drain(spec.op, spec.drainBound, timeSource.markNow(), abortPending = false, replied = false)
+        val spec = RequestSpec.of(Request.Close(handle), kind)
+        val bound = spec.drainBound.copy(maxTime = maxOf(spec.drainBound.maxTime, spec.firstFrameTimeout))
+        val d = Drain(spec.op, bound, timeSource.markNow(), abortPending = false, replied = false, clock = null)
         drain = d
         own.launch {
             try {
                 writeLock.withLock { driver.send(spec.body, spec.writeDeadline) }
+                events.trySend(Event.OwedWritten(d))
                 log.event(LinkEvent.CloseSent(handle))
             } catch (e: CancellationException) {
                 throw e
@@ -691,6 +700,8 @@ class LinkSession(
         val started: ComparableTimeMark,
         var abortPending: Boolean,
         val replied: Boolean,
+        /** Where [bound]'s time limit counts from. Null until an owed `CLOSE` is written. */
+        var clock: ComparableTimeMark? = started,
     ) {
         var frames = 0
         var bytes = 0L
@@ -703,6 +714,7 @@ class LinkSession(
         class Release(val owner: Owner) : Event
         class OweClose(val handle: Int) : Event
         class OwedWriteFailed(val drain: Drain) : Event
+        class OwedWritten(val drain: Drain) : Event
         data object ByeSeen : Event
         class AbortFailed(val drain: Drain) : Event
         data object DrainTimeout : Event
@@ -714,13 +726,5 @@ class LinkSession(
         const val BLE_BUDGET: Long = 256L * 1024
 
         fun defaultBudget(kind: TransportKind): Long = if (kind == TransportKind.BLE) BLE_BUDGET else LAN_BUDGET
-
-        private val KNOWN_TYPES = setOf(
-            FrameType.FILE, FrameType.LIST_END, FrameType.OPENED, FrameType.CHUNK, FrameType.READ_END,
-            FrameType.CLOSED, FrameType.TIME_SET, FrameType.FLUSHED, FrameType.CONFIG, FrameType.WIFI_AP,
-            FrameType.WIFI_SCAN_END, FrameType.REBOOTING, FrameType.LOG, FrameType.LOG_END, FrameType.TOKEN,
-            FrameType.HELLO, FrameType.STATUS, FrameType.LIVE, FrameType.CONFIG_CHUNK, FrameType.BYE,
-            FrameType.DIAG, FrameType.ABORTED, FrameType.LIST_SINCE_END, FrameType.DESCRIPTOR_CHUNK, FrameType.ERROR,
-        )
     }
 }

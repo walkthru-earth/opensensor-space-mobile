@@ -1,13 +1,13 @@
 # Data model, Room, DataStore, files on disk, backup
 
 **Scope:** what the phone stores, where, and how it moves between phones. Not how it is computed (see history-pipeline) or fetched (see sync-engine).
-**Code:** `core/database` commonMain `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `ThingEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`, `ListCursor.kt`; `data/local/di/DatabaseModule.kt` (`opensensor.db`); `core/database/schemas/space.opensensor.data.local.database.AppDatabase/1.json`, `2.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
+**Code:** `core/database` commonMain `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `ThingEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`, `ListCursor.kt`, `ThingSource.kt`, `ThingPlace.kt`, `PrunedFile.kt`; `data/local/di/DatabaseModule.kt` (`opensensor.db`); `core/database/schemas/space.opensensor.data.local.database.AppDatabase/` (one JSON per version); `core/sync` commonMain `data/DeviceContinuityPolicy.kt`; `core/settings` `SettingsKeys.kt`, `SettingsRepository.kt`; `data/settings/AppSettings.kt`, `DiscoverStore.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
 **Related:** [sync-engine.md](sync-engine.md) (who writes `archived_file`), [history-pipeline.md](history-pipeline.md) (who writes the tiers), [transports.md](transports.md#lan-token-lifecycle) (the token).
 
 ## Finding and exporting the mobile archive
 
 Android raw Parquet files live in app-private
-`/data/user/0/space.opensensor/files/archive/<thing>/<relative Hive path>`.
+`/data/user/0/space.opensensor.app/files/archive/<thing>/<relative Hive path>`.
 Ordinary file managers cannot browse this directory. Open the sensor's **Files** screen,
 then **⋮ → Save zip to…**, **Share archive as zip**, or **Share N Parquet files**.
 Derived daily exports are separate from the original sensor files.
@@ -20,9 +20,9 @@ thing/Hive paths. Partial downloads are not exported. The original archive stays
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
-## Room schema v7 (`opensensor.db`)
+## Room schema (`opensensor.db`)
 
-One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
+One Room KMP schema in `:core:database` serves both phones, at the version `AppDatabase` declares, on the bundled SQLite driver. Android
 keeps the file in its app database directory. iOS keeps it at
 `Application Support/database/opensensor.db`, excluded from backup, and uses only `archived_file`,
 `pruned_file`, `list_cursor`, `thing_source` and `thing_place`. Exported schemas live in `core/database/schemas/`.
@@ -58,7 +58,7 @@ erDiagram
     long crc32
     long syncedAtEpochMs
     string sourceDevice
-    long indexedAtEpochMs "v4 index →"
+    long indexedAtEpochMs "index columns →"
     string indexError
     long rows
     int rowGroups
@@ -71,7 +71,7 @@ erDiagram
     long lastMonoUs
     long firstSeq
     long lastSeq
-    long estFirstUtcNs "v6 time estimate →"
+    long estFirstUtcNs "time estimate →"
     long estLastUtcNs
     string estAnchorFile
     string dictionarySha256 "footer digests, History resolves the template from them"
@@ -96,7 +96,7 @@ erDiagram
     long id PK "UNIQUE (thing,epochDay)"
     string thing
     long epochDay
-    string sourceSignature "SHA-256 of derive-v2 + sorted name:crc32 + anchors"
+    string sourceSignature "SHA-256 of derive-v<DERIVE_VERSION> + sorted name:crc32 + anchors"
     int sourceFiles
     int rows
     long builtAtEpochMs
@@ -247,7 +247,7 @@ the device and settings, and returns no credential until a later bonded BLE sess
 transient `KeyStoreException` or `UnrecoverableKeyException` propagates and keeps the credential.
 Unrelated crypto, programming and database failures also propagate.
 
-### Write semantics that bit us
+### Write semantics
 
 - **`@Upsert` on an entity with an auto id and a unique index updates nothing** (it runs `UPDATE … WHERE id = ?` with id 0). `archived_file` and `derived_day` use `@Insert(onConflict = REPLACE)`, the id carries no meaning. `known_device` (address is the PK) may use `@Upsert`.
 - **`openSession` never writes a `KnownDevice` snapshot.** `connect()` already inserts a placeholder row with `insertIfAbsent` before the link opens. After `info`, `openSession` calls `insertIfAbsent` again with default settings, which adds a row only if it is still missing and returns -1 otherwise. An existing row gets `recordConnection`, which writes identity and timestamps only, so Auto-sync, the companion association and the LAN credential keep their latest value. Identity checks run before that write, and a thing change clears the old token and port first with `setLanToken`. Clearing an unusable credential, or a token the LAN refused or rotated, uses `clearLanTokenIfStored`, one conditional update on the ciphertext that failed.
@@ -268,8 +268,18 @@ through `AppSettings`. `SettingsRepositoryTest` holds the golden key list.
 | `advanced_mode` | boolean (legacy) | unset `detail_level` + `advanced_mode = true` → `DEVELOPER`. Still written with the level |
 | `show_public_sensors` | boolean | Discover network switch, missing = on |
 | `unit_system` | string (`AUTO` / `METRIC` / `IMPERIAL`) | display units, missing = `AUTO`. Display only, Room, Parquet and exports stay SI |
+| `derived_quota_bytes` | long | `RetentionPolicy.derivedQuotaBytes`, missing or negative = the default |
+| `map_cache_bytes` | long | `RetentionPolicy.mapCacheBytes`, missing or negative = the default |
+| `discover_source` | string (`DiscoverSource` name) | where Discover reads from, missing or unknown = `SAMPLE` |
+| `nickname:<id>` | string | one phone only nickname per sensor, keyed by its lowercase id. Never sent to the sensor |
 
-An older `clock_sync_mode` key may remain in the file. Nothing reads it.
+`SettingsKeys` is the storage contract and names every key. `SettingsRepository.forgetSensor` removes
+what the file holds for a sensor when the owner forgets it.
+
+Android keeps a second Preferences DataStore, `datastore/discover.preferences_pb` (`DiscoverStore`).
+It holds what the Discover map remembers, the last camera (`camera_lat`, `camera_lng`,
+`camera_zoom`), the chosen `property` and `window`, and `first_run_done`. It never holds a location
+fix. iOS keeps the same values in `NSUserDefaults` under `discover.*` keys.
 
 ## Files under `filesDir`
 
@@ -278,7 +288,7 @@ archive/<thing>/<hive path>.parquet              verified device files, byte-exa
 archive-partial/<thing>/<name>.partial(.meta)    in-progress downloads                           (sync-engine)
 ```
 
-Derived day files live in the OS cache directory since #61, Android `cacheDir/derived/v1/` and
+Derived day files live in the OS cache directory, Android `cacheDir/derived/v1/` and
 iOS `Library/Caches/derived/v1/`, so the OS may drop them and backups skip them.
 
 ```
@@ -328,9 +338,14 @@ once at process start. No screen edits the quotas yet. `QuotaEnforcer` deletes o
 oldest written first, until the total is under the cap, and keeps the manifests. A missing day file
 with a matching manifest is rebuilt when something reads it. On Android the daily export calls
 `HistoryDeriver.ensureDailyFiles()` first, and lists and zips the day files inside
-`DerivedQuota.holding`, so no eviction runs until the zip is staged. When the last hold ends, after
+`DerivedQuota.holding`, so no eviction runs until the zip is staged. iOS does the same through
+`IosArchive.dailyFiles`. It removes the manifest of each evicted day (`forgetEvictedDays`), so one
+derive pass builds those days again, and lists `derived/v1` with the iOS `directoryEntries` (#301).
+On iOS a day whose sources changed loses its old file and manifest before it builds again. A day
+that fails to build is then not listed, and the other days of that thing still build.
+When the last hold ends, after
 success, failure or cancellation, the quota is applied at once, and a Clear History cache tapped during
-the hold runs then. iOS has no derived reader yet. The quota also runs after a derive pass that rebuilt
+the hold runs then. The quota also runs after a derive pass that rebuilt
 a day and in the janitor. The feed `BlockCache` (#94) reads its quota at every write from
 `blockCacheQuotaWithin`, the smaller of its cap and the OS cache allowance left after the map cache
 (Android `getCacheQuotaBytes`). The quota is 0 while the volume has under 256 MiB free for
@@ -361,7 +376,7 @@ so does Download again.
 
 ## Backup
 
-`res/xml/data_extraction_rules.xml`, 2026-09-17.
+`res/xml/data_extraction_rules.xml`.
 
 ```mermaid
 flowchart LR
@@ -379,8 +394,8 @@ The archive is reproducible and commonly exceeds Auto Backup's 25 MB quota, so i
 A user-initiated device-to-device transfer still carries the database and archive; because Android
 Keystore keys do not transfer, the encrypted token may be unreadable on the destination and must be
 fetched again over Bluetooth. The LAN protocol remains plaintext TCP: at-rest encryption and backup
-exclusion do not encrypt traffic on the local network. `fullBackupContent`/`backup_rules.xml` was
-removed, Android 12+ (our minSdk) reads only `dataExtractionRules`.
+exclusion do not encrypt traffic on the local network. The manifest sets only `dataExtractionRules`,
+which is what Android 12 and newer read.
 
 ## Uses → affects
 

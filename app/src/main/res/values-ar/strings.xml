@@ -166,6 +166,7 @@
     <string name="config_problem_psk_long">كلمة المرور طويلة جدًا. الحد الأقصى 63 بايت.</string>
     <string name="config_problem_line_break">لا يُسمح بفواصل الأسطر أو أحرف التحكم هنا.</string>
     <string name="config_problem_site">إحدى قيم بيانات الموقع غير صالحة. راجع الحقول.</string>
+    <string name="config_problem_field">هذه القيمة غير مسموح بها هنا.</string>
     <string name="msg_bonds_cleared">نسي المستشعر كل الهواتف المقترنة. ستُقرن من جديد عند اتصال Bluetooth التالي.</string>
     <string name="msg_saved_after_reboot">%1$s. تُطبّق تغييرات Bluetooth بعد إعادة التشغيل.</string>
     <string name="msg_config_rejected_pairing">رفض المستشعر إعدادات الاقتران. لم يتغيّر شيء.</string>

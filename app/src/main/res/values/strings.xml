@@ -153,6 +153,7 @@
     <string name="config_problem_psk_long">The password is too long. The limit is 63 bytes.</string>
     <string name="config_problem_line_break">Line breaks and control characters are not allowed here.</string>
     <string name="config_problem_site">A site value is not valid. Check the site fields.</string>
+    <string name="config_problem_field">This value is not allowed here.</string>
     <string name="msg_bonds_cleared">The sensor forgot all paired phones. You pair again on the next Bluetooth connection.</string>
     <string name="msg_saved_after_reboot">%1$s. Bluetooth changes apply after a restart.</string>
     <string name="msg_config_rejected_pairing">The sensor refused the pairing settings. Nothing was changed.</string>

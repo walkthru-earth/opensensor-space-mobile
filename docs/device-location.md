@@ -1,8 +1,18 @@
 # Private device location
 
+**Scope:** how the owner sets a Thing's H3 area, mobility and site, what the phone keeps and what
+it sends.
+**Code:** `feature/device` (`DeviceLocationForm`, `DeviceSiteForm`, `DeviceConfigController`),
+`ui/map` (`CellPicker`, `PlaceSearchField`), `core/protocol` (`DeviceConfig.kt`, `ConfigField.kt`),
+`core/model` (`H3Cell`, `ThingSite`, `SiteRules`), `core/sync` (`ThingSetupPolicy`, `ThingPlaces`),
+`core/history` (`CellTrackReader`).
+**Related:** [protocol-quickref.md](protocol-quickref.md#private-device-location),
+[devices-and-discovery.md](devices-and-discovery.md), [screens.md](screens.md),
+[store-compliance.md](store-compliance.md).
+
 Device settings can provision the monitoring thing's H3 area over the existing
 authenticated BLE or LAN session. This is available in shared Android/iOS UI on
-firmware that supports GET_CONFIG page 1. Legacy firmware shows unsupported.
+firmware that supports GET_CONFIG page 1. Firmware without that page shows unsupported.
 
 1. Open Choose area. A full screen map shows the H3 resolution 8 cells around its middle, each
    about 0.74 km². Below zoom 12 the cells are too small to tap and the map asks to zoom in. It
@@ -156,7 +166,8 @@ because it clears the key.
   is absent (no receiver) and when it is empty (no fresh fix). `gnssCellText` keeps that difference.
   `thing.mobility` (`fixed` or `moving`) has a `ConfigFields` row and
   `ConfigPatch.Builder.thingMobility`, sent only by the Fixed or Moving tap. `thing.setup` reads as
-  `ThingConfig.needsSetup`. `Request.GetConfigPage` asks for page 5 or 6, `OwnerConfig` and
+  `ThingConfig.needsSetup`. `thing.setup_ack` and `thing.setup_v` parse into `ThingConfig` and read
+  through `SetupAck` (protocol quickref). `Request.GetConfigPage` asks for page 5 or 6, `OwnerConfig` and
   `ThingConfig.deploymentId` parse them, and `ConfigPatch.Builder.site` checks each site value.
   `ConfigFields.SITE_KEYS` are the site keys and `ConfigGroup.SITE` names their card.
 - `core/model` `ThingSite`, `SiteField` and `SiteRules` hold the site values, their caps and the
@@ -183,7 +194,7 @@ because it clears the key.
   picker full screen. `DeviceSiteForm` is the site part of that card and the setup Site page.
   `DeviceConfigController` keeps the site draft (`DeviceSiteState`) beside the location draft.
 - Its Android and iOS source sets own the temporary OS fix, cancellation and H3
-  conversion. Android repository and iOS bridge retain their existing command guards.
+  conversion. Android `DeviceFacade` and the iOS bridge keep their command guards.
 - `DeviceCapabilities` reads LIVE through the thing of the `info.desc` and `info.dict` digests,
   by `TemplateIndex.resolve`, from the templates boards served and then the bundled ones in
   `core/model/bundled`. Only the current digest of each board is bundled. An older or unknown

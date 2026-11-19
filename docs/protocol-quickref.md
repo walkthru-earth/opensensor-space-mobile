@@ -3,7 +3,7 @@
 **Scope:** constants as implemented in `:core:protocol`, for lookup. The **owner** is
 `../opensensor-space-firmware/docs/shared/ble-sync-protocol.md`; do not change a layout, opcode, UUID, JSON key
 or error code here before changing it there (and the firmware).
-**Code:** `core/protocol/…/data/protocol/Frames.kt`, `DeviceUuids.kt`, `LanFraming.kt`, `DeviceConfig.kt`, `JsonModels.kt`, `ParquetVerify.kt`.
+**Code:** `core/protocol/…/data/protocol/Frames.kt`, `DeviceGatt.kt`, `LanProtocol.kt`, `DeviceConfig.kt`, `ConfigField.kt`, `JsonModels.kt`, `ParquetVerify.kt`. `DeviceUuids` and `LanFraming` in `jvmMain` wrap the shared constants for Android.
 **Related:** [transports.md](transports.md) (pipes), [sync-engine.md](sync-engine.md) (how the file opcodes are driven).
 
 ## Request → response shape
@@ -18,7 +18,7 @@ sequenceDiagram
   Note over P,D: ERROR(op, code) may replace any response, op echoes the request opcode
 ```
 
-## GATT (`DeviceUuids`)
+## GATT (`DeviceGatt`)
 
 | Attribute | UUID (`255f595e-XXXX-47ed-8e0d-59994199b680`) | Role |
 | --- | --- | --- |
@@ -29,22 +29,34 @@ sequenceDiagram
 | CONTROL | `0005` | write: request |
 | RESPONSE | `0006` | notify: one frame per notification |
 
-`MTU_REQUEST = 517`, `MTU_MINIMUM = 247`, `PROTOCOL_VERSION = 2`. BLE `payload_max = min(MTU − 3, 512)`. Below MTU 483 a snapshot can exceed one notification and is skipped, so the app long reads STATUS and LIVE every 10 s.
+`MTU_REQUEST = 517`, `MTU_MINIMUM = 247`, `DeviceGatt.PROTOCOL_VERSION = 3`, and the app refuses a device below it (`ProtocolGate`). BLE `payload_max = min(MTU − 3, 512)`. Below MTU 483 a snapshot can exceed one notification and is skipped, so the app long reads STATUS and LIVE every 10 s.
 
-**Advertising service data** (`Advertisement`, protocol 2.1 / firmware ≥ `-v6.3`), under SERVICE in the ADV PDU; the name and UUID list are in the scan response (the `ScanRecord` merges both): `ver` u8 = 1 · `flags` u8 (bit 0 `no_utc`, 1 `new_files`, 2 `sd`, 3 `lan`, 4 `fail`, 5 `clk_restored`, 6 `setup` from CoreS3 `v6.24` and Waveshare `v2.18`, 0 on older firmware, read by `Advertisement.needsSetup`) · `fin` u32 LE · `boot16` u16 LE (last four hex digits of `info.boot`) · 2 reserved. `Advertisement.decode(scanRecord.getServiceData(SERVICE))`; `flagFilter(flag)` gives the `data/mask` pair for a hardware `ScanFilter`. Absent on older firmware → `null`.
+**Advertising service data** (`Advertisement`), under SERVICE in the ADV PDU; the name and UUID list are in the scan response (the `ScanRecord` merges both): `ver` u8 = 1 · `flags` u8 (bit 0 `no_utc`, 1 `new_files`, 2 `sd`, 3 `lan`, 4 `fail`, 5 `clk_restored`, 6 `setup` from CoreS3 `v6.24` and Waveshare `v2.18`, 0 on older firmware, read by `Advertisement.needsSetup`) · `fin` u32 LE · `boot16` u16 LE (last four hex digits of `info.boot`) · 2 reserved. `Advertisement.decode(scanRecord.getServiceData(SERVICE))`; `flagFilter(flag)` gives the `data/mask` pair for a hardware `ScanFilter`. Absent on older firmware → `null`.
 
 ## Opcodes (`Opcode`)
 
-| v1 | | v2 | |
-| --- | --- | --- | --- |
-| `0x01` LIST | → `FILE`× … `LIST_END` | `0x08` GET_CONFIG | → `CONFIG` |
-| `0x02` OPEN | → `OPENED(handle,size,crc32,name)` | `0x09` SET_CONFIG | → `CONFIG` (lines `key=value\n`) |
-| `0x03` READ | → `CHUNK(handle,offset,data)`× … `READ_END(next_offset)` | `0x0A` WIFI_SCAN | → `WIFI_AP`× … `WIFI_SCAN_END(status)` |
-| `0x04` CLOSE | → `CLOSED` | `0x0B` REBOOT | → `REBOOTING(delay_ms)` |
-| `0x05` SET_TIME | → `TIME_SET` | `0x0C` LOG_TAIL | → `LOG`× … `LOG_END(returned)` |
-| `0x06` FLUSH | → `FLUSHED` | `0x0D` GET_TOKEN | → `TOKEN` (BLE only; `ERROR` 13 on LAN) |
-| `0x07` STATUS | no response frame; the `status` push is the ack | `0x11` GET_DESCRIPTOR | → `DESCRIPTOR_CHUNK(total,offset,bytes)` (`ERROR` 17 when none) |
-| | | `0x10` LIST_SINCE(cursor 32 B) | → `FILE`× … `LIST_SINCE_END` (`ERROR` 11 on older firmware, `ERROR` 1 for a cursor it cannot read) |
+| Opcode | Request | Answer |
+| --- | --- | --- |
+| `0x01` | LIST | `FILE` × n, then `LIST_END(count u32, partials, sd_kib, sd_used_kib)` |
+| `0x02` | OPEN(name) | `OPENED(handle, size, crc32, name)` |
+| `0x03` | READ(handle, offset, length) | `CHUNK(handle, offset, data)` × n, then `READ_END(next_offset, status)` |
+| `0x04` | CLOSE(handle) | `CLOSED` |
+| `0x05` | SET_TIME(epoch_s, optional subsecond_us) | `TIME_SET` |
+| `0x06` | FLUSH | `FLUSHED(rows, fin)` |
+| `0x07` | STATUS | no response frame, the `status` push is the ack |
+| `0x08` | GET_CONFIG(optional page byte) | `CONFIG`, or `CONFIG_CHUNK` × n on BLE |
+| `0x09` | SET_CONFIG(lines `key=value\n`) | `CONFIG` |
+| `0x0A` | WIFI_SCAN | `WIFI_AP` × n, then `WIFI_SCAN_END(count, status)` |
+| `0x0B` | REBOOT | `REBOOTING(delay_ms)` |
+| `0x0C` | LOG_TAIL(max_bytes u16) | `LOG` × n, then `LOG_END(total, returned)` |
+| `0x0D` | GET_TOKEN | `TOKEN` (BLE only, `ERROR` 13 on LAN) |
+| `0x0E` | GET_DIAG | `DIAG(boot_seq, counts, events)`, or `ERROR` 7 on a link narrower than 38 bytes |
+| `0x0F` | ABORT | `ABORTED(op)`, the opcode it stopped, 0 when idle |
+| `0x10` | LIST_SINCE(cursor 32 B) | `FILE` × n, then `LIST_SINCE_END` (`ERROR` 11 on older firmware, `ERROR` 1 for a cursor it cannot read) |
+| `0x11` | GET_DESCRIPTOR(offset u32, length u16) | `DESCRIPTOR_CHUNK(total, offset, bytes)` (`ERROR` 17 when none) |
+
+`DeviceSession.logTail` asks for 65535 bytes by default, the most `max_bytes` carries, and the
+device clips the answer to its log ring.
 
 Opcode `0x10` and frame type `0x10` (FILE) are separate number spaces. `ListCursor` is opaque. The
 phone reads only its first 4 bytes, the `mount_epoch` u32 LE, and sends the rest back as received.
@@ -54,26 +66,58 @@ next cursor. See [incremental listing](sync-engine.md#incremental-listing) for w
 
 ## Frame types (`FrameType`)
 
-| v1 | v2 | LAN-only |
+| Type | Frame | Link |
 | --- | --- | --- |
-| `0x10` FILE · `0x11` LIST_END · `0x20` OPENED · `0x21` CHUNK · `0x22` READ_END · `0x23` CLOSED · `0x30` TIME_SET · `0x31` FLUSHED | `0x40` CONFIG · `0x41` WIFI_AP · `0x42` WIFI_SCAN_END · `0x43` REBOOTING · `0x44` LOG · `0x45` LOG_END · `0x46` TOKEN · `0x4A` CONFIG_CHUNK (BLE when CONFIG exceeds one notification) · `0x4E` LIST_SINCE_END · `0x4F` DESCRIPTOR_CHUNK | `0x47` HELLO · `0x48` STATUS push · `0x49` LIVE push |
+| `0x10` | FILE | both |
+| `0x11` | LIST_END | both |
+| `0x20` | OPENED | both |
+| `0x21` | CHUNK | both |
+| `0x22` | READ_END | both |
+| `0x23` | CLOSED | both |
+| `0x30` | TIME_SET | both |
+| `0x31` | FLUSHED | both |
+| `0x40` | CONFIG | both |
+| `0x41` | WIFI_AP | both |
+| `0x42` | WIFI_SCAN_END | both |
+| `0x43` | REBOOTING | both |
+| `0x44` | LOG | both |
+| `0x45` | LOG_END | both |
+| `0x46` | TOKEN | BLE |
+| `0x47` | HELLO | LAN, the handshake answer |
+| `0x48` | STATUS push | LAN |
+| `0x49` | LIVE push | LAN |
+| `0x4A` | CONFIG_CHUNK | BLE, when CONFIG exceeds one notification |
+| `0x4B` | BYE(reason, generation, err, queued, uptime_s) | LAN, sent once before the device closes the socket |
+| `0x4C` | DIAG | both |
+| `0x4D` | ABORTED | both |
+| `0x4E` | LIST_SINCE_END | both |
+| `0x4F` | DESCRIPTOR_CHUNK | both |
+| `0x7F` | ERROR(op, code, detail) | both |
+
+A `BYE` can be lost, so a socket that ends without one has an unknown reason. `DisconnectReason`
+names the reason codes that `BYE` and `DIAG` carry.
 
 ## Error codes (`ProtocolError`)
 
 | Code | Meaning | App reaction |
 | --- | --- | --- |
 | 1 malformed request · 2 invalid name · 3 not a finalized Parquet · 4 open failed · 5 bad handle · 6 range outside file · 8 storage unavailable · 9 invalid epoch (2020–2100) · 10 nothing to flush · 11 unknown opcode | | outcome for that request (`FileOutcome.DeviceError` for files), never a broken pipe |
-| 7 | busy | LAN connect: fall back to BLE |
+| 7 | busy. The firmware sends it for a full command queue, a transfer in progress, another LIST running (`list`), a LIST ended by a storage remount (`remount`), a LIST or READ stopped early (`preempted`), a link too narrow for the answer (`mtu`) and an OTA upload owned by another session (`ota-owner`) | `DeviceBusyException`, retried later. At the LAN handshake the phone falls back to BLE |
 | 12 | invalid config | names the key; nothing changed on the device |
 | 13 | not allowed on this link | `GET_TOKEN` over LAN, force BLE |
 | 14 | authentication failed | LAN handshake: stored token is dead → clear + refetch over BLE (`LanTokenPolicy`) |
 | 15 | Wi-Fi unavailable | `WIFI_SCAN_END.status` → typed "Wi-Fi unavailable" |
+| 16 | aborted | the answer to a request that `ABORT` stopped (`TerminalRules.isAbortError`) |
 | 17 | no descriptor | `GET_DESCRIPTOR`: the board serves no template, keep the bundled one (`NoDescriptorException`) |
 
 `ERROR.op` is "mine" only when it equals the request opcode (firmware echoes the first byte);
 anything else is a `ProtocolViolationException`.
 
-## LAN framing (`LanFraming`)
+The firmware contract also defines LAN OTA, opcodes `0x12` to `0x15`, frame `0x50 OTA_STATE` and
+error 18. The app implements none of them. It also does not read the STATUS keys `qf` and `qb` or
+the CONFIG `ntp.*` keys.
+
+## LAN framing (`LanProtocol`)
 
 | Constant | Value |
 | --- | --- |
@@ -83,8 +127,9 @@ anything else is a `ProtocolViolationException`.
 | Frame | `len` u16 LE + frame; `PAYLOAD_MAX` 1024 device→phone, `REQUEST_MAX` 512 phone→device |
 | Idle | `DEVICE_IDLE_LIMIT_MS` 300 s; phone sends `STATUS` after `KEEPALIVE_AFTER_IDLE_MS` 120 s |
 
-`HELLO.payload_max` is trusted if ≥ 64 (`TcpLinkDriver.MIN_PAYLOAD_MAX`); `mtu` reports
-`payload_max + 3` so the same `MTU − 3` arithmetic yields it.
+`HELLO.payload_max` is trusted from 64 to 1024 (`LanHandshake.MIN_PAYLOAD_MAX` and `PAYLOAD_MAX`),
+and both phones refuse a HELLO outside that range. `mtu` reports `payload_max + 3` so the same
+`MTU − 3` arithmetic yields it.
 
 ## Board template (`DescriptorDownload`, `BoardDescriptors`)
 
@@ -116,9 +161,23 @@ serves. No `desc` means the board serves none, and the phone never asks.
 
 ## CONFIG keys (`DeviceConfig`)
 
-Every key the app writes is a row of `ConfigFields` (`core/protocol`) with its secret flag and
-confirm gate. `SECRET_KEYS` and the Device settings confirmations come from that table, and a
-schema may only make a known key stricter.
+Every app key is a row of `ConfigFields` (`core/protocol`) with its secret flag and confirm gate.
+`SECRET_KEYS` and the Device settings confirmations come from that table. A board template declares
+its own keys in `firmware.config_keys` ([decision 0003](../../opensensor-space-firmware/docs/shared/decisions/0003-metadata-driven-apps.md)).
+`ConfigFields.declared` reads one entry (`boolean`, `integer` with a two number range, `enum`, or
+`text` with an optional byte range up to 64, and `applies` of `immediately`, `next sample`, `next boot`
+or `action`). Any other type, decimal among them, does not parse. `ConfigFields.merge` then applies the
+floor.
+
+- A secret, or a key in `SECRET_KEYS`, is dropped. Secrets are never declarable.
+- An app key keeps the app's type, timing and protections, and only gains a stricter confirmation
+  or `disrupts`.
+- A board key is kept only outside the reserved prefixes `ble.`, `wifi.`, `lan.`, `location.`,
+  `thing.`, `owner.` and `sensor.`, with a dotted lowercase name of at most 48 bytes and four parts, read
+  back from page 7. A board `action` always confirms, disrupts and applies once.
+
+`ConfigPatch.Builder.field` sends one merged board key. It refuses a secret, reserved or unmerged
+field and a value outside its type (`ConfigProblem.FIELD_VALUE`, the message never holds the value).
 
 `ble.pair` (random / fixed / none) · `ble.pin` (six ASCII digits, **write-only**. `CONFIG.ble`
 reports only `pin_set` and `pin_default`) · `ble.clear_bonds=1` · `wifi.on` · `wifi.ssid` (1–32 bytes) · `wifi.psk` (empty or 8–63 bytes,
@@ -147,8 +206,10 @@ Feature gates use `info.proto` / `info.fw`, never guesses. The one exception is 
 `status.ls` (`DeviceStatus.listSinceEpoch`, the card's FAT serial, 0 with no card, absent on older
 firmware) as the firmware contract says.
 
-`LiveSample` parses LIVE as a map by key name, in any order. `seq`, `mono` and `utc` are typed
-header fields, and `utc` is nanoseconds. Every other key is a number or null. Floats such as `1.00`
+`LiveSample` parses LIVE as a map by key name, in any order. `seq` and `mono` are typed
+header fields. Every other key is a number or null, `utc` included. The template `live_keys` map
+`utc` to the column `event_time_utc_us`, microseconds since the epoch, and `LiveReading.utc` reads
+it through that column. A null or fractional `utc` has no instant. Floats such as `1.00`
 and `1.0` parse as numbers, and the app keeps its own display rounding. The firmware sends every key
 the template declares in `live_keys`. A null key means no reading now, so the card shows a dash. An
 absent key means the board has no such field. The app shows cards by the template declaration, so a
@@ -163,15 +224,19 @@ from the column and its label from the app profile. The thing joins the bundled 
 under `core/model/bundled/templates/` with the app profile under `core/model/bundled/profiles/`
 (`BundledCatalog.thing`). The templates are opensensor-space-firmware `docs/shared/templates` copied byte for
 byte, `<board>/<dict>.json` and `index.json`, and their `live_keys` list the keys in board LIVE order.
-Only the current digest of each board is bundled, at the firmware version the bundled templates name. CoreS3 (`3b4d8500…`)
-sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
+Only the current digest of each board is bundled, copied from opensensor-space-firmware `a5545b4`. CoreS3 (`f4f81218…`)
+sends `imu_t`, the IMU die temperature, shown as board temperature, and `lst`, the light sensor state. Its profile hides `t` and `rh`
 because they are always null on CoreS3. Waveshare (`a8605aaf…`) sends `t`, ambient air
-temperature, `rh` and `bstate`, the battery health code. A new firmware digest is a copy of the
+temperature, `rh` and `bstate`, the battery health code. CrowPanel e-paper SEN63C (`e7279c4e…`) sends
+`sen`, `m1`, `m25`, `m4`, `m10`, `t`, `rh` and `co2`, but no profile is bundled for it, so it has no
+LIVE view yet. A new firmware digest is a copy of the
 published templates, a profile file swap and a fixture refresh, with no code change. Any other digest, older ones included,
 has no LIVE view, and Today says so only after `INFO` arrived. A board whose template it served
 but whose dict has no reviewed profile has no LIVE view either, because the derived profile only
 names raw columns (`DeviceCapabilities.from`). History still reads its files through the served
-template. `LiveKeyFixturesTest`
+template. The owner decided on 2026-11-17 that LIVE will show for any template whose SHA-256 is
+verified. That is planned and not built, see
+`docs/superpowers/specs/2026-11-17-metadata-driven-app/`. `LiveKeyFixturesTest`
 holds every digest from opensensor-space-firmware `tools/fixtures/live_keys/`, checks the bundled template live keys
 against the current ones and lists the retired ones, and the weekly `live-key-drift` workflow fails
 when opensensor-space-firmware main has a digest missing there. LIVE is a snapshot, not archive data.
@@ -182,14 +247,28 @@ new session resume the run, and verified files already on the phone are never fe
 
 ## Private device location
 
-`GET_CONFIG` keeps its legacy empty body. Page byte `1` requests the `location`
+`GET_CONFIG` with an empty body returns the `ble`, `wifi`, `lan` and `sensor` snapshot. Page byte `1` requests the `location`
 object with cell, maximum `resolution`, actual `cell_resolution`, derived
 center `lat`/`lon` and declared `country`, plus the `thing` object with
 `mobility` (`fixed` or `moving`, default `fixed`) and, from CoreS3 `v6.24` and Waveshare `v2.18`,
-`setup` (1 or 0, matching advert bit 6, read as `ThingConfig.needsSetup`). It uses the same CONFIG/CONFIG_CHUNK
-framing and 480-byte JSON limit. `Request.GetLocation` and `DeviceSession.getLocation`
-return unsupported when older firmware returns the legacy object or rejects
-that selector. A missing location object is not an unset supported location.
+`setup` (1 or 0, matching advert bit 6, read as `ThingConfig.needsSetup`), and the setup record
+`setup_ack` and `setup_v` (decision 0003). It uses the same CONFIG/CONFIG_CHUNK
+framing and 480-byte JSON limit. `DeviceSession.getLocationPage` sends
+`Request.GetConfigPage(LOCATION)` and returns null when older firmware rejects that selector. When
+it returns the legacy object the page has no `location`, which reads as unsupported. A missing
+location object is not an unset supported location.
+
+The setup record is `SetupAck`. Bit `i` of `setup_ack` marks step `i` of the template `firmware.setup`
+done. `setup_v` is `SetupAck.version` of the ordered step ids, the first 31 bits of SHA-256 over the
+ids joined by `\n`, never 0. A `setup_v` that differs from the phone's reads as no step done
+(`SetupAck.done`), and `SetupAck.withStep` starts a stale record from zero. The phone sends both with
+`ConfigPatch.Builder.setupAck`, `thing.setup_v` first. A list holds at most 31 steps. The record
+never proves a required step, those stay derived from the config.
+
+Page byte `7` (`Request.GetConfigPage.BOARD_SETTINGS`) holds the board keys the template declares,
+nested by prefix (`{"panel":{"theme":"dark"}}`). `DeviceSession.getBoardSettings` reads it as
+`BoardSettings`, flat `SET_CONFIG` keys with booleans as `1` or `0`, and drops reserved and secret
+keys. An `ERROR` is thrown.
 
 Waveshare `v2.18` adds `location.gnss_cell` (firmware #147), the receiver's fix from the last 15 s as a
 resolution 8 cell, or `""` without a fresh fix. CoreS3 has no receiver and omits it.
@@ -199,9 +278,14 @@ null there. `gnssCellText` keeps the difference.
 `ConfigPatch.Builder.location(cell, country)` sends only `location.cell`, `location.resolution=8` and
 `location.country`. The cell is empty or a resolution 8 cell. SET_CONFIG acknowledges the legacy page, and the app then reads
 page 1 and checks its saved values. No raw GPS coordinates cross this API.
-`ConfigPatch.Builder.thingMobility` writes `thing.mobility`, but the app does not send it yet. `location.phone_cell` is reserved for the H3 cell of the phone's own fix, which the
-board keeps in RAM and writes with `location_source` 3. No released firmware accepts it, so the
-app names the key and never sends it.
-Pages 2–4 are firmware time policy/status and server configuration; this app
-currently exposes location provisioning. See [device-location.md](device-location.md)
+`ConfigPatch.Builder.thingMobility` writes `thing.mobility`. The app sends it only from the Fixed or
+Moving tap (`DeviceConfigController`). `location.phone_cell` is the H3 cell of the phone's own fix,
+which the board keeps in RAM for a limited time and writes with `location_source` 3. The firmware
+accepts it. The app names the key (`ConfigPatch.KEY_LOCATION_PHONE_CELL`) and does not send it yet
+([#264](https://github.com/walkthru-earth/opensensor-space-mobile/issues/264)).
+Pages 2 to 4 are the firmware time policy, its status and the NTP servers, and the app does not
+request them. Pages 5 and 6 carry the owner site. `Request.GetConfigPage.SITE` returns
+`owner.title`, `owner.provider`, `owner.url` and `thing.deployment_id`, and `SITE_DESCRIPTION`
+returns `owner.description` (`DeviceSession.getSite`).
+See [device-location.md](device-location.md)
 and the firmware-owned [wire contract](../../opensensor-space-firmware/docs/shared/ble-sync-protocol.md).

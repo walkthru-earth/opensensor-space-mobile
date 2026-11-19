@@ -1,12 +1,12 @@
 # Thing plugins, one app for many kinds of Things
 
-Research report, 2026-10-27. Status is proposal. Steps 1, 3 and 5 of the migration order are built (#220, #222, #224), the rest is not.
+Research report, 2026-10-27. Status is proposal. Steps 1 to 8 of the migration order are built. Steps 9 to 11 are not.
 
 Goal. Any kind of Thing (an opensensor board over BLE or LAN, the phone itself, a device that uploads on its own, a public feed station, later LoRa or a third party cloud) plugs into the app through one contract. Shared Kotlin does the work once for Android and iOS. Screens, the map and the setup wizard are driven by templates and data, with code only where data cannot express it.
 
 Tracking epic [#219](https://github.com/walkthru-earth/opensensor-space-mobile/issues/219).
 
-This builds on [2026-10-25-sensor-agnostic-stac-contract.md](../2026-10-25-sensor-agnostic-stac-contract.md), which made the data layer generic. This proposal does the same for sources, identity, setup and screens.
+This builds on the sensor agnostic data layer of `:core:model` ([devices-and-discovery.md](../../../devices-and-discovery.md)). This proposal does the same for sources, identity, setup and screens.
 
 Inputs.
 - Six read-only investigations on 2026-10-27, one each for the shared core, Android adapters, iOS adapters, map and screens, setup wizard and open source prior art. Each finding cites `file:line` or a primary source. The lead checked the main claims against the code before writing this.
@@ -97,5 +97,5 @@ New here.
 
 ## 6. Drift found on the way
 
-- Fixed by #225. `BleConfig` reads `pin_set`, and `ConfigPatch.Builder.thingMobility()` is gone until a screen sends mobility.
-- `profile.hero` is parsed (`ModelJson.kt:91`) but no screen reads it.
+- Fixed by #225. `BleConfig` reads `pin_set`. `ConfigPatch.Builder.thingMobility()` is sent by the Fixed or Moving tap in Device settings.
+- Fixed by #221. `profile.hero` picks the Today presenter (`FamilyPresenters.kt`).

@@ -22,7 +22,7 @@ import kotlin.test.assertSame
 
 class FamilyPresenterTest {
     private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809")
-    private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9")
+    private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = "f4f81218dc80d1a8e6db043197a2f7180c4f075f9e8348df30eaceef44d68370")
     private val soilSample = LiveSample.parse("""{"sm":0.31,"st":18.5,"pct":80}""")
 
     private fun state(info: DeviceInfo?, live: LiveSample?, level: DetailLevel) = TodayUiState(TodaySnapshot(info = info, live = live), level)
