@@ -411,6 +411,23 @@ class FileItemsTest {
     }
 
     @Test
+    fun aCellFaultIsReportedBeforeAWindowFault() {
+        // `scripts/canonical.mjs` checks the cells before the HHMM window, so a file with both faults
+        // gets the cell reason. Each file below is also named 1315 while its first row is at 13:00.
+        val wrongName = FILE_NAME.replace("_1300_", "_1315_")
+        fun build(rows: List<Row>, mobility: Mobility = Mobility.FIXED, withCells: Boolean = true) =
+            item(deviceFile(rows, withCells), mobility, name = wrongName)
+        assertEquals(FileItemResult.WindowMismatch("1315", "1300"), build(rowsIn(OSU_CELL)))
+        assertEquals(FileItemResult.NoLocation, build(rowsIn(null)))
+        assertEquals(FileItemResult.NoLocation, build(rowsIn(null), Mobility.MOVING, withCells = false))
+        assertEquals(FileItemResult.WrongResolution(10), build(rowsIn(h3.latLngToCell(5.6018, -0.1881, 10))))
+        assertEquals(FileItemResult.InvalidCell("887576970a3ffff"), build(rowsIn(H3Index.fromHex("887576970a3ffff"))))
+        val other = h3.latLngToCell(5.70, -0.30, 8)
+        val twoCells = rowsIn(OSU_CELL, 2) + rowsIn(other, 2).map { it.copy(utcUs = it.utcUs!! + 20_000_000L) }
+        assertEquals(FileItemResult.FixedThingMoved(2), build(twoCells))
+    }
+
+    @Test
     fun aFooterWithoutARotationWindowGetsNoItem() {
         val result = FileItems.build(
             FILE_NAME,
