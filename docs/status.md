@@ -20,9 +20,9 @@ build commit, the cell gives the commit that recorded the run, marked "rec.".
 | Auto-sync | 2026-10-18 `958148ea` | 2026-10-18 `958148ea` | 2026-10-10 `bed79491`, one-time background run only | not run |
 | Pairing and stale bond | 2026-10-11 rec. `91919319` | 2026-10-11 rec. `91919319` | 2026-09-29 `06ab6ccd` | not run, see note 1 |
 | Station page and live readings | 2026-10-27 `39388eab` | 2026-10-27 `39388eab` | 2026-10-27 rec. `b58cc77b` | 2026-10-09 rec. `d763fdb6`, owner report |
-| History | 2026-10-27 `39388eab` | 2026-10-27 `39388eab` | not run, see note 7 | not run |
-| Files | 2026-10-18 `958148ea` | 2026-10-18 `958148ea` | 2026-10-10 `bed79491` | not run |
-| Export | 2026-10-18 `958148ea` | 2026-10-18 `958148ea` | not run | not run |
+| History | 2026-11-19 `1c7c08b0` | 2026-11-19 `1c7c08b0` | not run, see note 7 | not run |
+| Files | 2026-11-19 `1c7c08b0` | 2026-11-19 `1c7c08b0` | 2026-10-10 `bed79491` | not run |
+| Export | 2026-11-19 `1c7c08b0` | 2026-11-19 `1c7c08b0` | not run | not run |
 | Discover | 2026-10-18 `958148ea` | 2026-10-18 `958148ea` | not run | not run |
 | Setup wizard | 2026-11-09 `9503132c` | 2026-11-09 `9503132c` | not run | not run |
 | Location (res 8 cell) | 2026-11-09 `9503132c` | 2026-11-09 `9503132c` | not run | not run |
@@ -117,7 +117,8 @@ No phone run of these changes is recorded.
   `derived/v1/<thing>/day=….parquet` and manifests under the Android entry names. Evicted days are
   built again first, and the derived quota is paused until the zip is staged. `IosDailyFilesTest`
   covers the listing, a thing with no day file, a link, a day file gone before the zip and the
-  evicted day manifests.
+  evicted day manifests. A changed day loses its old file and manifest before it builds, so a day
+  that fails to build is not exported, and the other days still are.
 - 2026-11-17, `06a49bbe`. The bundled templates are byte copies of opensensor-space-firmware
   e2eb30b `docs/shared/templates`, which adds the CrowPanel e-paper template. CI checks out the
   firmware at that commit. CrowPanel has no reviewed app profile, so it renders with a profile
