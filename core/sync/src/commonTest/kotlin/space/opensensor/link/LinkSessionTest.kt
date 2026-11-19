@@ -161,7 +161,7 @@ class LinkSessionTest {
         var delivered = 0
         val reply = async {
             runCatching {
-                s.exchange<Unit>(RequestSpec.of(Request.List)) { _, _ ->
+                s.exchange<Unit>(RequestSpec.of(Request.List, s.kind)) { _, _ ->
                     delivered++
                     gate.await()
                     null
@@ -196,7 +196,7 @@ class LinkSessionTest {
         val s = session(driver)
         s.open()
         val bound = DrainBound(maxFrames = 10)
-        val list = launch { s.exchange<Unit>(RequestSpec.of(Request.List, bound)) { _, _ -> null } }
+        val list = launch { s.exchange<Unit>(RequestSpec.of(Request.List, s.kind, bound)) { _, _ -> null } }
         runCurrent()
         list.cancelAndJoin()
         driver.emit(*files(50))
@@ -231,7 +231,7 @@ class LinkSessionTest {
         val driver = ScriptedLinkDriver()
         val s = session(driver, heartbeat = Heartbeat(pingAfterIdle = 120.seconds, deadline = 180.seconds))
         s.open()
-        val stalled = launch { s.exchange<Unit>(RequestSpec.of(Request.List)) { _, _ -> awaitCancellation() } }
+        val stalled = launch { s.exchange<Unit>(RequestSpec.of(Request.List, s.kind)) { _, _ -> awaitCancellation() } }
         runCurrent()
         // The consumer never returns, the peer keeps sending.
         repeat(10) {
@@ -472,7 +472,7 @@ class LinkSessionTest {
         val s = session(driver)
         s.open()
         val failure = async { runCatching { s.collect(Request.SetTime(1_800_000_000)) } }
-        advanceTimeBy(RequestSpec.DEFAULT_FIRST_FRAME + 1.seconds)
+        advanceTimeBy(RequestSpec.LAN_REPLY_WAIT + 1.seconds)
         runCurrent()
         val timeout = assertIs<LinkTimeoutException>(failure.await().exceptionOrNull())
         assertEquals(DisconnectCause.Timeout(TimeoutPhase.FIRST_FRAME, Opcode.SET_TIME), timeout.timeout)
@@ -554,7 +554,7 @@ class LinkSessionTest {
         }
         val s = session(driver)
         s.open()
-        assertFailsWith<LinkTimeoutException> { s.send(RequestSpec.of(Request.Status)) }
+        assertFailsWith<LinkTimeoutException> { s.send(RequestSpec.of(Request.Status, s.kind)) }
 
         assertEquals(Frame.Config(0, "{}"), TinyApi(s).getConfig())
         assertEquals(listOf(Opcode.STATUS, Opcode.GET_CONFIG), driver.sent)
@@ -592,7 +592,7 @@ class LinkSessionTest {
         }
         val s = session(driver)
         s.open()
-        val first = s.exchange(RequestSpec.of(Request.List)) { frame, _ -> frame as? Frame.File }
+        val first = s.exchange(RequestSpec.of(Request.List, s.kind)) { frame, _ -> frame as? Frame.File }
         assertEquals("f0.parquet", first.name)
         assertEquals(Frame.Config(0, "{}"), TinyApi(s).getConfig())
     }

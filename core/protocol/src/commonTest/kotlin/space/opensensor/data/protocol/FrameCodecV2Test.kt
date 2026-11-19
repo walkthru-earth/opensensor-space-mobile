@@ -54,6 +54,13 @@ class FrameCodecV2Test {
     }
 
     @Test
+    fun `every named frame type is known and nothing else`() {
+        for (type in 0..0xFF) {
+            assertEquals(!FrameType.name(type).startsWith("0x"), FrameType.isKnown(type), FrameType.name(type))
+        }
+    }
+
+    @Test
     fun `CONFIG decodes flags and json`() {
         val json = """{"ble":{"pair":"fixed","pin_set":1,"pin_default":1,"bonds":1,"display":0}}"""
         val frame = FrameCodec.decode(("40" + "01" + json.encodeToByteArray().toHex()).hexToBytes()) as Frame.Config

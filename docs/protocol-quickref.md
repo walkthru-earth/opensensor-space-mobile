@@ -127,8 +127,9 @@ the CONFIG `ntp.*` keys.
 | Frame | `len` u16 LE + frame; `PAYLOAD_MAX` 1024 device→phone, `REQUEST_MAX` 512 phone→device |
 | Idle | `DEVICE_IDLE_LIMIT_MS` 300 s; phone sends `STATUS` after `KEEPALIVE_AFTER_IDLE_MS` 120 s |
 
-`HELLO.payload_max` is trusted if ≥ 64 (`TcpLinkDriver.MIN_PAYLOAD_MAX`); `mtu` reports
-`payload_max + 3` so the same `MTU − 3` arithmetic yields it.
+`HELLO.payload_max` is trusted from 64 to 1024 (`LanHandshake.MIN_PAYLOAD_MAX` and `PAYLOAD_MAX`),
+and both phones refuse a HELLO outside that range. `mtu` reports `payload_max + 3` so the same
+`MTU − 3` arithmetic yields it.
 
 ## Board template (`DescriptorDownload`, `BoardDescriptors`)
 

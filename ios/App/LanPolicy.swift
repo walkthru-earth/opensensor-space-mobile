@@ -3,13 +3,11 @@ import Network
 import dnssd
 
 /// Network policy shared by Bonjour discovery and LAN sessions. Kept free of the Kotlin framework
-/// so the native test harness can exercise it on the host.
+/// so the native test harness can exercise it on the host. Limits come in from `SyncWire`.
 enum LanPolicy {
-    /// TCP connect attempts end after this many seconds instead of the system default.
-    static let connectTimeoutSeconds = 10
-
     /// LAN sockets must stay on the local network. Cellular is prohibited; Wi-Fi and wired remain.
-    static func connectionParameters() -> NWParameters {
+    /// TCP connect attempts end after [connectTimeoutSeconds] instead of the system default.
+    static func connectionParameters(connectTimeoutSeconds: Int) -> NWParameters {
         let tcp = NWProtocolTCP.Options()
         tcp.noDelay = true
         tcp.connectionTimeout = connectTimeoutSeconds

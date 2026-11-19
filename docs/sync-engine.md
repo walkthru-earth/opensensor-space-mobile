@@ -18,8 +18,9 @@ platform supplies only an `ArchiveStore`, an `ArchiveIndex` and a byte pipe. On 
 request frame and hands back each reply frame. `SensorSync` runs one collection per link off the
 main thread and reports progress (at most four times a second) and one `SyncResult` on the main
 thread. The engine only lists, opens, reads and closes files. It never asks the sensor to delete,
-rename or rewrite one. Swift keeps
-LAN framing, the HELLO check, keepalive, STATUS and LIVE pushes, and the BLE token request.
+rename or rewrite one. Swift keeps LAN framing, keepalive, STATUS and LIVE pushes, and the BLE
+token request. The HELLO verdict and the LAN limits come from the shared `LanHandshake` through
+`SyncWire`.
 
 Outcomes cross to Swift as `SyncResult` with `keepsLink` and `resumable`, and the message is a
 `:ui:strings` key with the Android words. Link and Wi-Fi access events that happen outside a
@@ -295,8 +296,11 @@ until `READ_END`, and only then `WindowLostException` is thrown, so a late windo
 the next `READ`. `LIST` and `LIST_SINCE` check the count in `LIST_END` or `LIST_SINCE_END` and
 throw `ProtocolViolationException` on a mismatch, with the link still Ready.
 
-`RequestSpec` allows 20 s between reply frames and normally 15 s for the first frame.
-WIFI_SCAN allows 20 s. OPEN, FLUSH and REBOOT allow 60 s for the first frame. The connection-open deadline is
+`RequestSpec.of(request, kind)` picks the waits per transport. On Bluetooth it allows 20 s between
+reply frames and normally 15 s for the first frame. WIFI_SCAN allows 20 s. OPEN, FLUSH and REBOOT
+allow 60 s for the first frame. On LAN every wait is at least 30 s (`RequestSpec.LAN_REPLY_WAIT`).
+That number comes from the firmware contract, which tells a LAN phone to allow at least 30 s for a
+reply. OPEN, FLUSH and REBOOT keep 60 s on LAN too. The connection-open deadline is
 separate, 180 s through `DeviceSession.over` to cover Bluetooth connect and bonding.
 Timeouts carry `DisconnectCause.Timeout` with the failed phase.
 
@@ -320,9 +324,11 @@ fake and compatibility `DeviceTransport` paths. iOS uses the connection's `IosLi
 - `oweClose(handle)` queues a `CLOSE` without waiting. The router sends it once the request in
   flight and its drain have ended, consumes the `CLOSED`, and only then admits the next request.
   A stopped transfer uses it, so Stop returns at once and never waits behind the abandoned `READ`.
+  Its 30 s wait for `CLOSED` starts once the `CLOSE` write is done, so a slow LAN write does not
+  eat the reply wait. The write itself stays bounded by its 10 s write deadline.
 - A close from the driver first forwards frames already received, so a reply just before EOF
   (`REBOOTING`, `BYE`, close) still reaches its caller.
-- Reply timeouts measure progress, 20 s between frames per the proto 3 contract. A timeout
+- Reply timeouts measure progress, 20 s between frames on Bluetooth and 30 s on LAN. A timeout
   fails the request and keeps the link.
 - The optional `Heartbeat` (LAN 120 s ping, 180 s deadline) reads only reader RX marks from an
   injected `TimeSource`. Nothing polls.
