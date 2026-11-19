@@ -3,8 +3,8 @@ import java.security.MessageDigest
 // The shared core model of what a thing measures (#183): board templates, app profiles, datastreams,
 // observed properties, scales and the thing that joins them. Pure commonMain with kotlinx
 // serialization parsing of the stac-opensensor v0.1.0 board template, the app's own profile JSON and
-// the thing Collection. The bundled templates and profiles under `bundled/` are raw JSON files, so a
-// new firmware digest is a file swap with no code change (#184). See [BundleFiles].
+// the thing Collection. The bundled templates, profiles and stac-opensensor registries under `bundled/`
+// are raw JSON files, so a new firmware digest is a file swap with no code change (#184). See [BundleFiles].
 plugins {
     id("opensensor.kmp.library")
     alias(libs.plugins.kotlin.serialization)
@@ -111,7 +111,7 @@ tasks.withType<Test>().configureEach {
     inputs.files(firmwareTemplates)
         .withPropertyName("firmwareTemplates")
         .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir("bundled/templates")
-        .withPropertyName("bundledTemplates")
+    inputs.dir("bundled")
+        .withPropertyName("bundledFiles")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }

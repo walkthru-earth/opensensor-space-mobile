@@ -44,9 +44,13 @@ goes over the encrypted BLE characteristics, and the token is stored only in the
 `AfterFirstUnlockThisDeviceOnly`. It passes through the shared codec in memory and never reaches
 the UI or a log. Save Wi-Fi access is a Developer level action. The `OSS1` HELLO must
 match the enrolled thing and full hardware ID, so discovery alone cannot enroll a replacement.
+`SyncWire.helloCheck` gives the shared `LanHandshake` verdict, the same check Android runs, and
+the connect and HELLO bounds (5 s and 8 s), keepalive, idle bound and frame cap come from `SyncWire` too.
 A LAN `AUTH_FAILED` drops the saved token. Each `LanSession` is an actor on its own serial queue,
 keeps one receive of up to 64 KiB outstanding, splits `len` u16 frames and forbids cellular
-interfaces. Frames cross into Kotlin as `NSData` (`SyncWireData.kt`).
+interfaces. Frames cross into Kotlin as `NSData` (`SyncWireData.kt`). Once the shared link
+exists, Swift reads only a reply's type byte (`SyncWire.frameKind`), so a file frame is copied
+into Kotlin once and decoded once, by `LinkSession`. STATUS and LIVE pushes are still decoded in Swift.
 
 ## Sync and archive
 
@@ -103,7 +107,11 @@ A force quit stops everything. Downloaded bytes and index records stay for the n
 - **Files.** Share one, share all, share zip and save zip stage copies under
   `tmp/opensensor-export/<run>` and open `UIActivityViewController` or the document picker. Only
   verified files are exported and the run is removed when the sheet closes. Runs coexist, and a
-  run the screen could not remove ages out after one hour (`ExportRuns`).
+  run the screen could not remove ages out after one hour (`ExportRuns`). Share daily files zips
+  `Library/Caches/derived/v1` under the names Android uses (#301). `IosArchive.dailyFiles` first
+  drops the manifest of each day the quota or iOS evicted (`forgetEvictedDays`) and builds the days
+  again in one derive pass, then lists them with `directoryEntries`. The derived quota is paused
+  (`DerivedQuota.holding`) from that pass until the zip is staged.
 - **Debug.** Borrows a short link for raw commands, `LOG_TAIL`, `GET_CONFIG` and `STATUS`, with the
   shared denylist and redaction.
 - **Sticker scan.** VisionKit `DataScannerViewController` (`StickerScanner.swift`), shown only where

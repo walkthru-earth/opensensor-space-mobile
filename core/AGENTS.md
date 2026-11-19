@@ -8,7 +8,7 @@ gate when a `:core` source names one. Open the doc of the module you change.
 
 | Module | Owns | Doc |
 | --- | --- | --- |
-| `model/` | What a thing measures as data. `BoardTemplate`, `TemplateIndex`, `Datastream`, `AppProfile`, `Thing.join`, `H3Cell`, the bundled templates and profiles under `bundled/` | [devices and discovery](../docs/devices-and-discovery.md) |
+| `model/` | What a thing measures as data. `BoardTemplate`, `TemplateIndex`, `Datastream`, `AppProfile`, `Thing.join`, `H3Cell`, a column's display hints, `SetupManifest`, the bundled templates and profiles under `bundled/`, and `PropertyRegistry` and `ScaleRegistry` over `bundled/registry/` | [devices and discovery](../docs/devices-and-discovery.md) |
 | `protocol/` | The mirror of the firmware `docs/shared/ble-sync-protocol.md`. Frames, opcodes, `DeviceGatt`, `LanProtocol`, `LiveReading`, `ParquetVerify`, `SafeName` | [protocol quickref](../docs/protocol-quickref.md) |
 | `parquet/` | The Parquet reader and writer and the codec SPI. `ByteReader`, `RangeSource`, `ParquetFile`, `ParquetReader` | [parquet](../docs/parquet.md) |
 | `net/` | HTTP range reads (`HttpRangeSource`) and the disk block cache (`CachedRangeSource`, `BlockCache`) | [parquet](../docs/parquet.md) |
@@ -18,7 +18,7 @@ gate when a `:core` source names one. Open the doc of the module you change.
 | `history/` | Metrics, indexing, tiers, daily Parquet, `HistoryOrchestrator`, `DeviceCapabilities`, `BoardDescriptors`, `TemplateHrefs`, `LegacyFileCleanup` | [history pipeline](../docs/history-pipeline.md) |
 | `database/` | The Room KMP database (`AppDatabase`), its DAOs, migrations and exported schemas | [data model](../docs/data-model.md) |
 | `publicfeed/` | The Discover feed port, H3 (`H3Grid`) and the viewport cover | [devices and discovery](../docs/devices-and-discovery.md) |
-| `units/` | Display units | [screens](../docs/screens.md) |
+| `units/` | Display units and the UCUM symbols (`UcumDisplay`) | [screens](../docs/screens.md) |
 | `settings/` | Shared DataStore preferences, `SettingsKeys`, units and detail level, with the iOS Application Support path | [data model](../docs/data-model.md) |
 | `stac/` | The STAC File Item (`FileItems.build`) and Thing Collection (`ThingCollections.build`) of a synced file, pure functions with no upload, network or Room, and `CanonicalJson` | [devices and discovery](../docs/devices-and-discovery.md) |
 | `thing/` | The `ThingKind` contract, `OpenSensorBoardKind`, the `ThingKinds` registry, `PublishGate` and `PlatformNeedsTable`. It never uploads | [devices and discovery](../docs/devices-and-discovery.md), [store compliance](../docs/store-compliance.md) |
@@ -49,7 +49,7 @@ Rules that hold across modules.
   a code branch or a schema string check in a screen. `:core:model` holds
   the data model (#183) and the bundled board templates and app profiles under
   `core/model/bundled/` (#184). `bundled/templates/` is opensensor-space-firmware `docs/shared/templates` copied
-  byte for byte at `e2eb30b`, three boards (M5Stack CoreS3, Waveshare ESP32-S3 SIM7670G and ELECROW
+  byte for byte at `a5545b4`, three boards (M5Stack CoreS3, Waveshare ESP32-S3 SIM7670G and ELECROW
   CrowPanel e-paper SEN63C, `elecrow-crowpanel-epaper-42`), and `bundled/profiles/` holds the
   CoreS3 and Waveshare profiles (marked `-text`, excluded from the whitespace hooks), and `BundledTemplateBytesTest`
   checks each file's SHA-256 against its `index.json` desc and its pinned hash, `index.json`

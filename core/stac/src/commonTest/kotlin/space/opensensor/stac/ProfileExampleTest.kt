@@ -18,7 +18,6 @@ import space.opensensor.data.history.parquet.ParquetLogicalType
 import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.history.parquet.ParquetWriter
 import space.opensensor.model.BoardTemplate
-import space.opensensor.model.BundledCatalog
 import space.opensensor.publicfeed.H3Index
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -26,8 +25,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 /**
- * A phone Item rebuilt from each row fixture of stac-opensensor v0.1.0 (tag v0.1.0, commit
- * 83787768cc8451109d48a03d4ef5493ffcd403dd) equals the board's example Item as JSON values, the
+ * A phone Item rebuilt from each row fixture of stac-opensensor v0.1.0 (commit
+ * e9981360c2229a98d5659ef0038a3b6114953f73) equals the board's example Item as JSON values, the
  * canonical form of PROFILE.md. It runs on the JVM and on iOS, so both H3 bindings and both ways of
  * printing a double are checked against the examples. The JVM test also validates the rebuilt Items
  * against the schemas.
@@ -71,13 +70,15 @@ const val MOVING_ROWS = "rows-moving.json"
 
 /**
  * The phone's result for the row fixture [rowsName]. The rows are written to a Parquet file with the
- * footer and the bundled template the fixture names, then built as `PublishGate` rebuilds a board
+ * footer and the fixture template the footer names, then built as `PublishGate` rebuilds a board
  * file to check its sidecar.
  */
 fun rebuildExample(rowsName: String): FileItemResult {
     val fixture = Json.parseToJsonElement(stacFile(rowsName).decodeToString()).jsonObject
-    val footer = checkNotNull(OpenSensorFooter.parse(stacFile(fixture["footer"]!!.jsonPrimitive.content).decodeToString()))
-    val template = checkNotNull(BundledCatalog.template(checkNotNull(footer.dictionarySha256)))
+    val footerText = stacFile(fixture["footer"]!!.jsonPrimitive.content).decodeToString()
+    val footer = checkNotNull(OpenSensorFooter.parse(footerText))
+    val templatePath = stacTemplatePath(Json.parseToJsonElement(footerText).jsonObject)
+    val template = BoardTemplate.parse(stacFile(templatePath).decodeToString(), footer.templateSha256)
     val name = fixture["file"]!!.jsonObject["name"]!!.jsonPrimitive.content
     val bytes = fixtureFile(fixture["rows"]!!.jsonObject, template)
     return FileItems.build(name, ByteArrayReader(bytes), footer, template, PUBLISHED_RES, h3)

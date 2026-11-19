@@ -207,6 +207,7 @@
     <string name="location_save">Save on device</string>
     <string name="msg_config_rejected_site">The sensor refused the site details. Nothing was changed.</string>
     <string name="config_problem_site">A site value is not valid. Check the site fields.</string>
+    <string name="config_problem_field">This value is not allowed here.</string>
     <string name="site_title">Site</string>
     <string name="location_site_title">Location and site</string>
     <string name="site_info">Optional. These details are public when you share this sensor's data. Do not type a home address. The deployment ID is written into each data file, and a change starts a new file.</string>

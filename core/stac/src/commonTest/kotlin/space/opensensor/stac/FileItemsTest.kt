@@ -106,7 +106,7 @@ class FileItemsTest {
 
     @Test
     fun theFixedGeometryIsTheProfileExampleRing() {
-        // The fixed example Item of stac-opensensor v0.1.0 (83787768cc8451109d48a03d4ef5493ffcd403dd).
+        // The fixed example Item of stac-opensensor v0.1.0 (e9981360c2229a98d5659ef0038a3b6114953f73).
         // Every writer builds the same ring, within the 1e-9 degrees its own check allows, because H3
         // builds differ in the last bits.
         val cell = H3Index.fromHex("887576970bfffff")
@@ -130,7 +130,7 @@ class FileItemsTest {
 
     @Test
     fun theMovingGeometryIsTheProfileExampleUnion() {
-        // The moving example Item of stac-opensensor v0.1.0 (83787768cc8451109d48a03d4ef5493ffcd403dd),
+        // The moving example Item of stac-opensensor v0.1.0 (e9981360c2229a98d5659ef0038a3b6114953f73),
         // three cells in Cairo visited out of order. H3 C 4.5.0 is the reference, within 1e-9 degrees.
         val cells = listOf("883e628e67fffff", "883e628e05fffff", "883e628e29fffff").map(H3Index::fromHex)
         val rows = cells.mapIndexed { i, cell -> Row((HOUR_S + 10L * i) * 1_000_000L, cell) }
@@ -164,7 +164,7 @@ class FileItemsTest {
     @Test
     fun aMultiPolygonKeepsThePolygonOrderOfH3() {
         // Three disjoint cells. The expected values are h3-js 4.5.0 output through geometryOf in
-        // stac-opensensor scripts/canonical.mjs at 83787768. H3 returns Cairo first, then Osu, then the
+        // stac-opensensor scripts/canonical.mjs at e9981360. H3 returns Cairo first, then Osu, then the
         // cell north west of Accra, not the sorted input order, and every writer must keep that order.
         // Equal-area polygons may order differently across H3 builds, stac-opensensor #12 item N1.
         val cells = listOf("887576970bfffff", "883e628e05fffff", "887576914bfffff").map(H3Index::fromHex)

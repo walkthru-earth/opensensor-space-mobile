@@ -105,6 +105,15 @@ object FrameType {
     const val DESCRIPTOR_CHUNK: Int = 0x4F
     const val ERROR: Int = 0x7F
 
+    private val KNOWN = setOf(
+        FILE, LIST_END, OPENED, CHUNK, READ_END, CLOSED, TIME_SET, FLUSHED, CONFIG, WIFI_AP,
+        WIFI_SCAN_END, REBOOTING, LOG, LOG_END, TOKEN, HELLO, STATUS, LIVE, CONFIG_CHUNK, BYE,
+        DIAG, ABORTED, LIST_SINCE_END, DESCRIPTOR_CHUNK, ERROR,
+    )
+
+    /** A type this app decodes. A malformed known frame breaks the link, an unknown one is newer firmware. */
+    fun isKnown(type: Int): Boolean = type in KNOWN
+
     fun name(type: Int): String = when (type) {
         FILE -> "FILE"
         LIST_END -> "LIST_END"
@@ -251,6 +260,13 @@ sealed interface Request {
 
             /** `owner.description` (firmware #148). */
             const val SITE_DESCRIPTION = 6
+
+            /**
+             * The board keys a template declares in `firmware.config_keys`, read by [BoardSettings].
+             * Decision 0003 places them on one new page after page 6 and leaves the number to the
+             * firmware PR that builds it. The app reads page 7, the number the contract sketch uses.
+             */
+            const val BOARD_SETTINGS = 7
         }
     }
 

@@ -7,11 +7,15 @@ package space.opensensor.model
  * a new digest is a folder copy and a fixture refresh with no code change. Only the current digest of
  * each board is bundled. An unknown digest resolves only through a served template, and then renders
  * with a profile [AppProfile.derive]d from it. Every lookup goes through [TemplateIndex.resolve].
+ * `registry/` is a verbatim copy of the stac-opensensor property and scale registries, read as
+ * [properties] and [scales].
  */
 object BundledCatalog {
     private const val TEMPLATES = "templates/"
     private const val TEMPLATE_INDEX = "${TEMPLATES}index.json"
     private const val PROFILES = "profiles/"
+    private const val PROPERTY_REGISTRY = "registry/properties.json"
+    private const val SCALE_REGISTRY = "registry/scales.json"
 
     /**
      * Every bundled template, in `index.json` order, each keyed by its `dict` and the `desc` the index
@@ -22,6 +26,15 @@ object BundledCatalog {
 
     /** Every bundled app profile. */
     val profiles: List<AppProfile> = BundledFiles.files.filterKeys { it.startsWith(PROFILES) }.values.map { AppProfile.parse(it) }
+
+    /**
+     * The stac-opensensor property registry, `registry/properties.json` copied byte for byte from the
+     * stac-opensensor commit `BundledRegistryBytesTest` pins.
+     */
+    val properties: PropertyRegistry by lazy { PropertyRegistry.parse(BundledFiles.files.getValue(PROPERTY_REGISTRY)) }
+
+    /** The stac-opensensor scale registry, `registry/scales.json`, copied like [properties]. */
+    val scales: ScaleRegistry by lazy { ScaleRegistry.parse(BundledFiles.files.getValue(SCALE_REGISTRY)) }
 
     init {
         require(templates.map { it.dict }.toSet().size == templates.size) { "two bundled templates share a dict" }

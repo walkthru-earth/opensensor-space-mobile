@@ -131,17 +131,15 @@ data class DeviceStatus(
  * the same value, the app keeps its own display rounding. When the board's buffer overflows it sends
  * one object with every key `null` ([overflow]), which clears the live values.
  *
- * [seq], [mono] and [utc] are typed header fields. Every other key lands in [values] by its key name,
- * a number as a [Double] and `null` as null. A value that is not a number is skipped. Keys mean
+ * [seq] and [mono] are typed header fields. Every other key lands in [values] by its key name, `utc`
+ * included, a number as a [Double] and `null` as null. A value that is not a number is skipped. Keys mean
  * nothing on their own, [LiveReading] maps them to template columns and ignores undeclared ones.
  */
 data class LiveSample(
     val seq: Long? = null,
     /** monotonic_us */
     val mono: Long? = null,
-    /** UTC in nanoseconds (LIVE keeps ns while the Parquet column is in microseconds), null when unsynchronized. */
-    val utc: Long? = null,
-    /** Every other key by its key name. */
+    /** Every other key by its key name, `utc` included. [LiveReading.utc] reads it through the template. */
     val values: Map<String, Double?> = emptyMap(),
     /** True when every key of the object was `null`, the board's overflow sample. */
     val overflow: Boolean = false,
@@ -155,10 +153,9 @@ data class LiveSample(
     companion object {
         const val SEQ = "seq"
         const val MONO = "mono"
-        const val UTC = "utc"
 
         /** The typed header fields, never read as values. */
-        val HEADER: Set<String> = setOf(SEQ, MONO, UTC)
+        val HEADER: Set<String> = setOf(SEQ, MONO)
 
         /** @throws IllegalArgumentException when [text] is not a JSON object. */
         fun parse(text: String): LiveSample {
@@ -174,7 +171,6 @@ data class LiveSample(
             return LiveSample(
                 seq = obj.header(SEQ),
                 mono = obj.header(MONO),
-                utc = obj.header(UTC),
                 values = values,
                 overflow = obj.isNotEmpty() && obj.values.all { it is JsonNull },
             )

@@ -1,1076 +1,206 @@
-# Status, what is verified, where, and what is next
+# Status, what is verified and where
 
-**Scope:** a dated log of what was checked and where. Host tests, the iOS simulator, an Android phone and an iPhone are kept apart, and anything not recorded here or in a board bench file is unverified.
+**Scope:** what is verified today, on which platform, at which commit, and which phone runs are still open. Host tests, the iOS simulator, the Android phone and the iPhone are kept apart.
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
-**Related:** measured device behaviour is recorded in the board-specific `../opensensor-space-firmware/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
+**Related:** measured board behaviour is in `../opensensor-space-firmware/docs/boards/*/bench-verified.md`. Anything not recorded here or there is unverified.
 
-## 2026-11-17, CrowPanel template at opensensor-space-firmware e2eb30b (code only)
+## Evidence
 
-Host tests and the iOS simulator only. No phone or board run is recorded.
+Each cell gives the date and commit of the newest recorded evidence for that feature, or "not run".
+The gate runs every host and simulator test on each commit. A host or simulator cell names the
+newest change to that feature that passed them. A phone cell needs a run of that feature on that
+phone. An install and launch alone counts only for the install row. When the record names no
+build commit, the cell gives the commit that recorded the run, marked "rec.".
 
-- The bundled templates are byte copies of opensensor-space-firmware e2eb30b `docs/shared/templates`,
-  which adds the CrowPanel e-paper SEN63C template `e7279c4e…` (firmware #182). CI checks out the
-  firmware at that commit.
-- CrowPanel has no reviewed app profile. It renders with a profile derived from its template, so
-  its columns show their template names and units, and it has no LIVE view, hero or Today so far.
-- To check on phones. A CrowPanel file in History and Files.
+| Feature | Host tests | iOS simulator | OnePlus 7 Pro | iPhone 16 Pro |
+| --- | --- | --- | --- | --- |
+| BLE sync | 2026-10-29 `4af870c4` | 2026-10-29 `4af870c4` | 2026-10-09 `5d5db510` | not run, see note 1 |
+| LAN sync | 2026-10-29 `4af870c4` | 2026-10-29 `4af870c4` | 2026-10-10 `bed79491` | 2026-10-09 rec. `d763fdb6`, owner report |
+| Sensor clock | 2026-10-29 `4af870c4` | 2026-10-29 `4af870c4` | 2026-10-09 `5d5db510` | not run |
+| Auto-sync | 2026-10-18 `958148ea` | 2026-10-18 `958148ea` | 2026-10-10 `bed79491`, one-time background run only | not run |
+| Pairing and stale bond | 2026-10-11 rec. `91919319` | 2026-10-11 rec. `91919319` | 2026-09-29 `06ab6ccd` | not run, see note 1 |
+| Station page and live readings | 2026-10-27 `39388eab` | 2026-10-27 `39388eab` | 2026-10-27 rec. `b58cc77b` | 2026-10-09 rec. `d763fdb6`, owner report |
+| History | 2026-11-19 `1c7c08b0` | 2026-11-19 `1c7c08b0` | not run, see note 7 | not run |
+| Files | 2026-11-19 `1c7c08b0` | 2026-11-19 `1c7c08b0` | 2026-10-10 `bed79491` | not run |
+| Export | 2026-11-19 `1c7c08b0` | 2026-11-19 `1c7c08b0` | not run | not run |
+| Discover | 2026-10-18 `958148ea` | 2026-10-18 `958148ea` | not run | not run |
+| Setup wizard | 2026-11-09 `9503132c` | 2026-11-09 `9503132c` | not run | not run |
+| Location (res 8 cell) | 2026-11-09 `9503132c` | 2026-11-09 `9503132c` | not run | not run |
+| Thing publish (File Item, Collection) | 2026-11-10 `430c12f4` | 2026-11-10 `430c12f4` | not run | not run |
+| No permission prompt at launch | not applicable | not run | 2026-10-08 rec. `15c7cd1a` | not run |
+| Install and launch | not applicable | 2026-10-11 rec. `80c338f1` | 2026-10-27 rec. `b58cc77b` | 2026-10-10 `bed79491` |
 
-## 2026-11-10, repository audit (docs only)
+### What the phone cells cover
 
-Every Markdown file and `AGENTS.md` was reconciled with `main`. Nothing in this entry is phone verified.
+1. iPhone and iPad over Bluetooth. On 2026-10-08 at `e1a3c6de` the owner saw live readings over
+   Bluetooth on the iPhone, with no file sync. On 2026-10-11 at `5604fb3e` Smart Sync over
+   Bluetooth failed on the iPad Air M2 (iPadOS 27.0.1). The CoreS3 ended each link with a failed
+   encryption and HCI 0x13 because a reflash had reset its bonds while the iPad kept the old key.
+   Forgetting the sensor in iPadOS Settings and pairing again is the workaround.
+2. OnePlus BLE sync and clock, 2026-10-09. Against CoreS3 firmware `01e6468`, the phone connected
+   over Bluetooth, set the sensor clock with no manual action, and Smart Sync downloaded and checked
+   the first fresh file. It then moved to Wi-Fi LAN and completed the six file manifest. The board
+   had a working RTC, so no-RTC recovery and power cuts are not covered.
+3. OnePlus LAN sync and Files, 2026-10-10. After CoreS3 firmware v6.11, automatic LAN sync copied
+   three files. "Sync now in background" then copied one 90 row file over LAN, and its CRC-32
+   matched the device. Files showed 38/38 checked. This is a short check, not overnight endurance.
+4. Auto-sync. No phone has completed a 15 minute periodic cycle. The OnePlus cell is the one-time
+   background run in note 3.
+5. OnePlus pairing, 2026-09-29. After a Waveshare reflash left a stale bond, the owner entered the
+   PIN, Android reported the bond, and the app verified INFO and showed live readings.
+6. OnePlus Station page, 2026-10-27. My devices showed the day lines of two boards. Today showed
+   the peacock hero, Today so far and the air cards. Battery state, the generic hero and Forget
+   were not checked. The run came before Today became the Station page hub (#117).
+7. OnePlus History. The last run, on 2026-09-30 at `dba3e693`, checked Day and Week of a Waveshare
+   across a station reset. It came before History read template datastreams, so the current
+   History has no phone run.
+8. iPhone LAN and live readings, 2026-10-09. The owner saw Wi-Fi LAN and live data, and reported
+   that Wi-Fi Smart Sync works after the `TIME_SET` fix. The report names no build commit, so the
+   cells give `d763fdb6`, the commit that recorded it. No file count or rate was recorded.
+9. OnePlus permissions, 2026-10-08. With Bluetooth and notification permissions revoked, launch
+   opened on the sensor list with no permission dialog. Scan, Sync now and the deny paths were
+   not checked.
+10. Install rows. The OnePlus installed over its stored data on 2026-10-27. The iPhone installed
+    and launched `bed79491` on 2026-10-10. The iPad installed and launched `5604fb3e` on
+    2026-10-11. The simulator row is the unsigned Debug build that drew Arabic Discover labels.
 
-### Evidence moved here from other docs
+## Open phone runs
 
-The audit removed dated evidence from the concern docs. Each line keeps its own date and kind.
+Open issues that need a phone run.
+
+- [#59](https://github.com/walkthru-earth/opensensor-space-mobile/issues/59), sync stability for
+  proto 3. The preparation, resume and large LIST repairs have host tests in `CollectionControllerTest`
+  and `LinkSessionTest` and no phone run.
+- [#84](https://github.com/walkthru-earth/opensensor-space-mobile/issues/84), the iOS Bluetooth
+  queue split on hardware.
+- [#98](https://github.com/walkthru-earth/opensensor-space-mobile/issues/98), inspector memory and
+  weak link READ windows on a 2 GB phone.
+- [#266](https://github.com/walkthru-earth/opensensor-space-mobile/issues/266), a board sidecar and
+  Collection from firmware #145 against the phone's rebuild.
+- [#272](https://github.com/walkthru-earth/opensensor-space-mobile/issues/272), the Site page and
+  card against a board with firmware #148 and one without, a refused link or deployment ID, Arabic
+  text at the 64 byte cap, and the readback after Save.
+- [#263](https://github.com/walkthru-earth/opensensor-space-mobile/issues/263), a moving Thing as a
+  track of cells.
+- [#264](https://github.com/walkthru-earth/opensensor-space-mobile/issues/264), the phone's res 8
+  cell sent to a board.
+- [#302](https://github.com/walkthru-earth/opensensor-space-mobile/issues/302), a user opened link
+  kept when an iOS Auto-sync step is cancelled.
+- [#228](https://github.com/walkthru-earth/opensensor-space-mobile/issues/228), the phone as a
+  Thing, blocked.
+
+Other checks owed, with no issue of their own.
+
+- Sensor clock, token and Wi-Fi sync. The clock after a power cut, the token after a sensor reset,
+  Wi-Fi sync switched back on below Developer, no Local Network prompt outside the Scan tap, and
+  Wi-Fi browsing after an iOS update.
+- Templates. LIVE, History and Today so far for each board on firmware at the bundled template
+  commit, and a CrowPanel file in History and Files.
+- Station page. Forget during Collect all, the battery state on both boards, and the iPhone day
+  lines.
+- History of each board after the template rebuild, and its default metric.
+- The corrected PM2.5 default, the long read on a small MTU, and an export of selected records.
+- The iOS daily zip after a sync, and again after Clear History cache.
+- Removal of old format files on both phones, then History, then a sync of a board that still
+  lists them.
+- Auto-sync. A 15 minute periodic cycle, overnight on the OnePlus, with the OEM battery settings it
+  needs.
+- Arabic map labels on an iPhone set to Arabic.
+- The TalkBack and VoiceOver walk in English and Arabic from
+  [cross-platform-guide.md](cross-platform-guide.md).
+
+## Recent changes, host and simulator only
+
+No phone run of these changes is recorded.
+
+- 2026-11-19, part of #350. The bundled templates are byte copies of opensensor-space-firmware
+  a5545b4 `docs/shared/templates`, and CI checks out the firmware at that commit. The CoreS3
+  dictionary is `f4f81218…`, which adds `lst` to LIVE, and its profile follows it. The templates
+  carry column titles, decimals, groups and a primary column. LIVE `utc` is read through the
+  template `live_keys` as the column `event_time_utc_us`, not as a header field. The registry is a
+  byte copy of stac-opensensor main `204365f`.
+- 2026-11-18, #301. iOS Files offers Share daily files, as Android does. The zip holds
+  `derived/v1/<thing>/day=….parquet` and manifests under the Android entry names. Evicted days are
+  built again first, and the derived quota is paused until the zip is staged. `IosDailyFilesTest`
+  covers the listing, a thing with no day file, a link, a day file gone before the zip and the
+  evicted day manifests. A changed day loses its old file and manifest before it builds, so a day
+  that fails to build is not exported, and the other days still are.
+- 2026-11-17, `06a49bbe`. The bundled templates are byte copies of opensensor-space-firmware
+  e2eb30b `docs/shared/templates`, which adds the CrowPanel e-paper template. CI checks out the
+  firmware at that commit. CrowPanel has no reviewed app profile, so it renders with a profile
+  derived from its template and has no LIVE view, hero or Today so far.
+- 2026-11-10, `430c12f4`, part of #266. `ThingCollections.build` writes the Thing Collection in
+  the canonical form of stac-opensensor v0.1.0. `PublishGate.boardFile` clears a board file only
+  with the board's own sidecar after the phone's rebuild matches it. `PublishGate.phoneFile`
+  publishes only this phone's own Thing and refuses every board file.
+- 2026-11-09, `9503132c`, #272. The wizard runs Find, Name, Location, Site, Wi-Fi and Done.
+  Location needs a confirmed res 8 cell from the area map. Site is optional and counts as saved
+  only when pages 5 and 6 read back the same ([device-location.md](device-location.md#site)).
+- 2026-11-04, `48360570`. The board kind publishes H3 resolution 8. The board writes the File Item
+  and `FileItems` must rebuild the same Item. `FileItemSchemaTest` and `ProfileExampleTest` check
+  it against the v0.1.0 profile. The JVM uses h3-java 4.5.1.
+- 2026-10-29, `4af870c4`. The sensor clock, the Wi-Fi token and Sync over Wi-Fi run by themselves
+  once per connection on both phones, through `SmartSyncPolicy`, `LanTokenPolicy` and
+  `LanAutoEnable`. Their cards show only at Developer. `ios/tests/verify-native.sh` and a
+  simulator build passed.
+- 2026-10-27, `39388eab`. History reads a file by the template its board served before a bundled
+  one. A dictionary with no reviewed profile has no LIVE view, no hero and no Today so far.
+  `FirmwareTemplatesTest` fails when a local firmware checkout has other templates.
+- 2026-10-26, `f92f2636`, #238. Today cards come from the template and the app profile. The
+  profile hero picks the hero through `HeroRegistry`, and any other thing gets
+  `GenericMetricHero`. Forget moved to the Today menu.
+- 2026-10-26, `a60fba64`. History metrics come from the board template datastreams and the app
+  profile. Rollups follow `opensensor:aggregate`.
+
+## Evidence moved from other docs
+
+The 2026-11-10 audit moved these dated records here from the concern docs. Each keeps its own
+date and kind.
 
 Phone observations.
 
-- **2026-10-08, iPhone 16 Pro, Arabic map labels (#53).** Up to maplibre-compose 0.19.0 the Apple
+- 2026-10-08, iPhone 16 Pro, Arabic map labels (#53). Up to maplibre-compose 0.19.0 the Apple
   build of `maplibre-native-ffi` compiled a bidi stub, so Arabic names drew unjoined and in the
-  wrong order, and iOS loaded Latin-only label styles. The fix is in the 2026-10-11 entry below
-  (maplibre-native-ffi #799). From `devices-and-discovery.md`.
-- **Undated, Android phone, locked screen LAN throughput.** Measured before the Wi-Fi lock was
-  added. Throughput fell from about 60 to about 12 files per minute with the screen locked, then
-  TCP stalled for more than 5 s. The source gave no date, phone model or build. From
-  `background-sync.md`.
+  wrong order. The fix came on 2026-10-11 with maplibre-native-ffi #799. From
+  `devices-and-discovery.md`.
+- Undated, Android phone, LAN with the screen locked, before the Wi-Fi lock was added.
+  Throughput fell from about 60 to about 12 files per minute, then TCP stalled for more than 5 s.
+  The source gave no date, phone model or build. From `background-sync.md`.
 
 Host and CI records, none of them a phone run.
 
-- **2026-09-17, warm-up on the archive.** DuckDB over 766 files and 14 boots of 10 minutes or
-  more. After the firmware gate, minute 0 deviates from minutes 5 to 10 by 2.5 µg/m³ mean
-  absolute, minute 3 by 1.7 and minute 7 by 0.6, inside one band. From `history-pipeline.md`.
-- **2026-09-29, CI after the repository rename at `06ab6cc`.** The
-  [main verification run](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/36584773614)
-  passed. The release run then failed on the `apksigner` label format (`V2 Signer` in place of
+- 2026-09-17, warm-up on the archive. DuckDB over 766 files and 14 boots of 10 minutes or more.
+  After the firmware gate, minute 0 deviates from minutes 5 to 10 by 2.5 µg/m³ mean absolute,
+  minute 3 by 1.7 and minute 7 by 0.6, inside one band. From `history-pipeline.md`.
+- 2026-09-29, CI at `06ab6cc`. The
+  [verify run](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/36584773614)
+  passed. The release run failed on the `apksigner` label format (`V2 Signer` in place of
   `Signer #1`) with a valid signature. From `build-and-release.md`.
-- **2026-10-08, first hosted verify run.** The
+- 2026-10-08, first hosted verify run. The
   [run for `27280bf`](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37741492239)
-  passed, the Xcode 27 native validation job included. Local validation the same day used Xcode
-  27.0 (27A266a), the iOS 26.5 simulator and the iOS 27 SDK. From `build-and-release.md`.
-- **2026-10-08, rolling tag failure.**
+  passed with the Xcode 27 native validation job. Local validation that day used Xcode 27.0
+  (27A266a), the iOS 26.5 simulator and the iOS 27 SDK. From `build-and-release.md`.
+- 2026-10-08, rolling tag.
   [Release run 22](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37740192533/job/113192946568)
-  for `cdd133c` passed verification, assembly and signer validation, then failed pushing `latest`
+  for `cdd133c` passed verification, assembly and signer validation, then failed to push `latest`
   for lack of `workflows` permission. From `build-and-release.md`.
-- **2026-10-08, R8 release APK size.** Unminified universal release APK 55,080,672 bytes, minified
-  6,596,149 bytes, `mapping.txt` produced. With Discover the minified APK was 49,525,502 bytes,
-  about 42.6 MB of it native libraries uncompressed, started on the API 36 arm64 emulator only.
-  From `build-and-release.md`.
-- **2026-10-11, ABI filter (#61).** With `arm64-v8a` and `armeabi-v7a` only, the minified release
-  APK went from 51,731,831 to 35,130,751 bytes. From `build-and-release.md`.
-- **2026-10-08, `RealArchiveTest` timing, M-series Mac.** All 767 real archive files read in
-  about 0.45 s on the JVM. Another line of the same doc gave 766 files in 0.2 s with 67,272 rows.
-  From `parquet.md`.
-
-## 2026-11-10, Thing Collection and two publish paths (code only)
-
-Host tests and the iOS simulator only. No phone or board run is recorded. Part of #266.
-
-- `ThingCollections.build` writes the Thing Collection in the canonical form of stac-opensensor
-  v0.1.0. A Collection rebuilt from each example owner config, board template, footer and Item
-  equals the fixed and moving example Collections as JSON values.
-- `ThingOwner.of` takes the title, description, provider and link the Site step stores (#148).
-- `PublishGate.boardFile` clears a board file only with the board's own sidecar, after the Item the
-  phone rebuilds matches it. `PublishGate.phoneFile` publishes the phone's Item only for this
-  phone's own Thing and refuses every board file.
-- To check on hardware. A board sidecar and Collection from firmware #145 against the phone's rebuild.
-
-## 2026-11-09, field setup with a site step (code only)
-
-Host tests and the iOS simulator only. No phone or board run is recorded. Owner decisions of
-2026-11-08 (#272), against firmware #148.
-
-- The wizard runs Find, Name, Location, Site, Wi-Fi and Done. A sensor that asks for setup opens it
-  on Find with the sensor offered first. Location needs a confirmed res 8 cell from the area map.
-  Site is optional, with Skip, and is left out for a board whose page 5 answers `ERROR` 1.
-- Device settings show the same site fields in the "Location and site" card with Save site.
-- Site values go in their own `SET_CONFIG` after the firmware rules pass on the phone, and count
-  as saved only when pages 5 and 6 read back the same
-  ([device-location.md](device-location.md#site)). A site read that fails offers Try again on
-  both screens.
-- To check on phones. The Site page and card against a board with firmware #148 and one without,
-  a refused link or deployment ID, Arabic text at the 64 byte cap, and the readback after Save.
-
-## 2026-11-04, published resolution 8 and relative File Item hrefs (code only)
-
-Host tests and the iOS simulator only. No phone run is recorded. Owner decisions of 2026-11-04 (#255).
-
-- The board kind publishes H3 resolution 8, the file's own cells. The resolution 7 cap is gone.
-- The File Item data href is `./<file>.parquet`, relative to the sidecar beside it.
-- The board writes the Item. `FileItems` regenerates it and must equal the board's Item.
-- `FileItems` follows the canonical form of stac-opensensor v0.1.0
-  (83787768cc8451109d48a03d4ef5493ffcd403dd). A file with a cell that is not res 8 gets no Item,
-  `anon:size` is 0.01, a moving Item does not list Grid, and the extension and link order, geometry,
-  times and `statistics` match the profile. The partition comes from the rotation window of the first
-  row. A file whose `HHMM` names another window gets `WindowMismatch`, a footer with no allowed
-  `rotation_interval_s` gets `NoRotationWindow` and a cell H3 rejects gets `InvalidCell`, all with
-  no Item.
-- `FileItemSchemaTest` checks the v0.1.0 profile, the core STAC 1.1.0 Item schema and the Grid,
-  Anonymized Location, Table and File extension schemas. `ProfileExampleTest` runs on the JVM and on
-  iOS. A phone Item rebuilt from each v0.1.0 row fixture equals its example as JSON values, with
-  geometry within the 1e-9 degrees the profile allows. The JVM uses h3-java 4.5.1, which matches the
-  H3 C 4.5.0 reference within 1e-9 there.
-
-## 2026-10-29, silent clock, Wi-Fi token and Wi-Fi sync (code only)
-
-Host tests, `ios/tests/verify-native.sh` and a simulator build only. No phone run is recorded.
-
-- The sensor clock, the Wi-Fi token and Sync over Wi-Fi run by themselves once per connection on
-  both phones, through shared `:core:sync` policy (`SmartSyncPolicy`, `LanTokenPolicy`,
-  `LanAutoEnable`). Their cards and switches show only at Developer. A phone clock before the build
-  floor is never sent. A network clock is replaced only after a measured difference within a
-  minute, and any anchor under six hours old is kept, so two phones never flip-flop the clock.
-- Setup Find scans over Bluetooth only, and setup offers Reconnect over Bluetooth when its link
-  runs on Wi-Fi. Today so far says the phone sets the clock while it is pending, and Finalize shows
-  before the first STATUS. A quiet token fetch on iOS waits for an idle link and never shows an error.
-- To check on phones. Clock set after a power cut, the token after a sensor reset, Wi-Fi sync
-  switched back on below Developer, no Local Network prompt outside the Scan tap, and Wi-Fi
-  browsing still on after an iOS update for a phone that already held Wi-Fi sync access.
-
-## 2026-10-27, templates at opensensor-space-firmware da9bd03 (code only)
-
-Host tests and the iOS simulator only. No phone run is recorded.
-
-- The bundled templates are byte copies of opensensor-space-firmware da9bd03 `docs/shared/templates`.
-  Waveshare moves to `a8605aaf…` and both template digests change (#182). `FirmwareTemplatesTest`
-  fails when a local firmware checkout has other templates.
-- History reads a file by a template its board served before a bundled one. A dict with no reviewed
-  profile has no LIVE view, no hero and no Today so far.
-- To check on phones. Waveshare LIVE labels, History metrics and Today so far on da9bd03 firmware.
-
-## 2026-10-27, Today from the template and Forget on Today (#238)
-
-Host tests and the iOS simulator. One Android phone check, below.
-
-- Today cards come from the template and the app profile `primary` list (#221, #187). The profile
-  `hero` picks the hero through `HeroRegistry`. The bundled air boards name `air-mood`, the peacock
-  with WHO moods. Any other thing gets `GenericMetricHero`, its first primary reading at the
-  profile display step, and a metrics card for the rest. My devices rows show the last day mean of
-  the thing's main metric (`LatestDays`) at its display step, on Android and iOS. Forget moved
-  from the My devices rows to the Today menu, and a Forget confirmed while Collect all holds the
-  link runs once the link frees. The board card shows the battery state from the template
-  classes, Waveshare `bstate` and CoreS3 `chg` (#90).
-- OnePlus 7 Pro, debug install over the stored data. My devices shows OS-7500 PM2.5 corrected and
-  OS-6b40 PM2.5 raw day lines with mood. Today shows the peacock hero, Today so far and the air
-  cards for both, as before. The battery state, the generic hero and Forget were not checked on
-  the phone.
-- To check on phones. Forget from Today during Collect all, the battery state on both boards, and
-  the iPhone day lines.
-
-## 2026-10-26, Thing contract and dictionary v7 templates (code only)
-
-Host tests and the iOS simulator only. No phone run is recorded.
-
-- The bundled templates are byte copies of opensensor-space-firmware 9915aec `docs/shared/templates`, CoreS3
-  (`3b4d8500…`, firmware v6.21) and Waveshare (`50a53393…`, firmware v2.15). The two H3 centre
-  columns become `location_source` and `geometry`. The v6 digests are retired.
-- To check on phones. LIVE and History on boards flashed from opensensor-space-firmware main.
-
-## 2026-10-26, History reads template datastreams (code only)
-
-Host tests and the iOS simulator only. No phone run is recorded.
-
-- History metrics come from the board template datastreams and the app profile (#186). Each file
-  is read by the template its footer names, at the footer's sample interval. Rollups follow
-  `opensensor:aggregate`. Room 13 drops the old tier caches, so every day is derived again once.
-  A daily file of sources at different intervals writes the shortest one. Simple History and the
-  Simple Files chart offer only the profile primary metrics.
-- To check on phones. History of each board after the rebuild, and the default metric.
-
-## 2026-10-18, main `958148ea` (code only)
-
-Merged on 2026-10-17 and 2026-10-18. Host tests, the iOS simulator and `./gradlew verify` on CI only.
-No phone run of these changes is recorded yet.
-
-- Archive and History. The iOS archive index is in Room KMP, one schema with Android (#128). Device
-  and History coordinators are shared by both apps (#124, #132). Corrupt Parquet footers, damaged
-  pages and bad time values no longer stop a History chart (#127, #133, #171). Sync and History
-  memory is bounded and the READ window adapts per link (#134). DELTA and BYTE_STREAM_SPLIT pages
-  decode, with a disk block cache (#103).
-- PM2.5. EPA humidity corrected PM2.5 is the default (#140). Pure QC rules flag suspect PM readings
-  (#139). The Today hero is judged on the EPA NowCast of the last 12 hours and its live value is
-  checked over a rolling window, host tests only (#93, #91).
-- Devices. The CoreS3 v6.13 LIVE dictionary is mapped (#150). Live and status take a long read when
-  the MTU cannot notify a full snapshot (#173). Passphrase and PIN patches go over Bluetooth only
-  (#167). The fixed PIN is masked and credential entry stays out of captures (#165). Forget says it
-  removes enrollment and credentials, not readings (#166). Auto-sync opt-out and renewed LAN
-  credentials hold through Android races (#112). An interrupted iOS collection is kept until a
-  transport accepts it (#174), and a reconnecting iOS run stops on Stop (#120).
-- Export. Station ZIP and daily exports hold only the selected verified records (#163). Export runs
-  share a lease and age out (#172).
-- Screens. Discover freshness, partition refresh and the flat histogram are fixed (#113). History
-  bars are read by a screen reader (#102), and chart labels stay inside the canvas at large text
-  (#131). Short labels fit one line and never split a word (#151). Shared accessibility foundations
-  live in `ui/designsystem` (#123).
-- To check on phones. A sync and History of each board after these changes, the corrected PM2.5
-  default, the long read on a small MTU, and an export of selected records.
-- Auto-sync has never completed a 15 minute periodic cycle on a phone.
-
-## 2026-10-16, remove old format files from the phone (code only)
-
-Branch `yharby/phone-old-file-cleanup`, on top of `yharby/firmware-parquet-micros-live-keys`, with
-the owner's approval. Host tests, the iOS simulator build and `verify` only. No phone run yet.
-
-- Settings › Storage › Old format files. A dry run counts old layout files (`UtcColumns.isLegacyLayout`)
-  for all dates or a UTC date range, then one confirmation removes them from the phone. Files without
-  a UTC column, current MICROS files and unreadable files stay.
-- Shared `LegacyFileCleanup` in `:core:history`. It may run while a sync runs. Per file under its
-  writer lease and the station gate of the shared `DeviceCoordinator`, which sync, index repair and
-  the janitor share. It reads the live record again, writes a `PrunedFiles` record, removes the index record,
-  then the final file below the Durable archive root. A failed delete restores the record, drops
-  the removed mark and counts as failed, and the startup janitor adopts a file left by a crash or a
-  failed restore. Each file's steps finish under `NonCancellable`, and derived days rebuild after, also
-  on cancellation. On iOS a station whose files all went is rebuilt from no sources, so its stale day
-  files go. A rebuild that throws is reported, the files stay removed.
-- Settings shows unreadable files, kept and failed counts, a later History update and a removal
-  failure apart from a count failure. `SettingsController` logs the operation and exception
-  class only.
-- Phone only. No device command and the device card is not touched. Sync skips a removed file
-  while the device lists it at the same size (`REMOVED`, Room v12 `pruned_file` on
-  both phones). Settings › Storage › Removed files › Download again clears
-  the marks after a confirm, so the next sync downloads them again.
-- To check on phones. A removal of old files on Android and iOS, History after it, and a sync of a
-  CoreS3 that still lists old files.
-
-## 2026-10-16, firmware MICROS columns, field ids and LIVE keys (code only)
-
-Branch `yharby/firmware-parquet-micros-live-keys`, for CoreS3 v6.12 and Waveshare v2.6 from
-opensensor-space-firmware `integration/waveshare-bench` (PRs 20, 21 and 22, draft). Host tests, the iOS simulator
-build and `verify` only. No phone run against the new firmware yet.
-
-- Parquet. `event_time_utc_us` and `clock_anchor_utc_us` are read by their `TIMESTAMP` unit, MICROS
-  now, NANOS or unannotated on older files (`UtcColumns`). The reader exposes `field_id`.
-- Derived days. `derived-v4` writes UTC instants as MICROS under the current names, keeps device
-  field ids and renames the estimate to `event_time_utc_estimated_us`. `DERIVE_VERSION` 6 rebuilds
-  every cached day once.
-- LIVE. `LiveSample` is a map by key name (#185), read through the station of the dictionary digest,
-  the bundled board template joined with its app profile (#184). A newer schema keeps its view. Only
-  the current digest of each board is bundled, CoreS3 (`4f80c26c…`) and Waveshare
-  (`6f567b38…`). An unknown or older digest syncs files but has no LIVE view. A null key is no
-  reading now and shows a dash, as does a declared key missing from a sample. Cards follow the
-  template declaration, and an overflow sample clears every live value. CoreS3
-  board temperature comes from `imu_t`, Waveshare air temperature from `t`. Particle bins show only
-  the board's keys. Before `INFO` arrives Today waits quietly and never says unsupported (#152). No
-  screen shows `bstate` yet (#90).
-- Index reopen. Room v11 and the one time iOS receipt import index rows without UTC rows again. A derive pass
-  before that back-fill keeps every day a waiting row may fill (`StationDays.held` in that build, a name the code no longer has), on Android and
-  iOS. `ArchiveRecord.isIndexed` is the one indexed test, and `withUtcBetween` uses it in SQL.
-- Old files. Both layouts stay readable, cached old files stay on the phone, and files the owner
-  removed from the Waveshare card are neither data loss nor uploaded again.
-- Iceberg. Tables target format v3 with the device MICROS columns as `timestamptz` and `field_id`
-  as the Iceberg id. The app has no Iceberg commit code yet, the plan is in `docs/parquet.md`.
-- To check on phones. A sync of v6.12 and v2.6 files, a mixed old and new History day, the CoreS3
-  board temperature tile, and resume after a storage watchdog reset.
-
-## 2026-10-12, consistent sync on Android and iOS (code only)
-
-Branch `fix/sync-consistency`. Host tests, the iOS simulator build and `verify-native.sh` only.
-No phone or iPad run yet.
-
-- Shared. Every run ends with a typed `SyncEndReason`. `TransportUnavailableException` (Bluetooth
-  off, permission missing) fails at once without retry. An unreachable device or an OPEN timeout
-  gets one retry, and the transfer permit is released while waiting. LAN BYE 10 (token rotated)
-  and BYE 3 (token refused) clear the stored LAN token. BYE 4 reads as busy.
-- Android. A refused GATT connect reads as unreachable. A LAN connect refused for the local
-  network permission reads as permission missing.
-- iOS. Every sync, Collect all step and Auto-sync step runs through `runs.collect` on the shared
-  controller. Collect all is cancelled only for sensors in the pass. A reopened sensor page keeps
-  its Bluetooth link and a resumed run for another sensor is dropped.
-- Screens. Today, Device, Files and Stations share one status model. Today names the end reason
-  and never shows caught up after a failure. Each action has one home. The iOS companion page,
-  the clock sync setting and other unused code are removed.
-- To check on phones. A PIN prompt that times out shows no repair message (Android). Token
-  rotation over Wi-Fi. An interrupted iOS Bluetooth run resumes. Bluetooth off fails at once.
-
-## 2026-10-11, stale-bond handling, iOS link queue and shared iOS controller (code only)
-
-Branch `fix/open-gaps-2026-10-11`. Host, simulator and gate results only. No phone or
-iPad run yet.
-
-- iOS. Core Bluetooth runs on one serial queue in `BlePhysicalLink`, with `BleGattQueue`
-  allowing one GATT operation at a time (#80). `BleBondFailure` treats CBError
-  `peerRemovedPairingInformation` as a removed pairing, and `encryptionTimedOut` or CBATTError
-  insufficient encryption or authentication only for a sensor that read INFO before. The link ends without resume or retry
-  and `CompanionNotice.PAIRING_REMOVED` asks the owner to forget the sensor in iOS Settings
-  and pair again. If iPadOS reports this board's refusal as a plain disconnect, the check
-  does not catch it. A re-pair run on the iPad must confirm the real error.
-- iOS shared. `IosLinkProvider` can ask Swift to dial a link. `SensorCollections` holds one
-  `CollectionController` per device (#81, partial). Swift does not route Smart Sync, Collect
-  all or background collection through it yet, so the Swift resume and retry timers remain.
-  Superseded on 2026-10-12, every iOS sync now runs through `runs.collect`.
-  Early-ending runs now report the files they saved instead of 0.
-- Android. HCI 0x06 and 0x3D map to a missing bond. Below API 36, which has no
-  `ACTION_KEY_MISSING`, `BleStaleBondDetector` treats a second consecutive close of a bonded
-  link before Ready as a stale bond. Missing keys and failed encryption stop retries and show
-  the existing pairing repair message, also after Smart Sync and Collect. The app never
-  removes a bond on its own. Which status Android 12 reports for this case is unverified.
-
-## 2026-10-11, iPad Smart Sync over Bluetooth fails on a stale bond
-
-The owner reported that Smart Sync on the iPad Air M2 (iPadOS 27.0.1, main `5604fb3e`)
-disconnects, reconnects, starts and then stops. A CoreS3 `AQ-6b40` serial capture from 14:39
-to 14:49 local (UTC+03:00) showed three cycles of `BLE CONNECT mtu=23`,
-`BLE AUTH result=failed action=disconnect` and `BLE DISCONNECT reason=peer-closed hci=0x13`.
-The firmware ends the link when encryption fails (`ble_sync.cpp`, `BLE_GAP_EVENT_ENC_CHANGE`).
-The board's bonds were reset by an earlier reflash, so the iPad most likely still holds the
-old pairing key. The same window shows clock sets over LAN (`PARQUET CLOCK transport=lan`), so
-Wi-Fi was still reachable. The iOS app ignored the disconnect error and treated each failure as an
-ordinary loss. The iPad log was not collected (`log collect` reported the device not configured),
-so the CoreBluetooth error code is unconfirmed. The workaround is to forget `AQ-6b40` in iPadOS Settings,
-Bluetooth, then pair again with the PIN. No firmware change is implied.
-
-## 2026-10-11, maplibre-compose 0.20.0 and Arabic map labels on iOS (#53)
-
-maplibre-compose 0.20.0 (maplibre-native-ffi 0.202610.0) links ICU on Apple, so iOS loads the
-same basemap styles as Android and the Latin-only styles are gone. `./gradlew --no-daemon verify`
-passed on a Mac, and an unsigned Debug Xcode build for the iPhone 17 simulator succeeded. On that
-simulator, launched in Arabic with the Cairo time zone, Discover drew القاهرة, الإسكندرية and
-الأقصر joined and right to left. Simulator only. Arabic labels on an iPhone set to Arabic, and
-Discover Back returning an open sheet to peek, still need a phone check.
-
-## 2026-10-11, latest main installed on iPad and Android
-
-Fetched `walkthru-earth/opensensor-space-mobile` main at `5604fb3e` and built
-from a detached worktree, preserving the existing checkout and its local notes.
-The Debug APK built successfully and was installed in place with `adb install -r`
-on the USB-connected OnePlus 7 Pro (GM1911, Android 16). Launch returned
-`Status: ok`, and the app process remained running. The original installation
-timestamp was retained. APK SHA-256:
-`07e8d335c7b6013c3347d19ad585dee5a267dc6255d975d3ee35680c81356adf`.
-
-Xcode 27.0 built the signed Debug device app for the paired iPad Air 13-inch M2
-(iPad14,11, iPadOS 27.0.1). Strict/deep signature verification passed;
-`devicectl` installed `space.opensensor.app` in place and successfully
-launched it; a follow-up process check confirmed it remained running. Neither
-app was uninstalled or its data cleared. The iPad data-container identifier
-changed during the update; no before-install file inventory was taken, so
-retained contents were not independently verified.
-
-Build/install/launch evidence is retained under ignored
-`app/build/install-evidence-5604fb3e/` and
-`ios/build/DeviceInstall/evidence-5604fb3e-ipad/`. This run confirms build,
-installation and launch only; BLE, LAN and file transfer were not exercised.
-No source changes or commit were made, and the full `verify` gate was not rerun.
-
-## 2026-10-10, latest checkout installed and launched on iPhone
-
-Xcode 27.0 built the signed Debug device app from mobile `bed7949`, which includes
-the fresh archive snapshot fix. Strict/deep signature verification passed. The
-USB-connected iPhone 16 Pro (iOS 26.6.2, Developer Mode enabled) accepted the
-`space.opensensor.app` installation, and `devicectl` successfully launched
-the app. Debug dylib SHA-256:
-`6bd2511ead905b86226b553e1adab0f68a1bc26c775bac55d93bf673df012548`.
-Build, install and launch evidence is retained under ignored
-`ios/build/DeviceInstall/evidence-bed7949/`. This confirms device installation
-and launch; BLE, LAN and file transfer behavior were not exercised in this run.
-
-## 2026-10-10, sync stability investigation and Android follow-up
-
-Read-only review of mobile `bed7949` and firmware `a53d18e` identified Android
-preparation protection/resume gaps and a canceled large-LIST reader starvation
-case. Focused existing repository, TCP and shared polling host tests passed.
-Two temporary host reproductions confirmed that preparation does not request
-foreground protection and that loss during preparation reconnects without
-starting collection; their source additions were restored. An isolated compiled
-TCP fixture reproduced false liveness failure with a full bounded response queue,
-using accelerated deadlines. These are host findings, not phone reproductions.
-An older iOS retained-connection/late-terminal issue remains source-derived and
-unreproduced. No production repair was made.
-
-Code status as of main `5604fb3e` (2026-10-11). The preparation protection and
-resume gaps and the canceled large-LIST starvation case are repaired in code by the
-#59 work (#69, #70, #79), with host regression tests in `CollectionControllerTest`
-and `LinkSessionTest`. The iOS late-terminal guard landed with #69 and #73. None
-of these repairs has phone evidence yet.
-
-The USB OnePlus 7 Pro ran the APK recorded below (`e56c48aa…add6`). At 18:41 local
-(UTC+03:00), manual background sync used LAN and completed with zero new files
-and zero failures. Interactive reconnect showed Wi-Fi LAN at 18:43:02.887.
-A foreground LIST near the next rotation saw peer EOF at 18:45:19.162; LIST
-failed, and automatic reconnect reached Ready at 18:45:24.688. The initiating
-firmware cause is unconfirmed. The recovered listing contained 42 files.
-
-The new 18:30 file (46.6 KiB) was collected while screen-off followed the Sync
-tap. Afterward the UI showed 42/42 checked files, 1.74 MiB. At 18:46:22.764 a
-local socket abort occurred with `lastEnd=COMPLETED`; BLE was Ready at
-18:46:29.260. This is consistent with idle background socket handling, but no
-corroborating OS socket-destruction event was collected. The transfer is too short
-to qualify sustained screen-off collection. LOG_TAIL returned 8,192 bytes, but
-matching incident lines were not extracted before the owner ended checks.
-The temporary Developer detail level was restored to Simple.
-
-The full ecosystem report, including source findings, evidence limits and ten
-Mermaid diagrams, is `SYNC-STABILITY-INVESTIGATION-2026-10-10.md` in the parent directory, outside this repository.
-Ignored app evidence is under `ios/build/DeviceInstall/evidence-bed7949/`.
-No current iPhone radio qualification was performed.
-
-## 2026-10-10, incomplete LAN listings, memory bounds and Android recovery
-
-On the connected OnePlus 7 Pro (GM1911, Android 16), the old firmware returned
-successful Wi-Fi LIST snapshots of only 12–13 files, ending near 02:30–02:45
-local time. USB enumeration of the same CoreS3 returned 35, including the morning
-files. Concurrent serial output reported `allocate_dma_buf: not enough mem,
-err=0x101` and failed SD reads. The firmware had mistaken a failed directory
-read for EOF and emitted LIST_END for a prefix; the phone's “All synced” banner
-therefore described an incomplete device snapshot. The files remained on SD.
-Before this fix, BLE recovery copied 22 files (1,062,753 bytes), with zero
-failures and measurements through 08:14:59 local time.
-
-Whole-device Sync all and Smart Sync now fetch a fresh LIST and build their plan
-directly from its result. LIST count mismatches fail, and retained/error/loading
-snapshots cannot establish “All synced.” Planning queries this station's local
-archive. Android TCP retains at most 64 response frames and applies backpressure
-without dropping them; readiness is published before the reader and keepalive
-start, fixing an eager-start keepalive race. Firmware v6.11 reserves an SD DMA
-buffer before radios start and rejects failed archive enumeration.
-
-`./gradlew --no-daemon verify` passed (957 tasks), including Android lint, APK,
-unit tests, shared host tests, shared iOS simulator tests and framework link.
-The eight TCP tests include eager keepalive startup, a 257-file response burst
-and disconnect while backpressured. Sanitized firmware directory, archive and
-SD-buffer and Parquet conformance tests and all three native board builds passed separately.
-
-The debug APK was installed with `adb install -r`, preserving the archive,
-settings and bond. APK SHA-256:
-`e56c48aabb3ff9f8256ec323814770e3adf7255dc5624bab38c3c32454daadd6`.
-After the v6.11 flash, automatic LAN sync copied three additional files
-(97,718 bytes), with zero failures. Files displayed Wi-Fi LAN, 37/37 checked
-files, 1.55 MiB, and the 08:00 file; USB independently listed the same 37.
-A later refresh returned 37 again, and the interactive LAN connection remained
-ready beyond five minutes without a reconnect. At the next automatic rotation,
-the board finalized a 90-row file. “Sync now in background” discovered and copied
-its 49,839 bytes over LAN, with zero failures; Files then showed 38/38 checked,
-1.59 MiB and the new 17:00 interval. Independent read-only extraction from the
-phone matched the device CRC-32 `bf653c17`; PyArrow and DuckDB read all 90 rows
-(sequences 0–89), with zero drop, missed-deadline and storage-error fields.
-Captures are ignored board
-artifacts under `lan-memory-20261010/`. This is a short Android/SD/LAN check;
-overnight endurance and real iPhone radio behavior are not qualified.
-
-## 2026-10-10, pushed interval fix and fresh iPhone installation
-
-Firmware `4d20dad` and mobile `655d865` were pushed to their GitHub `main`
-branches. The mobile pre-push `verify` gate passed. Xcode 27.0 built the signed
-Debug device app from mobile `655d865`, and strict/deep signature verification
-passed with access to the local trust store. Its provisioning profile includes
-the connected iPhone 16 Pro and expires on 2026-10-16. Debug dylib SHA-256:
-`10ee1af01d3f126095235d84366d22b61bdc8e608f4cac80bfd6e00bd98fd5a5`.
-
-The iPhone (iOS 26.6.2, Developer Mode enabled) had no installed opensensor app
-before this run. `devicectl` successfully installed `space.opensensor.app`.
-The initial launch was denied by iOS with its signature/entitlements/developer
-trust security message. The bundle signature, application identity and matching
-unexpired device profile were checked; owner completion of developer trust and
-a successful launch remain pending. No iPhone BLE, LAN or file transfer behavior
-is established by this installation. Build/install/launch evidence is retained
-under ignored `ios/build/DeviceInstall/evidence-20261010/`.
-
-## 2026-10-10, interval fragmentation fix, clean Android install and shared iOS checks
-
-Android and iOS now use the shared clock policy to request fresh device status
-before automatic maintenance. A usable recent external anchor survives reconnect;
-missing/RTC clocks, anchors at least six hours old and drift above two seconds
-plus measured link uncertainty request an acknowledged update. Only an actual
-`TIME_SET` creates a clock receipt. Firmware v6.10 also stops flushing unfinished
-intervals on every anchor update. Existing immutable source files are preserved
-by normal sync; no merging or rewriting is required.
-
-After the owner uninstalled the Android app and forgot the sensor bond, the
-fresh debug APK was installed on the connected OnePlus 7 Pro (GM1911, Android
-16). Bluetooth scan/connect grants were applied and the app launched to the
-AQ-6b40 pairing prompt. APK SHA-256:
-`a991b60c2870f39d0dec8157d0f9cceb0c703451620ae507271ce868921b7aeb`.
-The CoreS3 was separately reset and reflashed; its new station and empty initial
-archive are recorded in the board bench evidence. Pairing, reconnect and file
-transfer with this new installation are not yet qualified by this entry.
-
-With Kotlin 2.4.21, `./gradlew --no-daemon verify` passed (957 tasks), including
-Android lint/APK/unit tests, shared host tests, shared iOS simulator tests and
-framework link. Swift host checks and the unsigned Debug iOS simulator app
-build also passed. Independent review completed without a remaining blocking
-finding. Logs are ignored build artifacts. The owner deferred iPhone deployment;
-no iPhone install or radio test was performed for this change.
-
-## 2026-10-09, fresh installs on Android and iPhone
-
-After the owner deleted both apps, GitHub `main` still matched local commit
-`76f31e2`. The locally signed, minified Android release APK built with
-`-Popensensor.localRelease=true` and installed on the connected OnePlus 7 Pro
-(`GM1911`). Launch succeeded and `adb` listed its process. APK SHA-256:
-`0d2768ae810c6d9e16bb73fd6e1f77b70ef3c36d195c12cb39041af400d44e94`.
-The previously built and locally signed Debug iOS app from the same commit was
-verified, installed on the paired iPhone 16 Pro, and launched after the phone was
-unlocked. CoreDevice listed its process running. These are fresh install and
-launch checks; no sensor connection, archive, permission or screen behavior was
-tested on either phone.
-
-## 2026-10-09, iPhone install of current main
-
-Commit `76f31e2` on `main` matched GitHub `origin/main`. Xcode 27.0 built the
-signed Debug iOS app for the paired iPhone 16 Pro using the existing local
-development team. `devicectl` installed `space.opensensor.app` in place,
-launched it, and listed its process running afterward. The app's Debug dylib
-SHA-256 was `85a523c66b2a192f44b8e6dd1a2ef91533bdb2a67596cdd711bcc777818ed3a2`.
-This confirms the build, install and launch; no screen, radio or sync behavior was
-inspected during this check.
-
-## 2026-10-09, peacock expressions and Today layout (OnePlus and host/simulator)
-
-Eight transparent expression portraits now share the original peacock's identity,
-with wings, masks and feather gestures for air quality, missing data and work states.
-Today shows one large portrait above a smaller white backplate; both rotate together
-and the visible body meets the backplate's bottom edge. Average and sync cards no
-longer repeat the character. Shared empty states and Android notifications use the
-same expression set. Artwork and prompts are in [the asset record](design/peacock/README.md).
-
-The final debug APK was installed over the existing app on the connected OnePlus
-7 Pro (GM1911, Android 16) and launched successfully. The saved AQ-6b40 sensor and
-archive remained available. Phone inspection during the layout work showed live
-fair-air readings over Wi-Fi LAN, a single Today portrait, and readable history-ring
-values. The owner approved the final appearance before commit. This is a UI/install
-check; every air-quality expression and notification state was not exercised on
-the phone, and no iPhone radio behavior was tested.
-
-APK SHA-256: `558f15e5d85c2dffac22d124e41261917249c3eed3ec019b5f63fbafd68d050f`.
-
-Verification passed with the bundled JBR: `./gradlew --no-daemon verify
-:app:assembleRelease -Popensensor.localRelease=true` (1045 tasks), including Android lint,
-host tests, shared iOS simulator tests and framework link, plus a locally signed
-minified release APK. The unsigned Debug iOS simulator app also built successfully.
-All nine peacock resources match their source hashes in the debug APK and iOS app;
-the iOS semantics tests load each resource and check accessible state descriptions.
-
-The linked [release job](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37919254818/job/113783676017)
-failed its English-literal audit on an iOS retry diagnostic. The diagnostic was
-corrected, and the audit now declares the external source and catalogue files it
-reads as Gradle inputs. All 19 copy-audit tests passed; a temporary source violation
-also proved that a normal incremental run invalidates the prior passing result.
-
-## 2026-10-09, OnePlus update after automatic UTC changes
-
-Mobile commit `5d5db51` was pushed to `main` after the full pre-push `verify` gate
-passed. Its debug APK was installed over the existing app with `adb install -r`
-on the connected OnePlus 7 Pro (GM1911, Android 16). Existing app data, the saved
-AQ-6b40 sensor/history, and Bluetooth/notification grants were preserved. The app
-launched into its shared UI and remained alive without an AndroidRuntime crash.
-The phone UTC agreed with the build host at 10:34 UTC.
-
-APK SHA-256: `a844088b545663947e1bdd3a112c18468ffd3ac4af8feea204e381dc08292e56`.
-
-Against M5Stack CoreS3 firmware `01e6468`, after the explicitly requested SD Parquet
-cleanup and production flash:
-
-- Tapping the paired AQ-6b40 sensor connected over Bluetooth and displayed live readings.
-  The Clock card changed to "Clock is set and checked by a phone" without a manual clock
-  action. Board serial independently recorded automatic host UTC over BLE and a successful
-  RTC write (epoch `1791542381`, monotonic `55205803` µs).
-- Smart Sync downloaded and checked the first fresh file; Today changed from no timed
-  readings to a current-day average. Disconnecting and reconnecting selected authenticated
-  Wi-Fi LAN automatically; the Clock card again reported the phone-set clock. Board serial
-  confirmed the LAN host anchor (epoch `1791542442`, monotonic `115493452` µs).
-- Collection over LAN and a final sync of the most recently finalized file completed the
-  six-file manifest. Files displayed "All synced", "Everything is on this phone and checked",
-  and `Fri 9 Oct 2026 · 6/6 · 65.1 KiB`. The phone retained its older local archive separately
-  from the cleaned SD; its final archive count was 1265 files.
-
-The board had a usable RTC at boot. This run qualifies Android BLE/LAN automatic clock sync
-and fresh-file collection, not no-RTC recovery, power-cut durability, or iOS radio behavior.
-Older phone readings with no retained boot anchor remain undated as designed. Private receipt
-inspection via `adb run-as` was unavailable because this phone ROM rejected its target-SDK-37
-SELinux context; the observations above use app UI and firmware serial evidence.
-
-## 2026-10-09, automatic UTC and derived partition recovery (host/simulator)
-
-The working tree now synchronizes device UTC automatically on Android/iOS connection,
-without a manual clock setting. A boot-scoped receipt preserves the acknowledged clock
-mapping before collection. Shared history rebuilds
-unknown-UTC readings into derived UTC-day Parquet on both platforms, preserving original
-bytes and null UTC. See [decision, behavior and limits](time-reconciliation.md).
-
-Verified for this change:
-
-- `./gradlew --no-daemon verify`: passed, including Android debug APK, unit/host tests,
-  lint, shared iOS simulator tests and framework link (957 tasks; no new lint issues).
-- `ios/tests/verify-native.sh`: passed archive and LAN host checks.
-- Unsigned Debug simulator app: `xcodebuild -project ios/OpenSensor.xcodeproj -scheme
-  OpenSensor -configuration Debug -destination 'generic/platform=iOS Simulator'
-  -derivedDataPath ios/build/DerivedData CODE_SIGNING_ALLOWED=NO build`: passed,
-  without Swift concurrency warnings.
-- PyArrow 25.0.0 and DuckDB 1.5.5 read all four generated daily fixtures. The unknown-UTC
-  recovery fixture retains all 64 rows, partitions 63 before midnight and one after,
-  preserves the exact `123456` microsecond fraction and leaves raw UTC null.
-- Clock receipt restart, station/boot isolation, malformed evidence, arithmetic overflow,
-  independent footer recovery, stale-day replacement and deduplication have automated tests.
-- Changed Kotlin files pass the pinned ktlint hook; repository diff checks are clean.
-
-The sibling firmware passes both board builds and relevant sanitized writer, time-protocol,
-SNTP, telemetry and archive tests. No board was flashed and neither mobile app was installed
-or radio-tested in this change. Cold boot, Wi-Fi/Bluetooth reconnection, RTC retention and
-power-cut behavior still require dated hardware evidence. An unfinished RAM batch remains
-exposed to power loss; a boot with no retained anchor stays undated.
-
-## 2026-10-09. Wave 2 install check (OnePlus 7 Pro and iPad Air M2), install and launch only
-
-Debug build of `feat/platform-parity` at 14f0a61 (Wave 2: `:core:archive`, `:core:sync` pure moves,
-shared Settings, shared design system and bottom bar). Android was installed with `adb install -r`
-and launched. The process stayed alive with no crash in logcat. The screenshot came out black
-because the phone was dozing, and the screen was not checked. iPad Air M2 (iPadOS, Developer Mode
-on, signer trusted) was built for the device, installed with `devicectl` and launched.
-No sensor was connected and no sync, permission dialog or screen flow was tested on either device.
-
-Later merges the same night (#13 permissions at 00910a9, #14 strings at 5261a74, #12 shared shell
-at 69cc5c6) passed `verify`, `verify-native.sh` and the simulator build only. They were not
-installed on a phone. Owed phone checks are listed on PRs #27, #28, #29, #31 and #33.
-
-## 2026-10-08 17:55 Cairo. On-demand permissions launch check (OnePlus 7 Pro, Android 16)
-
-Minified release build of `refactor/production-readiness` (W13 merged), installed over the
-previous build with `adb install -r`. `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` and
-`POST_NOTIFICATIONS` were revoked and their user-set flags cleared first. Launch opened straight
-on "Sensors nearby" with the known sensor listed and no permission dialog. `dumpsys` showed all
-three still not granted after launch. Still to check on this phone: Scan asks for Nearby
-devices, Sync now asks for notifications, deny twice then the settings link, and the info sheets.
-
-## 2026-10-08, iOS interruption recovery and Parquet export
-
-The owner reports that switching to another app during M5Stack collection stops sync,
-and the next run appears to start over. Code inspection confirms that the old scene
-background handler explicitly closed LAN connections; each sync reset its completed-file
-counter and OPENed every manifest entry, although finalized files and partial bytes were retained.
-
-The working copy now requests bounded UIKit background time for user-started LAN collection.
-Expiration/background transport failure queues resume; foreground return reconnects after old
-archive ownership is released. Cancel clears queued intent, including during cleanup/reconnection,
-and paused progress remains visible. Verification receipts let later runs count saved files
-immediately and skip remote OPEN/READ while still validating local CRC/size/PAR1. Older files
-without receipts are checked once through the existing path. Force-quit/relaunch does not retain
-automatic resume intent, but downloaded bytes/receipts survive and manual sync reuses them.
-
-Since #19 both apps run the shared Files screen and inspector (`:feature:files`). iOS opens it
-from a Files button on My devices and shares one file, all files or a zip, or saves the zip through
-Apple's Files picker, preserving station/Hive paths and excluding partials and receipts. This
-replaced the older Swift folder export. Simulator build only, the iOS share and save sheets and the
-Android chooser and SAF save still need a phone run. Exact storage paths and access are in [data-model.md](data-model.md#finding-and-exporting-the-mobile-archive).
-
-Local validation: `./gradlew --no-daemon verify verifyIos`, unsigned Xcode 27 Debug simulator
-build and `./ios/tests/verify-native.sh` passed. Native regressions fail an actual collection
-mid-window, reconstruct its archive and check completed-file skipping, exact partial offset,
-initial retained progress and newly transferred-byte rates. Receipt tests cover legacy upgrade,
-size conflict, same-length corruption and symlinks. Export tests check independent copies,
-Hive paths and exclusion of partials/receipts, including Apple's `/var` path alias behavior.
-These changes have not been installed on the iPhone. Background timing, pause/reconnect/Cancellation,
-screen-lock behavior and Files-picker completion remain real-iPhone qualification work.
-
-## 2026-10-09, host gate
-
-`./gradlew --no-daemon verify` on an Apple Silicon Mac, branch `feat/platform-parity` wave 0.
-It now includes `verifyIos`, and every shared module joins both gates through its convention
-plugin. 353 tasks, **619 tests passed, 1 skipped, 0 failed**, zero lint errors, debug APK built.
-
-| Where | Tests |
-| --- | --- |
-| `:app` unit tests | 207 |
-| JVM, every `:core` module | 208 (protocol 80, history 44 plus 1 skipped, parquet 34, publicfeed 24, units 15, airquality 7, settings 2, sync 1, archive 1) |
-| iOS simulator, every `:core` module | 170 (protocol 72, parquet 33, publicfeed 24, history 15, units 15, airquality 7, settings 2, sync 1, archive 1) |
-| Android host, Compose modules | 17 (`:feature:discover` 13, `:ui:designsystem` 4) |
-| iOS simulator, `:ios:shared` | 17 (no longer run on the JVM) |
-
-`:core:airquality` tests ran for the first time in a gate. Host and simulator checks only. No
-phone run is claimed.
-
-## Host gate (2026-09-30)
-
-The pending PMS5003T identity/batch-candidate change has a separate host check:
-`./gradlew --no-daemon verify` passes with the new protocol, live estimate, History metric,
-Room v10 and barcode/manual Device card; a migration check script of that build, since removed from `tools/`,
-passed against the v9/v10 Room exports. The gate also covers BLE CONFIG chunk reassembly for
-smaller negotiated MTUs and its missing-chunk failure path. This build has **not** been installed on a phone or
-tested against flashed Waveshare v2 firmware. The optional Google Code Scanner depends on
-Google Play services and may download its module at first use; manual entry needs neither.
-
-`./gradlew --no-daemon clean verify` (2026-09-30): **247 tests passed, zero skipped or failed** across
-`:app` and the three `:core` modules of that date; zero lint errors. The debug APK builds.
-The optional real-archive test now finds the sibling `opensensor-space-firmware` checkout and
-decoded all 767 local Parquet files (67,442 rows) instead of silently skipping
-that corpus. The stdlib SQLite migration validator passes against v8/v9 exports.
-These are host checks. Hardware results are in the dated entries below.
-
-The OnePlus 7 Pro (Android 16 / API 36) accepted the current debug APK in place
-with `adb install -r`, preserving app data. APK SHA-256:
-`74da8ddd25f9e3141cf3d43e92475b0a3fa8e994d79adbb4bc49e8f07b1f99ca`.
-The device locked before the updated History and Today screens could be checked.
-The unlocked-phone lifecycle and one-file BLE check below used the preceding
-build. Firmware-side flash and SD readback are in its board bench file.
-
-## Lifecycle and foreground BLE check (2026-09-30 Cairo)
-
-OnePlus 7 Pro (GM1911, Android 16 / API 36), app commit `d1f91e4`, APK SHA-256
-`4f00537c996d77a39bea9a09f322b62309d1e955a3868ba05d3dfbb46206de7f`.
-Installation preserved the archive and connected AQ-7500 over Bluetooth to the
-Waveshare station `81c0da75-009b-4922-94f9-64e310f006b8`. History loaded
-its 30 September PM2.5 day chart (26.7 µg/m³, 25% coverage). Switching
-History → Files → History, then backgrounding and reopening the app, showed
-the same chart. Files' explicit refresh updated the LIST age without clearing
-its verified listing. The earlier initial History state exposed an empty 0/0
-placeholder while Room resolved; the current build displays “Loading archive…”
-until the query is ready.
-
-Today reported zero dropped rows and storage errors. Its confirmed “Finalize
-buffered rows” action made one short file available. Files showed 150 finalized
-files with one pending transfer. Foreground **Sync all** over BLE completed
-**1/1 file, 16.8 KiB displayed**, then showed “Everything on the card is in the
-archive and verified”; the phone archive count rose from 1,399 to 1,400. This
-is a one-file transfer and UI lifecycle check, not a full-archive throughput,
-LAN, screen-off sync or multi-device qualification. The board had no UTC anchor,
-so those new readings were archived without invented calendar times. See the
-[Waveshare bench record](../../opensensor-space-firmware/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md).
-
-## USB installation and stale pairing (2026-09-29)
-
-App `06ab6ccd` was installed with `adb install -r` on the OnePlus 7 Pro (GM1911,
-Android 16 / API 36), using the same debug certificate as its previous installation.
-Startup and Room-backed Home succeeded without an AndroidRuntime crash. Existing known
-devices and archive summaries remained visible: AQ-7500 had 99 files and AQ-6b40 had
-1,151. This is an installation/startup observation, not a controlled v8-to-v9 migration test.
-
-AQ-7500's automatic BLE reconnect failed: Android recorded GATT status 5 and
-`encryption_change:key_missing`, also present before this update. The owner confirmed the
-Waveshare had been reflashed/erased after pairing. Its USB console answered `parquet status`
-without a reset; no firmware, time, configuration or bond changes were made. Current image
-SHA-256 was not measured, so no firmware-specific transfer result is claimed. See the
-[Waveshare bench record](../../opensensor-space-firmware/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md).
-The owner then entered the physical USB owner PIN. Android reported BOND_BONDED and BLE
-MTU 517; the app verified INFO and displayed current PM2.5, ambient temperature and humidity.
-The station changed from `7abe1b6b-e014-42e7-b259-bf61cee9f288` to
-`81c0da75-009b-4922-94f9-64e310f006b8`. Both epochs appeared in History, and selecting the
-earlier one showed its existing PM2.5 chart (36.5 µg/m³, 18% coverage on 29 September).
-This establishes one foreground stale-bond repair and retained-history observation; it does
-not establish automatic erased-bond repair, file collection after recovery, or simultaneous links.
-
-The follow-up fixes open device details immediately on a sensor tap, even if its link failed
-or a worker owns it. A terminal authentication callback is retained through connection settle
-and teardown, rather than overwritten by a service-discovery error. The persistent banner
-explains pairing repair and opens Android Bluetooth settings; logs contain the GATT status
-and the same explanation. Four regression tests cover failure retention, disconnected status
-0, a fresh attempt and repair-banner detection. Eight more cover asynchronous Android pairing:
-initial BOND_NONE must not be mistaken for cancellation, fast cancellation cannot be lost to
-StateFlow conflation, and timeout/cancellation remain bounded. No automatic unpairing is performed.
-Tapping AQ-7500 opened Today even on a failed link; cancelling pairing left a persistent error
-with archive tabs available. The final debug APK is SHA-256
-`105783e2c2655fea0a9c83cff0fcf577aee3fab17f7d7937899a103f2c26c9b7`.
-
-## Waveshare live battery display (2026-09-30 Cairo)
-
-On the OnePlus 7 Pro (GM1911, Android 16), the installed AQ APK (SHA-256
-`105783e2c2655fea0a9c83cff0fcf577aee3fab17f7d7937899a103f2c26c9b7`, local app
-commit `5df7aa86171fc72e94a0bd72bfda75cb2f3fc056`) connected to AQ-7500 over Bluetooth
-with Waveshare firmware image SHA-256
-`63951c913b0995ee7d2180a68fb4fc995202b48cfe6741655909e2b420febc0c`.
-The app was in Simple view; switching to Detailed showed **100% / 4,277 mV** in Today's Battery
-card while current sensor readings updated. No app source or APK change was needed. The
-screenshot at `../../opensensor-space-firmware/firmware/arduino-waveshare-sim7670g/artifacts/battery-android-live-20260930.png`
-(SHA-256 `8080782f9cc55761599a8dd92354a05c93c43ec7c972f66bc88734fdb61bc988`)
-is retained in the firmware trial's git-ignored artifacts; the
-[Waveshare bench record](../../opensensor-space-firmware/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md)
-has the board-side evidence. This first display observation was USB-attached. After USB was
-unplugged, AQ-7500 remained connected over Bluetooth and the Detailed Battery card showed
-**100% / 4,067 mV**, with changed particle and ambient readings, status age 4 s and uptime
-12m50s. This verifies a fresh battery-only app readout on the same phone and firmware image.
-The second screenshot is retained at
-`../../opensensor-space-firmware/firmware/arduino-waveshare-sim7670g/artifacts/battery-android-live-battery-only-20260930.png`
-(322,123 bytes; SHA-256 `70250dffca9867bc284612c9e0a89a6d47e1569a789bd75810856b84a102d78f`).
-Neither run captured a raw GATT packet or transferred a file. The 100% value is the gauge's
-capped estimate, not a capacity-calibration result. Charging state remains unknown; the board
-adapter does not report `chg` or `vbus`.
-
-## Waveshare History after station reset (2026-09-30 Cairo)
-
-OnePlus 7 Pro (GM1911, Android 16 / API 36) received the updated debug APK in place with
-`adb install -r`; app data and archived files were retained. APK SHA-256 was
-`9c14cec1db961f842f570f99095db414558f19cd0247e62f01678564001be051`.
-The connected AQ-7500 had current station `81c0da75-009b-4922-94f9-64e310f006b8` and
-earlier station `7abe1b6b-e014-42e7-b259-bf61cee9f288` from the prior reset. History showed
-the current station's 30 September PM2.5 day chart (23.3 µg/m³, 2% coverage), then selecting
-**Earlier** opened its latest day, 29 September (36.5 µg/m³, 18% coverage). Changing to Week
-kept that date and showed its 23–29 September chart. The full UUIDs were replaced by short
-Current/Earlier labels; metric chips now scroll horizontally without squeezing a long label.
-
-Before this fix, History counted 99 retained SD copies whose inner Hive path named the earlier
-station as “still indexing” under the current station and described all 115 current-namespace
-files as untimed. The page now excludes those copies from the current station's file/time counts
-and explains their provenance; the immutable archive bytes and outer INFO-station namespace
-were not changed. After four additional files were collected, the current-namespace view showed
-20 own files, including three with real UTC, two with estimated time, and 99 retained copies
-from the earlier station. This observation covers the two station views and Day/Week controls,
-not a controlled reset/reflash or complete file-sync qualification. The firmware image was
-previously read as SHA-256 `63951c913b0995ee7d2180a68fb4fc995202b48cfe6741655909e2b420febc0c`;
-it was not read again during this battery-only phone run.
-
-Screenshots are retained in the firmware trial's ignored `artifacts/` directory:
-`history-android-current-20260930.png` (SHA-256
-`1832c216861e926198ba91aec625018439368b66d195b466f06887ffff9cd6c7`) and
-`history-android-earlier-20260930.png` (SHA-256
-`0e80bc7ea09de10c87b146bb45120290e74d5df10484a2c8fa60f89d7b105634`).
-The focused History presentation tests and `./gradlew --no-daemon verify` passed.
-
-## 2026-09-16 to 2026-09-29, earlier changes
-
-- **2026-09-29**, Rebranded visible copy/releases/exports without changing Android install or wire
-  identities. Added per-device assisted ViewModels/controllers, two-transfer budget, shared legacy
-  mDNS resolver, foreground aggregation and worker ownership; immutable archive writer leases and
-  reference-counted LAN protection; Room v9 station epochs and continuity policy; reviewed nullable
-  live profiles and available-metric/signed history charts. Retained SD producer-station mismatch
-  stays archived/exportable and is excluded from the new station's charts. No board was flashed,
-  rebooted or paired during the initial source audit. The later USB/foreground repair evidence
-  is recorded above. Qualification and limitations are in
-  [opensensor-space.md](device-identity.md).
-
-- **2026-09-20**, LAN bearer tokens are encrypted at rest with Android Keystore AES-GCM. Startup
-  completes plaintext migration before Auto-sync services can consume tokens. Missing keys, failed
-  authentication and malformed encrypted values fail closed by clearing only that device's token and
-  port (the device row remains for a later BLE refresh); DAO reads and flows stay usable while
-  unrelated failures still surface. Covered by focused JVM tests; not yet exercised on a phone or
-  across a real device-to-device transfer.
-- **2026-09-19**, **Post-sync `LIST` no longer dies with the link.** Seen on the phone after a completed sync: "LIST failed: link lost while waiting for a response" replaced the whole file list. Cause: the refresh was launched after `running = false`, i.e. after the foreground service let go of the uid, so the socket was killed under it (transport of that run not recorded, LAN + backgrounded phone fits; confirm with `adb logcat -s SyncEngine SyncFgs ConnectivityService` on the next run). The re-list now runs inside the protected run; `ManifestState` keeps the last listing through `Loading`/`Error` (`ManifestStateTest`), so the Files screen shows "Refresh failed: …, showing the last listing." instead of a blank list, and `plan` stays usable. Not yet on the phone.
-- **2026-09-18** (14:03 local), app `678c1c0` (APK `3c454c74…`) installed on the OnePlus over Wi-Fi adb against firmware `-v6.3`; **first device-flagged wake measured**, see the firmware repo's [bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#board-1-advertising-payload-wakes-the-phone-firmware-v63-protocol-21). `setForeground` still refused (no companion association yet); Wi-Fi callback fires at every process start and is throttled as designed.
-- **2026-09-18** (evening), **Event-driven Auto-sync** ([background-sync.md](background-sync.md#triggers-starting-a-run-before-the-period-is-up)): Companion Device Manager "wake when nearby" (association dialog on the Device screen, `CompanionPresenceService`, `REQUEST_COMPANION_*` exemptions, Room v8 `companionAssociationId`), offloaded advertising-flag scan on the firmware's new protocol-2.1 service data (`Advertisement`, `AdvertFlagScan`), Wi-Fi-arrival LAN-only run (`SyncTriggers`), `SyncTrigger` on every one-time run. 151 tests, lint clean. **Not yet on the phone**; design and measurement list in `../opensensor-space-firmware/docs/shared/background-sync-triggers.md`.
-
-- **2026-09-18** (later), Files list grouped by **local calendar day** (`FileGrouping`, zone-pinned tests): the headers were the SD card's UTC `day=` folder, so at UTC+3 every file after 21:00 local sat under tomorrow. Header subtitle names the UTC folder(s); each row shows its local start time. Installed on the OnePlus (commit `c6c27cd`), not yet recorded in bench-verified.
-- **2026-09-18**, bugs found on the phone, fixed: `derived_day` upsert that never updated (every pass rebuilt every day), Today card on the UTC day, History span frozen at open time, Day re-read on every Room write. Day view → **24 hourly columns**; Files gained **Chart by file**.
-- **2026-09-17**, GeoParquet 2.0 (D11); modules split into `:core:protocol` / `:core:parquet` / `:core:history`; metric registry, tiers one row per metric (Room v7); History steps 1–5 + §4.6 time estimate; Now card, detail levels, Home cards, Collect from all loggers; first phone run fixes (foreground service, auto-reconnect, token renewal, WifiLock, resume policy, REBOOT audit); Auto-sync; protocol v2.
-- **2026-09-16**, v1 protocol bench-verified from a macOS host; decisions mirrored into `ble-sync-protocol.md`.
-
-## Next
-
-0. **Qualify this multi-device/recovery slice**: install upgrade from the existing signed build;
-   test BLE/BLE, BLE/LAN and LAN/LAN with two boards, cancellation and foreground ownership;
-   normal reset/reflash and separately authorized credential-erasing recovery; retained SD station
-   history and pairing repair. Record each result under the correct firmware board bench record.
-
-
-1. **Instrumented phone runs** → `bench-verified.md` (date, firmware SHA-256, app commit, phone): full sync over BLE and LAN with the foreground-service build; BLE/Wi-Fi coexistence soak; energy; `lan.rotate_token`, `ble.clear_bonds`, `fixed`/`none` pairing.
-2. **Auto-sync overnight on the OnePlus**: count 15-min periods that ran (`adb logcat -s AutoSyncScheduler SyncWorker CompanionPresence AdvertFlagScan SyncTriggers`), whether `setForeground` was refused, whether BLE-by-address connects with the screen off; record OEM battery settings needed. **Triggers first:** the owner taps *Set up wake when nearby*, does the association dialog find the advertising logger; does `EVENT_BLE_APPEARED` arrive after walking back in; does a screen-off LAN sync survive with the device present (no "Destroyed live tcp sockets") and does `setForeground` stop being refused. The flag scan firing within a minute of `PARQUET READY` is measured (19 s, one event); repeat for a distribution and after a Bluetooth toggle.
-3. **API 37 local-network permission** on a real Android 17 device (grant / deny / revoke while connected) and `NsdManager` across API 31–37.
-4. **Further transports** (LoRa relays) behind `DeviceTransport`; engine, archive, verification unchanged.
-5. **Opt-in cloud step after local sync**, off by default, own setting and review; `INTERNET` for LAN does not pre-approve it. Privacy boundaries: `../opensensor-space-firmware/product/mobile-architecture.md`.
-
-## Test phone
-
-OnePlus 7 Pro, Android 16, over USB adb. `run-as` is refused on this ROM: inspect via logcat tags `HistoryIndexer HistoryDeriver
-SyncEngine DeviceConnection TcpTransport BleTransport AutoSync SyncWorker SyncFgs`, not files. `TcpTransport` and
-`BleTransport` are the tag names of that build, the drivers are `TcpLinkDriver` and `BleLinkDriver`.
-
-
-## 2026-10-08, Kotlin Multiplatform iOS migration started
-
-The Android app and first iOS app now compile the same portable protocol and
-sensor-domain implementations. JVM-only Parquet/file adapters and existing
-Android screens remain in place. [ios-migration.md](ios.md) describes
-the exact source-set split, build commands and remaining feature work.
-
-Host verification: `./gradlew --no-daemon verify` passed after formatting,
-with **274 tests passed, no failures or skips**, and no Android lint errors.
-Both actual-SQL migration validators passed (v8→v9 and v9→v10). `verifyIos`
-passed **17 common tests** on the installed iOS simulator and linked the
-Compose framework; iPhone arm64 framework linking also passed. Xcode 27 built
-both the simulator and signed device app. These are compilation/test results,
-not sensor or radio qualification.
-
-The first simulator launch exposed a required Compose plist setting; adding
-`CADisableMinimumFrameDurationOnPhone = true` fixed the startup crash. The
-corrected iPhone 17 Pro simulator on **iOS 26.5** rendered the discovery screen
-and remained running. Its unavailable-Bluetooth explanation was visually checked.
-The corrected app was installed on the owner's **iPhone 16 Pro, iOS 26.6.2**;
-after Developer Mode and profile trust were enabled by the owner, launch succeeded
-and CoreDevice confirmed the app process was still running. No signing team,
-certificate or provisioning material was committed.
-
-Real-phone evidence for app commit `e1a3c6d`: the owner's screenshot showed
-Bonjour discovery of `aq-6b40` on the iPhone. After reporting that the other phone
-was disconnected, the owner confirmed a Bluetooth connection and visible live
-readings in the iOS app. This is owner-reported foreground behavior, not a
-captured wire trace or a comparison of values with the board. The corresponding
-[CoreS3 bench note](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--first-ios-companion-phone-observation)
-records the evidence and its limits. A fresh pairing/PIN flow, notification
-cadence, STATUS updates, stale timeout and foreground/background behavior still
-need qualification. At that first-stage commit, the iOS app was a foreground live reader only:
-Bonjour discovery is implemented with an explicit **Find Wi-Fi sensors** action,
-`NSLocalNetworkUsageDescription` and the `_ossync._tcp` entry in `NSBonjourServices`.
-The browse stays active while iOS asks for permission; denial and unavailable Wi-Fi
-are not confused with Bluetooth failure. The shared LAN envelope/handshake now
-also compile for iOS. A discovered sensor name is confirmed by the phone
-screenshot; the Local Network prompt itself and allow/deny/revoke behavior were
-not reported. At that commit, Wi-Fi result cards were discovery-only with no connection action;
-Parquet archive download, offline history, exports, authenticated LAN transfers and automatic
-background collection were not implemented. The later Wi-Fi implementation is recorded below. Minimum app deployment target is iOS 18.5;
-this stage includes Apple Silicon simulator and physical iPhone targets.
-
-
-## 2026-10-08, iOS authenticated Wi-Fi collection implemented
-
-The foreground iOS app now supports explicit BLE **Save Wi-Fi access** (`GET_TOKEN`),
-device-only Keychain credentials, Bonjour TXT/endpoint discovery and independent authenticated
-LAN sessions. Wi-Fi cards expose Connect, Sync and Cancel/Disconnect, with per-sensor live
-PM2.5 and collection progress. Two sensors can transfer concurrently on one phone. The TCP
-reader separates pushes from file replies and bounds buffering; a STATUS keepalive follows
-120 seconds without outgoing phone traffic, independently of received LIVE pushes. Backgrounding
-closes all connections. Returning to the foreground requires an explicit reconnect/sync.
-
-Verified Parquet files are retained in Application Support under station/original relative path.
-Partial files resume only for the same size/CRC identity. Size, streamed CRC-32 and PAR1 checks
-must pass before immutable finalization; unsafe paths, foreign handles, wrong offsets, malformed
-READ_END and conflicting finalized archives fail without replacing saved data. Native I/O and
-CRC work run on a separate archive actor.
-
-Validation on 2026-10-08: `./gradlew --no-daemon verify verifyIos` passed, the unsigned Xcode
-Debug simulator and unsigned Release device builds passed, and `./ios/tests/verify-native.sh` passed against the production
-Swift archive/transfer engine. New shared tests cover request/frame codec bridging, token
-redaction, identity validation and independent per-sensor presentation state. Native tests cover
-resume, CRC failure, immutable conflict, traversal/symlink rejection, foreign handles,
-READ_END consistency, two concurrent stations, hardware claims retained through cancellation,
-and outbound keepalive timing.
-These are host/simulator/build results, not a new iPhone radio observation. BLE GET_TOKEN,
-Keychain persistence, LAN live/collection, cancellation/background/resume and multi-phone
-behavior need dated phone runs. Offline archive charts, export UI and automatic background
-collection remain unimplemented on iOS. The preceding first-stage iPhone observation applies
-only to the older BLE live-reading and Bonjour-discovery app.
-
-## 2026-10-08, iPhone rebuild with Wi-Fi card feedback
-
-After `git pull --ff-only origin main` reported up to date, the local working copy
-with the in-progress LAN implementation was updated so tapping a discovered
-Wi-Fi card invokes Connect. Each card shows discovered, connecting or connected
-state, progress during connection/sync, fresh PM2.5 when available, and waiting or
-sensor-not-ready feedback otherwise. Disconnect clears the value and late live
-callbacks cannot restore it; a vanished discovery endpoint asks for another scan.
-
-The shared presentation/wire suite passed **11 tests on JVM and 11 on the iOS
-simulator**; `verifyIos` also passed the core simulator tests. Xcode 27's signed
-Debug device build succeeded. The app was installed in place on the connected
-iPhone 16 Pro and launched; CoreDevice confirmed its process remained running.
-App executable SHA-256: `274f9f0a811a0c3c3d3d87461d3c4766ee52cd9c425c4c7ecf15f0112dbed0dc`.
-This is build/installation evidence from a working copy, not a new authenticated
-Wi-Fi reading or transfer observation. The owner still needs to tap a Wi-Fi sensor
-and check the connection feedback and live value on the phone.
-
-## 2026-10-08, owner-reported iPhone enrollment and slow LAN collection
-
-After the card showed that this phone needed Bluetooth enrollment, the owner
-confirmed **Save Wi-Fi access** succeeded and Wi-Fi file syncing started on the
-iPhone. The owner reported collection slower than BLE, also on Android. This
-confirms enrollment and collection start; it does not establish completed-file
-verification, measured throughput, Keychain persistence across launches or the
-number of simultaneously active collectors. The owner also reported the iOS 27
-runtime installed on the Mac; `xcodebuild -version` confirmed Xcode 27.0 (27A266a).
-
-Read-only Android/iOS/firmware inspection and existing board timings are recorded
-in the LAN investigation of that date. Its summary is that the CoreS3 v6.6 bench measured about
-1.8 KB/s per collector with two collectors, and after firmware v6.7 three host fetches of an
-87,654 byte file took 0.925 to 1.045 s, with no phone throughput established.
-No transfer tuning, firmware flash or app reinstall was performed during this
-investigation. An isolated same-file timing is still needed to distinguish
-request/storage latency from contention or radio behavior.
-
-## 2026-10-08, transfer overhead and firmware scheduling improvements
-
-Android now throttles intermediate progress and debug CHUNK snapshots to 100 ms,
-retaining final/recovery events, secret redaction and trailing frame history when
-requests end. iOS enables TCP noDelay, limits intermediate progress to 250 ms,
-removes a redundant per-chunk archive actor hop and cancels completed operation
-timers. Wi-Fi cards show average KiB/s calculated only from newly received bytes;
-resumed and already archived bytes do not inflate it. READ-window checkpoints,
-offset validation, size/CRC-32/PAR1 verification and immutable archives remain.
-
-`./gradlew --no-daemon verify verifyIos` passed: **286 JVM tests** plus the
-common iOS simulator tests, including **12 shared presentation/wire tests**.
-The native Swift harness passed rate/throttling, resume/reuse accounting and
-archive/transfer integrity checks. Xcode 27.0's signed Debug device build passed;
-the enhanced app was installed in place on the connected iPhone 16 Pro, launched,
-and confirmed running by CoreDevice. Executable SHA-256:
-`651022a29f1c1b497ef36b9389583b913c501f4beb17aff3fac8bab5d90c7a1c`.
-This confirms installation, not a measured phone speed improvement.
-
-The sibling firmware now wakes LAN work through bounded socket readiness and
-storage work through queue-first signaling, preserving sample/command fairness
-and radio/security settings. Sanitized scheduling, LAN, archive and control gates,
-format/lint, both board builds and the generic logger build passed. An additional
-Waveshare schema gate fails at an existing firmware-identity assertion in unrelated
-pending schema work. See its [performance guide](../../opensensor-space-firmware/docs/shared/lan-performance.md).
-Firmware has not been installed for this change; a sensor restart requires owner
-confirmation. Hardware throughput and sampling/coexistence results remain pending.
-
-## 2026-10-08, authorized CoreS3 v6.7 deployment and measured host speed
-
-The owner approved installing the firmware and measuring Wi-Fi speed. After
-the required identity/security checks and verified private 16 MiB backup, the
-CoreS3 at AQ-6b40 was upgraded to v6.7; upload verified its hash and LAN INFO
-reported the new identity with preserved station/device and a working saved token.
-The deployed working-copy image includes the owner's pending configuration work.
-USB backpressure was removed from radio/archive diagnostics without changing
-physical serial commands; fixed firmware scheduling waits were also removed.
-
-The same **87,654-byte file** took **0.925–1.045 seconds** in three host runs
-without a USB reader (**84–95 KB/s**). Two simultaneous host collectors each
-reached approximately **57 KB/s**. All copies matched the original SHA-256 and
-passed CRC/PAR1 and PyArrow/DuckDB validation; a physical serial readback passed
-too. Short-run logger snapshots showed no new dropped rows, errors, missed
-deadlines or failed state. An old-image comparison with two connections took
-2.149 seconds with the USB console drained versus 16.459 seconds without;
-another initial undrained baseline took 33.672 seconds with client count unknown.
-Different loads/client counts prevent claiming a controlled phone speed multiplier.
-
-Exact application/ELF and backup hashes, timings and limits are in the
-[CoreS3 bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--cores3-v67-lan-latency-and-usb-backpressure).
-The enhanced iPhone app remains installed with average KiB/s feedback. Actual
-Android/iPhone throughput after the firmware upgrade still needs phone observations;
-these are real-board host measurements, not phone or sustained-radio qualification.
-
-## 2026-10-09, combined device discovery and iPhone LAN Smart Sync follow-up
-
-The combined Bluetooth and `_ossync._tcp` My devices list and shared Today/Device
-navigation were built with `./gradlew --no-daemon verify`, Xcode Debug, and installed
-on the paired iPhone 16 Pro. The owner saw **Wi-Fi LAN** and live Today data, but
-reported that Smart Sync immediately disconnected the sensor. A captured iPhone
-screen showed **Not connected** and an incorrect **All caught up** message after
-the disconnect. This is real-phone app evidence; no completed file or transfer rate
-was observed. The owner's earlier impression that Wi-Fi sync was slow has no
-measured KiB/s or file size yet.
-
-The app parser omitted valid `TIME_SET` replies from its LAN frame validation;
-every fresh LAN sync sends `SET_TIME`, so the reply closed the socket as an invalid
-frame. Valid canonical replies now reach the shared sync engine, and an interrupted
-LAN run no longer appears caught up. Host and iOS simulator tests passed for the
-decoder and failure state. The corrected signed Debug app was installed and launched
-on the iPhone 16 Pro; CoreDevice listed its process running. Debug dylib SHA-256:
-`1e5debb1f9c623f02826db8af1c115e949d2ba260b3a18265e51543ca7c8e601`.
-On retry with this corrected build, the owner reported that Wi-Fi Smart Sync now works.
-No file size, completion count or transfer rate was supplied, so throughput and
-large-file/resume behavior remain unmeasured on the phone.
-
-The updated Android Debug APK installed and launched on the connected OnePlus 7
-Pro (`GM1911`, ADB `8ed37969`); its process was running after launch. APK SHA-256:
-`cf71cd19b217b75274e1763bab5479c43a50a8ab303b7036f5b743b03865ad70`.
-Android combined discovery, LAN-only open, and sensor collection were not exercised
-on that phone in this run.
-
-## 2026-10-09, sensor screen and sync resilience follow-up
-
-Code now routes Android Reconnect through an enrolled, resolved LAN target when
-Bluetooth is unavailable. iOS validates saved hardware identity before accepting BLE
-INFO, keeps earlier station IDs for History, scopes sensor Files and exports to that
-sensor, and exposes its live LIST and per-file retry. The iOS Smart Sync runner reports
-planned remaining bytes and per-file failures; the Debug screen receives a redacted
-clock/sync outcome trace. Foreground BLE and LAN sync retry transient link loss at most
-twice and retain verified partial files. Stop and disconnect cancel pending retries.
-
-`./gradlew --no-daemon verify` passed after the presentation-literal correction:
-Android lint, Debug APK, `:app` unit tests, shared host tests, iOS simulator tests
-and framework link. An unsigned iOS simulator app and a locally signed iPhone Debug
-app built successfully with Xcode. The new Android Debug APK installed and launched
-on the USB OnePlus 7 Pro (`GM1911`, ADB `8ed37969`), and `pidof` listed its process.
-APK SHA-256: `b2e3694179efe934dd0166b478f44586066b406ed64ca9b175dec3ce0709fd77`.
-The signed iPhone app installed on the paired iPhone 16 Pro; its Debug dylib SHA-256
-is `9b78df08c2130bf0c6abc9e7bb9af821db5472972fcfdd45702c93152e14effd`.
-CoreDevice initially refused the launch check because the iPhone was locked.
-Real-phone selected-file retry, deliberate radio interruption/recovery, two-sensor
-Collect all, and throughput remain to be observed on hardware. An install or launch
-check alone does not qualify these flows.
+- 2026-10-08, R8 release APK size. Unminified universal APK 55,080,672 bytes, minified 6,596,149
+  bytes with `mapping.txt`. With Discover the minified APK was 49,525,502 bytes, about 42.6 MB of
+  it native libraries, started on the API 36 arm64 emulator only. From `build-and-release.md`.
+- 2026-10-11, ABI filter (#61). With `arm64-v8a` and `armeabi-v7a` only, the minified release APK
+  went from 51,731,831 to 35,130,751 bytes. From `build-and-release.md`.
+- 2026-10-08, `RealArchiveTest` on an M-series Mac. All 767 archive files read in about 0.45 s on
+  the JVM. Another record gave 766 files in 0.2 s with 67,272 rows. From `parquet.md`.
+
+## Test devices
+
+- OnePlus 7 Pro (GM1911), Android 16, over USB adb. `run-as` is refused on this ROM, so inspect
+  through logcat and the app UI.
+- iPhone 16 Pro, iOS 26.6.2 at the last recorded run.
+- iPad Air 13-inch M2, iPadOS 27.0.1 at the last recorded run.
+
+## How to record a run
+
+Update the cells the run covers with its date and commit. Add a short note above when the cell
+needs one. Put board and firmware observations in the board's `bench-verified.md`. Entries before
+2026-10-26 are in git history (`git log -- docs/status.md`).

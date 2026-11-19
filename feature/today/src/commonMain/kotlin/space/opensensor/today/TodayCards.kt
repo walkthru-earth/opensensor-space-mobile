@@ -44,7 +44,6 @@ import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
 import space.opensensor.data.protocol.LiveReading
-import space.opensensor.data.protocol.LiveSample
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BigValue
 import space.opensensor.designsystem.BodyText
@@ -202,7 +201,6 @@ import space.opensensor.today.resources.today_of_the_day
 import space.opensensor.today.resources.today_readings_since_midnight
 import space.opensensor.today.resources.today_so_far
 import space.opensensor.units.UnitFormatter
-import kotlin.time.Instant
 
 /** The display units for Today's readings, provided by [TodayScreen] from its `units` parameter. */
 internal val LocalTodayUnits = staticCompositionLocalOf { UnitFormatter.Metric }
@@ -609,7 +607,7 @@ private fun Long.toPluralCount(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toIn
  * generation and the last sample's UTC instant. The phone sets the clock on its own.
  */
 @Composable
-internal fun ClockCard(status: DeviceStatus?, live: LiveSample?, modifier: Modifier = Modifier) {
+internal fun ClockCard(status: DeviceStatus?, live: LiveReading?, modifier: Modifier = Modifier) {
     val synced = status?.utcSynced
     val label = when (status?.clockSource) {
         1 -> stringResource(Res.string.clock_host)
@@ -645,9 +643,9 @@ internal fun ClockCard(status: DeviceStatus?, live: LiveSample?, modifier: Modif
         status?.gen?.let {
             Text(stringResource(Res.string.clock_generation, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        live?.utc?.let { ns ->
+        live?.utc?.let { instant ->
             Text(
-                stringResource(Res.string.clock_last_sample, isoInstant(ns)),
+                stringResource(Res.string.clock_last_sample, instant.toString()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontFamily = FontFamily.Monospace,
@@ -655,10 +653,6 @@ internal fun ClockCard(status: DeviceStatus?, live: LiveSample?, modifier: Modif
         }
     }
 }
-
-/** A LIVE `utc` in nanoseconds as an ISO-8601 instant, the Developer line on the clock card. */
-internal fun isoInstant(utcNs: Long): String =
-    Instant.fromEpochSeconds(utcNs / 1_000_000_000L, utcNs % 1_000_000_000L).toString()
 
 /**
  * Detailed level, on the reviewed dictionary after the board acknowledged the opt-in: the

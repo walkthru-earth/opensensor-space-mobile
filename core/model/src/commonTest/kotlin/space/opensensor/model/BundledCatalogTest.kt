@@ -13,7 +13,7 @@ class BundledCatalogTest {
     private val indexFile = "templates/index.json"
 
     // The current digests, opensensor-space-firmware docs/shared/templates (#86). A desc move keeps them.
-    private val cores3Dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
+    private val cores3Dict = "f4f81218dc80d1a8e6db043197a2f7180c4f075f9e8348df30eaceef44d68370"
     private val waveshareDict = "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809"
 
     // CrowPanel is bundled with no reviewed profile, so it renders with a derived one.
@@ -54,7 +54,8 @@ class BundledCatalogTest {
     @Test
     fun theBundledCores3TemplateKeepsTheReviewedA017edfColumns() {
         // The a017edf bytes carry the retired e5060fb7 digest. The firmware bytes keep every fact it
-        // reviewed and only add what it left out, a unit, property, aggregate or code classes. A unit
+        // reviewed and only add what it left out, a unit, property, aggregate, code classes or a display
+        // hint (title, Arabic title, class titles, decimals, group, scale or bitfields). A unit
         // of 1 now sits in the column, so the firmware drops its unit label. A plausible range may only
         // widen, as the board temperature range did to the BMI270 rating of -40 to 85. Dictionary v7
         // replaces the two H3 centre columns with location_source and geometry, and the sensor board
@@ -70,9 +71,18 @@ class BundledCatalogTest {
                 unit = column.unit ?: b.unit,
                 property = column.property ?: b.property,
                 aggregate = column.aggregate ?: b.aggregate,
-                classes = column.classes.ifEmpty { b.classes },
+                classes = column.classes.ifEmpty { b.classes }.map { c ->
+                    val firmware = b.classes.firstOrNull { it.value == c.value && it.name == c.name }
+                    c.copy(title = c.title ?: firmware?.title, description = c.description ?: firmware?.description)
+                },
                 unitLabel = column.unitLabel?.takeIf { it != b.unit },
                 plausibleRange = column.plausibleRange?.let { r -> b.plausibleRange?.takeIf { it.min <= r.min && it.max >= r.max } ?: r },
+                title = column.title ?: b.title,
+                titleI18n = column.titleI18n.ifEmpty { b.titleI18n },
+                decimals = column.decimals ?: b.decimals,
+                group = column.group ?: b.group,
+                scale = column.scale ?: b.scale,
+                bitfields = column.bitfields.ifEmpty { b.bitfields },
             )
             assertEquals(filled, b, column.name)
         }
@@ -189,7 +199,7 @@ class BundledCatalogTest {
         val index = ModelJson.parseTemplateIndex(BundledFiles.files.getValue("templates/index.json")).associate { it.dict to it.desc }
         assertEquals(index.getValue(cores3Dict), BundledCatalog.template(cores3Dict)?.key?.desc)
         assertEquals(index.getValue(waveshareDict), BundledCatalog.template(waveshareDict)?.key?.desc)
-        assertEquals(listOf("cores3-telemetry-v6", "waveshare-sim7670g-telemetry-v6", "crowpanel-epaper-telemetry-v1"), BundledCatalog.templates.map { it.schema })
+        assertEquals(listOf("waveshare-sim7670g-telemetry-v6", "crowpanel-epaper-telemetry-v1", "cores3-telemetry-v6"), BundledCatalog.templates.map { it.schema })
     }
 
     @Test
@@ -230,7 +240,7 @@ class BundledCatalogTest {
     @Test
     fun aRealFirmwareDescResolvesWithoutADict() {
         // The desc firmware writes in template.sha256 for the CoreS3 template.
-        val desc = "4dd6c4b1ef19187ed2c011ab86018e43be0f28edc3af63a0f6a27b70ff203ef3"
+        val desc = "38b0982d1da0dfea20777af87544f30c8141ef297ed5146c402129133acbea0e"
         val template = assertNotNull(BundledCatalog.templateByDesc(desc))
         assertEquals(cores3Dict, template.dict)
         assertEquals(desc, template.key.desc)

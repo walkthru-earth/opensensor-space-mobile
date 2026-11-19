@@ -546,7 +546,7 @@ class FakeTransport(
     private fun liveJson(): String {
         val pm1 = (pm25 * 0.7).toInt()
         val pm10 = (pm25 * 1.3).toInt()
-        val utc = utcAnchorNs?.let { """"utc":${it + upSeconds * 1_000_000_000L},""" } ?: ""
+        val utc = utcAnchorNs?.let { """"utc":${it / 1_000L + upSeconds * 1_000_000L},""" } ?: ""
         return """{"seq":$seq,"mono":${upSeconds * 1_000_000},$utc"pms":4,""" +
             """"pm1":$pm1,"pm25":${pm25.toInt()},"pm10":$pm10,"c1":$pm1,"c25":${pm25.toInt()},"c10":$pm10,""" +
             """"n03":${(pm25 * 130).toInt()},"n05":${(pm25 * 36).toInt()},"n1":${(pm25 * 4).toInt()},"n25":2,"n5":0,"n10":0,""" +
@@ -563,7 +563,7 @@ class FakeTransport(
         private const val LAN_PORT = 47390
 
         /** The bundled CoreS3 dictionary, so the fake board resolves like a current CoreS3. */
-        private const val CORES3_DICT = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
+        private const val CORES3_DICT = "f4f81218dc80d1a8e6db043197a2f7180c4f075f9e8348df30eaceef44d68370"
 
         /** `PAR1` + random body + 4-byte footer length + `PAR1`. Not a real Parquet file, but passes the head/tail check. */
         fun fakeParquet(rnd: Random, size: Int): ByteArray {

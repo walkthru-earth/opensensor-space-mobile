@@ -93,6 +93,6 @@ class AirQcTest {
         val waveshare = assertNotNull(BundledCatalog.template(LiveFixtures.waveshareDict))
         val qc = assertNotNull(AirFamily.rowCheck(waveshare))
         assertEquals(AirQc(bins.filter { waveshare.datastream(it) != null }), qc)
-        assertNull(AirFamily.rowCheck(waveshare.copy(datastreams = waveshare.datastreams.filter { it.name != AirFamily.PM25_ATMOSPHERIC })))
+        assertNull(AirFamily.rowCheck(waveshare.copy(datastreams = waveshare.datastreams.filter { it.name != AirFamily.PM25_ATMOSPHERIC }, primary = null)))
     }
 }
