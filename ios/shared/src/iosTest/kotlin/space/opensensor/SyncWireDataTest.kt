@@ -1,5 +1,7 @@
 package space.opensensor
 
+import space.opensensor.data.protocol.Frame
+import space.opensensor.data.protocol.FrameCodec
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -25,5 +27,20 @@ class SyncWireDataTest {
         val handshake = wire.handshake(token.toNSData()).toByteArray()
         assertEquals(36, handshake.size)
         assertContentEquals(token, handshake.copyOfRange(4, 36))
+    }
+
+    @Test fun frameKindReadsTheTypeByteInPlace() {
+        assertEquals(FrameKind.REPLY, wire.frameKind(byteArrayOf(0x21, 0x34, 0x12, 4, 3, 2, 1, 1, 2, 3).toNSData()))
+        assertEquals(FrameKind.STATUS, wire.frameKind(byteArrayOf(0x48, 0x7b, 0x7d).toNSData()))
+        assertEquals(FrameKind.LIVE, wire.frameKind(byteArrayOf(0x49, 0x7b, 0x7d).toNSData()))
+        assertEquals(FrameKind.INVALID, wire.frameKind(byteArrayOf(0x50).toNSData()))
+        assertEquals(FrameKind.INVALID, wire.frameKind(ByteArray(0).toNSData()))
+    }
+
+    @Test fun helloCheckTakesTheFrameBody() {
+        val json = """{"proto":3,"thing":"abc-123","dev":"aabbccddeeff"}"""
+        val hello = FrameCodec.encode(Frame.Hello(3, 1024, json)).toNSData()
+        assertEquals(HelloVerdict.ACCEPTED, wire.helloCheck(hello, thing = "abc-123", device = "aabbccddeeff").verdict)
+        assertEquals(HelloVerdict.THING_CHANGED, wire.helloCheck(hello, thing = "other", device = "aabbccddeeff").verdict)
     }
 }

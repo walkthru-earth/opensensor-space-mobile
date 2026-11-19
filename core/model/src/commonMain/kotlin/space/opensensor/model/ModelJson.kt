@@ -4,11 +4,15 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
@@ -28,6 +32,7 @@ internal object ModelJson {
         require(FileChecksum.isSha256Hex(firmware.dict)) { "template ${dto.id} has a malformed dict digest" }
         require(desc == null || FileChecksum.isSha256Hex(desc)) { "template ${dto.id} has a malformed desc digest" }
         val data = dto.itemAssets.data
+        val datastreams = data.columns.map { it.toDatastream(dto.id, firmware.liveKeys[it.name], firmware.unitLabels[it.name]) }
         return BoardTemplate(
             key = TemplateKey(dict = firmware.dict, desc = desc),
             id = dto.id,
@@ -38,10 +43,64 @@ internal object ModelJson {
             defaultSampleIntervalS = dto.sampleIntervalS,
             protoMin = firmware.protoMin,
             primaryDatetime = data.primaryDatetime,
-            datastreams = data.columns.map { it.toDatastream(dto.id, firmware.liveKeys[it.name], firmware.unitLabels[it.name]) },
+            datastreams = datastreams,
             liveKeys = firmware.liveKeys,
             dictionaryHref = dto.links.firstOrNull { it.rel == "describedby" && it.type != JSON_TYPE }?.href,
+            // A hint never changes what a value means, so a primary that names no column is ignored.
+            primary = dto.primary?.takeIf { p -> datastreams.any { it.name == p } },
+            scales = dto.scales.mapValues { (id, scale) -> scale.toScale(id) },
+            setup = SetupManifest(
+                setup = (firmware.setup as? JsonArray).orEmpty().mapNotNull(::stepOf),
+                settings = (firmware.settings as? JsonArray).orEmpty().mapNotNull(::sectionOf),
+                configKeys = (firmware.configKeys as? JsonObject).orEmpty()
+                    .mapNotNull { (key, spec) -> configKeyOf(key, spec)?.let { key to it } }.toMap(),
+            ),
         )
+    }
+
+    private const val PROPERTY_REGISTRY_TYPE = "OpenSensorPropertyRegistry"
+    private const val SCALE_REGISTRY_TYPE = "OpenSensorScaleRegistry"
+
+    fun parsePropertyRegistry(text: String): PropertyRegistry {
+        val dto = decode<PropertyRegistryDto>(text)
+        require(dto.type == PROPERTY_REGISTRY_TYPE) { "not a property registry, type is ${dto.type}" }
+        return PropertyRegistry(
+            dto.properties.map { (uri, element) ->
+                val e = try {
+                    json.decodeFromJsonElement(PropertyDto.serializer(), element)
+                } catch (x: SerializationException) {
+                    throw IllegalArgumentException("registry entry $uri: ${x.message}", x)
+                }
+                // The raw object tells a missing scale from an explicit null, which kotlinx folds together.
+                val scale = when (val raw = element.jsonObject["scale"]) {
+                    null -> RegistryScale.Unset
+                    is JsonNull -> RegistryScale.None
+                    is JsonPrimitive -> {
+                        require(raw.isString) { "registry entry $uri has a scale that is not an id" }
+                        RegistryScale.Named(raw.content)
+                    }
+                    else -> throw IllegalArgumentException("registry entry $uri has a scale that is not an id")
+                }
+                PropertyEntry(
+                    uri = uri,
+                    label = LocalizedText(e.label),
+                    definition = LocalizedText(e.definition),
+                    group = DisplayGroup(e.group),
+                    decimals = e.decimals,
+                    shortLabel = e.shortLabel?.let(::LocalizedText),
+                    symbol = e.symbol,
+                    unit = e.unit,
+                    scale = scale,
+                    note = e.note,
+                )
+            },
+        )
+    }
+
+    fun parseScaleRegistry(text: String): ScaleRegistry {
+        val dto = decode<ScaleRegistryDto>(text)
+        require(dto.type == SCALE_REGISTRY_TYPE) { "not a scale registry, type is ${dto.type}" }
+        return ScaleRegistry(dto.scales.mapValues { (id, scale) -> scale.toScale(id) })
     }
 
     /**
@@ -116,11 +175,80 @@ internal object ModelJson {
             require(r.size == 2) { "column $name has a plausible range of ${r.size} values" }
             PlausibleRange(r[0], r[1])
         },
-        classes = classes.map { CodeClass(it.value, it.name, it.colorHint, it.nodata) },
+        classes = classes.map { it.toCodeClass() },
         derived = derived?.let { Derivation(it.from, it.method) },
         liveKey = liveKey,
         unitLabel = unitLabel,
+        title = title,
+        titleI18n = titleI18n,
+        description = description,
+        descriptionI18n = descriptionI18n,
+        decimals = decimals,
+        group = group?.let(::DisplayGroup),
+        scale = scale,
+        bitfields = bitfields.map { f -> BitField(f.offset, f.length, f.classes.map { it.toCodeClass() }, f.name, f.description) },
     )
+
+    private fun ClassDto.toCodeClass(): CodeClass = CodeClass(value, name, colorHint, nodata, title, description)
+
+    /** A `firmware.setup` entry, or null when it is not an object with a non-empty string `id`. */
+    private fun stepOf(e: JsonElement): ManifestStep? {
+        val o = e as? JsonObject ?: return null
+        val id = idOf(o) ?: return null
+        return ManifestStep(id, required = (o["req"] as? JsonPrimitive)?.booleanOrNull == true, keys = keysOf(o))
+    }
+
+    /** A `firmware.settings` entry, or null when it is not an object with a non-empty string `id`. */
+    private fun sectionOf(e: JsonElement): ManifestSection? {
+        val o = e as? JsonObject ?: return null
+        val id = idOf(o) ?: return null
+        return ManifestSection(id, keys = keysOf(o))
+    }
+
+    private fun idOf(o: JsonObject): StepId? = (o["id"] as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotEmpty() }?.let { StepId(it.content) }
+
+    /** The string entries of `keys`, skipping anything else. */
+    private fun keysOf(o: JsonObject): List<String> =
+        (o["keys"] as? JsonArray).orEmpty().mapNotNull { k -> (k as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotEmpty() }?.content }
+
+    /**
+     * A `firmware.config_keys` entry, or null when [key] is empty or the entry has no string `type`.
+     * A field of the wrong shape is left out, the rest of the key stays.
+     */
+    private fun configKeyOf(key: String, e: JsonElement): ConfigKeySpec? {
+        val o = e as? JsonObject ?: return null
+        if (key.isEmpty()) return null
+        val type = stringOf(o["type"]) ?: return null
+        val label = stringOf(o["label"])
+        val i18n = (o["label_i18n"] as? JsonObject).orEmpty().mapNotNull { (lang, v) -> stringOf(v)?.let { lang to it } }.toMap()
+        return ConfigKeySpec(
+            key = key,
+            type = ConfigKeyType(type),
+            values = valuesOf(o["values"]),
+            applies = stringOf(o["applies"])?.let(::ConfigApplies),
+            page = (o["page"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull,
+            label = (if (label != null) mapOf(LocalizedText.UNTAGGED to label) + i18n else i18n).takeIf { it.isNotEmpty() }?.let(::LocalizedText),
+        )
+    }
+
+    private fun stringOf(e: JsonElement?): String? = (e as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotEmpty() }?.content
+
+    /**
+     * `values` as an enum list of strings or numbers, or a `{"min", "max"}` range, else null. An array
+     * is always an enum list. The firmware contract has not fixed the range shape yet.
+     */
+    private fun valuesOf(e: JsonElement?): ConfigValues? = when (e) {
+        is JsonArray -> {
+            val choices = e.map { (it as? JsonPrimitive)?.takeIf { p -> p !is JsonNull }?.content }
+            if (e.isEmpty() || choices.any { it == null }) null else ConfigValues.Choices(choices.filterNotNull())
+        }
+        is JsonObject -> {
+            val min = (e["min"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
+            val max = (e["max"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
+            if ((min == null && max == null) || (min != null && max != null && min > max)) null else ConfigValues.Range(min, max)
+        }
+        else -> null
+    }
 
     private fun gateOf(o: JsonObject): ValidityGate {
         val column = o["column"]?.jsonPrimitive?.content
@@ -145,6 +273,7 @@ internal object ModelJson {
         source = source,
         unit = unit,
         guideline = guideline,
+        period = period,
         steps = steps.map { ScaleStep(it.upper, labelOf(it.label), it.colorHint) },
     )
 
@@ -175,6 +304,8 @@ internal class TemplateDto(
     val keywords: List<String> = emptyList(),
     val instruments: List<String> = emptyList(),
     @SerialName("opensensor:sample_interval_s") val sampleIntervalS: Double,
+    @SerialName("opensensor:primary") val primary: String? = null,
+    @SerialName("opensensor:scales") val scales: Map<String, ScaleDto> = emptyMap(),
     @SerialName("item_assets") val itemAssets: ItemAssetsDto,
     val links: List<LinkDto> = emptyList(),
     val firmware: FirmwareDto,
@@ -187,6 +318,10 @@ internal class FirmwareDto(
     val dict: String,
     @SerialName("live_keys") val liveKeys: Map<String, String> = emptyMap(),
     @SerialName("unit_labels") val unitLabels: Map<String, String> = emptyMap(),
+    // Kept as raw JSON and read tolerantly, so a block of the wrong shape is none, see SetupManifest.
+    val setup: JsonElement? = null,
+    val settings: JsonElement? = null,
+    @SerialName("config_keys") val configKeys: JsonElement? = null,
 )
 
 @Serializable
@@ -203,6 +338,7 @@ internal class ColumnDto(
     val name: String,
     val type: String = "",
     val title: String? = null,
+    val description: String? = null,
     val unit: String? = null,
     val roles: List<String> = emptyList(),
     @SerialName("cf:standard_name") val standardName: String? = null,
@@ -214,8 +350,22 @@ internal class ColumnDto(
     @SerialName("opensensor:aggregate") val aggregate: String? = null,
     @SerialName("opensensor:plausible_range") val plausibleRange: List<Double>? = null,
     @SerialName("opensensor:scale") val scale: String? = null,
+    @SerialName("opensensor:title_i18n") val titleI18n: Map<String, String> = emptyMap(),
+    @SerialName("opensensor:description_i18n") val descriptionI18n: Map<String, String> = emptyMap(),
+    @SerialName("opensensor:decimals") val decimals: Int? = null,
+    @SerialName("opensensor:group") val group: String? = null,
     @SerialName("opensensor:derived") val derived: DerivedDto? = null,
     @SerialName("classification:classes") val classes: List<ClassDto> = emptyList(),
+    @SerialName("classification:bitfields") val bitfields: List<BitFieldDto> = emptyList(),
+)
+
+@Serializable
+internal class BitFieldDto(
+    val offset: Int,
+    val length: Int,
+    val classes: List<ClassDto>,
+    val name: String? = null,
+    val description: String? = null,
 )
 
 @Serializable
@@ -227,6 +377,8 @@ internal class ClassDto(
     val name: String,
     @SerialName("color_hint") val colorHint: String? = null,
     val nodata: Boolean = false,
+    val title: String? = null,
+    val description: String? = null,
 )
 
 @Serializable
@@ -258,6 +410,7 @@ internal class ScaleDto(
     val steps: List<StepDto>,
     val unit: String? = null,
     val guideline: Double? = null,
+    val period: String? = null,
 )
 
 @Serializable
@@ -279,3 +432,21 @@ internal class ProfileDto(
     val scales: Map<String, String> = emptyMap(),
     val hidden: List<String> = emptyList(),
 )
+
+@Serializable
+internal class PropertyRegistryDto(val type: String, val properties: Map<String, JsonElement>)
+
+@Serializable
+internal class PropertyDto(
+    val label: Map<String, String>,
+    val definition: Map<String, String>,
+    val group: String,
+    val decimals: Int,
+    @SerialName("short_label") val shortLabel: Map<String, String>? = null,
+    val symbol: String? = null,
+    val unit: String? = null,
+    val note: String? = null,
+)
+
+@Serializable
+internal class ScaleRegistryDto(val type: String, val scales: Map<String, ScaleDto>)

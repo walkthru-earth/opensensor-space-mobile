@@ -30,7 +30,7 @@ enum TransferChecks {
         precondition(!claims.connect(name: "another-alias", device: "board"))
         claims.finishTask(name: "alias")
         precondition(claims.connect(name: "another-alias", device: "board"))
-        var liveness = LanLiveness(lastSent: 0)
+        var liveness = LanLiveness(lastSent: 0, keepaliveAfter: 120)
         precondition(!liveness.needsKeepalive(now: 119, collecting: false))
         // Frequent incoming LIVE pushes cannot reset the outgoing-traffic deadline.
         for now in stride(from: 10.0, through: 110.0, by: 10.0) {
@@ -45,7 +45,7 @@ enum TransferChecks {
 
     /// LAN framing from an accumulating buffer: split prefixes, split bodies, batches, and the cap.
     private static func frameBufferChecks() throws {
-        var frames = LanFrameBuffer()
+        var frames = LanFrameBuffer(cap: 1024)
         frames.append(Data([0x03]))
         check(try frames.next() == nil)
         frames.append(Data([0x00, 0x21, 0x01]))
@@ -69,7 +69,7 @@ enum TransferChecks {
             _ = try frames.next()
             fatalError("frame above the HELLO payload cap accepted")
         } catch is LanFrameError {}
-        var zero = LanFrameBuffer()
+        var zero = LanFrameBuffer(cap: 1024)
         zero.append(Data([0x00, 0x00]))
         do {
             _ = try zero.next()
@@ -84,9 +84,9 @@ enum TransferChecks {
         precondition(LanPolicy.localNetworkAccess(.dns(DNSServiceErrorType(kDNSServiceErr_PolicyDenied))) == .denied)
         precondition(LanPolicy.localNetworkAccess(.dns(DNSServiceErrorType(kDNSServiceErr_NoSuchRecord))) == .unknown)
         precondition(LanPolicy.localNetworkAccess(.posix(.ENETDOWN)) == .unknown)
-        let parameters = LanPolicy.connectionParameters()
+        let parameters = LanPolicy.connectionParameters(connectTimeoutSeconds: 5)
         precondition(parameters.prohibitedInterfaceTypes == [.cellular])
         let tcp = parameters.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options
-        precondition(tcp?.connectionTimeout == LanPolicy.connectTimeoutSeconds && tcp?.noDelay == true)
+        precondition(tcp?.connectionTimeout == 5 && tcp?.noDelay == true)
     }
 }

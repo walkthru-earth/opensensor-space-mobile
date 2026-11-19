@@ -14,8 +14,8 @@ import tools.jackson.databind.ObjectMapper
 import tools.jackson.databind.node.ObjectNode
 
 /**
- * The stac-opensensor v0.1.0 `footer.json` schema, copied byte for byte from the v0.1.0 tag (commit
- * 83787768cc8451109d48a03d4ef5493ffcd403dd) into `src/commonTest/fixtures/stac-opensensor`, run over
+ * The stac-opensensor v0.1.0 `footer.json` schema, copied byte for byte from main (commit
+ * e9981360c2229a98d5659ef0038a3b6114953f73) into `src/commonTest/fixtures/stac-opensensor`, run over
  * the profile's footer fixtures. [OpenSensorFooter] must refuse what the schema refuses for a missing
  * member or another version, and read every footer the schema accepts.
  */

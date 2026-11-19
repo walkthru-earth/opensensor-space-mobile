@@ -4,7 +4,10 @@ package space.opensensor
 
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.UByteVar
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.get
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
 import platform.Foundation.NSData
 import platform.Foundation.create
@@ -46,6 +49,19 @@ fun SyncWire.handshake(token: NSData): NSData {
 
 /** Decodes one frame body (without the LAN length prefix). Malformed frames return null. */
 fun SyncWire.decode(data: NSData): SyncReply? = decodeFrame(data.toByteArray())
+
+/**
+ * The kind of one frame body from its type byte, read in place with no copy. A REPLY then goes to
+ * `IosLink.offer` undecoded, so a file frame is copied into Kotlin and decoded once.
+ */
+fun SyncWire.frameKind(data: NSData): FrameKind {
+    val bytes = data.bytes ?: return FrameKind.INVALID
+    if (data.length == 0uL) return FrameKind.INVALID
+    return frameKindOf(bytes.reinterpret<UByteVar>()[0].toInt())
+}
+
+/** The shared HELLO check on one frame body, against the saved thing and hardware id. */
+fun SyncWire.helloCheck(data: NSData, thing: String, device: String): HelloCheck = helloCheckFrame(data.toByteArray(), thing, device)
 
 /** CHUNK payload or TOKEN bytes, empty for other kinds. */
 val SyncReply.payload: NSData get() = bytes.toNSData()
