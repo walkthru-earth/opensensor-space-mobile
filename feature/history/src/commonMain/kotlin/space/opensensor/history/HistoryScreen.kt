@@ -72,6 +72,7 @@ import space.opensensor.designsystem.SectionCard
 import space.opensensor.designsystem.StatLine
 import space.opensensor.designsystem.metricLabel
 import space.opensensor.designsystem.pm25CorrectionInfo
+import space.opensensor.designsystem.preferredLanguage
 import space.opensensor.designsystem.touchTarget
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.family.air.moodOf
@@ -459,6 +460,7 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, units: Unit
         }
         val m = c.mean
         val unit = state.metric.unit
+        val language = preferredLanguage()
         if (m == null) {
             slot + " · " + stringResource(Res.string.history_no_readings_short)
         } else {
@@ -467,7 +469,7 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, units: Unit
                 slot,
                 fmtValue(units.value(m, unit)) + " " + units.unit(unit),
                 // Simple names the mood only, never the WHO step.
-                mood?.let { if (stepNamed) it.titleText() + " · " + it.step.labelText() else it.titleText() },
+                mood?.let { if (stepNamed) listOfNotNull(it.titleText(), state.metric.stepName(m.toDouble(), language)).joinToString(" · ") else it.titleText() },
                 c.max?.takeIf { it > m * 1.15f }?.let { stringResource(Res.string.history_peak_value, fmtValue(units.value(it, unit))) },
                 stringResource(Res.string.history_covered, (c.coverage * 100).toInt()),
                 if (c.estimated) stringResource(Res.string.history_estimated_time) else null,
@@ -491,8 +493,9 @@ private fun Summary(s: HistorySeries, units: UnitFormatter, stepNamed: Boolean) 
     // The value colours carry the mood, so each figure also states it in words.
     val meanMood = s.mean?.let { s.metric.moodOf(it.toDouble()) }
     val peakMood = s.max?.let { s.metric.moodOf(it.toDouble()) }
-    val meanState = meanMood?.let { if (stepNamed) it.titleText() + ", " + it.step.labelText() else it.titleText() }
-    val peakState = peakMood?.let { if (stepNamed) it.titleText() + ", " + it.step.labelText() else it.titleText() }
+    val language = preferredLanguage()
+    val meanState = meanMood?.let { mood -> listOfNotNull(mood.titleText(), s.mean?.let { s.metric.stepName(it.toDouble(), language) }.takeIf { stepNamed }).joinToString(", ") }
+    val peakState = peakMood?.let { mood -> listOfNotNull(mood.titleText(), s.max?.let { s.metric.stepName(it.toDouble(), language) }.takeIf { stepNamed }).joinToString(", ") }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Column(Modifier.semantics(mergeDescendants = true) { meanState?.let { stateDescription = it } }) {
             Eyebrow(stringResource(Res.string.history_average))

@@ -69,12 +69,6 @@
     <string name="chart_mean_daily">Bars are daily means.</string>
     <string name="chart_mean_weekly">Bars are weekly means.</string>
     <string name="chart_guideline_note">The dashed line is the WHO 24 hour guideline.</string>
-    <string name="who_step_guideline">Within the WHO guideline</string>
-    <string name="who_step_it4">Within WHO interim target 4</string>
-    <string name="who_step_it3">Within WHO interim target 3</string>
-    <string name="who_step_it2">Within WHO interim target 2</string>
-    <string name="who_step_it1">Within WHO interim target 1</string>
-    <string name="who_step_above_it1">Above every WHO target</string>
     <string name="info_history_body1">Averages use only readings the sensor marked valid, warmed up, fresh and without error.</string>
     <string name="info_history_body2">Coverage is the share of the window with such readings. Three readings in an hour is 1 percent, not an hourly average.</string>
     <string name="info_history_body3">Dashed stretches were logged before the sensor had a clock. Their time is estimated from a later time set on the same power on.</string>

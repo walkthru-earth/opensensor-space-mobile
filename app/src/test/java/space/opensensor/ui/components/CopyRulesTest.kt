@@ -9,7 +9,6 @@ import space.opensensor.data.protocol.LiveSample
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.NowReading
 import space.opensensor.family.air.PmsStatus
-import space.opensensor.publicfeed.DiscoverCollection
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -27,8 +26,6 @@ class CopyRulesTest {
     /** The repository root, whether Gradle runs this from `app/` or from the root. */
     private val root: File = listOf(File(".."), File(".")).first { File(it, "settings.gradle.kts").isFile }
 
-    private fun strings(folder: String = "values"): Map<String, String> = parse(File(root, "app/src/main/res/$folder/strings.xml"))
-
     /**
      * The Compose resource catalogues shared with iOS (`feature/<name>` and `ui/<name>`
      * `src/commonMain/composeResources`), by module name.
@@ -38,9 +35,6 @@ class CopyRulesTest {
             val file = File(module, "src/commonMain/composeResources/$folder/strings.xml")
             if (file.isFile) module.name to parse(file) else null
         }.toMap()
-
-    /** Android escapes an apostrophe with a backslash, Compose resources do not. Compare the text shown. */
-    private fun shown(text: String) = text.replace("\\'", "'")
 
     private fun parse(file: File): Map<String, String> {
         val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
@@ -60,22 +54,6 @@ class CopyRulesTest {
             }
         }
         return out
-    }
-
-    /**
-     * Discover names WHO steps from the PM scales the app ships (`DiscoverCollection.BUNDLED`), the
-     * things from the Android step strings. Both say the same in English and Arabic.
-     */
-    @Test
-    fun `bundled WHO step names match the Android step strings`() {
-        val keys = listOf("who_step_guideline", "who_step_it4", "who_step_it3", "who_step_it2", "who_step_it1", "who_step_above_it1")
-        for ((folder, lang) in listOf("values" to "en", "values-ar" to "ar")) {
-            val s = strings(folder)
-            for (id in listOf("pm25", "pm10")) {
-                val scale = checkNotNull(DiscoverCollection.BUNDLED.scale(id)) { "$id has no bundled scale" }
-                assertEquals("$folder $id", keys.map { shown(s.getValue(it)) }, scale.steps.map { it.label.get(lang) })
-            }
-        }
     }
 
     @Test

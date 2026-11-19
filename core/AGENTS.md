@@ -49,7 +49,7 @@ Rules that hold across modules.
   a code branch or a schema string check in a screen. `:core:model` holds
   the data model (#183) and the bundled board templates and app profiles under
   `core/model/bundled/` (#184). `bundled/templates/` is opensensor-space-firmware `docs/shared/templates` copied
-  byte for byte at `a5545b4`, three boards (M5Stack CoreS3, Waveshare ESP32-S3 SIM7670G and ELECROW
+  byte for byte at `b6c84e0`, three boards (M5Stack CoreS3, Waveshare ESP32-S3 SIM7670G and ELECROW
   CrowPanel e-paper SEN63C, `elecrow-crowpanel-epaper-42`), and `bundled/profiles/` holds the
   CoreS3 and Waveshare profiles (marked `-text`, excluded from the whitespace hooks), and `BundledTemplateBytesTest`
   checks each file's SHA-256 against its `index.json` desc and its pinned hash, `index.json`

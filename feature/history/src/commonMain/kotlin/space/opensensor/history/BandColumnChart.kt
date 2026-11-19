@@ -62,11 +62,10 @@ import space.opensensor.data.history.localDateOf
 import space.opensensor.data.history.startOfDay
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.metricLabel
+import space.opensensor.designsystem.preferredLanguage
 import space.opensensor.designsystem.spokenList
 import space.opensensor.family.air.AirMood
-import space.opensensor.family.air.WhoStep
 import space.opensensor.family.air.moodOf
-import space.opensensor.family.air.stepOf
 import space.opensensor.history.resources.Res
 import space.opensensor.history.resources.chart_bars_title
 import space.opensensor.history.resources.chart_guideline_24h
@@ -169,7 +168,7 @@ fun BandColumnChart(
     val separator = listSeparator()
     val estimated = stringResource(Res.string.history_estimated_time)
     val moodTitles = AirMood.entries.associateWith { it.titleText() }
-    val stepLabels = WhoStep.entries.associateWith { it.labelText() }
+    val language = preferredLanguage()
     val spoken = bars.map { c ->
         val m = c.mean ?: 0f
         listOfNotNull(
@@ -177,7 +176,7 @@ fun BandColumnChart(
             fmtValue(units.value(m, metric.unit)) + " " + units.unit(metric.unit),
             metric.moodOf(m.toDouble())?.let { moodTitles[it] },
             // Simple names the mood only, never the WHO step.
-            if (level.detailed) metric.stepOf(m.toDouble())?.let { stepLabels[it] } else null,
+            if (level.detailed) metric.stepName(m.toDouble(), language) else null,
             estimated.takeIf { c.estimated },
         ).let { spokenList(it, separator) }
     }
@@ -598,7 +597,7 @@ internal fun chartHighest(
     val value = fmtValue(units.value(mean, metric.unit))
     val unit = units.unit(metric.unit)
     val highest = if (slot != null) stringResource(Res.string.chart_highest_at, value, unit, slot(top)) else stringResource(Res.string.chart_highest, value, unit)
-    val step = if (stepNamed) metric.stepOf(mean.toDouble())?.labelText() else null
+    val step = if (stepNamed) metric.stepName(mean.toDouble(), preferredLanguage()) else null
     return spokenList(listOfNotNull(highest, step), listSeparator())
 }
 

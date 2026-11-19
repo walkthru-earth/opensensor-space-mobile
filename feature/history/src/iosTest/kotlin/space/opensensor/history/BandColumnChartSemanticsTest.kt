@@ -35,6 +35,9 @@ class BandColumnChartSemanticsTest {
         AirFamily.install()
     }
 
+    /** The registry scale's own name for step [index], so a reworded registry needs no test change. */
+    private fun step(index: Int): String = AirMetrics.PM25.healthScale!!.names[index].get("en")
+
     private fun hour(index: Int, mean: Float?, estimated: Boolean = false) = HistoryColumn(
         startS = index * HOUR,
         endS = (index + 1) * HOUR,
@@ -99,8 +102,8 @@ class BandColumnChartSemanticsTest {
                 BandColumnChart(day, AirMetrics.PM25, HistoryRange.DAY, 0, 24 * HOUR, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.DETAILED)
             }
         }
-        onNodeWithContentDescription("00:00, 22.0 µg/m³, Fair, Within WHO interim target 4").assertExists()
-        onNodeWithContentDescription("02:00, 40.0 µg/m³, Poor, Within WHO interim target 2, estimated time").assertExists()
+        onNodeWithContentDescription("00:00, 22.0 µg/m³, Fair, ${step(1)}").assertExists()
+        onNodeWithContentDescription("02:00, 40.0 µg/m³, Poor, ${step(3)}, estimated time").assertExists()
     }
 
     @Test

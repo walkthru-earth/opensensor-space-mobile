@@ -236,4 +236,15 @@ class MetadataTemplateTest {
             t.datastreams.forEach { ds -> assertTrue(ds.scale == null || ds.scale in t.scales, "${t.id} ${ds.name}") }
         }
     }
+
+    /**
+     * A template copies its scales from the stac-opensensor registry, step names included, so every
+     * screen shows the same words for a step whichever of the two it reads.
+     */
+    @Test
+    fun everyBundledTemplateScaleEqualsItsRegistryScale() {
+        val named = BundledCatalog.templates.flatMap { t -> t.scales.values.map { t.id to it } }
+        assertTrue(named.isNotEmpty())
+        named.forEach { (id, scale) -> assertEquals(BundledCatalog.scales[scale.id], scale, "$id ${scale.id}") }
+    }
 }

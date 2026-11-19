@@ -493,7 +493,7 @@ Science's qualitative display advice and the South Coast AQMD accessible scale: 
 their own WHO step on a neutral background (no shaded bands), neutral ink for metrics without a
 scale, opacity = coverage, dashed outline = estimated time, whisker = peak. A caption states the
 averaging (hourly, daily or weekly means against a 24-hour guideline), and the touch readout names
-the mood and WHO step in words. Time labels
+the mood and WHO step in words, the step by its registry scale label (`MetricSpec.stepName`). Time labels
 in the phone's zone, buckets UTC-aligned. **Files › Chart by file** (`FileSummary`) is the same column style in file
 order, the diagnostic a time axis cannot give.
 
