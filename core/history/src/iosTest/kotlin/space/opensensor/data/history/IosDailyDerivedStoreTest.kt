@@ -7,6 +7,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import platform.Foundation.NSFileImmutable
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUUID
@@ -95,6 +96,31 @@ class IosDailyDerivedStoreTest {
         assertFalse(NSFileManager.defaultManager.fileExistsAtPath(failing.removeSuffix(".parquet") + ".manifest.json"))
         assertTrue(NSFileManager.defaultManager.fileExistsAtPath(building))
         assertNotNull(derived.open(record.thing, failingDay + 1, listOf(changed), anchors), "the next day built after the failure").close()
+    }
+
+    /** #301. A changed day whose old file cannot be removed is recorded as failed, and the later days still build. */
+    @Test
+    fun aChangedDayWhoseOldFileCannotBeRemovedDoesNotStopTheLaterDays() = runTest {
+        val (source, anchor) = dailyFixture()
+        val record = source.record
+        val anchors = mapOf(anchor.boot to anchor)
+        val now = anchor.utcNs / 1_000_000_000L + 200_000L
+        val paths = IosDailyDerivedStore(root).rebuild(record.thing, listOf(record), archive, anchors, now)
+        assertEquals(2, paths.size)
+        val locked = paths.sorted().first()
+        val failingDay = ThingDays.dayOf(record.estFirstUtcNs!!)
+        val fm = NSFileManager.defaultManager
+        fun lock(on: Boolean) = assertTrue(fm.setAttributes(mapOf<Any?, Any?>(NSFileImmutable to on), locked, null))
+        lock(true)
+        try {
+            val changed = record.copy(crc32 = record.crc32 + 1)
+            val derived = IosDailyDerivedStore(root)
+            assertFailsWith<IllegalStateException> { derived.rebuild(record.thing, listOf(changed), archive, anchors, now + 1) }
+            assertFalse(fm.fileExistsAtPath(locked.removeSuffix(".parquet") + ".manifest.json"), "the locked day has no receipt")
+            assertNotNull(derived.open(record.thing, failingDay + 1, listOf(changed), anchors), "the next day built after the failure").close()
+        } finally {
+            lock(false)
+        }
     }
 
     @Test

@@ -107,15 +107,16 @@ class IosDailyDerivedStore(
                     kept += target.substringAfterLast('/')
                     continue
                 }
-                // The old file no longer matches its sources. It goes before the build, so a build that
-                // fails leaves no day listed as current. A crash between the commits leaves no receipt either.
-                remove(manifest)
-                remove(target)
-                val temporary = atomic.createTemp(".parquet")
+                var temporary: String? = null
                 try {
+                    // The old file no longer matches its sources. It goes before the build, so a build that
+                    // fails leaves no day listed as current. A crash between the commits leaves no receipt either.
+                    remove(manifest)
+                    remove(target)
+                    val built = atomic.createTemp(".parquet").also { temporary = it }
                     // The builder opens and closes one source at a time (#61).
                     val daily = sources.map { source -> DailyParquetSource(source) { ParquetFile.open(archive.reader(source.key)) } }
-                    val sink = FileSink(temporary)
+                    val sink = FileSink(built)
                     val pass = try {
                         DayPass.run(thing, day, daily, sink, anchors, nowEpochS, templates = templates)
                     } finally {
@@ -128,8 +129,8 @@ class IosDailyDerivedStore(
                     pass.dailyError?.let { throw it }
                     if (result == null) continue
                     // The writer counted the rows, the synced length says every byte reached the file. No footer re-parse.
-                    check((fm.attributesOfItemAtPath(temporary, null)?.get(NSFileSize) as? Number)?.toLong() == sink.written) { "derived file is short" }
-                    atomic.commitReplace(temporary, target, StorageClass.Rebuildable)
+                    check((fm.attributesOfItemAtPath(built, null)?.get(NSFileSize) as? Number)?.toLong() == sink.written) { "derived file is short" }
+                    atomic.commitReplace(built, target, StorageClass.Rebuildable)
                     writeManifest(manifest, thing, day, result, signature, nowEpochS)
                     paths += target
                     kept += target.substringAfterLast('/')
@@ -139,7 +140,7 @@ class IosDailyDerivedStore(
                     // The other days and the stale cleanup still run, then the pass reports the first failure.
                     if (failure == null) failure = e
                 } finally {
-                    fm.removeItemAtPath(temporary, null)
+                    temporary?.let { fm.removeItemAtPath(it, null) }
                 }
             }
             // A day that a record still waiting for its index may fill again is not stale yet (#87).
