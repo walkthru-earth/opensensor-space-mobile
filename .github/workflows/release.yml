@@ -18,13 +18,12 @@
 # Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
 name: release
 
-# A push to main that only touches docs or Markdown builds nothing, as in verify.yml. GitHub does not
-# apply path filters to tag pushes, so every `v*` tag still publishes.
+# Every push to main builds, docs only too. A skipped docs push would leave main ahead of the code
+# commit still building, and its rolling tag guard would then never publish it.
 on:
   push:
     branches: [main]
     tags: ["v*"]
-    paths-ignore: ["docs/**", "**/*.md"]
   workflow_dispatch:
 
 permissions:

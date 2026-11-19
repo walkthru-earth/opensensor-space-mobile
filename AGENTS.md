@@ -122,5 +122,5 @@ validation" job has a 60 minute timeout. A run cancelled by a newer push is not 
 A timed out job is often a slow macOS runner, but a hung test also times out, so read its log
 before calling it either. The unsigned device Release build is its own job, "iOS device
 Release build", with a 45 minute timeout. It runs on `main` and by hand, never on a pull request.
-A change that only touches `docs/**` or Markdown starts no CI run (`paths-ignore`). Rerun the job, or run `./gradlew --no-daemon verify` and
+A change that only touches `docs/**` or Markdown starts no `verify.yml` run (`paths-ignore`). A push to `main` always runs `release.yml`. Rerun the job, or run `./gradlew --no-daemon verify` and
 `verifyIos` locally before calling a change broken.
