@@ -4,6 +4,7 @@ package space.opensensor.data.history
 
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.sync.Mutex
@@ -59,6 +60,9 @@ import kotlin.time.Instant
  * the quota or purged by iOS. It is a cache miss, skipped here and kept, so eviction never makes
  * rebuild passes churn.
  *
+ * A day whose sources changed loses its old file and manifest before it builds again. A day that
+ * fails to build is left with neither, the other days still build, and [rebuild] then throws.
+ *
  * It is also the Day view's [DerivedDayFiles] (#63): a day file is read only while its manifest
  * carries the signature of exactly the sources the view would read.
  */
@@ -91,6 +95,7 @@ class IosDailyDerivedStore(
             val paths = mutableListOf<String>()
             // Day files this pass keeps, built or evicted. Everything else in the directory is stale.
             val kept = HashSet<String>()
+            var failure: Exception? = null
             for (day in byDay.keys.sorted()) {
                 val sources = byDay.getValue(day)
                 val complete = nowEpochS >= (day + 1) * 86_400 + DailyParquetBuilder.COMPLETE_GRACE_S
@@ -102,6 +107,10 @@ class IosDailyDerivedStore(
                     kept += target.substringAfterLast('/')
                     continue
                 }
+                // The old file no longer matches its sources. It goes before the build, so a build that
+                // fails leaves no day listed as current. A crash between the commits leaves no receipt either.
+                remove(manifest)
+                remove(target)
                 val temporary = atomic.createTemp(".parquet")
                 try {
                     // The builder opens and closes one source at a time (#61).
@@ -117,19 +126,18 @@ class IosDailyDerivedStore(
                         tierStore.save(thing, day, ArchiveHistoryTiers.signature(sources, templates), TierStore.fromBuckets(pass.buckets))
                     }
                     pass.dailyError?.let { throw it }
-                    if (result == null) {
-                        remove(manifest)
-                        remove(target)
-                        continue
-                    }
+                    if (result == null) continue
                     // The writer counted the rows, the synced length says every byte reached the file. No footer re-parse.
                     check((fm.attributesOfItemAtPath(temporary, null)?.get(NSFileSize) as? Number)?.toLong() == sink.written) { "derived file is short" }
-                    // A crash between the two commits must leave no receipt claiming older bytes.
-                    remove(manifest)
                     atomic.commitReplace(temporary, target, StorageClass.Rebuildable)
                     writeManifest(manifest, thing, day, result, signature, nowEpochS)
                     paths += target
                     kept += target.substringAfterLast('/')
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The other days and the stale cleanup still run, then the pass reports the first failure.
+                    if (failure == null) failure = e
                 } finally {
                     fm.removeItemAtPath(temporary, null)
                 }
@@ -147,6 +155,7 @@ class IosDailyDerivedStore(
                 }
                 if (parquetName !in kept) remove(checked("$directory/$name"))
             }
+            failure?.let { throw it }
             paths
         }
     }

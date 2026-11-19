@@ -23,6 +23,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -69,6 +70,31 @@ class IosDailyDerivedStoreTest {
         assertEquals(64L, corrected.sumOf { ParquetFile.open(LocalFileReader(it)).use { f -> f.numRows } })
         assertTrue(paths.none { it in corrected })
         paths.forEach { assertFalse(NSFileManager.defaultManager.fileExistsAtPath(it)) }
+    }
+
+    /** #301. A changed day whose build fails loses its old file and receipt, and the other days still build. */
+    @Test
+    fun aChangedDayWhoseBuildFailsIsNotLeftAsCurrent() = runTest {
+        val (source, anchor) = dailyFixture()
+        val record = source.record
+        val anchors = mapOf(anchor.boot to anchor)
+        val now = anchor.utcNs / 1_000_000_000L + 200_000L
+        val paths = IosDailyDerivedStore(root).rebuild(record.thing, listOf(record), archive, anchors, now)
+        assertEquals(2, paths.size)
+        val (failing, building) = paths.sorted()
+        val failingDay = ThingDays.dayOf(record.estFirstUtcNs!!)
+        val failingTiers = object : TierStore by TierStore.NONE {
+            override suspend fun save(thing: String, epochDay: Long, signature: String, tiers: DayTiers) {
+                if (epochDay == failingDay) error("tier save failed")
+            }
+        }
+        val changed = record.copy(crc32 = record.crc32 + 1)
+        val derived = IosDailyDerivedStore(root, tierStore = failingTiers)
+        assertFailsWith<IllegalStateException> { derived.rebuild(record.thing, listOf(changed), archive, anchors, now + 1) }
+        assertFalse(NSFileManager.defaultManager.fileExistsAtPath(failing))
+        assertFalse(NSFileManager.defaultManager.fileExistsAtPath(failing.removeSuffix(".parquet") + ".manifest.json"))
+        assertTrue(NSFileManager.defaultManager.fileExistsAtPath(building))
+        assertNotNull(derived.open(record.thing, failingDay + 1, listOf(changed), anchors), "the next day built after the failure").close()
     }
 
     @Test

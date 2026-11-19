@@ -358,8 +358,9 @@ internal object IosArchive {
      * The daily export's listing (#301), what Android's `ensureDailyFiles` then `directoryEntries` do.
      * One derive pass builds again every day the quota or iOS evicted and every stale day, then the
      * `derived/v1` files are listed under the zip names Android uses. Files runs it inside
-     * [holdingDailyFiles], so nothing it listed is evicted until the zip is staged. A day that cannot
-     * be built is left out, and the next pass retries it.
+     * [holdingDailyFiles], so nothing it listed is evicted until the zip is staged. A changed day loses
+     * its old file and manifest before it builds, so a day that fails to build is not listed, the days
+     * built before and after it are, and the next pass retries it.
      */
     suspend fun dailyFiles(): List<ExportEntry> {
         restoreDerived(Unit)

@@ -341,6 +341,8 @@ with a matching manifest is rebuilt when something reads it. On Android the dail
 `DerivedQuota.holding`, so no eviction runs until the zip is staged. iOS does the same through
 `IosArchive.dailyFiles`. It removes the manifest of each evicted day (`forgetEvictedDays`), so one
 derive pass builds those days again, and lists `derived/v1` with the iOS `directoryEntries` (#301).
+On iOS a day whose sources changed loses its old file and manifest before it builds again. A day
+that fails to build is then not listed, and the other days of that thing still build.
 When the last hold ends, after
 success, failure or cancellation, the quota is applied at once, and a Clear History cache tapped during
 the hold runs then. The quota also runs after a derive pass that rebuilt
