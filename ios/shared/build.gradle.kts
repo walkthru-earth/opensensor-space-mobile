@@ -1,11 +1,10 @@
 // The iOS app's shared Kotlin: the Compose screens and the Swift-facing API, built as the static
 // OpenSensorShared framework (opensensor.kmp.ios-framework). iOS only, with no JVM target, so
-// `commonMain` consumes the Android and iOS Compose feature modules directly. `commonTest` runs on the
-// iOS simulator in `verifyIos`.
+// `commonMain` consumes the Android and iOS Compose feature modules directly. The convention adds
+// Compose, kotlin-test and kotlinx-coroutines-test. `commonTest` runs on the iOS simulator in
+// `verifyIos`.
 plugins {
     id("opensensor.kmp.ios-framework")
-    alias(libs.plugins.compose.multiplatform)
-    alias(libs.plugins.compose.compiler)
 }
 
 kotlin {
@@ -46,16 +45,10 @@ kotlin {
             implementation(project(":ui:designsystem"))
             // The companion copy, resolved from UiText at the composable edge.
             implementation(project(":ui:strings"))
-            implementation(libs.compose.components.resources)
             implementation(project(":ui:permissions"))
-            implementation(libs.compose.runtime)
-            implementation(libs.compose.foundation)
-            implementation(libs.compose.material3)
         }
         commonTest.dependencies {
             implementation(project(":core:storage:testkit"))
-            // The background run bridge suspends on the Swift ports (AutoSyncTest).
-            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

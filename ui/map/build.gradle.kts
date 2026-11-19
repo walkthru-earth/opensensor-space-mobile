@@ -20,17 +20,12 @@ kotlin {
             api(project(":ui:permissions"))
             // Callers draw their layers in the map's content slot and drive its MapState.
             api(libs.maplibre.compose)
-            implementation(libs.kotlinx.coroutines.core)
         }
         androidMain.dependencies {
             // One render backend for Android. OpenGL first, Vulkan after a phone check.
             runtimeOnly(libs.maplibre.compose.runtime.opengl.android)
             // The "Near me" coarse location prompt (NearMe.android.kt).
             implementation(libs.androidx.activity.compose)
-        }
-        iosTest.dependencies {
-            // The zoom controls semantics test renders on the iOS simulator.
-            implementation(libs.compose.ui.test)
         }
     }
 }

@@ -17,14 +17,10 @@ kotlin {
         commonMain.dependencies {
             api(project(":core:sync"))
             api(project(":ui:designsystem"))
-            implementation(libs.kotlinx.coroutines.core)
             // Pretty printing of the status and config JSON.
             implementation(libs.kotlinx.serialization.json)
             // Local time of day for frame and trace lines.
             implementation(libs.kotlinx.datetime)
-        }
-        commonTest.dependencies {
-            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

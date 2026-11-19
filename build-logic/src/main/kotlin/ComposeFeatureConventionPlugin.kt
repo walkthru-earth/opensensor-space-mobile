@@ -15,18 +15,19 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
  *   other Compose libraries ship Android artifacts), `iosArm64` and `iosSimulatorArm64`.
  * - Namespace `space.opensensor.<module name>`, SDK levels from [OpenSensorConventions],
  *   Android resources on, bytecode 17.
- * - Compose runtime, foundation, Material 3, UI and resources in `commonMain`.
+ * - Compose runtime, foundation, Material 3, UI and resources in `commonMain` ([applyOpenSensorCompose]),
+ *   plus kotlinx-coroutines-core, which every screen controller uses.
  * - Compose resources in the internal `<namespace>.resources` package, always generated.
- * - `kotlin-test` in `commonTest`. AGP compiles `commonTest` into the Android host test, so shared
- *   tests run on the host in `verify` and on the simulator in `verifyIos`.
+ * - `kotlin-test` and kotlinx-coroutines-test in `commonTest`. AGP compiles `commonTest` into the
+ *   Android host test, so shared tests run on the host in `verify` and on the simulator in `verifyIos`.
+ * - Compose UI test in `iosTest`, for the semantics tests that render headless on the simulator.
  * - A `test` task that runs `testAndroidHostTest`.
  */
 class ComposeFeatureConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) = with(target) {
         pluginManager.apply("org.jetbrains.kotlin.multiplatform")
         pluginManager.apply("com.android.kotlin.multiplatform.library")
-        pluginManager.apply("org.jetbrains.compose")
-        pluginManager.apply("org.jetbrains.kotlin.plugin.compose")
+        applyOpenSensorCompose()
 
         val moduleNamespace = "${OpenSensorConventions.COMPOSE_NAMESPACE_ROOT}.${project.name}"
 
@@ -44,14 +45,14 @@ class ComposeFeatureConventionPlugin : Plugin<Project> {
             compilerOptions { openSensorDefaults() }
 
             sourceSets.getByName("commonMain").dependencies {
-                implementation(catalogLibrary("compose-runtime"))
-                implementation(catalogLibrary("compose-foundation"))
-                implementation(catalogLibrary("compose-material3"))
-                implementation(catalogLibrary("compose-ui"))
-                implementation(catalogLibrary("compose-components-resources"))
+                implementation(catalogLibrary("kotlinx-coroutines-core"))
             }
             sourceSets.getByName("commonTest").dependencies {
                 implementation(catalogLibrary("kotlin-test"))
+                implementation(catalogLibrary("kotlinx-coroutines-test"))
+            }
+            sourceSets.named { it == "iosTest" }.configureEach {
+                dependencies { implementation(catalogLibrary("compose-ui-test")) }
             }
             sourceSets.getByName("androidHostTest").dependencies {
                 implementation(catalogLibrary("junit"))

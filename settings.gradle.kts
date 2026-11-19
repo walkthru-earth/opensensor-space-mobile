@@ -19,6 +19,8 @@ rootProject.name = "opensensor-space-mobile"
 
 // Opt-in host history benchmark, no device archive or hardware access.
 include(":tools:history-benchmark")
+// Drift checks of version pins outside the version catalog (tools/pins/build.gradle.kts).
+include(":tools:pins")
 
 include(":app")
 // Protocol, Parquet and history are Kotlin Multiplatform, shared with iOS.

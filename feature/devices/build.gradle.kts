@@ -22,15 +22,7 @@ kotlin {
             api(project(":ui:designsystem"))
             api(project(":ui:permissions"))
             implementation(project(":ui:strings"))
-            implementation(libs.kotlinx.coroutines.core)
             implementation(libs.jetbrains.lifecycle.runtime.compose)
-        }
-        commonTest.dependencies {
-            implementation(libs.kotlinx.coroutines.test)
-        }
-        // The Scan clearance test renders the screen headless on the iOS simulator (verifyIos).
-        iosTest.dependencies {
-            implementation(libs.compose.ui.test)
         }
     }
 }

@@ -92,7 +92,7 @@ Rules that hold across modules.
   instead of touching the decoder. The decoder reads `ByteView`s in place and never copies them.
 - Module build files apply a convention plugin from `../build-logic/` (`opensensor.kmp.library`,
   `opensensor.kmp.android-library` for `:core:database`, `opensensor.kmp.compose-feature`,
-  `opensensor.kmp.ios-framework`, `opensensor.jvm.library`).
+  `opensensor.kmp.ios-framework`, `opensensor.jvm.library`, and `opensensor.android.application` for `:app`).
   Change targets, bytecode level, test wiring or gate membership there, once, not in a module.
   See `../build-logic/AGENTS.md` and `docs/architecture.md`.
 - Sync rules that both phones must share live in `protocol/commonMain`. `ParquetVerify` (size,

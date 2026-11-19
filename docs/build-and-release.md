@@ -1,7 +1,7 @@
 # Build, verify, release. Stack, hooks, CI, signing, the fake device
 
 **Scope:** toolchain versions, permissions declared, the `verify` gate, git hooks, GitHub Actions, release signing, and the debug-only fake device used by tests and demos.
-**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `gradle/gradle-daemon-jvm.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/opensensor.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `.github/dependabot.yml`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
+**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `gradle/gradle-daemon-jvm.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/opensensor.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `.github/actions/`, `.github/dependabot.yml`, `build-logic/`, `tools/pins/`, `tools/ci/requirements.txt`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
 **Related:** [architecture.md](architecture.md) (modules the gate builds), [status.md](status.md) (what the gate proves and what it cannot).
 
 ## Gate
@@ -14,7 +14,7 @@ flowchart LR
   GH[GitHub PR or push to main] --> W["verify.yml: pre-commit --all-files + ./gradlew verify → debug APK + reports"]
   GH --> I["verify.yml: macOS → Kotlin iOS tests + one simulator Debug build for app and Swift tests"]
   GH --> D["verify.yml: macOS device Release build job, main and by hand only"]
-  GH --> R["release.yml: apk job (read-only, R8 + signing) → publish job (contents: write) · main → rolling 'latest' · v* tag → permanent release"]
+  GH --> R["release.yml: build job (read-only, R8 + signing) → publish job (contents: write) · main → rolling 'latest' · v* tag → permanent release"]
 ```
 
 ```sh
@@ -71,6 +71,8 @@ template the app has not bundled yet turns that run red. The firmware folders ar
 GitHub Actions runs `verify.yml` on pull requests, on pushes to `main` and by hand, never on a
 schedule. `live-key-drift.yml` runs weekly and by hand only, so a green pull request run says nothing
 about the firmware `main` check. `release.yml` runs on pushes to `main`, on `v*` tags and by hand.
+A push to `main` that only touches `docs/**` or Markdown builds nothing. The rolling tag still moves to
+a code build when main is ahead of it by such commits only.
 A green run and the local gates are the acceptance evidence.
 Mobile CodeRabbit provides summaries only, so use a scoped source review before opening a PR.
 Run `./ios/tests/verify-native.sh` for the native host checks. No host or simulator gate qualifies
@@ -87,9 +89,10 @@ it finds through `JAVA_HOME`, `/usr/libexec/java_home` on macOS, `/usr/lib/jvm` 
 Without one the build stops at once with `Unable to download toolchain matching the requirements
 ({languageVersion=25, ...})`.
 
-The build JDK does not set the bytecode. The shared modules compile to Java 17, Android's floor
-(`OpenSensorConventions.jvmTarget`). `:app` sets no JVM target and keeps AGP's default, so its classes
-are Java 11 (class file major 55).
+The build JDK does not set the bytecode. Every module compiles to Java 17, Android's floor
+(`OpenSensorConventions.jvmTarget`), class file major 61. `:app` gets it from the
+`opensensor.android.application` convention, together with its SDK levels, so the app and the shared
+modules cannot drift apart. Without it AGP would compile `:app` to Java 11.
 
 A `./gradlew` started without a JDK 25 in reach fails at once. macOS auto-detection reads `/usr/libexec/java_home`, which lists
 only JDKs under `/Library/Java/JavaVirtualMachines` and `~/Library/Java/JavaVirtualMachines`. Homebrew's
@@ -124,9 +127,9 @@ commit the file. The root `build.gradle.kts` configures that task to write no do
 | --- | --- |
 | Language / UI | Kotlin (`kotlin`), Jetpack Compose through its BOM (`androidxComposeBom`, material3 included), the shared `:ui:designsystem` theme and vendored icons (no dynamic color, no `material-icons-extended`), Navigation 3 (`nav3Core` and `jetbrainsNavigation3`). Versions are the `gradle/libs.versions.toml` keys named here |
 | DI / data | Hilt (`hilt`), Room (`androidxRoom`, schema `AppDatabase.version`, exported under `core/database/schemas/`), DataStore Preferences (`androidxDatastore`), WorkManager (`androidxWork`) + `androidx.hilt:hilt-work` (`androidxHilt`), kotlinx.serialization (`kotlinxSerialization`), kotlinx-datetime (`kotlinxDatetime`, shared calendar math), coroutines (`coroutines`). Versions are the `gradle/libs.versions.toml` keys named here |
-| Native | Discover adds `maplibre-compose` (`maplibreCompose`) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`) and `com.uber:h3` (`h3`, JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C library (`core/publicfeed/src/nativeInterop/h3c`, its README names the version) with `xcrun clang` and binds it through cinterop |
+| Native | Discover adds `maplibre-compose` (`maplibreCompose`) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`) and `com.uber:h3` (`h3`, JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C library (`core/publicfeed/src/nativeInterop/h3c`, its README names the version) with `xcrun clang` and binds it through cinterop. `H3VersionPinTest` (`:tools:pins`) fails when the C major and minor differ from `com.uber:h3`. The patch may differ, because h3-java numbers its own releases |
 | Build | Gradle as `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` names it (configuration cache on), with the daemon on JDK 25 through the Daemon JVM criteria (see Build JDK). AGP (`androidGradlePlugin`), KSP (`ksp`) and Compose Multiplatform (`composeMultiplatform`) as `gradle/libs.versions.toml` pins them. R8 for release. Every `:core` module and `:family:air` target JVM (Java 17) and iOS, except `:core:database`, which targets Android and iOS (`opensensor.kmp.android-library`). Every `:ui` and `:feature` module uses `opensensor.kmp.compose-feature`, Compose Multiplatform for Android (`com.android.kotlin.multiplatform.library`) and iOS, with no JVM target. `:ios:shared` targets iOS only |
-| SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
+| SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches). One place, `build-logic` `OpenSensorConventions`, for `:app` and every shared Android target |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 
 Bump `libs.versions.toml` only to versions you have verified build.
@@ -140,7 +143,7 @@ plugin adds its module's tasks to `verify` and `verifyIos` (`build-logic/src/mai
 including the metadata compile of every shared source set. Only that compile checks `commonMain` on
 its own (an expect class must declare the members it inherits), and `assemble` runs it, so CodeQL
 autobuild fails without it. `commonMain` joins `verify`, the iOS only source sets join `verifyIos`.
-For the same reason `opensensor.jvm.library` adds `compileKotlin` of the `:tools` modules to `verify`.
+For the same reason `opensensor.jvm.library` adds `compileKotlin` and `test` of the `:tools` modules to `verify`.
 On a Mac with Xcode `verify` runs `verifyIos` too, so the pre-push hook covers iOS. Linux CI skips
 it, and `-Popensensor.skipIos=true` skips it locally. A Mac with only the Command Line Tools has no
 iOS SDK, so it skips `verifyIos` as well. When Gradle configures the build (the first run, or after
@@ -176,7 +179,7 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | Explicit Xcode 27.0 through `DEVELOPER_DIR` | Matches the locally checked release build; avoids the runner's moving default and pre-release Xcode installations. |
 | Temurin, version read from `gradle/gradle-daemon-jvm.properties`, + repository Gradle wrapper | Uses the same Java major as Linux CI and local builds, and keeps the project's pinned Gradle distribution. |
 | `setup-gradle` with `cache-provider: basic` | Owns Gradle caching and wrapper validation, using standard GitHub caching. Do not also enable Gradle caching in `setup-java`. |
-| Separate `~/.konan` cache | Reuses the native compiler/dependencies, keyed by architecture, Xcode and dependency/build definitions. No DerivedData cache. |
+| Separate `~/.konan` cache | Reuses the native compiler and its dependencies, keyed by architecture, Xcode and the Kotlin version (see CI caches). No DerivedData cache. |
 | Two Gradle workers | Limits simultaneous native compilation on the standard runner's 7 GB RAM. |
 | `ios/tests/verify-native.sh` | Compiles native archive export, LAN framing/policy, RunSlot cancellation and Bluetooth GATT queue checks in Swift 6 with complete concurrency checking and warnings as errors. Shared transfer checks run in Kotlin tests. No radio or UI qualification. |
 | `verifyIos` | Runs the simulator tests of every shared module (every `:core`, `:family`, `:ui` and `:feature` module and `:ios:shared`), compiles the `iosMain`, `appleMain` and `nativeMain` metadata, and links the Debug framework. |
@@ -335,7 +338,7 @@ uploads the four Actions secrets. Local signed release:
 `set -a; source secrets/.env; set +a; ./gradlew :app:assembleRelease`. `secrets/` is git-ignored.
 **Back the keystore up.** Without it no future release installs over an existing one.
 
-The workflow runs as two jobs. The `apk` job validates the keystore, runs `verify`, builds and
+The workflow runs as two jobs. The `build` job validates the keystore, runs `verify`, builds and
 checks the signed APK, writes the notes and uploads `dist/` with a `contents: read` token. It reads
 the Gradle cache read-only and restores the Kotlin/Native cache without saving it, so a release
 build never writes a cache entry. The `publish` job is the only
@@ -371,14 +374,43 @@ Every action in `.github/workflows/` is pinned to a full commit SHA with the rel
 trailing comment, for example `actions/checkout@<sha> # v7.0.1`. Resolve a new pin with
 `git ls-remote https://github.com/<owner>/<repo> refs/tags/<tag>` and use the peeled `^{}` commit
 for annotated tags. `.github/dependabot.yml` opens grouped weekly updates for Gradle (Kotlin
-toolchain, Android build, Compose, AndroidX, other), GitHub Actions and pre-commit hooks, after a
-seven day cooldown. Each update must pass `verify.yml`. Real BLE, LAN and background behavior after
-an update still needs a phone run before a release.
+toolchain, Android build, Compose, AndroidX, other), GitHub Actions, pre-commit hooks and the
+pre-commit version CI installs (pip, `tools/ci/requirements.txt`), after a seven day cooldown. Each
+update must pass `verify.yml`. Real BLE, LAN and background behavior after an update still needs a
+phone run before a release.
 
-Gradle jobs restore `~/.konan` (Kotlin/Native compiler and dependencies) keyed by OS, architecture
-and the build definitions. Both iOS jobs add the Xcode version to the key. The verify workflow
-writes the Gradle cache only on `main`, from the Linux gradle job and "iOS native validation". The
-iOS device Release build and release builds only read the Gradle cache and only restore `~/.konan`.
+Three pins live outside the files Dependabot reads, and `:tools:pins` checks them in `verify`.
+
+| Pin | Check |
+| --- | --- |
+| ktlint version and SHA-256 in `tools/hooks/ktlint.sh` | `KtlintPinTest`. The version also sits in the catalog (`ktlint`, library `ktlint-cli`), so a Dependabot Gradle update bumps it there and the test fails until the script carries the same version and the new release file's SHA-256 |
+| Firmware commit of the `opensensor-space-firmware` checkout in `verify.yml` and `release.yml` | `FirmwareRefPinTest`. Both workflows name the same full commit. The weekly `live-key-drift.yml` compares the templates with firmware `main` |
+| pre-commit in CI | `PreCommitPinTest`. The hooks job installs `tools/ci/requirements.txt`, one exact version, never a floating `pipx run pre-commit` |
+
+`H3VersionPinTest` in the same module compares the vendored H3 C library with `com.uber:h3`
+(Stack, Native).
+
+### CI caches
+
+GitHub keeps 10 GB of cache per repository and evicts the least recently used entry above that,
+and an entry nobody restores for 7 days. So only `main` saves, and every pull request and release
+job restores only.
+
+| Cache | Saved by | Read by |
+| --- | --- | --- |
+| Gradle (`setup-gradle`, `cache-read-only` off `main`) | the Linux gradle job and "iOS native validation" on `main` | every Gradle job |
+| `~/.konan` (`actions/cache/restore` and `actions/cache/save`) | the same two jobs on `main`, when the exact key missed | every Gradle job |
+| pre-commit hook environments | the hooks job on `main`, when the exact key missed | the hooks job |
+
+The `~/.konan` key is OS, architecture, the Xcode version on macOS and the Kotlin version
+(`.github/actions/konan-cache-key`). The compiler and its dependencies change with those only, so a
+build script edit no longer makes a new 200 to 650 MB entry. The restore key drops the Kotlin
+version, so a Kotlin bump starts from the previous entry. Before saving, `main` deletes the
+compilers of older Kotlin versions, so that start does not carry them on.
+
+The Gradle action keys its home entry by job id and falls back to the newest entry of the same OS.
+The read-only release job has never saved one, so it restores the newest Linux entry the verify
+gradle job saved on `main`.
 
 ## Fake device (debug builds, `FakeTransport`)
 

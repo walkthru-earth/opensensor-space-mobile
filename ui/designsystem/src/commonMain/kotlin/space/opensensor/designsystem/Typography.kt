@@ -114,7 +114,9 @@ fun quicksandFontFamily(): FontFamily = variableFamily(Res.font.quicksand, Quick
 
 /**
  * Cairo, the website's Arabic face (`--font-cairo`), the OFL variable TTF `Cairo[slnt,wght].ttf`
- * version 3.130 from google/fonts `ofl/cairo` (byte for byte the website's `app/fonts/` copy). Used
+ * version 3.130 from google/fonts `ofl/cairo` with its `slnt` axis pinned to 0 by fontTools 4.63.0
+ * (`fonttools varLib.instancer Cairo[slnt,wght].ttf slnt=0`). The full weight axis, every glyph and
+ * every OpenType feature stay, and the file drops from 599,548 to 316,644 bytes. Used
  * for the whole UI when the language is written in Arabic script or the layout runs right to left.
  *
  * It also sets the big numbers. Quicksand has proportional digits and no `tnum` feature, so a

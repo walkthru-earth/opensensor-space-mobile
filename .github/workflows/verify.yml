@@ -49,12 +49,22 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
-      - name: Cache pre-commit environments
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # pre-commit itself is pinned in tools/ci/requirements.txt, where Dependabot updates it.
+      - run: python -m pip install --disable-pip-version-check -r tools/ci/requirements.txt
+      # The hook environments. Pull requests restore them and only main saves them.
+      - name: Restore pre-commit environments
+        id: pre-commit-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/pre-commit
-          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
-      - run: pipx run pre-commit run --all-files --show-diff-on-failure
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'tools/ci/requirements.txt') }}
+      - run: pre-commit run --all-files --show-diff-on-failure
+      - name: Save pre-commit environments
+        if: github.ref == 'refs/heads/main' && steps.pre-commit-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: ${{ steps.pre-commit-cache.outputs.cache-primary-key }}
 
   gradle:
     name: ./gradlew verify
@@ -85,14 +95,32 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
-      - name: Cache Kotlin Native toolchain
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - id: konan-key
+        uses: ./.github/actions/konan-cache-key
+      # Pull requests restore the Kotlin/Native toolchain and never save it.
+      - name: Restore Kotlin Native toolchain
+        id: konan
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'build-logic/src/**', 'core/*/build.gradle.kts', 'feature/*/build.gradle.kts', 'ui/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
+          key: ${{ steps.konan-key.outputs.key }}
+          restore-keys: ${{ steps.konan-key.outputs.restore-prefix }}
       - run: ./gradlew --no-daemon verify
         env:
           OPENSENSOR_FIRMWARE_DIR: ${{ github.workspace }}/opensensor-space-firmware
+      # Only main saves, once per key. The compilers of older Kotlin versions go first, so an entry
+      # restored through the prefix does not carry them into the new one.
+      - name: Drop older Kotlin Native compilers
+        if: github.ref == 'refs/heads/main' && steps.konan.outputs.cache-hit != 'true'
+        env:
+          KOTLIN: ${{ steps.konan-key.outputs.kotlin }}
+        run: find ~/.konan -maxdepth 1 -name 'kotlin-native-prebuilt-*' ! -name "*-$KOTLIN" -exec rm -rf {} + 2>/dev/null || true
+      - name: Save Kotlin Native toolchain
+        if: github.ref == 'refs/heads/main' && steps.konan.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.konan
+          key: ${{ steps.konan-key.outputs.key }}
       - name: Check the APK native ABIs
         run: python3 tools/check_apk_abis.py app/build/outputs/apk/debug/app-debug.apk
       - name: Upload debug APK
@@ -141,11 +169,18 @@ jobs:
         with:
           cache-provider: basic
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
-      - name: Cache Kotlin Native toolchain
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - id: konan-key
+        uses: ./.github/actions/konan-cache-key
+        with:
+          xcode: ${{ env.XCODE_VERSION }}
+      # Pull requests restore the Kotlin/Native toolchain and never save it.
+      - name: Restore Kotlin Native toolchain
+        id: konan
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-${{ runner.arch }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'build-logic/src/**', 'core/*/build.gradle.kts', 'feature/*/build.gradle.kts', 'ui/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
+          key: ${{ steps.konan-key.outputs.key }}
+          restore-keys: ${{ steps.konan-key.outputs.restore-prefix }}
       - name: Check Apple toolchain
         run: |
           test "$(uname -m)" = arm64
@@ -161,6 +196,19 @@ jobs:
         run: ios/tests/verify-native.sh 2>&1 | tee ios/build/ci/native-tests.log
       - name: Run shared Kotlin tests on iOS simulator
         run: ./gradlew --no-daemon --stacktrace verifyIos 2>&1 | tee ios/build/ci/kotlin-tests.log
+      # Only main saves, once per key. The compilers of older Kotlin versions go first, so an entry
+      # restored through the prefix does not carry them into the new one.
+      - name: Drop older Kotlin Native compilers
+        if: github.ref == 'refs/heads/main' && steps.konan.outputs.cache-hit != 'true'
+        env:
+          KOTLIN: ${{ steps.konan-key.outputs.kotlin }}
+        run: find ~/.konan -maxdepth 1 -name 'kotlin-native-prebuilt-*' ! -name "*-$KOTLIN" -exec rm -rf {} + 2>/dev/null || true
+      - name: Save Kotlin Native toolchain
+        if: github.ref == 'refs/heads/main' && steps.konan.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.konan
+          key: ${{ steps.konan-key.outputs.key }}
       # One Debug simulator build serves both the packaged app and the Swift tests, so the
       # shared Kotlin framework and the app compile once instead of twice.
       - name: Build unsigned simulator app and tests
@@ -244,11 +292,18 @@ jobs:
           # iOS native validation saves these caches. This job only reads them, so its smaller
           # device build never wins the save and leaves validation without simulator outputs.
           cache-read-only: true
+      - id: konan-key
+        uses: ./.github/actions/konan-cache-key
+        with:
+          xcode: ${{ env.XCODE_VERSION }}
+      # Restore only. iOS native validation saves this cache on main.
       - name: Restore Kotlin Native toolchain
+        id: konan
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-${{ runner.arch }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'build-logic/src/**', 'core/*/build.gradle.kts', 'feature/*/build.gradle.kts', 'ui/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
+          key: ${{ steps.konan-key.outputs.key }}
+          restore-keys: ${{ steps.konan-key.outputs.restore-prefix }}
       - name: Check Apple toolchain
         run: |
           test "$(uname -m)" = arm64

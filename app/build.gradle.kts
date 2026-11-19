@@ -1,5 +1,6 @@
 plugins {
-    alias(libs.plugins.android.application)
+    // AGP with the shared SDK levels and bytecode 17 (build-logic OpenSensorConventions).
+    id("opensensor.android.application")
     alias(libs.plugins.hilt.gradle)
     alias(libs.plugins.ksp)
     alias(libs.plugins.compose.compiler)
@@ -44,12 +45,9 @@ if (requestedReleaseTasks && !localRelease && releaseKeystore?.isFile != true) {
 
 android {
     namespace = "space.opensensor.app"
-    compileSdk = 37
 
     defaultConfig {
         applicationId = "space.opensensor.app"
-        minSdk = 31
-        targetSdk = 37
         versionCode = ciVersionCode ?: 1
         versionName = ciVersionName ?: "1.0"
 
