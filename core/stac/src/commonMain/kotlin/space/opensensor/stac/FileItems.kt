@@ -57,7 +57,10 @@ sealed interface FileItemResult {
     /** A row has no UTC time, so the file is not anchored to the calendar. */
     data object NoUtcAnchor : NoItem
 
-    /** The footer names no rotation window the profile allows, so the file's window cannot be placed. */
+    /**
+     * The footer names no rotation window, or one the profile does not allow. It allows 600, 900, 1800
+     * and 3600 seconds ([OpenSensorFooter.ROTATION_WINDOWS_S]), so the file's window cannot be placed.
+     */
     data object NoRotationWindow : NoItem
 
     /**
@@ -87,7 +90,7 @@ sealed interface FileItemResult {
 
 /**
  * The STAC File Item of a synced device file, in the canonical form of the stac-opensensor v0.1.0
- * profile (main commit e9981360c2229a98d5659ef0038a3b6114953f73).
+ * profile, as `scripts/canonical.mjs` builds it at main commit 204365f929e6f77bcaa6e70a0245c96cadc5c115.
  * The board writes this Item as a sidecar beside its file, and the phone is its transport and
  * validator. An Item built here must equal the board's Item as JSON values. Once upload exists, the
  * phone uploads the board's sidecar `.json` together with its `.parquet`.
@@ -162,6 +165,9 @@ object FileItems {
         if (footer == null) return FileItemResult.NoThingId
         val thing = footer.thingId?.takeIf { UUID.matches(it) } ?: return FileItemResult.NoThingId
         val mobility = footer.mobility ?: return FileItemResult.NoMobility
+        // Right after the Thing and mobility, before the rows, as `scripts/canonical.mjs` checks it.
+        val rotationS = footer.rotationIntervalS?.takeIf { it in OpenSensorFooter.ROTATION_WINDOWS_S }
+            ?: return FileItemResult.NoRotationWindow
         if (footer.purpose != TELEMETRY) return FileItemResult.NotTelemetry(footer.purpose)
         val file = ParquetFile.open(reader, fileName)
         val rows = file.numRows.toInt()
@@ -170,7 +176,7 @@ object FileItems {
         if (times.nullCount > 0) return FileItemResult.NoUtcAnchor
         val startNs = times.values.min()
         val endNs = times.values.max()
-        val rotationS = footer.rotationIntervalS ?: return FileItemResult.NoRotationWindow
+        // HHMM names the window that holds the earliest row, as in `scripts/canonical.mjs`.
         val windowS = windowStart(startNs, rotationS)
         val named = fileName.substring(DATE_PREFIX.length, DATE_PREFIX.length + 4)
         val window = hhmm(windowS)
@@ -233,7 +239,8 @@ object FileItems {
     /**
      * The UTC start, in seconds, of the rotation window of [rotationS] seconds that holds the row at
      * [ns], floor(seconds ÷ window) × window as the firmware logger computes it. The file name `HHMM`
-     * and the partition date come from it.
+     * and the partition date come from it. `scripts/canonical.mjs` uses the truncating JS `%` and this
+     * floors, so they differ only before 1970.
      */
     fun windowStart(ns: Long, rotationS: Long): Long {
         val seconds = ns.floorDiv(NS_PER_S)
