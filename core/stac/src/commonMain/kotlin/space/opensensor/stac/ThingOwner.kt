@@ -13,12 +13,15 @@ import space.opensensor.model.DisplayGroup
 import space.opensensor.model.ThingSite
 import space.opensensor.stac.ProfileRules.isI18n
 import space.opensensor.stac.ProfileRules.isId
+import space.opensensor.stac.ProfileRules.isNumber
 import space.opensensor.stac.ProfileRules.isScale
 import space.opensensor.stac.ProfileRules.isText
 
 /**
  * One STAC provider of a Thing Collection, with the four fields STAC 1.1.0 defines. A null [roles],
- * [url] or [description] is left out, so a provider is copied as the owner gave it.
+ * [url] or [description] is left out, so a provider is copied as the owner gave it. It throws
+ * [IllegalArgumentException] for a value STAC refuses, an empty [name], a role outside [ROLES] or a
+ * [url] that is not an IRI.
  */
 data class StacProvider(
     val name: String,
@@ -26,6 +29,12 @@ data class StacProvider(
     val url: String? = null,
     val description: String? = null,
 ) {
+    init {
+        require(name.isNotEmpty()) { "a provider has an empty name" }
+        require(roles.orEmpty().all { it in ROLES }) { "a provider has a role STAC does not define" }
+        require(url == null || isUrl(url)) { "a provider url is not an IRI" }
+    }
+
     fun json(): JsonObject = buildJsonObject {
         put("name", name)
         description?.let { put("description", it) }
@@ -36,6 +45,12 @@ data class StacProvider(
     companion object {
         /** The keys a provider may have. [ThingOwner.parse] refuses any other, so none is dropped. */
         val KEYS = setOf("name", "description", "roles", "url")
+
+        /** The provider roles STAC 1.1.0 defines. */
+        val ROLES = setOf("producer", "licensor", "processor", "host")
+
+        /** True when [url] is an IRI, the format STAC gives a provider url. */
+        fun isUrl(url: String): Boolean = ProfileRules.isIri(url)
     }
 }
 
@@ -58,7 +73,7 @@ data class ColumnLabel(val hints: JsonObject) {
                 "title", "description" -> value.isText()
                 GROUP -> value.isText() && DisplayGroup((value as JsonPrimitive).content).isKnown
                 ThingCollections.SCALE -> value.isId()
-                DECIMALS -> (value as? JsonPrimitive)?.takeUnless { it.isString }?.content?.let(::decimalsOf) != null
+                DECIMALS -> value.isNumber() && decimalsOf((value as JsonPrimitive).content) != null
                 TITLE_I18N, DESCRIPTION_I18N -> value.isI18n()
                 else -> throw IllegalArgumentException("a column adds $key, which is not a display hint")
             }
@@ -79,7 +94,7 @@ data class ColumnLabel(val hints: JsonObject) {
         /**
          * The decimals a JSON number gives, when it is an integer from 0 to 9 however it is spelled, as
          * `1`, `1.0`, `1e0` or `0.5e1`. It reads the digits, not a Double, so `1.0000000000000001` is
-         * not rounded to 1. Anything else is null.
+         * not rounded to 1. [number] is a JSON number. Anything else is null.
          */
         private fun decimalsOf(number: String): Int? {
             val (whole, fraction, exponent) = JSON_NUMBER.matchEntire(number)?.destructured ?: return null
@@ -111,6 +126,9 @@ private object ProfileRules {
 
     /** An absolute URI, a scheme then RFC 3986 characters, where each `%` starts two hex digits. */
     private val URI = Regex("""[A-Za-z][A-Za-z0-9+.-]*:(?:[A-Za-z0-9\-._~!$&'()*+,;=:/?#\[\]@]|%[0-9A-Fa-f]{2})+""")
+
+    /** A number as JSON spells it, so `NaN`, `0x10` or `01` is not one. */
+    private val JSON_NUMBER = Regex("""-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?""")
 
     private val COLOR_HINT = Regex("""[0-9A-F]{6}""")
     private val SCALE_KEYS = setOf("source", "unit", "period", "guideline", "steps")
@@ -144,7 +162,27 @@ private object ProfileRules {
             this["color_hint"].let { it == null || (it.isText() && COLOR_HINT.matches((it as JsonPrimitive).content)) }
     }
 
-    private fun JsonElement.isNumber() = this is JsonPrimitive && !isString && content.toDoubleOrNull() != null
+    fun JsonElement.isNumber() = this is JsonPrimitive && !isString && JSON_NUMBER.matches(content)
+
+    /**
+     * An IRI, a [URI] that may also hold the RFC 3987 characters beyond ASCII after its scheme. Each
+     * of those reads as `~`, which a URI allows after the scheme and never in it.
+     */
+    fun isIri(text: String): Boolean {
+        val ascii = StringBuilder(text.length)
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                c.code < 0x80 -> ascii.append(c)
+                c in '\u00A0'..'\uD7FF' || c in '\uF900'..'\uFDCF' || c in '\uFDF0'..'\uFFEF' -> ascii.append('~')
+                c.isHighSurrogate() && i + 1 < text.length && text[i + 1].isLowSurrogate() -> ascii.append('~').also { i++ }
+                else -> return false
+            }
+            i++
+        }
+        return URI.matches(ascii)
+    }
 }
 
 /**
@@ -179,13 +217,14 @@ data class ThingOwner(
         /**
          * The owner config of a Thing whose owner [site] the board reported, published under the
          * bucket and [prefix] of its upload target, which [host] runs. An empty or missing site value
-         * is left out. `owner.provider` is the producer and licensor, with `owner.url` as its link, as
-         * the firmware `SET_CONFIG` table names them. A site with no provider lists only [host], and the
+         * is left out, and so is an `owner.url` that is not an IRI. `owner.provider` is the producer
+         * and licensor, with `owner.url` as its link, as the firmware `SET_CONFIG` table names them. A site with no provider lists only [host], and the
          * profile wants the owner as producer, so the Collection is complete once the owner names one.
          * `thing.deployment_id` stays in the file footers, a Collection never names it.
          */
         fun of(site: ThingSite, prefix: String, host: StacProvider): ThingOwner {
-            val producer = site.provider.orBlank()?.let { StacProvider(it, listOf(PRODUCER, LICENSOR), site.url.orBlank()) }
+            val url = site.url.orBlank()?.takeIf(StacProvider::isUrl)
+            val producer = site.provider.orBlank()?.let { StacProvider(it, listOf(PRODUCER, LICENSOR), url) }
             return ThingOwner(
                 title = site.title.orBlank(),
                 description = site.description.orBlank(),
@@ -197,8 +236,8 @@ data class ThingOwner(
         /**
          * The owner config [json] in the shape of `owner.json`. Throws [IllegalArgumentException] when it
          * is not one, including a `providers`, `columns`, `primary`, `scales`, `contacts` or `roles` of
-         * another JSON type, a column key that is not a display hint, an empty `primary` or a scale the
-         * profile refuses. A member that is missing or JSON null counts as not given.
+         * another JSON type, a provider STAC refuses, a column key that is not a display hint, an empty
+         * `primary` or a scale the profile refuses. A member that is missing or JSON null counts as not given.
          */
         fun parse(json: String): ThingOwner {
             val root = Json.parseToJsonElement(json) as? JsonObject ?: throw IllegalArgumentException("owner config is not an object")

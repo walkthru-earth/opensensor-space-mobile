@@ -148,6 +148,28 @@ class ThingCollectionsTest {
     }
 
     @Test
+    fun anOwnerProviderFollowsStac() {
+        val url = "https://例え.jp/a%20b?x=1#y\uD83D\uDE00"
+        val roles = """["producer","licensor","processor","host"]"""
+        assertEquals(url, ThingOwner.parse("""{"prefix":"p","providers":[{"name":"Osu","roles":$roles,"url":"$url"}]}""").providers.single().url)
+        for (provider in listOf(
+            """{"name":""}""",
+            """{"name":"Osu","roles":["owner"]}""",
+            """{"name":"Osu","url":""}""",
+            """{"name":"Osu","url":"example.org"}""",
+            """{"name":"Osu","url":"https://example.org/%ZZ"}""",
+            """{"name":"Osu","url":"https://example.org/a b"}""",
+            """{"name":"Osu","url":"例え:x"}""",
+            """{"name":"Osu","url":"https://example.org/\u0085"}""",
+            """{"name":"Osu","url":"https://example.org/\uD83D"}""",
+        )) {
+            assertFailsWith<IllegalArgumentException>(provider) { ThingOwner.parse("""{"prefix":"p","providers":[$provider]}""") }
+        }
+        assertFailsWith<IllegalArgumentException> { StacProvider("") }
+        assertNull(ThingOwner.of(ThingSite(provider = "Osu", url = "example.org"), PREFIX, HOST).providers.first().url)
+    }
+
+    @Test
     fun aTemplateHashThatIsNotSha256HexIsRefused() {
         val footer = assertNotNull(OpenSensorFooter.parse(json("footers/m5stack-cores3.json").toString()))
         assertFailsWith<IllegalArgumentException> { CollectionFooter("t", footer.mobility!!, "https://example.org/t.json", "not-hex") }
@@ -188,6 +210,9 @@ class ThingCollectionsTest {
             """{"opensensor:decimals":"1"}""",
             """{"opensensor:decimals":-1}""",
             """{"opensensor:decimals":true}""",
+            """{"opensensor:decimals":01}""",
+            """{"opensensor:decimals":1.}""",
+            """{"opensensor:decimals":+1}""",
             """{"opensensor:group":1}""",
             """{"opensensor:title_i18n":{"ar":1}}""",
             """{"title":""}""",
@@ -250,6 +275,12 @@ class ThingCollectionsTest {
             """"heat":{"source":"https://example.org/%4","period":"PT24H","steps":[$step]}""",
             """"heat":{"source":"urn:x:<heat>","period":"PT24H","steps":[$step]}""",
             """"heat":{"source":"1urn:x","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":NaN}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":Infinity}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":1d}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":0x10}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":025}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":NaN,"label":"Good"}]}""",
             """"heat":{"source":"urn:x","period":"24h","steps":[$step]}""",
             """"heat":{"source":"urn:x","period":"P","steps":[$step]}""",
             """"heat":{"source":"urn:x","period":"PT24H","steps":[]}""",
