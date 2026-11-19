@@ -36,7 +36,7 @@ class BandColumnChartSemanticsTest {
     }
 
     /** The registry scale's own name for step [index], so a reworded registry needs no test change. */
-    private fun step(index: Int): String = AirMetrics.PM25.healthScale!!.steps[index].label.get("en")
+    private fun step(index: Int): String = AirMetrics.PM25.healthScale!!.names[index].get("en")
 
     private fun hour(index: Int, mean: Float?, estimated: Boolean = false) = HistoryColumn(
         startS = index * HOUR,

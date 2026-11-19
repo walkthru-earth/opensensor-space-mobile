@@ -99,7 +99,7 @@ class DayRingSemanticsTest {
     }
 
     /** The registry scale's own name for step [index], so a reworded registry needs no test change. */
-    private fun step(index: Int): String = AirMetrics.PM25.healthScale!!.steps[index].label.get("en")
+    private fun step(index: Int): String = AirMetrics.PM25.healthScale!!.names[index].get("en")
 
     @Test
     fun detailedReadsEachHourWithItsWhoStep() {
