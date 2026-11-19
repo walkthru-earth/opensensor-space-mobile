@@ -3,19 +3,11 @@ package space.opensensor.history
 import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.designsystem.moodWord
 import space.opensensor.family.air.AirMood
 import space.opensensor.family.air.WhoStep
 import space.opensensor.family.air.stepOf
-import space.opensensor.history.resources.Res
-import space.opensensor.history.resources.who_step_above_it1
-import space.opensensor.history.resources.who_step_guideline
-import space.opensensor.history.resources.who_step_it1
-import space.opensensor.history.resources.who_step_it2
-import space.opensensor.history.resources.who_step_it3
-import space.opensensor.history.resources.who_step_it4
 import space.opensensor.designsystem.color as designSystemColor
 import space.opensensor.designsystem.contrastRatio as designSystemContrastRatio
 import space.opensensor.designsystem.onBand as designSystemOnBand
@@ -65,14 +57,9 @@ internal fun contrastRatio(a: Color, b: Color): Double = designSystemContrastRat
 @Composable
 internal fun AirMood.titleText(): String = moodWord(step)
 
-@Composable
-internal fun WhoStep.labelText(): String = stringResource(
-    when (this) {
-        WhoStep.GUIDELINE -> Res.string.who_step_guideline
-        WhoStep.IT4 -> Res.string.who_step_it4
-        WhoStep.IT3 -> Res.string.who_step_it3
-        WhoStep.IT2 -> Res.string.who_step_it2
-        WhoStep.IT1 -> Res.string.who_step_it1
-        WhoStep.ABOVE_IT1 -> Res.string.who_step_above_it1
-    },
-)
+/**
+ * The name this metric's scale gives the step [value] falls in, in [language], or null for a metric
+ * without a scale or a non-finite value. The words are the scale's own (the stac-opensensor registry's
+ * for a family scale, the Collection's for a feed), so the app keeps no copy of them.
+ */
+internal fun MetricSpec.stepName(value: Double, language: String): String? = healthScale?.stepName(value, language)

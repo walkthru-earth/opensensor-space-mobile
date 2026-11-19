@@ -81,12 +81,6 @@
     <string name="chart_mean_daily">الأعمدة متوسطات يومية.</string>
     <string name="chart_mean_weekly">الأعمدة متوسطات أسبوعية.</string>
     <string name="chart_guideline_note">الخط المتقطع هو إرشاد منظمة الصحة العالمية لمدة 24 ساعة.</string>
-    <string name="who_step_guideline">ضمن إرشاد منظمة الصحة العالمية</string>
-    <string name="who_step_it4">ضمن الهدف المرحلي 4 لمنظمة الصحة العالمية</string>
-    <string name="who_step_it3">ضمن الهدف المرحلي 3 لمنظمة الصحة العالمية</string>
-    <string name="who_step_it2">ضمن الهدف المرحلي 2 لمنظمة الصحة العالمية</string>
-    <string name="who_step_it1">ضمن الهدف المرحلي 1 لمنظمة الصحة العالمية</string>
-    <string name="who_step_above_it1">فوق كل أهداف منظمة الصحة العالمية</string>
     <string name="info_history_body1">تستخدم المتوسطات فقط القراءات التي وسمها المستشعر بأنها صالحة، بعد الإحماء، وحديثة، وبلا خطأ.</string>
     <string name="info_history_body2">التغطية هي نسبة الفترة التي فيها مثل هذه القراءات. ثلاث قراءات في ساعة تعني 1 بالمئة، وليست متوسطًا للساعة.</string>
     <string name="info_history_body3">المقاطع المتقطعة سُجّلت قبل أن تكون للمستشعر ساعة. وقتها مقدَّر من وقت ضُبط لاحقًا خلال فترة التشغيل نفسها.</string>
