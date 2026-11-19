@@ -79,7 +79,7 @@ Rules.
    `core/model/bundled/templates/`, byte for byte, with
    `rsync -a --delete ../opensensor-space-firmware/docs/shared/templates/ core/model/bundled/templates/` from the
    repo root. Set the firmware checkout `ref` in `.github/workflows/verify.yml` to the commit copied,
-   so CI checks the copy against it with `FirmwareTemplatesTest`. The bundle is at `e2eb30b` and holds
+   so CI checks the copy against it with `FirmwareTemplatesTest`. The bundle is at `a5545b4` and holds
    three boards, M5Stack CoreS3, Waveshare ESP32-S3 SIM7670G and ELECROW CrowPanel e-paper SEN63C
    (`elecrow-crowpanel-epaper-42`). Only CoreS3 and Waveshare have a profile. Add a reviewed `AppProfile` for that
    `dict` under `core/model/bundled/profiles/`, or the board has no LIVE, hero or metrics card. `BundledCatalog` reads the

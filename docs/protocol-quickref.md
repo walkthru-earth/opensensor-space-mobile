@@ -206,9 +206,10 @@ Feature gates use `info.proto` / `info.fw`, never guesses. The one exception is 
 `status.ls` (`DeviceStatus.listSinceEpoch`, the card's FAT serial, 0 with no card, absent on older
 firmware) as the firmware contract says.
 
-`LiveSample` parses LIVE as a map by key name, in any order. `seq`, `mono` and `utc` are typed
-header fields. `utc` is microseconds since the epoch, the same value as the file column
-`event_time_utc_us`, and `LiveSample.utcInstant` reads it. Every other key is a number or null. Floats such as `1.00`
+`LiveSample` parses LIVE as a map by key name, in any order. `seq` and `mono` are typed
+header fields. Every other key is a number or null, `utc` included. The template `live_keys` map
+`utc` to the column `event_time_utc_us`, microseconds since the epoch, and `LiveReading.utc` reads
+it through that column. A null or fractional `utc` has no instant. Floats such as `1.00`
 and `1.0` parse as numbers, and the app keeps its own display rounding. The firmware sends every key
 the template declares in `live_keys`. A null key means no reading now, so the card shows a dash. An
 absent key means the board has no such field. The app shows cards by the template declaration, so a
@@ -223,8 +224,8 @@ from the column and its label from the app profile. The thing joins the bundled 
 under `core/model/bundled/templates/` with the app profile under `core/model/bundled/profiles/`
 (`BundledCatalog.thing`). The templates are opensensor-space-firmware `docs/shared/templates` copied byte for
 byte, `<board>/<dict>.json` and `index.json`, and their `live_keys` list the keys in board LIVE order.
-Only the current digest of each board is bundled, copied from opensensor-space-firmware `e2eb30b`. CoreS3 (`3b4d8500…`)
-sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
+Only the current digest of each board is bundled, copied from opensensor-space-firmware `a5545b4`. CoreS3 (`f4f81218…`)
+sends `imu_t`, the IMU die temperature, shown as board temperature, and `lst`, the light sensor state. Its profile hides `t` and `rh`
 because they are always null on CoreS3. Waveshare (`a8605aaf…`) sends `t`, ambient air
 temperature, `rh` and `bstate`, the battery health code. CrowPanel e-paper SEN63C (`e7279c4e…`) sends
 `sen`, `m1`, `m25`, `m4`, `m10`, `t`, `rh` and `co2`, but no profile is bundled for it, so it has no

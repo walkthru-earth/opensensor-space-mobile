@@ -112,7 +112,7 @@ class TodayFormatTest {
         val bundled = BundledCatalog.template(WAVESHARE.dict!!)!!
         val desc = "ab".repeat(32)
         // The board serves a new revision of its dict without the particle columns.
-        val revised = bundled.copy(key = TemplateKey(bundled.dict, desc), datastreams = bundled.datastreams.filterNot { it.name.startsWith("pm") })
+        val revised = bundled.copy(key = TemplateKey(bundled.dict, desc), datastreams = bundled.datastreams.filterNot { it.name.startsWith("pm") }, primary = null)
         val served = MutableStateFlow<List<BoardTemplate>>(emptyList())
         val asked = MutableStateFlow<List<String>>(emptyList())
         val observe = { _: String, metric: MetricSpec, window: HistoryWindow ->

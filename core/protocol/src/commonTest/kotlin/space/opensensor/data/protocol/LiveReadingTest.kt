@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 class LiveReadingTest {
     private fun thing(dict: String): Thing = assertNotNull(BundledCatalog.thing("thing", dict))
 
-    private val cores3 = thing("3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9")
+    private val cores3 = thing("f4f81218dc80d1a8e6db043197a2f7180c4f075f9e8348df30eaceef44d68370")
     private val waveshare = thing("a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809")
 
     @Test
@@ -72,6 +72,27 @@ class LiveReadingTest {
         assertNull(reading.code("pms_status"))
         assertNull(reading.value("pm25_atmospheric_ug_m3"))
         assertNull(reading.value("ambient_temperature_c"))
+    }
+
+    @Test
+    fun `utc is read through the template LIVE key as microseconds since the epoch`() {
+        // The firmware contract example. Read as nanoseconds it would land in January 1970.
+        val sample = LiveSample.parse("""{"seq":15021,"mono":150210000000,"utc":1757990410000000,"pms":4}""")
+        listOf(cores3, waveshare).forEach { thing ->
+            val reading = LiveReading(sample, thing)
+            assertTrue(reading.declares(LiveReading.EVENT_TIME_UTC_US))
+            assertEquals(1757990410000000.0, reading.value(LiveReading.EVENT_TIME_UTC_US)!!, 0.0)
+            assertEquals("2025-09-16T02:40:10Z", reading.utc.toString())
+        }
+        assertEquals("2026-11-19T06:30:00.123456Z", LiveReading(LiveSample.parse("""{"utc":1795069800123456}"""), cores3).utc.toString())
+        assertEquals("1969-12-31T23:59:59.999999Z", LiveReading(LiveSample.parse("""{"utc":-1}"""), cores3).utc.toString())
+    }
+
+    @Test
+    fun `an unsynchronized or fractional utc has no instant`() {
+        assertNull(LiveReading(LiveSample.parse("""{"utc":null,"pms":4}"""), cores3).utc)
+        assertNull(LiveReading(LiveSample.parse("""{"pms":4}"""), cores3).utc)
+        assertNull(LiveReading(LiveSample.parse("""{"utc":1.5}"""), cores3).utc)
     }
 
     @Test

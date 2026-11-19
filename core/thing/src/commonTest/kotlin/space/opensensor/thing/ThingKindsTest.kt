@@ -39,7 +39,7 @@ class ThingKindsTest {
     }
 
     /** The CoreS3 dictionary, pinned. */
-    private val coreS3Dict = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
+    private val coreS3Dict = "f4f81218dc80d1a8e6db043197a2f7180c4f075f9e8348df30eaceef44d68370"
 
     @Test
     fun theBoardSourceIsTheOneTheVersion3MigrationWrites() {
