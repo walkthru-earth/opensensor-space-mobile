@@ -251,7 +251,7 @@ The rules for a new screen or component.
    to swipe and scrim dismissal.
 4. **One element per thing.** A card or row that is one item (a reading with its unit and WHO step, a
    device row, a stat line) merges with `Modifier.cardSemantics()` (`semantics(mergeDescendants = true)`)
-   or `Modifier.valueSemantics(label, value, unit, state)` (`clearAndSetSemantics`), and a clickable row
+   or sets one spoken description with `clearAndSetSemantics` (as `MoodStrip` does), and a clickable row
    merges by itself. A settings row with a switch reads its label and its state together through
    `Modifier.switchRowSemantics(checked, onCheckedChange)` (`toggleable(role = Role.Switch)`), and the
    `Switch` takes `onCheckedChange = null` when the row and the switch do the same thing. A row with a
@@ -345,7 +345,7 @@ scale converter, spoken tick quantisation and reduce-motion helpers. `DisplayFon
 `FontScaleConverter` table at every Android font size step. `SemanticsTest` in `:ui:designsystem`
 `iosTest` renders the shared components on the iOS simulator and checks 48 dp touch bounds, 8 dp bottom
 bar spacing, headings, merged rows, 200 percent font scale fitting without split words, the 55 percent
-`StatLine` value cap, `valueSemantics` replacing its text, `TickingText` speaking in 10 second steps,
+`StatLine` value cap, the internal `valueSemantics` replacing its text, `TickingText` speaking in 10 second steps,
 `InfoSheet` close action, switch rows, tab roles and live iOS reduce-motion notifications. `FitTextTest` in
 `:ui:designsystem` `commonTest` pins the size search and the mid-word check, and `FitTextLayoutTest`
 in `iosTest` renders bottom bar labels, titles and body text at font scale 1.0, 2.0 and

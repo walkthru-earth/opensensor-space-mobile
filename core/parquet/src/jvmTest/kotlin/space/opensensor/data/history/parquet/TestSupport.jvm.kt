@@ -10,7 +10,7 @@ actual fun fixtureBytes(path: String): ByteArray =
 
 private val zstd = ThreadLocal.withInitial { ZstdDecompressCtx() }
 
-/** What `:app` does with zstd-jni's AAR (AppParquetCodecs), here with the JVM jar. */
+/** Built-ins plus ZSTD through the zstd-jni JVM jar, so the tests decode every PyArrow fixture. */
 actual val testCodecs: ParquetCodecs = ParquetCodecs.builtIn.with(ParquetCodec.ZSTD) { src, srcOffset, srcLength, dst, dstOffset, dstLength ->
     zstd.get().decompressByteArray(dst, dstOffset, dstLength, src, srcOffset, srcLength)
 }

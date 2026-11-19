@@ -3,6 +3,7 @@ package space.opensensor
 import space.opensensor.collection.SyncEndReason
 import space.opensensor.family.air.NowReading
 import space.opensensor.permissions.AccessStatus
+import space.opensensor.permissions.AccessStep
 import space.opensensor.permissions.PermissionFlow
 import space.opensensor.strings.UiText
 import space.opensensor.strings.resources.Res
@@ -18,6 +19,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -282,21 +284,21 @@ class CompanionStateTest {
         // Nothing is known, and no link is offered, before the first tap.
         assertEquals(AccessStatus.NOT_DETERMINED, state.bluetoothAccess)
         assertEquals(AccessStatus.UNKNOWN, state.lanAccess)
-        assertFalse(PermissionFlow.offersSettings(state.bluetoothAccess))
-        assertFalse(PermissionFlow.offersSettings(state.lanAccess))
+        assertNotEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onTap(state.bluetoothAccess))
+        assertNotEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onTap(state.lanAccess))
 
         state.bluetoothAuthorizationChanged(2) // CBManagerAuthorization.denied
-        assertTrue(PermissionFlow.offersSettings(state.bluetoothAccess))
+        assertEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onTap(state.bluetoothAccess))
         state.bluetoothAuthorizationChanged(1) // restricted, nothing the user can change
-        assertFalse(PermissionFlow.offersSettings(state.bluetoothAccess))
+        assertNotEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onTap(state.bluetoothAccess))
         state.bluetoothAuthorizationChanged(3)
         assertEquals(AccessStatus.GRANTED, state.bluetoothAccess)
 
         state.lanScanStarted()
         state.lanScanWaiting()
-        assertFalse(PermissionFlow.offersSettings(state.lanAccess))
+        assertNotEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onTap(state.lanAccess))
         state.lanScanAccessDenied()
-        assertTrue(PermissionFlow.offersSettings(state.lanAccess))
+        assertEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onTap(state.lanAccess))
         state.lanScanReady()
         assertEquals(AccessStatus.UNKNOWN, state.lanAccess)
     }

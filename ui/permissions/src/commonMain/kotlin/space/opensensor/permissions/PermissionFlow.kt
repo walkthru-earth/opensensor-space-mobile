@@ -108,7 +108,4 @@ object PermissionFlow {
         AccessStatus.UNKNOWN -> AccessStep.READY
         AccessStatus.NOT_DETERMINED, AccessStatus.DENIED, AccessStatus.RESTRICTED -> AccessStep.DECLINED
     }
-
-    /** True when a screen showing [status] should offer the app's settings page beside it. */
-    fun offersSettings(status: AccessStatus): Boolean = status == AccessStatus.DENIED
 }

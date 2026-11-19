@@ -5,12 +5,6 @@
 # Readable stack traces. Retrace them with the mapping.txt published next to the APK.
 -keepattributes SourceFile,LineNumberTable
 
-# zstd-jni. The native library looks up Java classes, fields and methods by name
-# through JNI (for example Zstd*Ctx.nativePtr), so nothing in the package may be
-# renamed or removed.
--keep class com.github.luben.zstd.** { *; }
--dontwarn com.github.luben.zstd.**
-
 # Exception class names are shown to people (e.message ?: e::class.simpleName) and
 # written to diagnostics, so keep the names of every Throwable.
 -keepnames class * extends java.lang.Throwable

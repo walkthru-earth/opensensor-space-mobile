@@ -46,6 +46,13 @@ data class DisconnectEvent(
 ) {
     val disconnectReason: DisconnectReason get() = DisconnectReason.fromCode(reason)
 
+    /** One log line, the reason, the errno or HCI code when set and the boot, as `"keepalive-failed, err 8, boot 2"`. */
+    fun describe(): String = buildString {
+        append(disconnectReason.wireName)
+        if (err != 0) append(", err ").append(err)
+        append(", boot ").append(bootSeq)
+    }
+
     fun encode(): ByteArray = WireBuffer.allocate(BYTES)
         .putInt(uptimeSeconds.toInt())
         .putInt(generation.toInt())

@@ -38,7 +38,7 @@ flowchart TB
     MP[":ui:map<br/>base map, styles, tile cache, cell outlines, Near me, CellPicker, place search"]
   end
   FE[":feature:*<br/>shell, discover, devices, today, history, files, device, setup, settings, debug"]
-  APP[":app (Android)<br/>Hilt, WorkManager, Android adapters, screen hosts, zstd-jni"]
+  APP[":app (Android)<br/>Hilt, WorkManager, Android adapters, screen hosts"]
   IS[":ios:shared (iOS only)<br/>AppRoot, bridges, static OpenSensorShared framework"]
   IOS["ios/App (Xcode and Swift)<br/>Core Bluetooth, sockets, Bonjour, Keychain, background tasks"]
   PR --> MO
@@ -150,7 +150,7 @@ The root build registers `verify` and `verifyIos` and lists only the `:app` task
 (`build-logic/src/main/kotlin/Gates.kt`), so a new module is gated as soon as it applies a
 convention. On a Mac host `verify` also runs `verifyIos`. Set `-Popensensor.skipIos=true` to skip
 it. `verifyIos` includes `:core:parquet:iosSimulatorArm64Test`, which decodes the real fixtures on
-the simulator. `app/src/androidTest` is in neither gate.
+the simulator. The app has no instrumented tests, so every test runs in a gate.
 
 ## Layers inside `:app`
 
@@ -185,7 +185,7 @@ flowchart LR
 | `data/lan/` | `TcpLinkDriver` (`LinkDriver`), `SocketErrors` (pure errno table), `LanDiscovery` (NsdManager, shared resolver), `LanDiscoveryState` (foreground browse), `LanWifiLock` (transfer leases) |
 | `data/sync/`, `data/archive/` | `FileArchive`, `FileArchiveStore` and the Hilt bindings of the shared planner, collector and engine |
 | `data/background/` | `SyncForegroundService`, `SyncNotifications`, `SyncWorker`, `DeriveWorker`, `AutoSyncScheduler`, `AutoSyncRunner` (pure), `AppAutoSyncGateway`, and the triggers `CompanionPresence` + `CompanionPresenceService`, `AdvertFlagScan` + `AdvertScanReceiver`, `SyncTriggers` + `WifiArrivalReceiver` + `BootReceiver` |
-| `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `RoomHistoryTiers`, `parquet/AppParquetCodecs` (ZSTD) |
+| `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `RoomHistoryTiers` |
 | `data/local/` | `di/DatabaseModule` (opens the shared `AppDatabase` of `:core:database`), `security/LanTokenCipher` and `SecureKnownDeviceDao` |
 | `data/settings/`, `data/storage/` | The Android view of `:core:settings` (`AppSettings`, `DiscoverStore`) and of `:core:storage` (`AndroidStorageBudget`, `AppStorageControls`) |
 | `data/di/` | `ThingModule` (the `ThingKinds` list), coroutine and data bindings |
@@ -273,7 +273,7 @@ part of the derived tier format, so a bit is never reused or renumbered.
 - **A new analysis is a pure object in `:core:history`** with a test over the real fixtures, fed by `:app` from Room/files. Never a query inside a composable.
 - **A new transport is a `LinkDriver`** behind `TransportFactory` and one `LinkSession` (`DeviceTransport` remains a compatibility surface); the session, engine and archive do not change ([transports.md](transports.md)).
 - **Transport work never lives in a composable or Activity**; manager-owned controllers keep session/sync state through rotation and navigation. Opening another device selects another controller without closing existing connections.
-- **The one native Android library** is `zstd-jni` (`@aar`), registered from `:app` into `:core:parquet`'s codec SPI (`AppParquetCodecs`). iOS inflates GZIP with the system zlib and has no ZSTD codec.
+- **No native Parquet codec.** `:core:parquet` decodes UNCOMPRESSED, LZ4_RAW, SNAPPY and GZIP on both phones and refuses ZSTD by name. iOS inflates GZIP with the system zlib.
 
 ## Concurrent collection and ownership
 

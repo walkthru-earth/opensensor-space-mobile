@@ -13,6 +13,7 @@ gate when a `:core` source names one. Open the doc of the module you change.
 | `parquet/` | The Parquet reader and writer and the codec SPI. `ByteReader`, `RangeSource`, `ParquetFile`, `ParquetReader` | [parquet](../docs/parquet.md) |
 | `net/` | HTTP range reads (`HttpRangeSource`) and the disk block cache (`CachedRangeSource`, `BlockCache`) | [parquet](../docs/parquet.md) |
 | `storage/` | `StorageClass`, `StorageRoots`, `AtomicFiles`, `StorageBudget`, `RetentionPolicy`, `QuotaEnforcer`, `MemoryPressure` | [data model](../docs/data-model.md) |
+| `storage/testkit/` | `FakeStorageBudget` for tests | [data model](../docs/data-model.md) |
 | `archive/` | The archive layout, the verifier, records and the `ArchiveStore` and `ArchiveIndex` ports | [data model](../docs/data-model.md) |
 | `sync/` | `LinkSession`, `DeviceSession`, `SyncEngine`, `ArchiveCollector`, `CollectionController` in `collection/`, `DeviceCoordinator`, `StorageJanitor`, `SmartSyncPolicy` | [sync engine](../docs/sync-engine.md), [transports](../docs/transports.md) |
 | `history/` | Metrics, indexing, tiers, daily Parquet, `HistoryOrchestrator`, `DeviceCapabilities`, `BoardDescriptors`, `TemplateHrefs`, `LegacyFileCleanup` | [history pipeline](../docs/history-pipeline.md) |
@@ -99,8 +100,10 @@ Rules that hold across modules.
   and `SafeName` is the firmware name rule (charset, no `..` or `//`, 399-byte cap) plus the phone's
   241-byte segment cap, so every sibling of a segment fits a 255-byte file name. Platform code
   measures and calls them, it does not re-implement them.
-- The clock check and `lan.on` run at most once per link through `LinkSession.claimOnce(key)`,
-  with the keys `CLOCK_CHECK` ("clock") and `LAN_ENABLE` ("lan.on") in `DeviceSession`. The token
+- The clock check, `lan.on` and the read only `GET_DIAG` run at most once per link through
+  `LinkSession.claimOnce(key)`, with the keys `CLOCK_CHECK` ("clock"), `LAN_ENABLE` ("lan.on") and
+  `DIAG` ("diag") in `DeviceSession`. `lastBleDropOnce` keeps its claim on any reply but a plain
+  BUSY, since `ERROR` 7 `"mtu"` will not change on that link. The token
   fetch takes no claim. Android gates it with `LanTokenPolicy.shouldFetch` and iOS with
   `tokenWanted`. `synchronizeClockOnce` and `enableLanOnce` keep the claim once the sensor decided,
   which includes a STATUS timeout and an ERROR reply other than BUSY. A cancelled try, a failure
