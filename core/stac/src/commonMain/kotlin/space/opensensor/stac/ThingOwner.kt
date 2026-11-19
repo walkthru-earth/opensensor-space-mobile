@@ -109,8 +109,8 @@ private object ProfileRules {
     /** The profile's ISO 8601 duration, the period of a scale. */
     private val PERIOD = Regex("""^P(?!$)([0-9]+Y)?([0-9]+M)?([0-9]+W)?([0-9]+D)?(T(?=[0-9])([0-9]+H)?([0-9]+M)?([0-9]+S)?)?$""")
 
-    /** An absolute URI, which starts with a scheme. */
-    private val URI = Regex("""[A-Za-z][A-Za-z0-9+.-]*:\S+""")
+    /** An absolute URI, a scheme then RFC 3986 characters, where each `%` starts two hex digits. */
+    private val URI = Regex("""[A-Za-z][A-Za-z0-9+.-]*:(?:[A-Za-z0-9\-._~!$&'()*+,;=:/?#\[\]@]|%[0-9A-Fa-f]{2})+""")
 
     private val COLOR_HINT = Regex("""[0-9A-F]{6}""")
     private val SCALE_KEYS = setOf("source", "unit", "period", "guideline", "steps")

@@ -239,12 +239,17 @@ class ThingCollectionsTest {
         val good = """{"source":"https://www.who.int/","period":"PT24H","steps":[$step,{"upper":null,"label":{"ar":"سيئ","en":"Bad"}}]}"""
         ThingOwner.parse("""{"prefix":"p","scales":{"who.pm2_5-24h":$good}}""")
         ThingOwner.parse("""{"prefix":"p","scales":{"heat":{"source":"urn:x:heat","unit":"Cel","period":"P1D","guideline":25,"steps":[$step]}}}""")
+        ThingOwner.parse("""{"prefix":"p","scales":{"heat":{"source":"https://example.org/caf%C3%A9?a=1#b","period":"P1D","steps":[$step]}}}""")
         for (scale in listOf(
             """"Heat":$good""",
             """"heat":[]""",
             """"heat":{"period":"PT24H","steps":[$step]}""",
             """"heat":{"source":"","period":"PT24H","steps":[$step]}""",
             """"heat":{"source":"who","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"https://example.org/%ZZ","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"https://example.org/%4","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"urn:x:<heat>","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"1urn:x","period":"PT24H","steps":[$step]}""",
             """"heat":{"source":"urn:x","period":"24h","steps":[$step]}""",
             """"heat":{"source":"urn:x","period":"P","steps":[$step]}""",
             """"heat":{"source":"urn:x","period":"PT24H","steps":[]}""",
