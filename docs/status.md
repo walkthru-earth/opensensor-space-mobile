@@ -15,12 +15,12 @@ build commit, the cell gives the commit that recorded the run, marked "rec.".
 | Feature | Host tests | iOS simulator | OnePlus 7 Pro | iPhone 16 Pro |
 | --- | --- | --- | --- | --- |
 | BLE sync | 2026-10-29 `4af870c4` | 2026-10-29 `4af870c4` | 2026-10-09 `5d5db510` | not run, see note 1 |
-| LAN sync | 2026-10-29 `4af870c4` | 2026-10-29 `4af870c4` | 2026-10-10 `bed79491` | 2026-10-09 `d763fdb6`, owner report |
+| LAN sync | 2026-10-29 `4af870c4` | 2026-10-29 `4af870c4` | 2026-10-10 `bed79491` | 2026-10-09 rec. `d763fdb6`, owner report |
 | Sensor clock | 2026-10-29 `4af870c4` | 2026-10-29 `4af870c4` | 2026-10-09 `5d5db510` | not run |
 | Auto-sync | 2026-10-18 `958148ea` | 2026-10-18 `958148ea` | 2026-10-10 `bed79491`, one-time background run only | not run |
 | Pairing and stale bond | 2026-10-11 rec. `91919319` | 2026-10-11 rec. `91919319` | 2026-09-29 `06ab6ccd` | not run, see note 1 |
-| Station page and live readings | 2026-10-27 `39388eab` | 2026-10-27 `39388eab` | 2026-10-27 rec. `b58cc77b` | 2026-10-09 `d763fdb6`, owner report |
-| History | 2026-10-27 `39388eab` | 2026-10-27 `39388eab` | 2026-09-30 `dba3e693` | not run |
+| Station page and live readings | 2026-10-27 `39388eab` | 2026-10-27 `39388eab` | 2026-10-27 rec. `b58cc77b` | 2026-10-09 rec. `d763fdb6`, owner report |
+| History | 2026-10-27 `39388eab` | 2026-10-27 `39388eab` | not run, see note 7 | not run |
 | Files | 2026-10-18 `958148ea` | 2026-10-18 `958148ea` | 2026-10-10 `bed79491` | not run |
 | Export | 2026-10-18 `958148ea` | 2026-10-18 `958148ea` | not run | not run |
 | Discover | 2026-10-18 `958148ea` | 2026-10-18 `958148ea` | not run | not run |
@@ -51,10 +51,12 @@ build commit, the cell gives the commit that recorded the run, marked "rec.".
 6. OnePlus Station page, 2026-10-27. My devices showed the day lines of two boards. Today showed
    the peacock hero, Today so far and the air cards. Battery state, the generic hero and Forget
    were not checked. The run came before Today became the Station page hub (#117).
-7. OnePlus History, 2026-09-30. Day and Week of a Waveshare across a station reset. This came
-   before History read template datastreams, so the current History has no phone run.
+7. OnePlus History. The last run, on 2026-09-30 at `dba3e693`, checked Day and Week of a Waveshare
+   across a station reset. It came before History read template datastreams, so the current
+   History has no phone run.
 8. iPhone LAN and live readings, 2026-10-09. The owner saw Wi-Fi LAN and live data, and reported
-   that Wi-Fi Smart Sync works after the `TIME_SET` fix. No file count or rate was recorded.
+   that Wi-Fi Smart Sync works after the `TIME_SET` fix. The report names no build commit, so the
+   cells give `d763fdb6`, the commit that recorded it. No file count or rate was recorded.
 9. OnePlus permissions, 2026-10-08. With Bluetooth and notification permissions revoked, launch
    opened on the sensor list with no permission dialog. Scan, Sync now and the deny paths were
    not checked.
