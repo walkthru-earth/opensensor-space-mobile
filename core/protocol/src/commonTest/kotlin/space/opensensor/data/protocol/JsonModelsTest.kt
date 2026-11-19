@@ -88,15 +88,29 @@ class JsonModelsTest {
     }
 
     @Test
+    fun `live utc is microseconds since the epoch`() {
+        // The firmware contract example. Read as nanoseconds it would land in January 1970.
+        val sample = LiveSample.parse("""{"seq":15021,"mono":150210000000,"utc":1757990410000000,"pms":4}""")
+        assertEquals(1757990410000000L, sample.utc)
+        assertEquals("2025-09-16T02:40:10Z", sample.utcInstant.toString())
+        assertEquals(
+            "2026-11-19T06:30:00.123456Z",
+            LiveSample.parse("""{"utc":1795069800123456}""").utcInstant.toString(),
+        )
+        assertEquals("1969-12-31T23:59:59.999999Z", LiveSample(utc = -1).utcInstant.toString())
+        assertNull(LiveSample.parse("""{"utc":null}""").utcInstant)
+    }
+
+    @Test
     fun `live floats with trailing zeros parse as numbers`() {
         // opensensor-space-firmware#100 prints each float with its field decimals.
-        val parsed = LiveSample.parse("""{"seq":1,"mono":1,"utc":1760000000000000000,"pms":4,"pm25":5.00,"t":22.50,"rh":41.0,"imu_t":40.1,"pct":87}""")
+        val parsed = LiveSample.parse("""{"seq":1,"mono":1,"utc":1757990410000000,"pms":4,"pm25":5.00,"t":22.50,"rh":41.0,"imu_t":40.1,"pct":87}""")
         assertEquals(5.0, parsed["pm25"]!!, 0.0)
         assertEquals(22.5, parsed["t"]!!, 0.0)
         assertEquals(41.0, parsed["rh"]!!, 0.0)
         assertEquals(40.1, parsed["imu_t"]!!, 0.0)
         assertEquals(87.0, parsed["pct"]!!, 0.0)
-        assertEquals(1760000000000000000L, parsed.utc)
+        assertEquals(1757990410000000L, parsed.utc)
         assertEquals(1L, LiveSample.parse("""{"seq":1.0}""").seq)
     }
 

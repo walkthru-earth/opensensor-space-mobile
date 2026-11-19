@@ -75,11 +75,6 @@ class TodayFormatTest {
     }
 
     @Test
-    fun theFirmwareClockPrintsAsAnInstant() {
-        assertEquals("2026-01-01T00:00:00Z", isoInstant(1_767_225_600L * 1_000_000_000L))
-    }
-
-    @Test
     fun todaySoFarComesFromTheHourlyDayAndIsNullWithoutAThing() = runTest {
         val zone = TimeZone.UTC
         val info = MutableStateFlow<DeviceInfo?>(null)

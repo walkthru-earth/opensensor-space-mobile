@@ -202,7 +202,6 @@ import space.opensensor.today.resources.today_of_the_day
 import space.opensensor.today.resources.today_readings_since_midnight
 import space.opensensor.today.resources.today_so_far
 import space.opensensor.units.UnitFormatter
-import kotlin.time.Instant
 
 /** The display units for Today's readings, provided by [TodayScreen] from its `units` parameter. */
 internal val LocalTodayUnits = staticCompositionLocalOf { UnitFormatter.Metric }
@@ -645,9 +644,9 @@ internal fun ClockCard(status: DeviceStatus?, live: LiveSample?, modifier: Modif
         status?.gen?.let {
             Text(stringResource(Res.string.clock_generation, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        live?.utc?.let { ns ->
+        live?.utcInstant?.let { instant ->
             Text(
-                stringResource(Res.string.clock_last_sample, isoInstant(ns)),
+                stringResource(Res.string.clock_last_sample, instant.toString()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontFamily = FontFamily.Monospace,
@@ -655,10 +654,6 @@ internal fun ClockCard(status: DeviceStatus?, live: LiveSample?, modifier: Modif
         }
     }
 }
-
-/** A LIVE `utc` in nanoseconds as an ISO-8601 instant, the Developer line on the clock card. */
-internal fun isoInstant(utcNs: Long): String =
-    Instant.fromEpochSeconds(utcNs / 1_000_000_000L, utcNs % 1_000_000_000L).toString()
 
 /**
  * Detailed level, on the reviewed dictionary after the board acknowledged the opt-in: the
