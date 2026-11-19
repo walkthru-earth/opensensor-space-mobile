@@ -18,7 +18,7 @@ gate when a `:core` source names one. Open the doc of the module you change.
 | `history/` | Metrics, indexing, tiers, daily Parquet, `HistoryOrchestrator`, `DeviceCapabilities`, `BoardDescriptors`, `TemplateHrefs`, `LegacyFileCleanup` | [history pipeline](../docs/history-pipeline.md) |
 | `database/` | The Room KMP database (`AppDatabase`), its DAOs, migrations and exported schemas | [data model](../docs/data-model.md) |
 | `publicfeed/` | The Discover feed port, H3 (`H3Grid`) and the viewport cover | [devices and discovery](../docs/devices-and-discovery.md) |
-| `units/` | Display units | [screens](../docs/screens.md) |
+| `units/` | Display units and the UCUM symbols (`UcumDisplay`) | [screens](../docs/screens.md) |
 | `settings/` | Shared DataStore preferences, `SettingsKeys`, units and detail level, with the iOS Application Support path | [data model](../docs/data-model.md) |
 | `stac/` | The STAC File Item (`FileItems.build`) and Thing Collection (`ThingCollections.build`) of a synced file, pure functions with no upload, network or Room, and `CanonicalJson` | [devices and discovery](../docs/devices-and-discovery.md) |
 | `thing/` | The `ThingKind` contract, `OpenSensorBoardKind`, the `ThingKinds` registry, `PublishGate` and `PlatformNeedsTable`. It never uploads | [devices and discovery](../docs/devices-and-discovery.md), [store compliance](../docs/store-compliance.md) |

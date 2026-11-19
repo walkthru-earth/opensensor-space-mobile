@@ -42,6 +42,7 @@ import space.opensensor.device.resources.action_reconnect
 import space.opensensor.device.resources.bonds_confirm
 import space.opensensor.device.resources.bonds_forget
 import space.opensensor.device.resources.bonds_forget_button
+import space.opensensor.device.resources.config_problem_field
 import space.opensensor.device.resources.config_problem_line_break
 import space.opensensor.device.resources.config_problem_pin
 import space.opensensor.device.resources.config_problem_psk_long
@@ -302,6 +303,7 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
             ConfigProblem.STICKER_FORMAT -> Res.string.msg_sticker_invalid
             ConfigProblem.LINE_BREAK -> Res.string.config_problem_line_break
             ConfigProblem.SITE_VALUE -> Res.string.config_problem_site
+            ConfigProblem.FIELD_VALUE -> Res.string.config_problem_field
         },
     )
     DeviceConfigNotice.StickerInvalid -> getString(Res.string.msg_sticker_invalid)

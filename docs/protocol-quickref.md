@@ -160,9 +160,23 @@ serves. No `desc` means the board serves none, and the phone never asks.
 
 ## CONFIG keys (`DeviceConfig`)
 
-Every key the app writes is a row of `ConfigFields` (`core/protocol`) with its secret flag and
-confirm gate. `SECRET_KEYS` and the Device settings confirmations come from that table, and a
-schema may only make a known key stricter.
+Every app key is a row of `ConfigFields` (`core/protocol`) with its secret flag and confirm gate.
+`SECRET_KEYS` and the Device settings confirmations come from that table. A board template declares
+its own keys in `firmware.config_keys` ([decision 0003](../../opensensor-space-firmware/docs/shared/decisions/0003-metadata-driven-apps.md)).
+`ConfigFields.declared` reads one entry (`boolean`, `integer` with a two number range, `enum`, or
+`text` with an optional byte range up to 64, and `applies` of `immediately`, `next sample`, `next boot`
+or `action`). Any other type, decimal among them, does not parse. `ConfigFields.merge` then applies the
+floor.
+
+- A secret, or a key in `SECRET_KEYS`, is dropped. Secrets are never declarable.
+- An app key keeps the app's type, timing and protections, and only gains a stricter confirmation
+  or `disrupts`.
+- A board key is kept only outside the reserved prefixes `ble.`, `wifi.`, `lan.`, `location.`,
+  `thing.`, `owner.` and `sensor.`, with a dotted lowercase name of at most 48 bytes and four parts, read
+  back from page 7. A board `action` always confirms, disrupts and applies once.
+
+`ConfigPatch.Builder.field` sends one merged board key. It refuses a secret, reserved or unmerged
+field and a value outside its type (`ConfigProblem.FIELD_VALUE`, the message never holds the value).
 
 `ble.pair` (random / fixed / none) · `ble.pin` (six ASCII digits, **write-only**. `CONFIG.ble`
 reports only `pin_set` and `pin_default`) · `ble.clear_bonds=1` · `wifi.on` · `wifi.ssid` (1–32 bytes) · `wifi.psk` (empty or 8–63 bytes,
@@ -234,11 +248,24 @@ new session resume the run, and verified files already on the phone are never fe
 object with cell, maximum `resolution`, actual `cell_resolution`, derived
 center `lat`/`lon` and declared `country`, plus the `thing` object with
 `mobility` (`fixed` or `moving`, default `fixed`) and, from CoreS3 `v6.24` and Waveshare `v2.18`,
-`setup` (1 or 0, matching advert bit 6, read as `ThingConfig.needsSetup`). It uses the same CONFIG/CONFIG_CHUNK
+`setup` (1 or 0, matching advert bit 6, read as `ThingConfig.needsSetup`), and the setup record
+`setup_ack` and `setup_v` (decision 0003). It uses the same CONFIG/CONFIG_CHUNK
 framing and 480-byte JSON limit. `DeviceSession.getLocationPage` sends
 `Request.GetConfigPage(LOCATION)` and returns null when older firmware rejects that selector. When
 it returns the legacy object the page has no `location`, which reads as unsupported. A missing
 location object is not an unset supported location.
+
+The setup record is `SetupAck`. Bit `i` of `setup_ack` marks step `i` of the template `firmware.setup`
+done. `setup_v` is `SetupAck.version` of the ordered step ids, the first 31 bits of SHA-256 over the
+ids joined by `\n`, never 0. A `setup_v` that differs from the phone's reads as no step done
+(`SetupAck.done`), and `SetupAck.withStep` starts a stale record from zero. The phone sends both with
+`ConfigPatch.Builder.setupAck`, `thing.setup_v` first. A list holds at most 31 steps. The record
+never proves a required step, those stay derived from the config.
+
+Page byte `7` (`Request.GetConfigPage.BOARD_SETTINGS`) holds the board keys the template declares,
+nested by prefix (`{"panel":{"theme":"dark"}}`). `DeviceSession.getBoardSettings` reads it as
+`BoardSettings`, flat `SET_CONFIG` keys with booleans as `1` or `0`, and drops reserved and secret
+keys. An `ERROR` is thrown.
 
 Waveshare `v2.18` adds `location.gnss_cell` (firmware #147), the receiver's fix from the last 15 s as a
 resolution 8 cell, or `""` without a fresh fix. CoreS3 has no receiver and omits it.

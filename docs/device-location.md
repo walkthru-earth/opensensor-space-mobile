@@ -166,7 +166,8 @@ because it clears the key.
   is absent (no receiver) and when it is empty (no fresh fix). `gnssCellText` keeps that difference.
   `thing.mobility` (`fixed` or `moving`) has a `ConfigFields` row and
   `ConfigPatch.Builder.thingMobility`, sent only by the Fixed or Moving tap. `thing.setup` reads as
-  `ThingConfig.needsSetup`. `Request.GetConfigPage` asks for page 5 or 6, `OwnerConfig` and
+  `ThingConfig.needsSetup`. `thing.setup_ack` and `thing.setup_v` parse into `ThingConfig` and read
+  through `SetupAck` (protocol quickref). `Request.GetConfigPage` asks for page 5 or 6, `OwnerConfig` and
   `ThingConfig.deploymentId` parse them, and `ConfigPatch.Builder.site` checks each site value.
   `ConfigFields.SITE_KEYS` are the site keys and `ConfigGroup.SITE` names their card.
 - `core/model` `ThingSite`, `SiteField` and `SiteRules` hold the site values, their caps and the
