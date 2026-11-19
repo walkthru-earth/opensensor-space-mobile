@@ -88,6 +88,10 @@ Rules.
    so update its `pinned` map with the copy. `BundledCatalogTest` checks the profiles. The template
    links point at fixed firmware commits. The app trusts only the digests, and follows a link only
    through `TemplateHrefs`, for a file whose desc nothing on the phone resolves.
+   A copy replaces the older descs, since `FirmwareTemplatesTest` needs the bundle to equal the
+   firmware folder. An archive file written under an older desc shows its metrics only through a
+   fetched copy, which needs the network once, or after the board is reflashed. The app is
+   unreleased, so this is accepted.
    A new `opensensor:property` belongs in stac-opensensor `registry/properties.json` first. Copy
    `registry/properties.json` and `registry/scales.json` byte for byte into
    `core/model/bundled/registry/` and update the `pinned` map of `BundledRegistryBytesTest`. Until
