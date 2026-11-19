@@ -224,7 +224,7 @@ from the column and its label from the app profile. The thing joins the bundled 
 under `core/model/bundled/templates/` with the app profile under `core/model/bundled/profiles/`
 (`BundledCatalog.thing`). The templates are opensensor-space-firmware `docs/shared/templates` copied byte for
 byte, `<board>/<dict>.json` and `index.json`, and their `live_keys` list the keys in board LIVE order.
-Only the current digest of each board is bundled, copied from opensensor-space-firmware `6291f3e`. CoreS3 (`f4f81218…`)
+Only the current digest of each board is bundled, copied from opensensor-space-firmware `b6c84e0`. CoreS3 (`f4f81218…`)
 sends `imu_t`, the IMU die temperature, shown as board temperature, and `lst`, the light sensor state. Its profile hides `t` and `rh`
 because they are always null on CoreS3. Waveshare (`a8605aaf…`) sends `t`, ambient air
 temperature, `rh` and `bstate`, the battery health code. CrowPanel e-paper SEN63C (`e7279c4e…`) sends

@@ -27,7 +27,7 @@ class BundledTemplateBytesTest {
             "templates/" + e.getValue("href").jsonPrimitive.content to e.getValue("desc").jsonPrimitive.content
         }
 
-    /** opensensor-space-firmware 6291f3e `docs/shared/templates`. The template pins equal their index desc. */
+    /** opensensor-space-firmware b6c84e0 `docs/shared/templates`. The template pins equal their index desc. */
     private val pinned = mapOf(
         "templates/index.json" to "30efb5d849ad0b61e8f92037b085d6695a968bbf2d4342beeb300859f9666ed9",
         "templates/elecrow-crowpanel-epaper-42/e7279c4edbe87071e4a51889124a43d7ffcd1977c79c8575887ae35bdee10903.json" to
