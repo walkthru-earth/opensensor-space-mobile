@@ -3,3 +3,5 @@
 core/model/bundled/templates/** -text
 # Board templates copied from stac-opensensor for the core/stac tests, kept byte for byte like the bundled ones.
 core/stac/src/commonTest/fixtures/stac-opensensor/templates/** -text
+# The stac-opensensor property and scale registries, copied verbatim and pinned by SHA-256 in BundledRegistryBytesTest.
+core/model/bundled/registry/** -text

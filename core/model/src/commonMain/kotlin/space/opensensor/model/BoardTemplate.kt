@@ -44,8 +44,8 @@ object TemplateIndex {
 
 /**
  * What a firmware build knows about its columns, parsed from a stac-opensensor v0.1.0 board template
- * (`"type": "OpenSensorTemplate"`). It carries only template facts, see [AppProfile] for the app's
- * presentation choices and [Thing] for the join.
+ * (`"type": "OpenSensorTemplate"`). It carries only template facts, the display hints and the board's
+ * declared [setup] included. See [AppProfile] for the app's presentation choices and [Thing] for the join.
  */
 data class BoardTemplate(
     val key: TemplateKey,
@@ -71,11 +71,21 @@ data class BoardTemplate(
     val liveKeys: Map<String, String>,
     /** Href of the firmware dictionary `describedby` link. Shown only, never fetched or trusted. The dict digest is the key. */
     val dictionaryHref: String?,
+    /**
+     * Top level `opensensor:primary`, the column a client shows first, or null when the template names
+     * none or names a column it does not have. A thing Collection's primary wins over it.
+     */
+    val primary: String? = null,
+    /** Top level `opensensor:scales`, the scales the columns' `opensensor:scale` ids point at. */
+    val scales: Map<String, Scale> = emptyMap(),
+    /** The setup steps, settings sections and config keys of `firmware.setup`, `settings` and `config_keys`. */
+    val setup: SetupManifest = SetupManifest.NONE,
 ) {
     init {
         val names = datastreams.map { it.name }
         require(names.size == names.toSet().size) { "template $id lists a column twice" }
         require(defaultSampleIntervalS > 0) { "template $id has a sample interval of $defaultSampleIntervalS" }
+        require(primary == null || primary in names) { "template $id has the primary $primary, which is not a column" }
     }
 
     private val byName: Map<String, Datastream> = datastreams.associateBy { it.name }
@@ -87,6 +97,9 @@ data class BoardTemplate(
 
     /** The column a LIVE [key] carries on this template, or null for a key it does not map. */
     fun columnForLiveKey(key: String): String? = byLiveKey[key]
+
+    /** The template scale a column's `opensensor:scale` names, or null when it names none or one [scales] lacks. */
+    fun scaleOf(datastream: Datastream): Scale? = datastream.scale?.let { scales[it] }
 
     companion object {
         /**

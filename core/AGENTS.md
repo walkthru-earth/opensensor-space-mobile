@@ -8,7 +8,7 @@ gate when a `:core` source names one. Open the doc of the module you change.
 
 | Module | Owns | Doc |
 | --- | --- | --- |
-| `model/` | What a thing measures as data. `BoardTemplate`, `TemplateIndex`, `Datastream`, `AppProfile`, `Thing.join`, `H3Cell`, the bundled templates and profiles under `bundled/` | [devices and discovery](../docs/devices-and-discovery.md) |
+| `model/` | What a thing measures as data. `BoardTemplate`, `TemplateIndex`, `Datastream`, `AppProfile`, `Thing.join`, `H3Cell`, a column's display hints, `SetupManifest`, the bundled templates and profiles under `bundled/`, and `PropertyRegistry` and `ScaleRegistry` over `bundled/registry/` | [devices and discovery](../docs/devices-and-discovery.md) |
 | `protocol/` | The mirror of the firmware `docs/shared/ble-sync-protocol.md`. Frames, opcodes, `DeviceGatt`, `LanProtocol`, `LiveReading`, `ParquetVerify`, `SafeName` | [protocol quickref](../docs/protocol-quickref.md) |
 | `parquet/` | The Parquet reader and writer and the codec SPI. `ByteReader`, `RangeSource`, `ParquetFile`, `ParquetReader` | [parquet](../docs/parquet.md) |
 | `net/` | HTTP range reads (`HttpRangeSource`) and the disk block cache (`CachedRangeSource`, `BlockCache`) | [parquet](../docs/parquet.md) |
