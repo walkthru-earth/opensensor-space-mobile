@@ -56,11 +56,11 @@ class JsonModelsTest {
     }
 
     @Test
-    fun `live parses every key by name with seq mono and utc as header fields`() {
+    fun `live parses every key by name with seq and mono as header fields`() {
         val parsed = LiveSample.parse(live)
         assertEquals(23L, parsed.seq)
         assertEquals(252976111L, parsed.mono)
-        assertNull(parsed.utc)
+        assertFalse(parsed.has("utc"))
         assertEquals(22.0, parsed["pm25"]!!, 0.0)
         assertEquals(2127.0, parsed["n03"]!!, 0.0)
         assertEquals(42.3, parsed["t"]!!, 0.0)
@@ -75,7 +75,8 @@ class JsonModelsTest {
         assertNull(parsed["pm25"])
         assertFalse(parsed.has("n03"))
         assertNull(parsed["n03"])
-        assertNull(parsed.utc)
+        assertTrue(parsed.has("utc"))
+        assertNull(parsed["utc"])
         assertEquals(4100.0, parsed["bat"]!!, 0.0)
         assertFalse(parsed.overflow)
     }
@@ -88,17 +89,11 @@ class JsonModelsTest {
     }
 
     @Test
-    fun `live utc is microseconds since the epoch`() {
-        // The firmware contract example. Read as nanoseconds it would land in January 1970.
+    fun `live utc is a value like any other key`() {
+        // The template maps event_time_utc_us to utc, so LiveReading reads it. A Double holds epoch microseconds exactly.
         val sample = LiveSample.parse("""{"seq":15021,"mono":150210000000,"utc":1757990410000000,"pms":4}""")
-        assertEquals(1757990410000000L, sample.utc)
-        assertEquals("2025-09-16T02:40:10Z", sample.utcInstant.toString())
-        assertEquals(
-            "2026-11-19T06:30:00.123456Z",
-            LiveSample.parse("""{"utc":1795069800123456}""").utcInstant.toString(),
-        )
-        assertEquals("1969-12-31T23:59:59.999999Z", LiveSample(utc = -1).utcInstant.toString())
-        assertNull(LiveSample.parse("""{"utc":null}""").utcInstant)
+        assertEquals(1757990410000000.0, sample["utc"]!!, 0.0)
+        assertEquals(1795069800123456.0, LiveSample.parse("""{"utc":1795069800123456}""")["utc"]!!, 0.0)
     }
 
     @Test
@@ -110,7 +105,7 @@ class JsonModelsTest {
         assertEquals(41.0, parsed["rh"]!!, 0.0)
         assertEquals(40.1, parsed["imu_t"]!!, 0.0)
         assertEquals(87.0, parsed["pct"]!!, 0.0)
-        assertEquals(1757990410000000L, parsed.utc)
+        assertEquals(1757990410000000.0, parsed["utc"]!!, 0.0)
         assertEquals(1L, LiveSample.parse("""{"seq":1.0}""").seq)
     }
 

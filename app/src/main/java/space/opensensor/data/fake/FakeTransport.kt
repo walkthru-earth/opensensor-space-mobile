@@ -563,7 +563,7 @@ class FakeTransport(
         private const val LAN_PORT = 47390
 
         /** The bundled CoreS3 dictionary, so the fake board resolves like a current CoreS3. */
-        private const val CORES3_DICT = "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"
+        private const val CORES3_DICT = "f4f81218dc80d1a8e6db043197a2f7180c4f075f9e8348df30eaceef44d68370"
 
         /** `PAR1` + random body + 4-byte footer length + `PAR1`. Not a real Parquet file, but passes the head/tail check. */
         fun fakeParquet(rnd: Random, size: Int): ByteArray {

@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 
 /**
  * `bundled/registry` is stac-opensensor `registry/properties.json` and `registry/scales.json` copied
- * byte for byte at e9981360c2229a98d5659ef0038a3b6114953f73 (#16). A reformat, a final newline or a line ending change fails here, and
+ * byte for byte at 204365f929e6f77bcaa6e70a0245c96cadc5c115, main after #27. A reformat, a final newline or a line ending change fails here, and
  * a re-copy updates [pinned] on purpose. Re-copy with
  * `git -C ../stac-opensensor show <commit>:registry/properties.json > core/model/bundled/registry/properties.json`
  * and the same for `scales.json`. Runs on the host, where the files under `core/model/bundled` are readable.
@@ -16,8 +16,8 @@ class BundledRegistryBytesTest {
     private val root = File("bundled")
 
     private val pinned = mapOf(
-        "registry/properties.json" to "c687a8237fde0fe509361027d3decaf1e0c3ba5c825c78ff88d764c332e08971",
-        "registry/scales.json" to "37a381e5cf3c14ed164e4efbf863dd1614fdc3a92a8229053a8978a29c9a75bd",
+        "registry/properties.json" to "16458c74dbdafb3b18de72d7f474a9f49790fb299d1429cea7057b5c5c6d1b52",
+        "registry/scales.json" to "1b0bd3aa8ddf81dfa1d44068c3e133fb9b9edb145da1dae6e100b62f2aa6cc3e",
     )
 
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

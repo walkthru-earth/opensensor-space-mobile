@@ -44,7 +44,6 @@ import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.DeviceStatus
 import space.opensensor.data.protocol.LiveReading
-import space.opensensor.data.protocol.LiveSample
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BigValue
 import space.opensensor.designsystem.BodyText
@@ -608,7 +607,7 @@ private fun Long.toPluralCount(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toIn
  * generation and the last sample's UTC instant. The phone sets the clock on its own.
  */
 @Composable
-internal fun ClockCard(status: DeviceStatus?, live: LiveSample?, modifier: Modifier = Modifier) {
+internal fun ClockCard(status: DeviceStatus?, live: LiveReading?, modifier: Modifier = Modifier) {
     val synced = status?.utcSynced
     val label = when (status?.clockSource) {
         1 -> stringResource(Res.string.clock_host)
@@ -644,7 +643,7 @@ internal fun ClockCard(status: DeviceStatus?, live: LiveSample?, modifier: Modif
         status?.gen?.let {
             Text(stringResource(Res.string.clock_generation, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        live?.utcInstant?.let { instant ->
+        live?.utc?.let { instant ->
             Text(
                 stringResource(Res.string.clock_last_sample, instant.toString()),
                 style = MaterialTheme.typography.bodySmall,
