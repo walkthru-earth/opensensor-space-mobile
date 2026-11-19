@@ -212,4 +212,5 @@ fun ConfigProblem.toStringRes(): Int = when (this) {
     ConfigProblem.STICKER_FORMAT -> R.string.msg_sticker_invalid
     ConfigProblem.LINE_BREAK -> R.string.config_problem_line_break
     ConfigProblem.SITE_VALUE -> R.string.config_problem_site
+    ConfigProblem.FIELD_VALUE -> R.string.config_problem_field
 }

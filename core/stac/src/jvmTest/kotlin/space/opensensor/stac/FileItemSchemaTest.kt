@@ -21,8 +21,8 @@ import kotlin.test.assertIs
  * Items validated against every schema a STAC validator applies to them, with no network.
  *
  * - The stac-opensensor v0.1.0 profile and extension schemas, its fixed and moving example Items, the
- *   row fixtures behind them and the footers they name, copied byte for byte from the v0.1.0 tag
- *   (commit 83787768cc8451109d48a03d4ef5493ffcd403dd) into `src/commonTest/fixtures/stac-opensensor`.
+ *   row fixtures behind them and the footers they name, copied byte for byte from main
+ *   (commit e9981360c2229a98d5659ef0038a3b6114953f73) into `src/commonTest/fixtures/stac-opensensor`.
  *   The examples validate too, so a failure points at the writer, not at the copy.
  * - The core STAC 1.1.0 Item schema with the GeoJSON Feature and Geometry schemas it references, and
  *   the Grid v1.1.0, Anonymized Location v1.0.0, Table v1.3.0 and File v2.1.0 extension schemas.

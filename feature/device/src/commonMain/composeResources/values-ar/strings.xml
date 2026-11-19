@@ -211,6 +211,7 @@
     <string name="location_save">الحفظ على الجهاز</string>
     <string name="msg_config_rejected_site">رفض المستشعر بيانات الموقع. لم يتغيّر شيء.</string>
     <string name="config_problem_site">إحدى قيم بيانات الموقع غير صالحة. راجع الحقول.</string>
+    <string name="config_problem_field">هذه القيمة غير مسموح بها هنا.</string>
     <string name="site_title">بيانات الموقع</string>
     <string name="location_site_title">الموقع وبياناته</string>
     <string name="site_info">اختياري. تصبح هذه التفاصيل عامة عند مشاركة بيانات هذا المستشعر. لا تكتب عنوان منزل. يُكتب معرّف النشر في كل ملف بيانات، وتغييره يبدأ ملفًا جديدًا.</string>

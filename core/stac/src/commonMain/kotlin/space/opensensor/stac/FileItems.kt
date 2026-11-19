@@ -87,7 +87,7 @@ sealed interface FileItemResult {
 
 /**
  * The STAC File Item of a synced device file, in the canonical form of the stac-opensensor v0.1.0
- * profile (tag v0.1.0, commit 83787768cc8451109d48a03d4ef5493ffcd403dd).
+ * profile (main commit e9981360c2229a98d5659ef0038a3b6114953f73).
  * The board writes this Item as a sidecar beside its file, and the phone is its transport and
  * validator. An Item built here must equal the board's Item as JSON values. Once upload exists, the
  * phone uploads the board's sidecar `.json` together with its `.parquet`.

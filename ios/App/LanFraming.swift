@@ -14,6 +14,8 @@ struct LanReply: Sendable {
     var json = ""
     /// What this frame means in place of HELLO. The shared `SyncReply.refusal` rule decides it.
     var refusal: LanRefusal = .none
+    /// The frame body, kept for the shared HELLO check.
+    var body = Data()
 }
 
 /// A frame received in place of HELLO. Only `tokenRejected` (ERROR 14, BYE auth-failed or token-rotated) drops the
@@ -23,11 +25,13 @@ enum LanRefusal: Sendable {
 }
 
 /// Firmware's idle timer measures phone traffic, independently of unsolicited sensor pushes.
+/// [keepaliveAfter] comes from the shared `SyncWire.lanKeepaliveSeconds`.
 struct LanLiveness {
     private(set) var lastSent: TimeInterval
+    let keepaliveAfter: TimeInterval
     mutating func sent(now: TimeInterval) { lastSent = now }
     func needsKeepalive(now: TimeInterval, collecting: Bool) -> Bool {
-        !collecting && now - lastSent >= 120
+        !collecting && now - lastSent >= keepaliveAfter
     }
 }
 
@@ -48,11 +52,13 @@ struct SensorClaims {
     mutating func finishTask(name: String) { tasks[name] = nil }
 }
 
-/// Accumulates LAN bytes and splits complete `len` u16 LE frames. Bounded by the HELLO payload cap.
+/// Accumulates LAN bytes and splits complete `len` u16 LE frames. Bounded by the payload cap, the
+/// shared `SyncWire.lanPayloadMax` until HELLO declares its own.
 struct LanFrameBuffer {
     private var buffer = Data()
     private var head = 0
-    var cap = 1024
+    var cap: Int
+    init(cap: Int) { self.cap = cap }
     var bufferedBytes: Int { buffer.count - head }
     mutating func append(_ data: Data) {
         if head > 0, head == buffer.count {

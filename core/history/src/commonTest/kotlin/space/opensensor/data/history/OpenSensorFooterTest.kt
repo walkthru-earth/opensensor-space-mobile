@@ -87,7 +87,7 @@ class OpenSensorFooterTest {
 
     @Test
     fun theSpecExampleParses() {
-        // stac-opensensor v0.1.0 (83787768) footers/m5stack-cores3.json, compacted, with the pinned
+        // stac-opensensor v0.1.0 (e9981360) footers/m5stack-cores3.json, compacted, with the pinned
         // opensensor-space-firmware raw URLs a CoreS3 board writes. Its long free text members are cut short.
         val example = """{"version":"0.1.0","thing":{"id":"3f2b9c1e-6a7d-4e58-9b1c-2d4f6a8e0c13","device_id":"441bf6e26b40","board":"m5stack-cores3","deployment_id":"unknown","mobility":"fixed"},""" +
             """"firmware":{"version":"idf-cores3-parquet-v6.23","schema":"cores3-telemetry-v6","boot_id":"0f3a9c2e5b7d41e8a6c3f0b2d9e4a713"},""" +
@@ -108,7 +108,11 @@ class OpenSensorFooterTest {
             rotationIntervalS = 900,
         )
         assertEquals(footer, parse(example))
-        assertSame(coreS3Template, FileTemplates.BUNDLED.of(footer).template)
+        // The example names the retired CoreS3 dictionary v7. A board on the bundled dictionary writes the
+        // same footer with its own dictionary and template hashes.
+        assertNull(FileTemplates.BUNDLED.of(footer).template)
+        val current = footer.copy(dictionarySha256 = coreS3Template.dict, templateSha256 = coreS3Template.key.desc)
+        assertSame(coreS3Template, FileTemplates.BUNDLED.of(current).template)
         // The href a CoreS3 board writes is one TemplateHrefs would fetch.
         assertTrue(TemplateHrefs.isFirmwareTemplate(assertNotNull(footer.templateHref)))
     }
@@ -256,7 +260,7 @@ class OpenSensorFooterTest {
     @Test
     fun aRealFirmwareTemplateDigestResolvesWithoutADict() {
         // The template.sha256 firmware writes for the CoreS3 template, with no dictionary member.
-        val real = "4dd6c4b1ef19187ed2c011ab86018e43be0f28edc3af63a0f6a27b70ff203ef3"
+        val real = "38b0982d1da0dfea20777af87544f30c8141ef297ed5146c402129133acbea0e"
         assertSame(coreS3Template, FileTemplates.BUNDLED.template(null, real))
         assertSame(coreS3Template, resolve(null, real))
     }

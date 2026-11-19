@@ -56,11 +56,11 @@ class JsonModelsTest {
     }
 
     @Test
-    fun `live parses every key by name with seq mono and utc as header fields`() {
+    fun `live parses every key by name with seq and mono as header fields`() {
         val parsed = LiveSample.parse(live)
         assertEquals(23L, parsed.seq)
         assertEquals(252976111L, parsed.mono)
-        assertNull(parsed.utc)
+        assertFalse(parsed.has("utc"))
         assertEquals(22.0, parsed["pm25"]!!, 0.0)
         assertEquals(2127.0, parsed["n03"]!!, 0.0)
         assertEquals(42.3, parsed["t"]!!, 0.0)
@@ -75,7 +75,8 @@ class JsonModelsTest {
         assertNull(parsed["pm25"])
         assertFalse(parsed.has("n03"))
         assertNull(parsed["n03"])
-        assertNull(parsed.utc)
+        assertTrue(parsed.has("utc"))
+        assertNull(parsed["utc"])
         assertEquals(4100.0, parsed["bat"]!!, 0.0)
         assertFalse(parsed.overflow)
     }
@@ -88,15 +89,23 @@ class JsonModelsTest {
     }
 
     @Test
+    fun `live utc is a value like any other key`() {
+        // The template maps event_time_utc_us to utc, so LiveReading reads it. A Double holds epoch microseconds exactly.
+        val sample = LiveSample.parse("""{"seq":15021,"mono":150210000000,"utc":1757990410000000,"pms":4}""")
+        assertEquals(1757990410000000.0, sample["utc"]!!, 0.0)
+        assertEquals(1795069800123456.0, LiveSample.parse("""{"utc":1795069800123456}""")["utc"]!!, 0.0)
+    }
+
+    @Test
     fun `live floats with trailing zeros parse as numbers`() {
         // opensensor-space-firmware#100 prints each float with its field decimals.
-        val parsed = LiveSample.parse("""{"seq":1,"mono":1,"utc":1760000000000000000,"pms":4,"pm25":5.00,"t":22.50,"rh":41.0,"imu_t":40.1,"pct":87}""")
+        val parsed = LiveSample.parse("""{"seq":1,"mono":1,"utc":1757990410000000,"pms":4,"pm25":5.00,"t":22.50,"rh":41.0,"imu_t":40.1,"pct":87}""")
         assertEquals(5.0, parsed["pm25"]!!, 0.0)
         assertEquals(22.5, parsed["t"]!!, 0.0)
         assertEquals(41.0, parsed["rh"]!!, 0.0)
         assertEquals(40.1, parsed["imu_t"]!!, 0.0)
         assertEquals(87.0, parsed["pct"]!!, 0.0)
-        assertEquals(1760000000000000000L, parsed.utc)
+        assertEquals(1757990410000000.0, parsed["utc"]!!, 0.0)
         assertEquals(1L, LiveSample.parse("""{"seq":1.0}""").seq)
     }
 

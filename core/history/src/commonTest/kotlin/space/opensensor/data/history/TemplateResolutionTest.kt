@@ -36,7 +36,7 @@ class TemplateResolutionTest {
         val servedOld = revision("01".repeat(32))
         val servedNew = revision("02".repeat(32))
         // Same key as a bundled template, told apart by its datastreams.
-        val shadow = other.copy(datastreams = other.datastreams.take(1))
+        val shadow = other.copy(datastreams = other.datastreams.take(1), primary = null)
         val served = ServedTemplates().apply {
             add(servedOld)
             add(servedNew)

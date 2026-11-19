@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.withTimeoutOrNull
 import space.opensensor.data.lan.LanAutoEnable
+import space.opensensor.data.protocol.BoardSettings
 import space.opensensor.data.protocol.ConfigChunkAccumulator
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.DeviceConfig
@@ -403,7 +404,7 @@ class DeviceSession(
     suspend fun flush(): Frame.Flushed = single(Request.Flush, "FLUSH")
 
     /** `STATUS` → a `status` notification only; no `response` frame is defined. */
-    suspend fun requestStatus() = link.send(RequestSpec.of(Request.Status))
+    suspend fun requestStatus() = link.send(RequestSpec.of(Request.Status, link.kind))
 
     /** The last status [freshStatus] got on this session, null before one. */
     var latestStatus: DeviceStatus? = null
@@ -478,6 +479,16 @@ class DeviceSession(
         require(!patch.isEmpty) { "empty config patch" }
         if (patch.carriesSecret && !link.kind.carriesSecrets) throw SecretNeedsBluetoothException(link.kind)
         return config(Request.SetConfig(patch), "SET_CONFIG")
+    }
+
+    /**
+     * The board keys a template declares, from `GET_CONFIG` page
+     * [Request.GetConfigPage.BOARD_SETTINGS], keyed by `SET_CONFIG` key. An `ERROR` is thrown, a
+     * board that declares no key answers an empty object.
+     */
+    suspend fun getBoardSettings(): BoardSettings {
+        val page = config(Request.GetConfigPage(Request.GetConfigPage.BOARD_SETTINGS), "GET_CONFIG board settings")
+        return BoardSettings.parse(page.rawJson)
     }
 
     /** One `CONFIG`, or `CONFIG_CHUNK` slices that end the reply once they add up. */
@@ -609,7 +620,7 @@ class DeviceSession(
      * [DeviceErrorException]. [onFrame] returns the result on the terminal frame, null before it.
      */
     private suspend fun <R : Any> request(request: Request, oweCloseIfUnsent: Int? = null, onFrame: suspend (Frame) -> R?): R = try {
-        link.exchange(RequestSpec.of(request), oweCloseIfUnsent) { frame, _ ->
+        link.exchange(RequestSpec.of(request, link.kind), oweCloseIfUnsent) { frame, _ ->
             if (frame is Frame.Error) throw DeviceErrorException.of(frame)
             onFrame(frame)
         }

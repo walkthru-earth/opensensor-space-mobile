@@ -102,7 +102,7 @@ actor LanSession {
 
     private let connection: NWConnection
     private let wire = SyncWire()
-    private var frames = LanFrameBuffer()
+    private var frames = LanFrameBuffer(cap: Int(SyncWire.companion.lanPayloadMax))
     private var receiving = false
     private var closed = false
     private var replies: [LanReply] = []
@@ -111,7 +111,8 @@ actor LanSession {
     private var sendWaiters: [UUID: Waiter<Void>] = [:]
     private var heartbeat: DispatchSourceTimer?
     private var lastReceived = ProcessInfo.processInfo.systemUptime
-    private var liveness = LanLiveness(lastSent: ProcessInfo.processInfo.systemUptime)
+    private var liveness = LanLiveness(
+        lastSent: ProcessInfo.processInfo.systemUptime, keepaliveAfter: SyncWire.companion.lanKeepaliveSeconds)
     /// True while Kotlin holds a lease, so the keepalive never interleaves with its requests.
     private var collecting = false
     /// True while the shared link's inbox is past its high mark. No receive is outstanding then.
@@ -132,13 +133,11 @@ actor LanSession {
 
     private static let maxQueuedReplies = 32
     private static let receiveChunk = 64 * 1024
-    /// Connect, send and HELLO.
-    private static let requestTimeout: TimeInterval = 10
-    private static let idleTimeout: TimeInterval = 180
 
     init(endpoint: NWEndpoint) {
         queue = DispatchSerialQueue(label: "space.opensensor.app.lan-session")
-        connection = NWConnection(to: endpoint, using: LanPolicy.connectionParameters())
+        let connectTimeout = Int(SyncWire.companion.lanConnectTimeoutSeconds.rounded(.up))
+        connection = NWConnection(to: endpoint, using: LanPolicy.connectionParameters(connectTimeoutSeconds: connectTimeout))
         (events, eventSink) = AsyncStream.makeStream(of: Event.self, bufferingPolicy: .bufferingNewest(64))
     }
 
@@ -150,7 +149,8 @@ actor LanSession {
     func connect(credential: LanCredential) async throws {
         guard !closed, connectWaiter == nil, identity == nil else { throw LanFailure.disconnected }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            connectWaiter = Waiter(continuation: continuation, deadline: deadline(after: Self.requestTimeout, .connect))
+            connectWaiter = Waiter(
+                continuation: continuation, deadline: deadline(after: SyncWire.companion.lanConnectTimeoutSeconds, .connect))
             connection.stateUpdateHandler = { [weak self] update in
                 self?.assumeIsolated { $0.stateChanged(update) }
             }
@@ -158,17 +158,21 @@ actor LanSession {
         }
         // The Kotlin side zeroes its token copies. Only the outgoing frame holds the token afterwards.
         try await sendRaw(wire.handshake(token: credential.token))
-        let hello = try await reply(timeout: Self.requestTimeout)
+        let hello = try await reply(timeout: SyncWire.companion.lanHelloTimeoutSeconds)
         try Self.refuse(hello)
-        guard hello.kind == "hello", hello.code >= 3, (64...1024).contains(Int(hello.count)),
-            let identity = wire.identity(json: hello.json)
-        else { throw LanFailure.invalidReply }
-        guard identity.device == credential.device else { throw LanFailure.hardwareChanged }
-        guard identity.thing == credential.thing else { throw LanFailure.thingChanged }
-        frames.cap = Int(hello.count)
-        payloadMax = Int(hello.count)
+        // The shared LanHandshake verdict, the same one Android's driver and continuity policy apply.
+        let check = wire.helloCheck(data: hello.body, thing: credential.thing, device: credential.device)
+        switch check.verdict {
+        case .accepted: break
+        case .deviceChanged: throw LanFailure.hardwareChanged
+        case .thingChanged: throw LanFailure.thingChanged
+        default: throw LanFailure.invalidReply
+        }
+        guard let identity = check.identity else { throw LanFailure.invalidReply }
+        frames.cap = Int(check.payloadMax)
+        payloadMax = Int(check.payloadMax)
         self.identity = identity
-        verifiedInfo = hello.json
+        verifiedInfo = check.json
         startHeartbeat()
     }
 
@@ -268,7 +272,8 @@ actor LanSession {
         guard !closed else { throw LanFailure.disconnected }
         let id = UUID()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            sendWaiters[id] = Waiter(continuation: continuation, deadline: deadline(after: Self.requestTimeout, .send(id)))
+            sendWaiters[id] = Waiter(
+                continuation: continuation, deadline: deadline(after: SyncWire.companion.lanHelloTimeoutSeconds, .send(id)))
             connection.send(
                 content: data,
                 completion: .contentProcessed { [weak self] error in
@@ -324,18 +329,26 @@ actor LanSession {
         }
     }
 
+    /// Once the shared link exists, a reply body goes to it undecoded. Only the type byte is read
+    /// here, so a file frame is copied into Kotlin and decoded once, by the link, which closes on a
+    /// malformed known frame. STATUS and LIVE are small and decoded here. An unknown type still closes.
     private func parse() {
         guard !closed else { return }
         do {
             while !readPaused, replies.count < Self.maxQueuedReplies, let body = try frames.next() {
+                if let sink {
+                    switch wire.frameKind(data: body) {
+                    case .reply:
+                        // False past the high mark. The link's resume call clears it again.
+                        if !sink.offer(frame: body) { readPaused = true }
+                        continue
+                    case .invalid: throw LanFailure.invalidReply
+                    default: break
+                    }
+                }
                 guard let reply = decode(body) else { throw LanFailure.invalidReply }
                 if reply.kind == "status" { sink?.offerStatus(json: reply.json) }
-                if let sink, reply.kind != "status", reply.kind != "live" {
-                    // False past the high mark. The link's resume call clears it again.
-                    if !sink.offer(frame: body) { readPaused = true }
-                } else {
-                    route(reply)
-                }
+                route(reply)
             }
         } catch {
             shutdown(reason: .invalidReply)
@@ -360,7 +373,8 @@ actor LanSession {
 
     private func decode(_ body: Data) -> LanReply? {
         guard let reply = wire.decode(data: body) else { return nil }
-        return LanReply(kind: reply.kind, code: reply.code, count: reply.count, json: reply.json, refusal: Self.refusal(reply.refusal))
+        return LanReply(
+            kind: reply.kind, code: reply.code, count: reply.count, json: reply.json, refusal: Self.refusal(reply.refusal), body: body)
     }
 
     private static func refusal(_ shared: HandshakeRefusal) -> LanRefusal {
@@ -426,11 +440,12 @@ actor LanSession {
     }
 
     /// Outgoing keepalive while idle (the firmware idle timer counts phone traffic) and an
-    /// incoming idle bound, checked every 15 seconds.
+    /// incoming idle bound, checked every `lanLivenessCheckSeconds`. All three come from `SyncWire`.
     private func startHeartbeat() {
         guard heartbeat == nil, !closed else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + 15, repeating: 15)
+        let every = SyncWire.companion.lanLivenessCheckSeconds
+        timer.schedule(deadline: .now() + every, repeating: every)
         timer.setEventHandler { [weak self] in self?.assumeIsolated { $0.beat() } }
         timer.resume()
         heartbeat = timer
@@ -439,7 +454,7 @@ actor LanSession {
     private func beat() {
         guard !closed else { return }
         let now = ProcessInfo.processInfo.systemUptime
-        if now - lastReceived >= Self.idleTimeout {
+        if now - lastReceived >= SyncWire.companion.lanIdleSeconds {
             shutdown(reason: .timeout)
             return
         }

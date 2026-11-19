@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -22,8 +23,8 @@ import kotlin.test.assertTrue
 
 /**
  * The Collection rebuilt from each Thing's owner config, board template, footer and example Item equals
- * the example Collection of stac-opensensor v0.1.0 (tag v0.1.0, commit
- * 83787768cc8451109d48a03d4ef5493ffcd403dd) as JSON values, as `scripts/check-profile.mjs` rebuilds it.
+ * the example Collection of stac-opensensor v0.1.0 (commit
+ * e9981360c2229a98d5659ef0038a3b6114953f73) as JSON values, as `scripts/check-profile.mjs` rebuilds it.
  * The fixtures and their source paths are listed in `fixtures/stac-opensensor/README.md`.
  */
 class ThingCollectionsTest {
@@ -87,12 +88,50 @@ class ThingCollectionsTest {
     }
 
     @Test
-    fun aColumnScaleWithoutOwnerScalesLeavesTheKeyOut() {
+    fun onlyTheScalesAColumnNamesAreListedTheOwnersOverTheTemplates() {
+        fun scale(title: String) = buildJsonObject { put("title", title) }
         val scaled = ThingOwner.of(ThingSite(provider = "Osu school"), PREFIX, HOST)
-            .copy(columns = mapOf("ambient_temperature_c" to ColumnLabel(scale = "heat")))
-        assertFalse("opensensor:scales" in build(scaled))
-        val scales = buildJsonObject { put("heat", buildJsonObject { put("title", "Heat") }) }
-        assertEquals(scales, build(scaled.copy(scales = scales))["opensensor:scales"])
+            .copy(columns = mapOf("ambient_temperature_c" to ColumnLabel(scale = "heat"), "relative_humidity_percent" to ColumnLabel(scale = "damp")))
+        // A named scale that neither gives still lists the key, as buildCollection does.
+        assertEquals(JsonObject(emptyMap()), build(scaled)["opensensor:scales"])
+        val template = buildJsonObject {
+            put("heat", scale("Template heat"))
+            put("damp", scale("Template damp"))
+            put("dust", scale("Template dust"))
+        }
+        val owner = scaled.copy(
+            scales = buildJsonObject {
+                put("heat", scale("Owner heat"))
+                put("unused", scale("Unused"))
+            }
+        )
+        val expected = buildJsonObject {
+            put("heat", scale("Owner heat"))
+            put("damp", scale("Template damp"))
+        }
+        assertEquals(expected, build(owner) { put(ThingCollections.SCALES, template) }["opensensor:scales"])
+    }
+
+    @Test
+    fun theOwnersPrimaryWinsOverTheTemplates() {
+        val owner = ThingOwner.of(ThingSite(provider = "Osu school"), PREFIX, HOST)
+        assertFalse("opensensor:primary" in build(owner))
+        val fromTemplate = build(owner) { put(ThingCollections.PRIMARY, "ambient_temperature_c") }
+        assertEquals("ambient_temperature_c", fromTemplate["opensensor:primary"]!!.jsonPrimitive.content)
+        val fromOwner = build(owner.copy(primary = "relative_humidity_percent")) { put(ThingCollections.PRIMARY, "ambient_temperature_c") }
+        assertEquals("relative_humidity_percent", fromOwner["opensensor:primary"]!!.jsonPrimitive.content)
+        assertEquals("relative_humidity_percent", ThingOwner.parse("""{"prefix":"p","primary":"relative_humidity_percent"}""").primary)
+    }
+
+    @Test
+    fun theOwnersDisplayHintsReplaceTheTemplatesKeyByKey() {
+        val hints = """{"title":"Air","description":"Roof air","opensensor:title_i18n":{"ar":"الهواء"},"opensensor:description_i18n":{"ar":"هواء السطح"},""" +
+            """"opensensor:decimals":1,"opensensor:group":"climate","opensensor:scale":"heat"}"""
+        val owner = ThingOwner.parse("""{"prefix":"$PREFIX","columns":{"ambient_temperature_c":$hints}}""")
+        val column = build(owner)["item_assets"]!!.jsonObject["data"]!!.jsonObject["table:columns"]!!.jsonArray
+            .map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == "ambient_temperature_c" }
+        Json.parseToJsonElement(hints).jsonObject.forEach { (key, value) -> assertEquals(value, column[key], key) }
+        assertEquals("ambient_temperature_c", column["name"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -106,6 +145,28 @@ class ThingCollectionsTest {
         assertFailsWith<IllegalArgumentException> {
             ThingOwner.parse("""{"prefix":"$PREFIX","providers":[{"name":"Osu school","email":"a@example.org"}]}""")
         }
+    }
+
+    @Test
+    fun anOwnerProviderFollowsStac() {
+        val url = "https://例え.jp/a%20b?x=1#y\uD83D\uDE00"
+        val roles = """["producer","licensor","processor","host"]"""
+        assertEquals(url, ThingOwner.parse("""{"prefix":"p","providers":[{"name":"Osu","roles":$roles,"url":"$url"}]}""").providers.single().url)
+        for (provider in listOf(
+            """{"name":""}""",
+            """{"name":"Osu","roles":["owner"]}""",
+            """{"name":"Osu","url":""}""",
+            """{"name":"Osu","url":"example.org"}""",
+            """{"name":"Osu","url":"https://example.org/%ZZ"}""",
+            """{"name":"Osu","url":"https://example.org/a b"}""",
+            """{"name":"Osu","url":"例え:x"}""",
+            """{"name":"Osu","url":"https://example.org/\u0085"}""",
+            """{"name":"Osu","url":"https://example.org/\uD83D"}""",
+        )) {
+            assertFailsWith<IllegalArgumentException>(provider) { ThingOwner.parse("""{"prefix":"p","providers":[$provider]}""") }
+        }
+        assertFailsWith<IllegalArgumentException> { StacProvider("") }
+        assertNull(ThingOwner.of(ThingSite(provider = "Osu", url = "example.org"), PREFIX, HOST).providers.first().url)
     }
 
     @Test
@@ -139,22 +200,102 @@ class ThingCollectionsTest {
     }
 
     @Test
-    fun anOwnerConfigMayOnlyLabelAColumn() {
-        assertFailsWith<IllegalArgumentException> {
-            ThingOwner.parse("""{"prefix":"p","columns":{"a":{"title":"A","unit":"K"}}}""")
+    fun anOwnerConfigMayOnlyGiveAColumnDisplayHints() {
+        for (column in listOf(
+            """{"title":"A","unit":"K"}""",
+            """{"opensensor:decimals":10}""",
+            """{"opensensor:decimals":1.5}""",
+            """{"opensensor:decimals":1.0000000000000001}""",
+            """{"opensensor:decimals":1e400}""",
+            """{"opensensor:decimals":"1"}""",
+            """{"opensensor:decimals":-1}""",
+            """{"opensensor:decimals":true}""",
+            """{"opensensor:decimals":01}""",
+            """{"opensensor:decimals":1.}""",
+            """{"opensensor:decimals":+1}""",
+            """{"opensensor:group":1}""",
+            """{"opensensor:title_i18n":{"ar":1}}""",
+            """{"title":""}""",
+            """{"description":""}""",
+            """{"opensensor:group":""}""",
+            """{"opensensor:scale":""}""",
+            """{"opensensor:title_i18n":{"ar":""}}""",
+            """{"opensensor:description_i18n":{}}""",
+            """{"opensensor:group":"climte"}""",
+            """{"opensensor:scale":"Heat"}""",
+            """{"opensensor:scale":"-heat"}""",
+            """{"opensensor:title_i18n":{"":"Air"}}""",
+            """{"opensensor:description_i18n":{"english":"Air"}}""",
+            """{"description":[]}"""
+        )) {
+            assertFailsWith<IllegalArgumentException>(column) { ThingOwner.parse("""{"prefix":"p","columns":{"a":$column}}""") }
         }
         assertFailsWith<IllegalArgumentException> { ThingOwner.parse("""{"title":"no prefix"}""") }
+        // JSON Schema takes any integral number as an integer, however it is spelled.
+        for (decimals in listOf("1", "1.0", "1e0", "9", "0.5e1", "90e-1")) {
+            ThingOwner.parse("""{"prefix":"p","columns":{"a":{"opensensor:decimals":$decimals}}}""")
+        }
+        ThingOwner.parse(
+            """{"prefix":"p","columns":{"a":{"opensensor:group":"climate","opensensor:scale":"who.pm2_5-24h",""" +
+                """"opensensor:title_i18n":{"ar":"هواء","en-US":"Air"}}}}""",
+        )
     }
 
     @Test
     fun anOwnerMemberOfAnotherTypeIsRefused() {
-        for (member in listOf(""""providers":{}""", """"columns":[]""", """"scales":[]""", """"contacts":{}""", """"providers":[{"name":"A","roles":"producer"}]""")) {
+        for (member in listOf(""""providers":{}""", """"columns":[]""", """"primary":1""", """"scales":[]""", """"contacts":{}""", """"providers":[{"name":"A","roles":"producer"}]""")) {
             assertFailsWith<IllegalArgumentException>(member) { ThingOwner.parse("""{"prefix":"p",$member}""") }
         }
         val missing = ThingOwner.parse("""{"prefix":"p"}""")
         val nulls = ThingOwner.parse("""{"prefix":"p","providers":null,"columns":null,"scales":null,"contacts":null}""")
         assertEquals(ThingOwner(null, null, emptyList(), "p"), missing)
         assertEquals(missing, nulls)
+    }
+
+    @Test
+    fun anOwnerPrimaryIsNotEmpty() {
+        assertFailsWith<IllegalArgumentException> { ThingOwner.parse("""{"prefix":"p","primary":""}""") }
+        assertEquals("pm2_5", ThingOwner.parse("""{"prefix":"p","primary":"pm2_5"}""").primary)
+    }
+
+    @Test
+    fun anOwnerScaleFollowsTheProfile() {
+        val step = """{"upper":15,"label":"Good","color_hint":"00E400"}"""
+        val good = """{"source":"https://www.who.int/","period":"PT24H","steps":[$step,{"upper":null,"label":{"ar":"سيئ","en":"Bad"}}]}"""
+        ThingOwner.parse("""{"prefix":"p","scales":{"who.pm2_5-24h":$good}}""")
+        ThingOwner.parse("""{"prefix":"p","scales":{"heat":{"source":"urn:x:heat","unit":"Cel","period":"P1D","guideline":25,"steps":[$step]}}}""")
+        ThingOwner.parse("""{"prefix":"p","scales":{"heat":{"source":"https://example.org/caf%C3%A9?a=1#b","period":"P1D","steps":[$step]}}}""")
+        for (scale in listOf(
+            """"Heat":$good""",
+            """"heat":[]""",
+            """"heat":{"period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"who","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"https://example.org/%ZZ","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"https://example.org/%4","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"urn:x:<heat>","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"1urn:x","period":"PT24H","steps":[$step]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":NaN}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":Infinity}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":1d}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":0x10}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":025}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":NaN,"label":"Good"}]}""",
+            """"heat":{"source":"urn:x","period":"24h","steps":[$step]}""",
+            """"heat":{"source":"urn:x","period":"P","steps":[$step]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"extra":1}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"unit":1}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[$step],"guideline":"25"}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":"15","label":"Good"}]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"label":"Good"}]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":1,"label":""}]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":1,"label":{"english":"Good"}}]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":1,"label":"Good","color_hint":"00e400"}]}""",
+            """"heat":{"source":"urn:x","period":"PT24H","steps":[{"upper":1,"label":"Good","more":1}]}"""
+        )) {
+            assertFailsWith<IllegalArgumentException>(scale) { ThingOwner.parse("""{"prefix":"p","scales":{$scale}}""") }
+        }
     }
 
     @Test
@@ -170,7 +311,7 @@ class ThingCollectionsTest {
         val footer = assertNotNull(OpenSensorFooter.parse(footerJson.toString()))
         val href = footerJson["template"]!!.jsonObject["href"]!!.jsonPrimitive.content
         val built = ThingCollections.build(
-            template = templateOf(footer),
+            template = json(stacTemplatePath(footerJson)),
             footer = assertNotNull(CollectionFooter.of(footer, href)),
             owner = ThingOwner.parse(text(ownerName)),
             ledger = assertNotNull(CollectionLedger.of(listOf(json(itemName)))),
@@ -179,21 +320,16 @@ class ThingCollectionsTest {
         assertNull(at, "rebuilt Collection differs at $at\n$built\nfrom the example\n$expected")
     }
 
-    /** A Collection of the fixed example Thing for [owner]. */
-    private fun build(owner: ThingOwner): JsonObject {
+    /** A Collection of the fixed example Thing for [owner], from its template with the members [template] adds. */
+    private fun build(owner: ThingOwner, template: JsonObjectBuilder.() -> Unit = {}): JsonObject {
         val footerJson = json("footers/m5stack-cores3.json")
         val footer = assertNotNull(OpenSensorFooter.parse(footerJson.toString()))
         val ledger = assertNotNull(CollectionLedger.of(listOf(json(FIXED_EXAMPLE))))
         val collectionFooter = assertNotNull(CollectionFooter.of(footer, "https://example.org/template.json"))
-        return ThingCollections.build(templateOf(footer), collectionFooter, owner, ledger).also {
+        val board = JsonObject(json(stacTemplatePath(footerJson)) + buildJsonObject(template))
+        return ThingCollections.build(board, collectionFooter, owner, ledger).also {
             assertTrue(it["partition:glob"]!!.jsonPrimitive.content.startsWith("s3://$PREFIX/thing=$THING/"))
         }
-    }
-
-    /** The board template the [footer] names, as the template file's JSON. */
-    private fun templateOf(footer: OpenSensorFooter): JsonObject {
-        val board = if (footer.dictionarySha256 == coreS3Template.dict) "m5stack-cores3" else "waveshare-esp32-s3-sim7670g"
-        return json("templates/$board/${footer.dictionarySha256}.json")
     }
 
     private fun text(path: String): String = stacFile(path).decodeToString()

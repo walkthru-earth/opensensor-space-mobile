@@ -115,8 +115,8 @@ flowchart LR
   derives. Android's SET_TIME saves the receipt on the link, then starts `deriveThing` off it, so a
   pass in flight never holds the link.
 - **Every derive is a pass.** Android's `HistoryDeriver.deriveStale` and `ensureDailyFiles` and iOS's
-  `IosArchive.rebuildDerived` each run inside one `derivePass`, which is not reentrant. iOS builds
-  `rebuildDerived` with `derivePassOf`, so its derive body has no entry point outside a pass. The iOS
+  `IosArchive.rebuildDerived` and the daily export's `restoreDerived` each run inside one `derivePass`,
+  which is not reentrant. iOS builds both with `derivePassOf`, so its derive body has no entry point outside a pass. The iOS
   History reader's own refresh of one thing takes only the derived lock, so History stays visible
   during a back-fill.
 - **Held days.** A day a waiting record holds stays in History, see below.

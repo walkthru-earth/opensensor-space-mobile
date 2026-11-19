@@ -18,7 +18,7 @@ class LiveKeyFixturesTest {
     private data class FixtureBuild(val board: String, val digest: String, val keys: List<String>)
 
     private val current = listOf(
-        FixtureBuild("cores3", "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "n5", "n10", "imu_t", "als", "vbus", "bat", "pct", "chg", "t", "rh")),
+        FixtureBuild("cores3", "f4f81218dc80d1a8e6db043197a2f7180c4f075f9e8348df30eaceef44d68370", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "n5", "n10", "imu_t", "als", "lst", "vbus", "bat", "pct", "chg", "t", "rh")),
         FixtureBuild("waveshare", "a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809", listOf("seq", "mono", "utc", "pms", "c1", "c25", "c10", "pm1", "pm25", "pm10", "n03", "n05", "n1", "n25", "t", "rh", "bat", "pct", "bstate")),
         FixtureBuild("crowpanel", "e7279c4edbe87071e4a51889124a43d7ffcd1977c79c8575887ae35bdee10903", listOf("seq", "mono", "utc", "sen", "m1", "m25", "m4", "m10", "t", "rh", "co2")),
     )
@@ -30,6 +30,7 @@ class LiveKeyFixturesTest {
         "22291d3aab63365404394f30c1549fb18bde0699df9b2de863de70bb3f4edf65", // CoreS3 v6.12, LIVE keys outside the digest
         "e5060fb7fedbcabf665b1c8a159a77f5fe9283ac34bd2d89f1bc98b0f027d38b", // CoreS3 v6.13, cores3-telemetry-v5
         "4f80c26cde8d7ea78c2160225d98386009a8651d9a049b4bf68a75da96015e94", // CoreS3 cores3-telemetry-v6, dictionary v6
+        "3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9", // CoreS3 dictionary cores3-telemetry-v7, no lst
         "e840c946c10378d28831b38f71daf66981d2ea99cf47ccba80fcd2e64f920ffd", // waveshare-sim7670g-telemetry-v1
         "715685cf83ac8d6975fde845ce58fd15fa6eaaf3df32644ec15dfc89875d2e9e", // waveshare-sim7670g-telemetry-v2
         "7cd1c69da4ecd728dde2736e4c55063d9707ef53cdba1745b8896efcfd60f5da", // waveshare-sim7670g-telemetry-v3

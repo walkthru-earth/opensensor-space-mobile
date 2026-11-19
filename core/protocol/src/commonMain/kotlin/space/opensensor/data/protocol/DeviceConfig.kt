@@ -69,6 +69,10 @@ data class ThingConfig(
     val setup: Int? = null,
     /** `thing.deployment_id` from page 5. Empty while unset. */
     @SerialName("deployment_id") val deploymentId: String? = null,
+    /** `thing.setup_ack`, the done bits in `firmware.setup` order. Read it through [SetupAck.done]. */
+    @SerialName("setup_ack") val setupAck: Int? = null,
+    /** `thing.setup_v`, the [SetupAck.version] of the step list [setupAck] refers to. */
+    @SerialName("setup_v") val setupV: Int? = null,
 ) {
     val thingMobility: ThingMobility? get() = ThingMobility.fromWire(mobility)
 
@@ -176,7 +180,7 @@ data class LanConfig(
 }
 
 /** Which local check a [ConfigPatch] value failed. Apps map it to their own copy. */
-enum class ConfigProblem { PIN_FORMAT, SSID_EMPTY, SSID_TOO_LONG, PSK_TOO_SHORT, PSK_TOO_LONG, STICKER_FORMAT, LINE_BREAK, SITE_VALUE }
+enum class ConfigProblem { PIN_FORMAT, SSID_EMPTY, SSID_TOO_LONG, PSK_TOO_SHORT, PSK_TOO_LONG, STICKER_FORMAT, LINE_BREAK, SITE_VALUE, FIELD_VALUE }
 
 /**
  * GET_CONFIG pages 5 and 6 as one [ThingSite]. Page 5 gives `owner.title`, `owner.provider`,
@@ -309,6 +313,46 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
             val key = ConfigFields.siteKey(field)
             if (problem != null) throw ConfigValidationException(ConfigProblem.SITE_VALUE, "$key refused: $problem")
             return add(key, value)
+        }
+
+        /**
+         * The setup record, [SetupAck.version] of the step list and its done bits, sent together so
+         * the bits never refer to another list.
+         */
+        fun setupAck(version: Int, ack: Int): Builder {
+            require(version >= 1) { "setup_v is never 0" }
+            require(ack >= 0) { "setup_ack is a positive mask" }
+            add(ConfigFields.THING_SETUP_V, version.toString())
+            return add(ConfigFields.THING_SETUP_ACK, ack.toString())
+        }
+
+        /**
+         * One board key a template declared, already through [ConfigFields.merge]. A secret key, a key
+         * under [ConfigFields.RESERVED_PREFIXES] or a field [ConfigFields.merge] drops is refused, so
+         * the app keys keep their typed methods. [value] is checked against the field's [FieldType]
+         * and refused with [ConfigProblem.FIELD_VALUE] when it does not fit, without echoing it.
+         */
+        fun field(field: ConfigField, value: String): Builder {
+            require(!field.secret && field.key !in SECRET_KEYS) { "a secret key is never declared" }
+            require(!ConfigFields.isReserved(field.key)) { "${field.key} is set by its own method" }
+            val floor = ConfigFields.merge(listOf(field)).singleOrNull()
+            require(floor == field) { "${field.key} is not a board key the app accepts" }
+            if (!fits(field.type, value)) {
+                throw ConfigValidationException(ConfigProblem.FIELD_VALUE, "${field.key} refused a value")
+            }
+            return add(field.key, value)
+        }
+
+        private fun fits(type: FieldType, value: String): Boolean {
+            if (value.any { it < ' ' || it == '\u007F' }) return false
+            return when (type) {
+                is FieldType.Text -> value.encodeToByteArray().size in type.minBytes..type.maxBytes
+                is FieldType.IntBetween -> value.toIntOrNull()?.takeIf { it.toString() == value } in type.min..type.max
+                is FieldType.Choice -> value in type.values
+                FieldType.Toggle -> value == "0" || value == "1"
+                FieldType.Action -> value == "1"
+                is FieldType.Digits, FieldType.H3Cell, FieldType.Country -> false
+            }
         }
 
         /** Every value of [changes], the fields [ThingSite.changesFrom] found. */

@@ -127,8 +127,9 @@ the CONFIG `ntp.*` keys.
 | Frame | `len` u16 LE + frame; `PAYLOAD_MAX` 1024 device→phone, `REQUEST_MAX` 512 phone→device |
 | Idle | `DEVICE_IDLE_LIMIT_MS` 300 s; phone sends `STATUS` after `KEEPALIVE_AFTER_IDLE_MS` 120 s |
 
-`HELLO.payload_max` is trusted if ≥ 64 (`TcpLinkDriver.MIN_PAYLOAD_MAX`); `mtu` reports
-`payload_max + 3` so the same `MTU − 3` arithmetic yields it.
+`HELLO.payload_max` is trusted from 64 to 1024 (`LanHandshake.MIN_PAYLOAD_MAX` and `PAYLOAD_MAX`),
+and both phones refuse a HELLO outside that range. `mtu` reports `payload_max + 3` so the same
+`MTU − 3` arithmetic yields it.
 
 ## Board template (`DescriptorDownload`, `BoardDescriptors`)
 
@@ -160,9 +161,23 @@ serves. No `desc` means the board serves none, and the phone never asks.
 
 ## CONFIG keys (`DeviceConfig`)
 
-Every key the app writes is a row of `ConfigFields` (`core/protocol`) with its secret flag and
-confirm gate. `SECRET_KEYS` and the Device settings confirmations come from that table, and a
-schema may only make a known key stricter.
+Every app key is a row of `ConfigFields` (`core/protocol`) with its secret flag and confirm gate.
+`SECRET_KEYS` and the Device settings confirmations come from that table. A board template declares
+its own keys in `firmware.config_keys` ([decision 0003](../../opensensor-space-firmware/docs/shared/decisions/0003-metadata-driven-apps.md)).
+`ConfigFields.declared` reads one entry (`boolean`, `integer` with a two number range, `enum`, or
+`text` with an optional byte range up to 64, and `applies` of `immediately`, `next sample`, `next boot`
+or `action`). Any other type, decimal among them, does not parse. `ConfigFields.merge` then applies the
+floor.
+
+- A secret, or a key in `SECRET_KEYS`, is dropped. Secrets are never declarable.
+- An app key keeps the app's type, timing and protections, and only gains a stricter confirmation
+  or `disrupts`.
+- A board key is kept only outside the reserved prefixes `ble.`, `wifi.`, `lan.`, `location.`,
+  `thing.`, `owner.` and `sensor.`, with a dotted lowercase name of at most 48 bytes and four parts, read
+  back from page 7. A board `action` always confirms, disrupts and applies once.
+
+`ConfigPatch.Builder.field` sends one merged board key. It refuses a secret, reserved or unmerged
+field and a value outside its type (`ConfigProblem.FIELD_VALUE`, the message never holds the value).
 
 `ble.pair` (random / fixed / none) · `ble.pin` (six ASCII digits, **write-only**. `CONFIG.ble`
 reports only `pin_set` and `pin_default`) · `ble.clear_bonds=1` · `wifi.on` · `wifi.ssid` (1–32 bytes) · `wifi.psk` (empty or 8–63 bytes,
@@ -191,8 +206,10 @@ Feature gates use `info.proto` / `info.fw`, never guesses. The one exception is 
 `status.ls` (`DeviceStatus.listSinceEpoch`, the card's FAT serial, 0 with no card, absent on older
 firmware) as the firmware contract says.
 
-`LiveSample` parses LIVE as a map by key name, in any order. `seq`, `mono` and `utc` are typed
-header fields, and `utc` is nanoseconds. Every other key is a number or null. Floats such as `1.00`
+`LiveSample` parses LIVE as a map by key name, in any order. `seq` and `mono` are typed
+header fields. Every other key is a number or null, `utc` included. The template `live_keys` map
+`utc` to the column `event_time_utc_us`, microseconds since the epoch, and `LiveReading.utc` reads
+it through that column. A null or fractional `utc` has no instant. Floats such as `1.00`
 and `1.0` parse as numbers, and the app keeps its own display rounding. The firmware sends every key
 the template declares in `live_keys`. A null key means no reading now, so the card shows a dash. An
 absent key means the board has no such field. The app shows cards by the template declaration, so a
@@ -207,8 +224,8 @@ from the column and its label from the app profile. The thing joins the bundled 
 under `core/model/bundled/templates/` with the app profile under `core/model/bundled/profiles/`
 (`BundledCatalog.thing`). The templates are opensensor-space-firmware `docs/shared/templates` copied byte for
 byte, `<board>/<dict>.json` and `index.json`, and their `live_keys` list the keys in board LIVE order.
-Only the current digest of each board is bundled, copied from opensensor-space-firmware `e2eb30b`. CoreS3 (`3b4d8500…`)
-sends `imu_t`, the IMU die temperature, shown as board temperature. Its profile hides `t` and `rh`
+Only the current digest of each board is bundled, copied from opensensor-space-firmware `a5545b4`. CoreS3 (`f4f81218…`)
+sends `imu_t`, the IMU die temperature, shown as board temperature, and `lst`, the light sensor state. Its profile hides `t` and `rh`
 because they are always null on CoreS3. Waveshare (`a8605aaf…`) sends `t`, ambient air
 temperature, `rh` and `bstate`, the battery health code. CrowPanel e-paper SEN63C (`e7279c4e…`) sends
 `sen`, `m1`, `m25`, `m4`, `m10`, `t`, `rh` and `co2`, but no profile is bundled for it, so it has no
@@ -234,11 +251,24 @@ new session resume the run, and verified files already on the phone are never fe
 object with cell, maximum `resolution`, actual `cell_resolution`, derived
 center `lat`/`lon` and declared `country`, plus the `thing` object with
 `mobility` (`fixed` or `moving`, default `fixed`) and, from CoreS3 `v6.24` and Waveshare `v2.18`,
-`setup` (1 or 0, matching advert bit 6, read as `ThingConfig.needsSetup`). It uses the same CONFIG/CONFIG_CHUNK
+`setup` (1 or 0, matching advert bit 6, read as `ThingConfig.needsSetup`), and the setup record
+`setup_ack` and `setup_v` (decision 0003). It uses the same CONFIG/CONFIG_CHUNK
 framing and 480-byte JSON limit. `DeviceSession.getLocationPage` sends
 `Request.GetConfigPage(LOCATION)` and returns null when older firmware rejects that selector. When
 it returns the legacy object the page has no `location`, which reads as unsupported. A missing
 location object is not an unset supported location.
+
+The setup record is `SetupAck`. Bit `i` of `setup_ack` marks step `i` of the template `firmware.setup`
+done. `setup_v` is `SetupAck.version` of the ordered step ids, the first 31 bits of SHA-256 over the
+ids joined by `\n`, never 0. A `setup_v` that differs from the phone's reads as no step done
+(`SetupAck.done`), and `SetupAck.withStep` starts a stale record from zero. The phone sends both with
+`ConfigPatch.Builder.setupAck`, `thing.setup_v` first. A list holds at most 31 steps. The record
+never proves a required step, those stay derived from the config.
+
+Page byte `7` (`Request.GetConfigPage.BOARD_SETTINGS`) holds the board keys the template declares,
+nested by prefix (`{"panel":{"theme":"dark"}}`). `DeviceSession.getBoardSettings` reads it as
+`BoardSettings`, flat `SET_CONFIG` keys with booleans as `1` or `0`, and drops reserved and secret
+keys. An `ERROR` is thrown.
 
 Waveshare `v2.18` adds `location.gnss_cell` (firmware #147), the receiver's fix from the last 15 s as a
 resolution 8 cell, or `""` without a fresh fix. CoreS3 has no receiver and omits it.

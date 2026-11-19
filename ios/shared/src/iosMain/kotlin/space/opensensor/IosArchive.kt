@@ -21,10 +21,13 @@ import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveLayout
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.archive.ClockAnchor
+import space.opensensor.archive.ExportEntry
 import space.opensensor.archive.IosArchiveStore
 import space.opensensor.archive.IosClockAnchorStore
 import space.opensensor.archive.IosExportSpace
 import space.opensensor.archive.PrunedFiles
+import space.opensensor.archive.directoryEntries
+import space.opensensor.archive.forgetEvictedDays
 import space.opensensor.data.archive.IosArchiveDatabase
 import space.opensensor.data.history.ArchiveHistoryTiers
 import space.opensensor.data.history.ArchiveIndexRepair
@@ -348,6 +351,45 @@ internal object IosArchive {
     private val rebuildThings: suspend (Collection<String>) -> Unit by lazy {
         history.derivePassOf { things: Collection<String> ->
             derivedMutex.withLock { rebuild(things, index.observeAll().first().groupBy { it.thing }) }
+        }
+    }
+
+    /**
+     * The daily export's listing (#301), what Android's `ensureDailyFiles` then `directoryEntries` do.
+     * One derive pass builds again every day the quota or iOS evicted and every stale day, then the
+     * `derived/v1` files are listed under the zip names Android uses. Files runs it inside
+     * [holdingDailyFiles], so nothing it listed is evicted until the zip is staged. A changed day loses
+     * its old file and manifest before it builds, so a day that fails to build is not listed, the days
+     * built before and after it are, and the next pass retries it.
+     */
+    suspend fun dailyFiles(): List<ExportEntry> {
+        restoreDerived(Unit)
+        return withContext(Dispatchers.IO) { directoryEntries(roots.rootOf(StorageRole.Derived), ArchiveLayout.DERIVED) }
+    }
+
+    /** Runs [block] with the derived quota paused, the hold of the daily export. */
+    suspend fun <T> holdingDailyFiles(block: suspend () -> T): T = derivedQuota.holding(block)
+
+    /**
+     * Drops the manifest of each evicted day, so the rebuild that follows builds it again, as one pass.
+     * Each thing is built on its own, so one that fails leaves the others in the export.
+     */
+    private val restoreDerived: suspend (Unit) -> Unit by lazy {
+        history.derivePassOf { _: Unit ->
+            derivedMutex.withLock {
+                val forgotten = withContext(Dispatchers.IO) { forgetEvictedDays(roots.rootOf(StorageRole.Derived)) }
+                if (forgotten > 0) println("daily export rebuilds $forgotten evicted days")
+                val byThing = index.observeAll().first().groupBy { it.thing }
+                for (thing in byThing.keys) {
+                    try {
+                        rebuild(listOf(thing), byThing)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        println("daily file retry needed: ${e::class.simpleName}")
+                    }
+                }
+            }
         }
     }
 
