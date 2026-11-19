@@ -546,7 +546,7 @@ class FakeTransport(
     private fun liveJson(): String {
         val pm1 = (pm25 * 0.7).toInt()
         val pm10 = (pm25 * 1.3).toInt()
-        val utc = utcAnchorNs?.let { """"utc":${it + upSeconds * 1_000_000_000L},""" } ?: ""
+        val utc = utcAnchorNs?.let { """"utc":${it / 1_000L + upSeconds * 1_000_000L},""" } ?: ""
         return """{"seq":$seq,"mono":${upSeconds * 1_000_000},$utc"pms":4,""" +
             """"pm1":$pm1,"pm25":${pm25.toInt()},"pm10":$pm10,"c1":$pm1,"c25":${pm25.toInt()},"c10":$pm10,""" +
             """"n03":${(pm25 * 130).toInt()},"n05":${(pm25 * 36).toInt()},"n1":${(pm25 * 4).toInt()},"n25":2,"n5":0,"n10":0,""" +

@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
+import kotlin.time.Instant
 
 /**
  * JSON characteristic payloads from ../opensensor-space-firmware/docs/shared/ble-sync-protocol.md.
@@ -139,13 +140,18 @@ data class LiveSample(
     val seq: Long? = null,
     /** monotonic_us */
     val mono: Long? = null,
-    /** UTC in nanoseconds (LIVE keeps ns while the Parquet column is in microseconds), null when unsynchronized. */
+    /** UTC in microseconds since the epoch, the same value as the file column `event_time_utc_us`, null when unsynchronized. */
     val utc: Long? = null,
     /** Every other key by its key name. */
     val values: Map<String, Double?> = emptyMap(),
     /** True when every key of the object was `null`, the board's overflow sample. */
     val overflow: Boolean = false,
 ) {
+    /** [utc] as an instant, null when unsynchronized. */
+    val utcInstant: Instant? get() = utc?.let {
+        Instant.fromEpochSeconds(it.floorDiv(MICROS_PER_SECOND), it.mod(MICROS_PER_SECOND) * NANOS_PER_MICRO)
+    }
+
     /** The value of the LIVE [key], null when the key is absent or carries no reading now. */
     operator fun get(key: String): Double? = values[key]
 
@@ -156,6 +162,8 @@ data class LiveSample(
         const val SEQ = "seq"
         const val MONO = "mono"
         const val UTC = "utc"
+        private const val MICROS_PER_SECOND = 1_000_000L
+        private const val NANOS_PER_MICRO = 1_000L
 
         /** The typed header fields, never read as values. */
         val HEADER: Set<String> = setOf(SEQ, MONO, UTC)

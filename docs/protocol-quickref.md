@@ -207,7 +207,8 @@ Feature gates use `info.proto` / `info.fw`, never guesses. The one exception is 
 firmware) as the firmware contract says.
 
 `LiveSample` parses LIVE as a map by key name, in any order. `seq`, `mono` and `utc` are typed
-header fields, and `utc` is nanoseconds. Every other key is a number or null. Floats such as `1.00`
+header fields. `utc` is microseconds since the epoch, the same value as the file column
+`event_time_utc_us`, and `LiveSample.utcInstant` reads it. Every other key is a number or null. Floats such as `1.00`
 and `1.0` parse as numbers, and the app keeps its own display rounding. The firmware sends every key
 the template declares in `live_keys`. A null key means no reading now, so the card shows a dash. An
 absent key means the board has no such field. The app shows cards by the template declaration, so a
