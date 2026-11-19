@@ -260,7 +260,7 @@ class OpenSensorFooterTest {
     @Test
     fun aRealFirmwareTemplateDigestResolvesWithoutADict() {
         // The template.sha256 firmware writes for the CoreS3 template, with no dictionary member.
-        val real = "38b0982d1da0dfea20777af87544f30c8141ef297ed5146c402129133acbea0e"
+        val real = "4e010301a21f994c2bf73c70922ee155657928afaa1603b8bff6ecfd8ff3778f"
         assertSame(coreS3Template, FileTemplates.BUNDLED.template(null, real))
         assertSame(coreS3Template, resolve(null, real))
     }

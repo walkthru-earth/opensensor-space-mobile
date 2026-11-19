@@ -27,15 +27,15 @@ class BundledTemplateBytesTest {
             "templates/" + e.getValue("href").jsonPrimitive.content to e.getValue("desc").jsonPrimitive.content
         }
 
-    /** opensensor-space-firmware a5545b4 `docs/shared/templates`. The template pins equal their index desc. */
+    /** opensensor-space-firmware 6291f3e `docs/shared/templates`. The template pins equal their index desc. */
     private val pinned = mapOf(
-        "templates/index.json" to "e778a890f446b537a84d20449c45a955753370559eede396bac1b138bea3a483",
+        "templates/index.json" to "30efb5d849ad0b61e8f92037b085d6695a968bbf2d4342beeb300859f9666ed9",
         "templates/elecrow-crowpanel-epaper-42/e7279c4edbe87071e4a51889124a43d7ffcd1977c79c8575887ae35bdee10903.json" to
-            "39da5da001dd662c6c05eddf08bbfdd1400d077dd5a9b7cdf2efaac939d08eb8",
+            "fe3097b4ca313128e82c15578607accd61e788030f0e2108a7282ffd8f9d7c5c",
         "templates/m5stack-cores3/f4f81218dc80d1a8e6db043197a2f7180c4f075f9e8348df30eaceef44d68370.json" to
-            "38b0982d1da0dfea20777af87544f30c8141ef297ed5146c402129133acbea0e",
+            "4e010301a21f994c2bf73c70922ee155657928afaa1603b8bff6ecfd8ff3778f",
         "templates/waveshare-esp32-s3-sim7670g/a8605aafb6f76b794e9e7fb32927be6d203afeeb14527206c0e49c1eb0436809.json" to
-            "f46b72d6f93e1f2077693c32eb03036935d73026d4ee64a149a6c9c347e0af74",
+            "8a01863d48a935e15f3cff3623df00b6aea1ffbeded036a65de80b3affce6634",
     )
 
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

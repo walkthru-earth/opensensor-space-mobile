@@ -60,7 +60,7 @@ audits through `verify`; release-only APK optimization and signer checks remain 
 `FirmwareTemplatesTest` (`:core:model`) compares `core/model/bundled/templates` with
 opensensor-space-firmware `docs/shared/templates` byte for byte (#261). The `verify.yml` gradle job
 and the `release.yml` `apk` job check the firmware out at the commit the bundle was copied from, a
-literal `ref` in each workflow (opensensor-space-firmware `a5545b4`, the merge of firmware #195), and set
+literal `ref` in each workflow (opensensor-space-firmware `6291f3e`, the head of firmware #203), and set
 `OPENSENSOR_FIRMWARE_DIR`. The `ref` stays a literal because CodeQL reports a checkout ref read
 from a repository file as cache poisoning. With that variable set, a missing checkout fails the test. Locally the
 test finds an `opensensor-space-firmware` folder beside the repository and skips without one. The
