@@ -324,6 +324,8 @@ fake and compatibility `DeviceTransport` paths. iOS uses the connection's `IosLi
 - `oweClose(handle)` queues a `CLOSE` without waiting. The router sends it once the request in
   flight and its drain have ended, consumes the `CLOSED`, and only then admits the next request.
   A stopped transfer uses it, so Stop returns at once and never waits behind the abandoned `READ`.
+  Its 30 s wait for `CLOSED` starts once the `CLOSE` write is done, so a slow LAN write does not
+  eat the reply wait. The write itself stays bounded by its 10 s write deadline.
 - A close from the driver first forwards frames already received, so a reply just before EOF
   (`REBOOTING`, `BYE`, close) still reaches its caller.
 - Reply timeouts measure progress, 20 s between frames on Bluetooth and 30 s on LAN. A timeout

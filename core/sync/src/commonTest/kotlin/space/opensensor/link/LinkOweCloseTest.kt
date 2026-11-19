@@ -3,8 +3,10 @@ package space.opensensor.link
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -19,6 +21,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 class LinkOweCloseTest {
     private val events = mutableListOf<LinkEvent>()
@@ -207,8 +210,74 @@ class LinkOweCloseTest {
         assertFailsWith<LinkClosedException> { s.awaitQuiet() }
     }
 
+    @Test
+    fun anOwedCloseWaitsTheFullReplyBoundAfterASlowWrite() = runTest {
+        val peer = ScriptedLinkDriver(respond = listReply)
+        val s = session(SlowCloseWrite(peer, 8.seconds))
+        s.open()
+        s.oweClose(3)
+        runCurrent()
+        val next = async { TinyApi(s).list() }
+        advanceTimeBy(8.seconds)
+        runCurrent()
+        assertEquals(listOf(Opcode.CLOSE), peer.sent)
+        assertTrue(events.any { it == LinkEvent.CloseSent(3) })
+
+        // 29 s after the write, 37 s after the drain began.
+        advanceTimeBy(29.seconds)
+        runCurrent()
+        assertIs<LinkState.Ready>(s.state.value)
+        peer.emit(Frame.Closed(3))
+        runCurrent()
+        assertEquals(listOf("a.parquet"), next.await())
+        assertEquals(listOf(Opcode.CLOSE, Opcode.LIST), peer.sent)
+    }
+
+    @Test
+    fun anOwedCloseWithNoClosedExceedsTheBoundCountedFromItsWrite() = runTest {
+        val peer = ScriptedLinkDriver()
+        val s = session(SlowCloseWrite(peer, 8.seconds))
+        s.open()
+        s.oweClose(3)
+        runCurrent()
+        advanceTimeBy(8.seconds + RequestSpec.LAN_REPLY_WAIT - 1.seconds)
+        runCurrent()
+        assertIs<LinkState.Ready>(s.state.value)
+        advanceTimeBy(2.seconds)
+        runCurrent()
+        val cause = s.closed.await()
+        assertIs<DisconnectCause.DrainExceeded>(cause)
+        assertEquals(Opcode.CLOSE, cause.op)
+    }
+
+    @Test
+    fun aPromptClosedEndsAnOwedCloseWhileItsWriteIsInFlight() = runTest {
+        val peer = ScriptedLinkDriver(respond = listReply)
+        val s = session(SlowCloseWrite(peer, 8.seconds))
+        s.open()
+        s.oweClose(3)
+        runCurrent()
+        peer.emit(Frame.Closed(3))
+        runCurrent()
+        val next = async { TinyApi(s).list() }
+        runCurrent()
+        assertTrue(events.any { it is LinkEvent.Drained && it.op == Opcode.CLOSE })
+        advanceTimeBy(8.seconds)
+        runCurrent()
+        assertEquals(listOf("a.parquet"), next.await())
+        assertIs<LinkState.Ready>(s.state.value)
+    }
+
     private suspend fun LinkSession.closeOwing(handle: Int): Frame =
         exchange(RequestSpec.of(Request.Close(handle), kind), oweCloseIfUnsent = handle) { frame, terminal -> if (terminal) frame else null }
+
+    /** Every `CLOSE` write takes [pause] before it reaches [peer]. */
+    private class SlowCloseWrite(private val peer: ScriptedLinkDriver, private val pause: Duration) : LinkDriver by peer {
+        override suspend fun send(body: ByteArray, deadline: Duration) {
+            if ((body[0].toInt() and 0xFF) == Opcode.CLOSE) delay(pause)
+            peer.send(body, deadline)
+        }
+    }
 
     /** Holds the first `CLOSE` write until [failWrite], then fails it. */
     private class FailFirstCloseLate(private val peer: ScriptedLinkDriver) : LinkDriver by peer {

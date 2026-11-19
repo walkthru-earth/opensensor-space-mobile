@@ -435,7 +435,7 @@ class LinkSession(
         try {
             while (true) {
                 val active = drain
-                val left = active?.let { it.bound.maxTime - it.started.elapsedNow() }
+                val left = active?.clock?.let { active.bound.maxTime - it.elapsedNow() }
                 val event = select<Event?> {
                     events.onReceiveCatching { it.getOrNull() }
                     onTimeoutOrNever(left) { Event.DrainTimeout }
@@ -450,6 +450,7 @@ class LinkSession(
                     }
                     // A late failure of an earlier drain must not end the current one.
                     is Event.OwedWriteFailed -> if (drain === event.drain) endDrain(event.drain)
+                    is Event.OwedWritten -> if (drain === event.drain) event.drain.clock = timeSource.markNow()
                     Event.ByeSeen -> refuseWaiting()
                     is Event.AbortFailed -> if (drain === event.drain) {
                         event.drain.abortPending = false
@@ -585,15 +586,19 @@ class LinkSession(
     /**
      * An owed `CLOSE` runs as a drain with no caller. Its `CLOSED`, or an `ERROR` for `CLOSE`,
      * ends it. A write that fails ends it at once, since the device then never saw the request and
-     * closes the handle on the next `OPEN` or on disconnect.
+     * closes the handle on the next `OPEN` or on disconnect. The write is bounded by its deadline,
+     * and the wait for `CLOSED` starts once the write is done, so it gets at least the reply wait
+     * of the transport ([RequestSpec.LAN_REPLY_WAIT] on LAN).
      */
     private fun sendOwedClose(handle: Int) {
         val spec = RequestSpec.of(Request.Close(handle), kind)
-        val d = Drain(spec.op, spec.drainBound, timeSource.markNow(), abortPending = false, replied = false)
+        val bound = spec.drainBound.copy(maxTime = maxOf(spec.drainBound.maxTime, spec.firstFrameTimeout))
+        val d = Drain(spec.op, bound, timeSource.markNow(), abortPending = false, replied = false, clock = null)
         drain = d
         own.launch {
             try {
                 writeLock.withLock { driver.send(spec.body, spec.writeDeadline) }
+                events.trySend(Event.OwedWritten(d))
                 log.event(LinkEvent.CloseSent(handle))
             } catch (e: CancellationException) {
                 throw e
@@ -695,6 +700,8 @@ class LinkSession(
         val started: ComparableTimeMark,
         var abortPending: Boolean,
         val replied: Boolean,
+        /** Where [bound]'s time limit counts from. Null until an owed `CLOSE` is written. */
+        var clock: ComparableTimeMark? = started,
     ) {
         var frames = 0
         var bytes = 0L
@@ -707,6 +714,7 @@ class LinkSession(
         class Release(val owner: Owner) : Event
         class OweClose(val handle: Int) : Event
         class OwedWriteFailed(val drain: Drain) : Event
+        class OwedWritten(val drain: Drain) : Event
         data object ByeSeen : Event
         class AbortFailed(val drain: Drain) : Event
         data object DrainTimeout : Event
