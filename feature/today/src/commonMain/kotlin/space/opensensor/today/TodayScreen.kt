@@ -225,7 +225,6 @@ fun TodayContent(
     val level = state.level
     val capabilities = state.capabilities
     val reading = state.reading
-    val live = snapshot.live
     val receivedAt = snapshot.liveAtEpochMs
     // Hoisted so the scroll position belongs to the screen. A clock refresh must never reset it.
     val listState = rememberLazyListState()
@@ -317,7 +316,7 @@ fun TodayContent(
                                     onSync = { onAction(TodayAction.SmartSync) },
                                     onStop = { onAction(TodayAction.StopSync) }.takeIf { snapshot.sync.running && !snapshot.heldInBackground },
                                 )
-                                TodayCard.CLOCK -> ClockCard(status = snapshot.status, live = live)
+                                TodayCard.CLOCK -> ClockCard(status = snapshot.status, live = reading)
                                 TodayCard.BATCH_ESTIMATE -> BatchEstimateCard(reading, receivedAt, snapshot.config)
                                 TodayCard.READINGS -> ReadingsCard(reading, receivedAt, level)
                                 TodayCard.PARTICLES -> ParticlesCard(reading)

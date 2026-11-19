@@ -113,6 +113,12 @@ Other checks owed, with no issue of their own.
 
 No phone run of these changes is recorded.
 
+- 2026-11-19, part of #350. The bundled templates are byte copies of opensensor-space-firmware
+  a5545b4 `docs/shared/templates`, and CI checks out the firmware at that commit. The CoreS3
+  dictionary is `f4f81218…`, which adds `lst` to LIVE, and its profile follows it. The templates
+  carry column titles, decimals, groups and a primary column. LIVE `utc` is read through the
+  template `live_keys` as the column `event_time_utc_us`, not as a header field. The registry is a
+  byte copy of stac-opensensor main `204365f`.
 - 2026-11-18, #301. iOS Files offers Share daily files, as Android does. The zip holds
   `derived/v1/<thing>/day=….parquet` and manifests under the Android entry names. Evicted days are
   built again first, and the derived quota is paused until the zip is staged. `IosDailyFilesTest`

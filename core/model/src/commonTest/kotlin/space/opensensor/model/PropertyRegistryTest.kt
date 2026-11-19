@@ -23,7 +23,9 @@ class PropertyRegistryTest {
         val entry = properties[temperature]!!
         assertEquals("Air temperature", entry.label.get("en"))
         assertEquals("درجة حرارة الهواء", entry.label.get("ar"))
-        assertEquals("Temperature", entry.shortLabel!!.get("ar"))
+        assertEquals("درجة الحرارة", entry.shortLabel!!.get("ar"))
+        // A label with no Arabic falls back to English.
+        assertEquals("Acceleration X", properties["urn:walkthru-earth:property:acceleration_x"]!!.label.get("ar"))
         assertEquals(DisplayGroup.CLIMATE, entry.group)
         assertEquals("Cel", entry.unit)
         assertEquals(1, entry.decimals)

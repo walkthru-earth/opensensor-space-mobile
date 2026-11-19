@@ -199,7 +199,7 @@ class PublishGateTest {
 
     private fun cleared(check: PublishCheck): Publication = assertIs<PublishCheck.Cleared>(check, "cleared, not $check").publication
 
-    private val template = checkNotNull(BundledCatalog.template("3b4d8500a19f42c6743b0f7d725276c96ca14a0c249f613048603afbc3cfaff9"))
+    private val template = checkNotNull(BundledCatalog.template("f4f81218dc80d1a8e6db043197a2f7180c4f075f9e8348df30eaceef44d68370"))
 
     private fun footer(thing: String) = OpenSensorFooter(sampleIntervalMs = 10_000, thingId = thing, mobility = OpenSensorFooter.Mobility.FIXED, purpose = "telemetry", rotationIntervalS = 900)
 

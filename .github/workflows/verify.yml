@@ -71,7 +71,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: walkthru-earth/opensensor-space-firmware
-          ref: e2eb30b6b1fb30b3e237d63e24ff5683a50cd185
+          ref: a5545b460e2495fb8403eb8fae6d0bf45e8c10ed
           path: opensensor-space-firmware
           persist-credentials: false
           sparse-checkout: docs/shared/templates

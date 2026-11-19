@@ -108,7 +108,11 @@ class OpenSensorFooterTest {
             rotationIntervalS = 900,
         )
         assertEquals(footer, parse(example))
-        assertSame(coreS3Template, FileTemplates.BUNDLED.of(footer).template)
+        // The example names the retired CoreS3 dictionary v7. A board on the bundled dictionary writes the
+        // same footer with its own dictionary and template hashes.
+        assertNull(FileTemplates.BUNDLED.of(footer).template)
+        val current = footer.copy(dictionarySha256 = coreS3Template.dict, templateSha256 = coreS3Template.key.desc)
+        assertSame(coreS3Template, FileTemplates.BUNDLED.of(current).template)
         // The href a CoreS3 board writes is one TemplateHrefs would fetch.
         assertTrue(TemplateHrefs.isFirmwareTemplate(assertNotNull(footer.templateHref)))
     }
@@ -256,7 +260,7 @@ class OpenSensorFooterTest {
     @Test
     fun aRealFirmwareTemplateDigestResolvesWithoutADict() {
         // The template.sha256 firmware writes for the CoreS3 template, with no dictionary member.
-        val real = "4dd6c4b1ef19187ed2c011ab86018e43be0f28edc3af63a0f6a27b70ff203ef3"
+        val real = "38b0982d1da0dfea20777af87544f30c8141ef297ed5146c402129133acbea0e"
         assertSame(coreS3Template, FileTemplates.BUNDLED.template(null, real))
         assertSame(coreS3Template, resolve(null, real))
     }

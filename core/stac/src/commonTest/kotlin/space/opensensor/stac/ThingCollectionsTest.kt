@@ -311,7 +311,7 @@ class ThingCollectionsTest {
         val footer = assertNotNull(OpenSensorFooter.parse(footerJson.toString()))
         val href = footerJson["template"]!!.jsonObject["href"]!!.jsonPrimitive.content
         val built = ThingCollections.build(
-            template = templateOf(footer),
+            template = json(stacTemplatePath(footerJson)),
             footer = assertNotNull(CollectionFooter.of(footer, href)),
             owner = ThingOwner.parse(text(ownerName)),
             ledger = assertNotNull(CollectionLedger.of(listOf(json(itemName)))),
@@ -326,16 +326,10 @@ class ThingCollectionsTest {
         val footer = assertNotNull(OpenSensorFooter.parse(footerJson.toString()))
         val ledger = assertNotNull(CollectionLedger.of(listOf(json(FIXED_EXAMPLE))))
         val collectionFooter = assertNotNull(CollectionFooter.of(footer, "https://example.org/template.json"))
-        val board = JsonObject(templateOf(footer) + buildJsonObject(template))
+        val board = JsonObject(json(stacTemplatePath(footerJson)) + buildJsonObject(template))
         return ThingCollections.build(board, collectionFooter, owner, ledger).also {
             assertTrue(it["partition:glob"]!!.jsonPrimitive.content.startsWith("s3://$PREFIX/thing=$THING/"))
         }
-    }
-
-    /** The board template the [footer] names, as the template file's JSON. */
-    private fun templateOf(footer: OpenSensorFooter): JsonObject {
-        val board = if (footer.dictionarySha256 == coreS3Template.dict) "m5stack-cores3" else "waveshare-esp32-s3-sim7670g"
-        return json("templates/$board/${footer.dictionarySha256}.json")
     }
 
     private fun text(path: String): String = stacFile(path).decodeToString()
