@@ -99,8 +99,8 @@ class IosArchiveStore(
             Kind.FILE -> IosFiles.size(path)
             else -> throw IllegalStateException("archive partial is not a file")
         }
-        val stored = IosFiles.readSmall(metaPath, META_MAX_BYTES)?.decodeToString()?.let(ArchiveLayout::decodeMeta)
-        val resumeFrom = if (existing != null && stored == meta && existing <= meta.size) existing else 0L
+        val stored = IosFiles.readSmall(metaPath, META_MAX_BYTES)?.decodeToString()
+        val resumeFrom = ArchiveLayout.resumeFrom(existing, stored, meta)
         if (existing == null) IosFiles.createEmpty(path)
         val fd = open(path, O_RDWR)
         check(fd >= 0) { "cannot open archive partial" }

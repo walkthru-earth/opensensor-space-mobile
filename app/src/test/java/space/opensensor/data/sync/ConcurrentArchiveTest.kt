@@ -17,6 +17,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
+import space.opensensor.archive.ArchiveKey
+import space.opensensor.archive.PartialMeta
 import space.opensensor.data.archive.FileArchiveStore
 import space.opensensor.data.archive.RoomArchiveIndex
 import space.opensensor.data.archive.SyncEngineModule
@@ -157,7 +159,7 @@ class ConcurrentArchiveTest {
     fun `corrupted resumable prefix is retried from zero in the same download`() = runBlocking {
         val crc32 = CRC32().also { it.update(bytes) }.value
         val prefix = bytes.size / 2
-        archive.openPartial("thing-a", name, bytes.size.toLong(), crc32).first.use { writer ->
+        archive.openPartial(ArchiveKey("thing-a", name), PartialMeta(bytes.size.toLong(), crc32)).first.use { writer ->
             writer.writeAt(0, bytes.copyOfRange(0, prefix).also { it[100] = (it[100].toInt() xor 1).toByte() })
         }
 
@@ -188,9 +190,9 @@ class ConcurrentArchiveTest {
     @Test
     fun `commit refuses to replace an archive even if a competing writer bypasses the lease`() = runBlocking {
         assertTrue(download(device(), "thing-a") is FileOutcome.Synced)
-        archive.openPartial("thing-a", name, bytes.size.toLong(), 0L).first.use { it.writeAt(0L, bytes) }
+        archive.openPartial(ArchiveKey("thing-a", name), PartialMeta(bytes.size.toLong(), 0L)).first.use { it.writeAt(0L, bytes) }
         try {
-            archive.commit("thing-a", name)
+            archive.commit(ArchiveKey("thing-a", name))
             fail("existing archive must not be replaced")
         } catch (_: AlreadyCommitted) {
             assertArrayEquals(bytes, archive.fileFor("thing-a", name).readBytes())
