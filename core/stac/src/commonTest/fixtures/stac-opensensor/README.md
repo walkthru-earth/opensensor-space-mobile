@@ -1,7 +1,7 @@
 # stac-opensensor fixtures
 
 Copied byte for byte from [walkthru-earth/stac-opensensor](https://github.com/walkthru-earth/stac-opensensor)
-at tag v0.1.0, commit `83787768cc8451109d48a03d4ef5493ffcd403dd`. Renew every file from the same commit
+at commit `e9981360c2229a98d5659ef0038a3b6114953f73` on main, the v0.1.0 profile with the #16 display hints. Renew every file from the same commit
 when the pin moves.
 
 | File here | Path in stac-opensensor |
