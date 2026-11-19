@@ -70,8 +70,9 @@ template the app has not bundled yet turns that run red. The firmware folders ar
 
 GitHub Actions runs `verify.yml` on pull requests, on pushes to `main` and by hand, never on a
 schedule. `live-key-drift.yml` runs weekly and by hand only, so a green pull request run says nothing
-about the firmware `main` check. `release.yml` runs on every push to `main`, docs only too, on `v*` tags and by hand. It has no
-`paths-ignore`, so a docs push never leaves a code commit's rolling build unpublished.
+about the firmware `main` check. `release.yml` runs on pushes to `main`, on `v*` tags and by hand.
+A push to `main` that only touches `docs/**` or Markdown builds nothing. The rolling tag still moves to
+a code build when main is ahead of it by such commits only.
 A green run and the local gates are the acceptance evidence.
 Mobile CodeRabbit provides summaries only, so use a scoped source review before opening a PR.
 Run `./ios/tests/verify-native.sh` for the native host checks. No host or simulator gate qualifies

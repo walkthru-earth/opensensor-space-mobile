@@ -18,12 +18,14 @@
 # Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
 name: release
 
-# Every push to main builds, docs only too. A skipped docs push would leave main ahead of the code
-# commit still building, and its rolling tag guard would then never publish it.
+# A push to main that only touches docs or Markdown builds nothing, as in verify.yml. GitHub does not
+# apply path filters to tag pushes, so every `v*` tag still publishes. The rolling tag guard below
+# still publishes a code build when main is ahead of it by such skipped commits only.
 on:
   push:
     branches: [main]
     tags: ["v*"]
+    paths-ignore: ["docs/**", "**/*.md"]
   workflow_dispatch:
 
 permissions:
@@ -272,11 +274,23 @@ jobs:
             const repo = context.repo;
             // Older queued builds must not replace latest or tag a commit whose workflows
             // differ from current main (GITHUB_TOKEN cannot gain workflows permission).
+            // A commit main gained after this build counts only when it touches more than docs or
+            // Markdown, the paths this workflow ignores. Those commits start no build of their own.
             const head = await github.rest.git.getRef({ ...repo, ref: 'heads/main' });
             if (head.data.object.sha !== context.sha) {
-              core.notice('Skipping rolling publication: main has advanced beyond this build. The APK is retained as a workflow artifact.');
-              core.setOutput('publish', 'false');
-              return;
+              const docsOnly = (name) => !!name && (name.startsWith('docs/') || name.endsWith('.md'));
+              const compare = await github.rest.repos.compareCommitsWithBasehead({ ...repo, basehead: `${context.sha}...${head.data.object.sha}` });
+              const files = compare.data.status === 'ahead'
+                ? await github.paginate(github.rest.repos.compareCommitsWithBasehead, { ...repo, basehead: `${context.sha}...${head.data.object.sha}`, per_page: 100 }, (response) => response.data.files ?? [])
+                : [];
+              const skippedOnly = compare.data.status === 'ahead' && files.length > 0 &&
+                files.every((file) => docsOnly(file.filename) && (!file.previous_filename || docsOnly(file.previous_filename)));
+              if (!skippedOnly) {
+                core.notice('Skipping rolling publication: main has advanced beyond this build. The APK is retained as a workflow artifact.');
+                core.setOutput('publish', 'false');
+                return;
+              }
+              core.notice('Main is ahead of this build by docs or Markdown commits only, so this build still publishes.');
             }
             let latest;
             try {
