@@ -31,6 +31,7 @@ class KmpAndroidLibraryConventionPlugin : Plugin<Project> {
                 compilerOptions { jvmTarget.set(OpenSensorConventions.jvmTarget) }
             }
             openSensorIosTargets()
+            alignIosLibraryVersions()
             compilerOptions { openSensorDefaults() }
 
             sourceSets.getByName("commonTest").dependencies {

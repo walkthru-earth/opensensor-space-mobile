@@ -45,9 +45,12 @@ with `workflow_dispatch`. On a pull request a newer push cancels the older run
 result and its run saves the `main` caches. The device Release build runs on `main` and by hand,
 not on pull requests, in its own job ("iOS device Release build", 45 minute timeout) beside "iOS
 native validation" (60 minutes). The Release job only reads the Gradle and Kotlin/Native caches, so
-it never saves over the ones the validation job writes. A slow macOS runner can still end "iOS
-native validation" at its timeout, and so can a hung test. Read the log of the last step that ran,
-then rerun the job when it shows a slow runner.
+it never saves over the ones the validation job writes. In "iOS native validation" the Kotlin tests
+stop after 40 minutes, the Xcode build after 20 and the Swift tests after 15, so a hung step still
+leaves the job time to save its caches and upload its logs. A warm run takes about 22 minutes and
+a cold Kotlin/Native cache about 45. A slow macOS runner can still end a step at its limit, and so
+can a hung test. Read the log of the last step that ran, then rerun the job when it shows a slow
+runner.
 CI runs ktlint on every file, while the local hook checks only staged files, so run
 `pre-commit run --all-files` before a merge that touches many Kotlin files.
 
@@ -190,8 +193,8 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | `xcode-27` (standard ARM64 runner, public preview) | Matches `iosSimulatorArm64`; validates the latest chosen Apple SDK without an Intel target or a multi-version matrix. |
 | Explicit Xcode 27.2 through `DEVELOPER_DIR` | Matches the locally checked release build (27B52); avoids the runner's moving default and pre-release Xcode installations. |
 | Temurin, version read from `gradle/gradle-daemon-jvm.properties`, + repository Gradle wrapper | Uses the same Java major as Linux CI and local builds, and keeps the project's pinned Gradle distribution. |
-| `setup-gradle` with `cache-provider: basic` | Owns Gradle caching and wrapper validation, using standard GitHub caching. Do not also enable Gradle caching in `setup-java`. |
-| Separate `~/.konan` cache | Reuses the native compiler and its dependencies, keyed by architecture, Xcode and the Kotlin version (see CI caches). No DerivedData cache. |
+| `setup-gradle` with `cache-provider: external`, Gradle home through `actions/cache` | `setup-gradle` validates the wrapper and the job caches `~/.gradle/caches` and `~/.gradle/wrapper` itself, with a restore key, so a build file change starts from the previous entry (see CI caches). Do not also enable Gradle caching in `setup-java`. |
+| Separate `~/.konan` cache | Reuses the native compiler, its dependencies and the compiler caches of every linked library, keyed by architecture, Xcode, Kotlin and the version catalog (see CI caches). No DerivedData cache. |
 | Two Gradle workers | Limits simultaneous native compilation on the standard runner's 7 GB RAM. |
 | `ios/tests/verify-native.sh` | Compiles native archive export, LAN framing/policy, RunSlot cancellation and Bluetooth GATT queue checks in Swift 6 with complete concurrency checking and warnings as errors. Shared transfer checks run in Kotlin tests. No radio or UI qualification. |
 | `verifyIos` | Runs the simulator tests of every shared module (every `:core`, `:family`, `:ui` and `:feature` module and `:ios:shared`), compiles the `iosMain`, `appleMain` and `nativeMain` metadata, and links the Debug framework. |
@@ -410,19 +413,41 @@ job restores only.
 
 | Cache | Saved by | Read by |
 | --- | --- | --- |
-| Gradle (`setup-gradle`, `cache-read-only` off `main`) | the Linux gradle job and "iOS native validation" on `main` | every Gradle job |
-| `~/.konan` (`actions/cache/restore` and `actions/cache/save`) | the same two jobs on `main`, when the exact key missed | every Gradle job |
+| Gradle on Linux (`setup-gradle`, `cache-read-only` off `main`) | the Linux gradle job on `main` | the Linux gradle and release jobs |
+| Gradle home on macOS (`actions/cache/restore` and `actions/cache/save`) | "iOS native validation" on `main`, when the exact key missed | both macOS jobs |
+| `~/.konan` (`actions/cache/restore` and `actions/cache/save`) | the Linux gradle job and "iOS native validation" on `main`, when the exact key missed | every Gradle job |
 | pre-commit hook environments | the hooks job on `main`, when the exact key missed | the hooks job |
 
-The `~/.konan` key is OS, architecture, the Xcode version on macOS and the Kotlin version
-(`.github/actions/konan-cache-key`). The compiler and its dependencies change with those only, so a
-build script edit no longer makes a new 200 to 650 MB entry. The restore key drops the Kotlin
-version, so a Kotlin bump starts from the previous entry. Before saving, `main` deletes the
-compilers of older Kotlin versions, so that start does not carry them on.
+The `~/.konan` key (`.github/actions/konan-cache-key`) is OS, architecture and the Kotlin version
+on Linux, which links no iOS binary. On macOS `~/.konan` also holds the compiler cache of every
+library an iOS binary links (`klib/cache/*-user-pl`), and a library bump needs new ones, so the
+key adds the Xcode version and a hash of `gradle/libs.versions.toml`. A catalog change then saves a
+new entry on `main`. With a key that ignored the catalog, a bump such as kotlinx-serialization 1.13
+hit the old entry, the rebuilt caches were never saved, and every later run spent about 20 more
+minutes rebuilding them.
+The restore keys first drop the catalog hash and Kotlin version, then the Xcode version, so a bump
+starts from the newest entry and builds only what changed. Before saving, `main` deletes the
+compilers of older Kotlin versions, so that start does not carry them on. The entry grows a little
+with each catalog change until the next Kotlin bump starts a fresh compiler directory.
 
-The Gradle action keys its home entry by job id and falls back to the newest entry of the same OS.
-The read-only release job has never saved one, so it restores the newest Linux entry the verify
-gradle job saved on `main`.
+Kotlin/Native keys each library cache by the whole set of libraries that library links against.
+A module that resolves older transitive versions, for example lifecycle 2.9.6 through Compose where
+`:ios:shared` has 2.11.0, makes its own copy of every Compose cache, about five copies in one build.
+`alignIosLibraryVersions` in `build-logic` holds the iOS builds of every module to the versions the
+shipped framework resolves, through dependency constraints that add no library. When a new split
+appears, add the library to that list and to the catalog.
+
+The Linux Gradle action keys its home entry by job id and falls back to the newest entry of the
+same OS. The read-only release job has never saved one, so it restores the newest Linux entry the
+verify gradle job saved on `main`. The macOS Gradle home key hashes the catalog, the wrapper, the
+build scripts and `build-logic`, and its restore key drops that hash, so a build change starts from
+the previous entry instead of an empty home. The basic provider of the Gradle action has no such
+fallback and saves only in a post step, which a cancelled job skips.
+
+On `main` "iOS native validation" saves both caches right after the Kotlin tests. When those tests
+fail or reach their time limit, it saves what they built under the key plus `-partial-` and the run
+id. The next run restores that entry through the restore key and finishes the work, so one cold
+run that times out does not leave every later run cold too.
 
 ## Fake device (debug builds, `FakeTransport`)
 

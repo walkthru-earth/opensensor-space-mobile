@@ -20,6 +20,7 @@ class IosFrameworkConventionPlugin : Plugin<Project> {
 
         extensions.configure<KotlinMultiplatformExtension> {
             openSensorIosTargets()
+            alignIosLibraryVersions()
             compilerOptions { openSensorDefaults() }
 
             sourceSets.getByName("commonTest").dependencies {
