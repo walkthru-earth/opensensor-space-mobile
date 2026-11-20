@@ -1,11 +1,11 @@
 [versions]
 composeMultiplatform = "1.12.2"
 composeMultiplatformMaterial3 = "1.9.0"
-androidGradlePlugin = "9.5.1"
+androidGradlePlugin = "9.5.2"
 androidxCore = "1.19.1"
 androidxLifecycle = "2.11.1"
 androidxActivity = "1.13.0"
-# Compose 1.12, the line CMP 1.12.2 maps to. BOM 2026.11.01 (Compose 1.13) needs compileSdk 37.1.
+# Compose 1.12, the line CMP 1.12.2 maps to. BOM 2026.11.01 (Compose 1.13) waits for a stable CMP 1.13.
 androidxComposeBom = "2026.09.00"
 androidxHilt = "1.4.0"
 androidxRoom = "2.8.5"

@@ -24,7 +24,7 @@ Once per machine, accept the SDK licences and install the SDK packages the build
 
 ```sh
 yes | sdkmanager --licenses
-sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+sdkmanager "platform-tools" "platforms;android-37.2" "build-tools;36.0.0"
 ```
 
 ## The gate

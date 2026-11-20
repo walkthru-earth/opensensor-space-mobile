@@ -97,9 +97,7 @@ android {
 
     buildFeatures {
         compose = true
-        aidl = false
         buildConfig = true
-        shaders = false
     }
 
     packaging {
