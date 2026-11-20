@@ -42,13 +42,13 @@ jobs:
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
       - id: jdk
         uses: ./.github/actions/build-jdk-version
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: ${{ steps.jdk.outputs.version }}
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.13"
+          python-version: "3.15"
       # pre-commit itself is pinned in tools/ci/requirements.txt, where Dependabot updates it.
       - run: python -m pip install --disable-pip-version-check -r tools/ci/requirements.txt
       # The hook environments. Pull requests restore them and only main saves them.
@@ -88,7 +88,7 @@ jobs:
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
       - id: jdk
         uses: ./.github/actions/build-jdk-version
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: ${{ steps.jdk.outputs.version }}
@@ -161,7 +161,7 @@ jobs:
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
       - id: jdk
         uses: ./.github/actions/build-jdk-version
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: ${{ steps.jdk.outputs.version }}
@@ -282,7 +282,7 @@ jobs:
       # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
       - id: jdk
         uses: ./.github/actions/build-jdk-version
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: ${{ steps.jdk.outputs.version }}
