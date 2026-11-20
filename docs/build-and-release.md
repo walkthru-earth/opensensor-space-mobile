@@ -84,7 +84,7 @@ pull request a newer push cancels the older run. "Analyze (swift)" traces the De
 of the app with the read-only Gradle cache. It is the longest scan, so it runs weekly (Monday) and by
 hand only, never on a pull request or a push. CodeQL cannot trace a build on macOS 27 or with Xcode 27
 ([changelog](https://github.blog/changelog/2026-10-19-codeql-changes-for-macos-27-xcode-27-and-swift-6-4/)),
-so this one job runs on `macos-26` with Xcode 26.6, unlike the Xcode 27.0 of "iOS native validation".
+so this one job runs on `macos-26` with Xcode 26.6, unlike the Xcode 27.2 of "iOS native validation".
 Kotlin is not scanned, because CodeQL extracts Kotlin only from a traced Gradle build.
 A green run and the local gates are the acceptance evidence.
 Mobile CodeRabbit provides summaries only, so use a scoped source review before opening a PR.
@@ -142,7 +142,7 @@ commit the file. The root `build.gradle.kts` configures that task to write no do
 | DI / data | Hilt (`hilt`), Room (`androidxRoom`, schema `AppDatabase.version`, exported under `core/database/schemas/`), DataStore Preferences (`androidxDatastore`), WorkManager (`androidxWork`) + `androidx.hilt:hilt-work` (`androidxHilt`), kotlinx.serialization (`kotlinxSerialization`), kotlinx-datetime (`kotlinxDatetime`, shared calendar math), coroutines (`coroutines`). Versions are the `gradle/libs.versions.toml` keys named here |
 | Native | Discover adds `maplibre-compose` (`maplibreCompose`) with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`) and `com.uber:h3` (`h3`, JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C library (`core/publicfeed/src/nativeInterop/h3c`, its README names the version) with `xcrun clang` and binds it through cinterop. `H3VersionPinTest` (`:tools:pins`) fails when the C major and minor differ from `com.uber:h3`. The patch may differ, because h3-java numbers its own releases |
 | Build | Gradle as `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` names it (configuration cache on), with the daemon on JDK 25 through the Daemon JVM criteria (see Build JDK). AGP (`androidGradlePlugin`), KSP (`ksp`) and Compose Multiplatform (`composeMultiplatform`) as `gradle/libs.versions.toml` pins them. R8 for release. Every `:core` module and `:family:air` target JVM (Java 17) and iOS, except `:core:database`, which targets Android and iOS (`opensensor.kmp.android-library`). Every `:ui` and `:feature` module uses `opensensor.kmp.compose-feature`, Compose Multiplatform for Android (`com.android.kotlin.multiplatform.library`) and iOS, with no JVM target. `:ios:shared` targets iOS only |
-| SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches). One place, `build-logic` `OpenSensorConventions`, for `:app` and every shared Android target |
+| SDK | `compileSdk` **37.2** (the Android 17 QPR2 minor SDK, `release(37) { minorApiLevel = 2 }`), `targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches). One place, `build-logic` `OpenSensorConventions`, for `:app` and every shared Android target. A minor SDK adds APIs only, and `targetSdk` takes a major level |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 
 Bump `libs.versions.toml` only to versions you have verified build.
@@ -177,9 +177,8 @@ branch ruleset. Changes to `docs/` or Markdown alone start no run. The workflow
 uses read-only repository permissions and cancels an older run only on a pull request. Validation needs
 no Apple account, provisioning profile or signing secret.
 
-The project's chosen validation toolchain is **Xcode 27.0 / iOS 27 SDK** for every
-run, including PRs. Pin the installed release explicitly, avoiding the 27.2 beta
-also present on the image. GitHub still labels the `xcode-27` runner
+The project's chosen validation toolchain is **Xcode 27.2 / iOS 27.2 SDK** for every
+run, including PRs. Pin the installed release explicitly, not the image default (27.1). GitHub still labels the `xcode-27` runner
 [public preview](https://github.blog/changelog/2026-09-10-xcode-27-runner-image-now-runs-on-macos-27/).
 The iOS 18.5 deployment target is a minimum, not a maximum; building with a newer
 SDK does not require dropping older devices. See
@@ -189,7 +188,7 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | Choice | Reason / behavior |
 | --- | --- |
 | `xcode-27` (standard ARM64 runner, public preview) | Matches `iosSimulatorArm64`; validates the latest chosen Apple SDK without an Intel target or a multi-version matrix. |
-| Explicit Xcode 27.0 through `DEVELOPER_DIR` | Matches the locally checked release build; avoids the runner's moving default and pre-release Xcode installations. |
+| Explicit Xcode 27.2 through `DEVELOPER_DIR` | Matches the locally checked release build (27B52); avoids the runner's moving default and pre-release Xcode installations. |
 | Temurin, version read from `gradle/gradle-daemon-jvm.properties`, + repository Gradle wrapper | Uses the same Java major as Linux CI and local builds, and keeps the project's pinned Gradle distribution. |
 | `setup-gradle` with `cache-provider: basic` | Owns Gradle caching and wrapper validation, using standard GitHub caching. Do not also enable Gradle caching in `setup-java`. |
 | Separate `~/.konan` cache | Reuses the native compiler and its dependencies, keyed by architecture, Xcode and the Kotlin version (see CI caches). No DerivedData cache. |

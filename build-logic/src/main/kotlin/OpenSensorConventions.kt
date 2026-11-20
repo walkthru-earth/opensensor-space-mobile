@@ -1,3 +1,4 @@
+import com.android.build.api.dsl.CompileSdkSpec
 import org.gradle.api.Project
 import org.gradle.api.artifacts.MinimalExternalModuleDependency
 import org.gradle.api.artifacts.VersionCatalogsExtension
@@ -20,8 +21,12 @@ internal object OpenSensorConventions {
     val jvmTarget: JvmTarget = JvmTarget.JVM_17
     const val JAVA_RELEASE: Int = 17
 
-    /** Android SDK levels of every shared Android library target and of `:app`. */
+    /**
+     * Android SDK levels of every shared Android library target and of `:app`. The compile SDK is
+     * 37.2, the Android 17 QPR2 minor SDK, set through [openSensorCompileSdk].
+     */
     const val COMPILE_SDK: Int = 37
+    const val COMPILE_SDK_MINOR: Int = 2
     const val MIN_SDK: Int = 31
 
     /** Android target SDK of `:app`. Libraries have none. */
@@ -32,6 +37,13 @@ internal object OpenSensorConventions {
 
     /** Name of the static framework the Xcode project links. Changing it breaks `ios/`. */
     const val IOS_FRAMEWORK_NAME: String = "OpenSensorShared"
+}
+
+/** Sets the compile SDK to [OpenSensorConventions.COMPILE_SDK].[OpenSensorConventions.COMPILE_SDK_MINOR]. */
+internal fun CompileSdkSpec.openSensorCompileSdk() {
+    version = release(OpenSensorConventions.COMPILE_SDK) {
+        minorApiLevel = OpenSensorConventions.COMPILE_SDK_MINOR
+    }
 }
 
 internal fun Project.catalogLibrary(alias: String): Provider<MinimalExternalModuleDependency> =

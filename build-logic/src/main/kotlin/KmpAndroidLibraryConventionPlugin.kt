@@ -24,7 +24,7 @@ class KmpAndroidLibraryConventionPlugin : Plugin<Project> {
         extensions.configure<KotlinMultiplatformExtension> {
             (this as ExtensionAware).extensions.configure<KotlinMultiplatformAndroidLibraryTarget>("android") {
                 namespace = "${OpenSensorConventions.COMPOSE_NAMESPACE_ROOT}.${project.name}"
-                compileSdk = OpenSensorConventions.COMPILE_SDK
+                compileSdk { openSensorCompileSdk() }
                 minSdk = OpenSensorConventions.MIN_SDK
                 // Host tests run against the android.jar stubs. Room asks a stub Context for nothing it needs.
                 withHostTest { isReturnDefaultValues = true }

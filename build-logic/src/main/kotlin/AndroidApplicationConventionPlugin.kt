@@ -17,7 +17,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
         pluginManager.apply("com.android.application")
 
         extensions.configure<ApplicationExtension> {
-            compileSdk = OpenSensorConventions.COMPILE_SDK
+            compileSdk { openSensorCompileSdk() }
             defaultConfig {
                 minSdk = OpenSensorConventions.MIN_SDK
                 targetSdk = OpenSensorConventions.TARGET_SDK

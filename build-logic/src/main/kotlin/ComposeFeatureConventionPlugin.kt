@@ -34,7 +34,7 @@ class ComposeFeatureConventionPlugin : Plugin<Project> {
         extensions.configure<KotlinMultiplatformExtension> {
             (this as ExtensionAware).extensions.configure<KotlinMultiplatformAndroidLibraryTarget>("android") {
                 namespace = moduleNamespace
-                compileSdk = OpenSensorConventions.COMPILE_SDK
+                compileSdk { openSensorCompileSdk() }
                 minSdk = OpenSensorConventions.MIN_SDK
                 androidResources { enable = true }
                 // Merged Android resources, so a Robolectric host test can render Compose in a real window.
