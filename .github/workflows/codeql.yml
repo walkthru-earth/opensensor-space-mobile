@@ -5,8 +5,10 @@
 # - actions, c-cpp (the vendored H3 C library), javascript-typescript and python need no build
 #   (`build-mode: none`). They take about a minute and run on pull requests, pushes to main, weekly
 #   and by hand.
-# - swift needs a traced Xcode build of the app, about 45 minutes on macOS. It runs weekly and by
-#   hand only, never on a pull request or a push.
+# - swift needs a traced Xcode build of the app, the longest scan, on macOS. It runs weekly and by
+#   hand only, never on a pull request or a push. CodeQL cannot trace builds on macOS 27 or with
+#   Xcode 27 (https://github.blog/changelog/2026-10-19-codeql-changes-for-macos-27-xcode-27-and-swift-6-4/),
+#   so this job pins macOS 26 and Xcode 26.6, not the Xcode 27.0 of verify.yml.
 # Kotlin is not scanned. CodeQL extracts Kotlin only from a traced Gradle build.
 # Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
 name: CodeQL
@@ -53,20 +55,20 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
 
-  # The same toolchain as "iOS native validation" in verify.yml. Xcode 27.0, read-only Gradle and
-  # Kotlin/Native caches, and the Debug simulator build. The Kotlin framework links before CodeQL
-  # starts tracing, so the traced Xcode build finds it up to date and traces mostly Swift.
+  # The Debug simulator build of "iOS native validation" in verify.yml, on macOS 26 with Xcode 26.6
+  # and the read-only Gradle cache. No main job saves a Kotlin/Native cache for Xcode 26.6, so Gradle
+  # downloads that toolchain. The Kotlin framework links before CodeQL starts tracing, so the traced
+  # Xcode build finds it up to date and traces mostly Swift.
   swift:
     name: Analyze (swift)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
-    runs-on: xcode-27
+    runs-on: macos-26
     timeout-minutes: 90
     permissions:
       contents: read
       security-events: write
     env:
-      XCODE_VERSION: "27.0"
-      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       GRADLE_OPTS: -Dorg.gradle.workers.max=2
     defaults:
       run:
@@ -86,16 +88,11 @@ jobs:
         with:
           cache-provider: basic
           cache-read-only: true
-      - id: konan-key
-        uses: ./.github/actions/konan-cache-key
-        with:
-          xcode: ${{ env.XCODE_VERSION }}
-      - name: Restore Kotlin Native toolchain
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.konan
-          key: ${{ steps.konan-key.outputs.key }}
-          restore-keys: ${{ steps.konan-key.outputs.restore-prefix }}
+      - name: Check Apple toolchain
+        run: |
+          test "$(uname -m)" = arm64
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version
       - name: Link the shared Kotlin framework
         run: ./gradlew --no-daemon :ios:shared:linkDebugFrameworkIosSimulatorArm64
       - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
