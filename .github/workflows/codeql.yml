@@ -1,0 +1,113 @@
+# CodeQL code scanning, advanced setup. It replaces GitHub's default setup, which must stay off
+# (repository settings, Code security), because GitHub rejects advanced uploads while it is on.
+# Same languages, query suite (`default`) and categories (`/language:<lang>`) as default setup had,
+# so existing alerts carry over.
+# - actions, c-cpp (the vendored H3 C library), javascript-typescript and python need no build
+#   (`build-mode: none`). They take about a minute and run on pull requests, pushes to main, weekly
+#   and by hand.
+# - swift needs a traced Xcode build of the app, about 45 minutes on macOS. It runs weekly and by
+#   hand only, never on a pull request or a push.
+# Kotlin is not scanned. CodeQL extracts Kotlin only from a traced Gradle build.
+# Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:
+    paths-ignore: ["docs/**", "**/*.md"]
+  schedule:
+    - cron: "29 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# As in verify.yml, a newer push to a pull request replaces its run, and every other run finishes.
+concurrency:
+  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, c-cpp, javascript-typescript, python]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
+
+  # The same toolchain as "iOS native validation" in verify.yml. Xcode 27.0, read-only Gradle and
+  # Kotlin/Native caches, and the Debug simulator build. The Kotlin framework links before CodeQL
+  # starts tracing, so the traced Xcode build finds it up to date and traces mostly Swift.
+  swift:
+    name: Analyze (swift)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: xcode-27
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      XCODE_VERSION: "27.0"
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+      GRADLE_OPTS: -Dorg.gradle.workers.max=2
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The build JDK is pinned once, in gradle/gradle-daemon-jvm.properties, which Gradle enforces.
+      - id: jdk
+        uses: ./.github/actions/build-jdk-version
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: ${{ steps.jdk.outputs.version }}
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
+          cache-read-only: true
+      - id: konan-key
+        uses: ./.github/actions/konan-cache-key
+        with:
+          xcode: ${{ env.XCODE_VERSION }}
+      - name: Restore Kotlin Native toolchain
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.konan
+          key: ${{ steps.konan-key.outputs.key }}
+          restore-keys: ${{ steps.konan-key.outputs.restore-prefix }}
+      - name: Link the shared Kotlin framework
+        run: ./gradlew --no-daemon :ios:shared:linkDebugFrameworkIosSimulatorArm64
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: swift
+          build-mode: manual
+      - name: Build unsigned simulator app
+        run: |
+          xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build/DerivedData-codeql \
+            CODE_SIGNING_ALLOWED=NO build
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:swift

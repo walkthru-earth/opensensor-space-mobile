@@ -1,7 +1,7 @@
 # Build, verify, release. Stack, hooks, CI, signing, the fake device
 
 **Scope:** toolchain versions, permissions declared, the `verify` gate, git hooks, GitHub Actions, release signing, and the debug-only fake device used by tests and demos.
-**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `gradle/gradle-daemon-jvm.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/opensensor.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `.github/actions/`, `.github/dependabot.yml`, `build-logic/`, `tools/pins/`, `tools/ci/requirements.txt`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
+**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `gradle/gradle-daemon-jvm.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/opensensor.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release,codeql}.yml`, `.github/actions/`, `.github/dependabot.yml`, `build-logic/`, `tools/pins/`, `tools/ci/requirements.txt`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
 **Related:** [architecture.md](architecture.md) (modules the gate builds), [status.md](status.md) (what the gate proves and what it cannot).
 
 ## Gate
@@ -14,6 +14,7 @@ flowchart LR
   GH[GitHub PR or push to main] --> W["verify.yml: pre-commit --all-files + ./gradlew verify → debug APK + reports"]
   GH --> I["verify.yml: macOS → Kotlin iOS tests + one simulator Debug build for app and Swift tests"]
   GH --> D["verify.yml: macOS device Release build job, main and by hand only"]
+  GH --> Q["codeql.yml: actions, C, JS and Python scans on Linux · Swift scan on macOS weekly and by hand only"]
   GH --> R["release.yml: build job (read-only, R8 + signing) → publish job (contents: write) · main → rolling 'latest' · v* tag → permanent release"]
 ```
 
@@ -73,6 +74,16 @@ schedule. `live-key-drift.yml` runs weekly and by hand only, so a green pull req
 about the firmware `main` check. `release.yml` runs on pushes to `main`, on `v*` tags and by hand.
 A push to `main` that only touches `docs/**` or Markdown builds nothing. The rolling tag still moves to
 a code build when main is ahead of it by such commits only.
+
+`codeql.yml` is the CodeQL advanced setup, so GitHub's default setup stays off in the repository
+settings (GitHub rejects advanced uploads while default setup is on). It scans with the `default`
+query suite and the `/language:<lang>` categories default setup used. The `actions`, `c-cpp` (the
+vendored H3 C library), `javascript-typescript` and `python` jobs need no build (`build-mode: none`),
+take about a minute on Linux, and run on pull requests, pushes to `main`, weekly and by hand. On a
+pull request a newer push cancels the older run. "Analyze (swift)" traces the Debug simulator build
+of the app on the `xcode-27` runner with Xcode 27.0 and the read-only caches of "iOS native
+validation". It takes about 45 minutes, so it runs weekly (Monday) and by hand only, never on a pull
+request or a push. Kotlin is not scanned, because CodeQL extracts Kotlin only from a traced Gradle build.
 A green run and the local gates are the acceptance evidence.
 Mobile CodeRabbit provides summaries only, so use a scoped source review before opening a PR.
 Run `./ios/tests/verify-native.sh` for the native host checks. No host or simulator gate qualifies
@@ -141,8 +152,8 @@ The iOS app lives in `ios/OpenSensor.xcodeproj`, with the Compose framework in
 including the `:ios:shared` presentation-state tests, and links the framework. Each convention
 plugin adds its module's tasks to `verify` and `verifyIos` (`build-logic/src/main/kotlin/Gates.kt`),
 including the metadata compile of every shared source set. Only that compile checks `commonMain` on
-its own (an expect class must declare the members it inherits), and `assemble` runs it, so CodeQL
-autobuild fails without it. `commonMain` joins `verify`, the iOS only source sets join `verifyIos`.
+its own (an expect class must declare the members it inherits), and `assemble` runs it, so a broken
+`commonMain` fails `assemble` even when every target compiles. `commonMain` joins `verify`, the iOS only source sets join `verifyIos`.
 For the same reason `opensensor.jvm.library` adds `compileKotlin` and `test` of the `:tools` modules to `verify`.
 On a Mac with Xcode `verify` runs `verifyIos` too, so the pre-push hook covers iOS. Linux CI skips
 it, and `-Popensensor.skipIos=true` skips it locally. A Mac with only the Command Line Tools has no
