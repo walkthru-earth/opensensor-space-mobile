@@ -14,7 +14,7 @@ flowchart LR
   GH[GitHub PR or push to main] --> W["verify.yml: pre-commit --all-files + ./gradlew verify → debug APK + reports"]
   GH --> I["verify.yml: macOS → Kotlin iOS tests + one simulator Debug build for app and Swift tests"]
   GH --> D["verify.yml: macOS device Release build job, main and by hand only"]
-  GH --> Q["codeql.yml: actions, C, JS and Python scans on Linux · Swift scan on macOS weekly and by hand only"]
+  GH --> Q["codeql.yml: actions, C, JS and Python scans on Linux · Swift scan on macOS 26 weekly and by hand only"]
   GH --> R["release.yml: build job (read-only, R8 + signing) → publish job (contents: write) · main → rolling 'latest' · v* tag → permanent release"]
 ```
 
@@ -81,9 +81,11 @@ query suite and the `/language:<lang>` categories default setup used. The `actio
 vendored H3 C library), `javascript-typescript` and `python` jobs need no build (`build-mode: none`),
 take about a minute on Linux, and run on pull requests, pushes to `main`, weekly and by hand. On a
 pull request a newer push cancels the older run. "Analyze (swift)" traces the Debug simulator build
-of the app on the `xcode-27` runner with Xcode 27.0 and the read-only caches of "iOS native
-validation". It takes about 45 minutes, so it runs weekly (Monday) and by hand only, never on a pull
-request or a push. Kotlin is not scanned, because CodeQL extracts Kotlin only from a traced Gradle build.
+of the app with the read-only Gradle cache. It is the longest scan, so it runs weekly (Monday) and by
+hand only, never on a pull request or a push. CodeQL cannot trace a build on macOS 27 or with Xcode 27
+([changelog](https://github.blog/changelog/2026-10-19-codeql-changes-for-macos-27-xcode-27-and-swift-6-4/)),
+so this one job runs on `macos-26` with Xcode 26.6, unlike the Xcode 27.0 of "iOS native validation".
+Kotlin is not scanned, because CodeQL extracts Kotlin only from a traced Gradle build.
 A green run and the local gates are the acceptance evidence.
 Mobile CodeRabbit provides summaries only, so use a scoped source review before opening a PR.
 Run `./ios/tests/verify-native.sh` for the native host checks. No host or simulator gate qualifies

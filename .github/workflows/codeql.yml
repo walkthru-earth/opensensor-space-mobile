@@ -61,7 +61,7 @@ jobs:
   # Xcode build finds it up to date and traces mostly Swift.
   swift:
     name: Analyze (swift)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: macos-26
     timeout-minutes: 90
     permissions:
