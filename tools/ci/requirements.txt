@@ -1,3 +1,3 @@
 # The pre-commit the verify.yml hooks job installs. Dependabot (pip, /tools/ci) updates the pin.
 # PreCommitPinTest (:tools:pins) keeps it one exact version.
-pre-commit==4.6.2
+pre-commit==4.7.0
