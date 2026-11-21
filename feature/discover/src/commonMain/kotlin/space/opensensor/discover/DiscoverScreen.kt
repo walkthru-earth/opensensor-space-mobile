@@ -30,20 +30,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
@@ -65,7 +59,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -76,19 +69,17 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.maplibre.spatialk.geojson.Position
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
+import space.opensensor.designsystem.FloatingIconButton
 import space.opensensor.designsystem.FloatingSurface
 import space.opensensor.designsystem.LocalReduceMotion
 import space.opensensor.designsystem.MinTouchSpacing
@@ -116,12 +107,11 @@ import space.opensensor.map.BaseMap
 import space.opensensor.map.MapZoom
 import space.opensensor.map.NearMeButton
 import space.opensensor.map.Place
+import space.opensensor.map.PlaceSearchField
 import space.opensensor.map.ZoomControls
-import space.opensensor.map.countryName
 import space.opensensor.map.moveCamera
 import space.opensensor.map.rememberMapStyle
 import space.opensensor.map.rememberNearMe
-import space.opensensor.map.rememberPlaceIndex
 import space.opensensor.model.HealthScale
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.CellScale
@@ -407,74 +397,32 @@ private fun TopControls(
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var query by rememberSaveable { mutableStateOf("") }
-    val focus = LocalFocusManager.current
-    val places = rememberPlaceIndex()
-    val results by produceState(emptyList<Place>(), query, places) {
-        value = places?.let { withContext(Dispatchers.Default) { it.search(query) } }.orEmpty()
-    }
-    val locale = Locale.current
-    val arabic = locale.language == "ar"
-    Column(modifier.fillMaxWidth().statusBarsPadding().padding(top = 8.dp)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text(strings.searchPlaces) },
-                leadingIcon = { Icon(DiscoverIcons.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) { Icon(DiscoverIcons.Close, contentDescription = strings.clearSearch) }
-                    }
-                },
-                singleLine = true,
-                shape = FloatingControl.Shape,
-                colors = TextFieldDefaults.colors(
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ),
-                modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+    // The search folds to one button at rest and opens into a field over the other top controls.
+    var searching by rememberSaveable { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth().statusBarsPadding().padding(top = FloatingControl.Inset)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = FloatingControl.Margin), verticalAlignment = Alignment.Top) {
+            PlaceSearchField(
+                open = searching,
+                onOpenChange = { searching = it },
+                onPlace = onPlace,
+                modifier = if (searching) Modifier.weight(1f) else Modifier,
+                noMatches = { text -> DiscoverStateMessage(text, PeacockExpression.CONFUSED, Modifier.padding(16.dp)) },
             )
-            Spacer(Modifier.width(8.dp))
-            FilledIconButton(
-                onClick = onAddSensor,
-                modifier = Modifier.size(52.dp),
-                shape = FloatingControl.Shape,
-                colors = IconButtonDefaults.filledIconButtonColors(containerColor = FloatingControl.Selected, contentColor = FloatingControl.OnSelected),
-            ) {
-                Icon(DiscoverIcons.Sensors, contentDescription = strings.addSensor)
-            }
-        }
-        if (query.isNotBlank() && places != null) {
-            FloatingSurface(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth()) {
-                Column(Modifier.padding(vertical = 4.dp)) {
-                    if (results.isEmpty()) {
-                        DiscoverStateMessage(strings.noPlaces, PeacockExpression.CONFUSED, Modifier.padding(16.dp))
-                    }
-                    results.forEach { place ->
-                        Column(
-                            Modifier.fillMaxWidth().clickable(role = Role.Button) { query = ""; focus.clearFocus(); onPlace(place) }.padding(horizontal = 16.dp, vertical = 10.dp),
-                        ) {
-                            Text(place.label(arabic), style = MaterialTheme.typography.bodyLarge)
-                            Text(countryName(place.country, locale.toLanguageTag()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+            if (!searching) {
+                Spacer(Modifier.weight(1f))
+                FloatingIconButton(onClick = onAddSensor, contentDescription = strings.addSensor, primary = true) {
+                    Icon(DiscoverIcons.Sensors, contentDescription = null)
                 }
             }
-            return@Column
         }
+        if (searching) return@Column
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                .padding(horizontal = FloatingControl.Margin, vertical = FloatingControl.Inset),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val chipColors = FilterChipDefaults.filterChipColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                selectedContainerColor = FloatingControl.Selected,
-                selectedLabelColor = FloatingControl.OnSelected,
-            )
+            val chipColors = FloatingControl.chipColors(overContent = true)
             state.chips.forEach { p ->
                 FilterChip(
                     selected = p.id == state.property?.id,
@@ -513,7 +461,7 @@ private fun SourceToggle(
     val date = state.dataDate
     val cachedAt = state.cachedAtEpochMs
     val realLabel = when {
-        real && cachedAt != null -> strings.realCached(ageText(strings, now - cachedAt))
+        real && cachedAt != null -> strings.realCached(strings.ago(now - cachedAt))
         real && date != null -> strings.realDataTo(date)
         else -> strings.sourceReal
     }
@@ -939,7 +887,7 @@ private fun OwnList(own: List<OwnPin>, status: Map<String, OwnStatus>, now: Long
                     FitText(strings.live, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = ink)
                 }
                 is OwnFreshness.Ago -> FitText(
-                    strings.age(freshness.step, freshness.count),
+                    strings.ago(freshness.ageMs),
                     style = MaterialTheme.typography.labelLarge,
                     color = muted,
                     modifier = Modifier.padding(start = 8.dp),
@@ -948,13 +896,6 @@ private fun OwnList(own: List<OwnPin>, status: Map<String, OwnStatus>, now: Long
             }
         }
     }
-}
-
-/** The age of [ageMs] in words, as in "12 min ago". */
-@Composable
-private fun ageText(strings: DiscoverStrings, ageMs: Long): String {
-    val (step, count) = ageOf(ageMs)
-    return strings.age(step, count)
 }
 
 /**
@@ -967,7 +908,7 @@ private fun sourceLines(state: DiscoverUiState, strings: DiscoverStrings, now: L
     val own = if (state.own.isEmpty()) null else strings.sourcesOwn(state.newestOwnReadingS()?.let { localDay(it * 1000) })
     val feed = when {
         state.isSample -> state.newestUpdateEpochMs?.let { strings.sourcesSample(utcDay(it)) }
-        else -> state.dataDate?.let { day -> strings.sourcesPublic(day, state.cachedAtEpochMs?.let { ageText(strings, now - it) }) }
+        else -> state.dataDate?.let { day -> strings.sourcesPublic(day, state.cachedAtEpochMs?.let { strings.ago(now - it) }) }
     }
     return listOfNotNull(own, feed)
 }

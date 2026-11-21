@@ -24,6 +24,8 @@ kotlin {
             api(project(":ui:designsystem"))
             // The shared map, its camera rest, zoom controls and Near me.
             api(project(":ui:map"))
+            // Ages read in the shared words of every screen (rememberAgoFormatter).
+            implementation(project(":ui:strings"))
             // Back first returns an open sheet to peek, on both apps (NavigationBackHandler).
             implementation(libs.jetbrains.navigationevent.compose)
         }

@@ -1,6 +1,7 @@
 package space.opensensor.discover
 
 import org.w3c.dom.Element
+import space.opensensor.map.searchMapInfo
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.test.Test
@@ -8,7 +9,8 @@ import kotlin.test.assertTrue
 
 /**
  * The bundled place search reads GeoNames under CC BY 4.0, so both maps credit it in their map
- * info, in English and Arabic. Discover here, the area picker of `:ui:map` beside it.
+ * info, in English and Arabic. Discover lists the `:ui:map` credit with its place search, the area
+ * picker of `:ui:map` lists the same line.
  */
 class MapCreditTest {
     private fun catalogue(path: String): Map<String, String> {
@@ -23,9 +25,9 @@ class MapCreditTest {
 
     @Test
     fun discoverMapInfoCreditsGeoNames() {
-        val key = DiscoverMapInfo.map { it.key }.single { it == "discover_map_info3" }
+        val key = searchMapInfo().map { it.key }.single { it == "map_info_geonames" }
         for (folder in listOf("values", "values-ar")) {
-            assertCredit(catalogue("src/commonMain/composeResources/$folder/strings.xml")[key], "Discover $folder")
+            assertCredit(catalogue("../../ui/map/src/commonMain/composeResources/$folder/strings.xml")[key], "Discover $folder")
         }
     }
 

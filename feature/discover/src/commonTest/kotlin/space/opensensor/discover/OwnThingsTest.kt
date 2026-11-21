@@ -44,29 +44,17 @@ class OwnThingsTest {
     }
 
     @Test
-    fun anAgeIsNamedInItsLargestWholeStep() {
-        assertEquals(AgeStep.JUST_NOW to 0L, ageOf(59_999))
-        // A phone clock behind the reading is just now, never a negative age.
-        assertEquals(AgeStep.JUST_NOW to 0L, ageOf(-5 * 60_000))
-        assertEquals(AgeStep.MINUTES to 1L, ageOf(60_000))
-        assertEquals(AgeStep.MINUTES to 59L, ageOf(60 * 60_000 - 1))
-        assertEquals(AgeStep.HOURS to 1L, ageOf(60 * 60_000))
-        assertEquals(AgeStep.HOURS to 23L, ageOf(24 * 60 * 60_000L - 1))
-        assertEquals(AgeStep.DAYS to 3L, ageOf(3 * 24 * 60 * 60_000L + 5))
-    }
-
-    @Test
     fun anOwnPinIsLiveWhileLinkedElseAsOldAsItsNewestReading() {
         val reading = LatestReading(endEpochS = 1_000, mean = 7f, metric = AirMetrics.PM25)
         val now = 1_000_000L + 12 * 60_000
-        assertEquals(OwnFreshness.Ago(AgeStep.MINUTES, 12), ownFreshness(OwnStatus(reading), now))
+        assertEquals(OwnFreshness.Ago(12 * 60_000L), ownFreshness(OwnStatus(reading), now))
         // Linked, Live wins over the age of the newest stored reading.
         assertEquals(OwnFreshness.Live, ownFreshness(OwnStatus(reading, live = true), now))
         assertEquals(OwnFreshness.Live, ownFreshness(OwnStatus(live = true), now))
         // Before its first sync and unlinked, a pin says nothing after its name.
         assertEquals(OwnFreshness.None, ownFreshness(OwnStatus(), now))
         assertEquals(OwnFreshness.None, ownFreshness(null, now))
-        assertEquals(OwnFreshness.Ago(AgeStep.DAYS, 2), ownFreshness(OwnStatus(reading), 1_000_000L + 2 * 86_400_000L))
+        assertEquals(OwnFreshness.Ago(2 * 86_400_000L), ownFreshness(OwnStatus(reading), 1_000_000L + 2 * 86_400_000L))
     }
 
     @Test

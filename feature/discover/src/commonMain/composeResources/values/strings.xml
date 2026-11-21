@@ -7,7 +7,6 @@
 -->
 <resources>
 
-    <string name="discover_search_places">Search places</string>
     <string name="discover_add_sensor">Add your sensor</string>
     <string name="discover_more">More</string>
     <string name="discover_window_last_hour">Last hour</string>
@@ -18,11 +17,6 @@
     <string name="discover_scale_title">Colour scale</string>
     <string name="discover_scale_info1">No health scale is published for this measurement. Colours stretch from low to high across the areas in view, leaving out the lowest and highest 5 percent.</string>
     <string name="discover_scale_info2">Each area shows hourly means from three or more sensors. A faded area has no new value for 3 hours. An outline only means the area does not measure this.</string>
-    <string name="discover_osm">© OpenStreetMap</string>
-    <string name="discover_map_title">Map data</string>
-    <string name="discover_map_info1">Map data © OpenStreetMap contributors, under the Open Database License. See openstreetmap.org/copyright.</string>
-    <string name="discover_map_info2">Basemap by Protomaps.</string>
-    <string name="discover_map_info3">Place names © GeoNames, under CC BY 4.0. See geonames.org.</string>
     <string name="discover_no_areas">No sensor areas here yet</string>
     <string name="discover_not_measured">Not measured here</string>
     <string name="discover_stale">No new value for 3 hours</string>
@@ -36,8 +30,6 @@
     <string name="discover_loading">Loading</string>
     <string name="discover_read_failed">Not available right now</string>
     <string name="discover_retry">Retry</string>
-    <string name="discover_no_places">No matching places</string>
-    <string name="discover_clear_search">Clear search</string>
     <string name="discover_updated_recently">Updated within the hour</string>
     <string name="discover_window_short_hour">1h</string>
     <string name="discover_window_short_day">24h</string>
@@ -136,13 +128,6 @@
     <string name="discover_own_show">Show %1$s on the map</string>
     <!-- Own sensors on the map (#273). Their newest reading on this phone, Live while linked. -->
     <string name="discover_live">Live</string>
-    <string name="discover_ago_just_now">just now</string>
-    <string name="discover_ago_minutes">%1$d min ago</string>
-    <string name="discover_ago_hours">%1$d h ago</string>
-    <plurals name="discover_ago_days">
-        <item quantity="one">%1$d d ago</item>
-        <item quantity="other">%1$d d ago</item>
-    </plurals>
     <!-- The Real label while the network fails and the last read data is shown, as in "OpenAQ, cached 2 h ago". -->
     <string name="discover_real_cached">OpenAQ, cached %1$s</string>
     <!-- On a public area that folds in a sensor the user shares. -->

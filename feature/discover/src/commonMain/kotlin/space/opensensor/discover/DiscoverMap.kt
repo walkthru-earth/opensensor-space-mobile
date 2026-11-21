@@ -203,10 +203,7 @@ internal fun rememberDiscoverMapState(
 internal fun ownGeoJsonWithAges(pins: List<OwnPin>, geoJson: String, now: Long, strings: DiscoverStrings): String {
     if (pins.none { it.placedEpochMs != null }) return geoJson
     val ages = pins.map { pin ->
-        pin.placedEpochMs?.let { placed ->
-            val (step, count) = ageOf(now - placed)
-            strings.age(step, count)
-        }
+        pin.placedEpochMs?.let { placed -> strings.ago(now - placed) }
     }
     return remember(pins, ages) { OwnThingGeoJson.points(pins, ages) }
 }

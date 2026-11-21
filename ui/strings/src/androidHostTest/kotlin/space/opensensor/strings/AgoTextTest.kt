@@ -16,6 +16,16 @@ class AgoTextTest {
     }
 
     @Test
+    fun withoutSecondsTheFirstMinuteReadsJustNow() {
+        assertEquals(AgoUnit.JUST_NOW to 0L, agoParts(59_999, seconds = false))
+        assertEquals(AgoUnit.JUST_NOW to 0L, agoParts(-5 * 60_000L, seconds = false))
+        assertEquals(AgoUnit.MINUTES to 1L, agoParts(60_000, seconds = false))
+        assertEquals(AgoUnit.MINUTES to 59L, agoParts(60 * 60_000L - 1, seconds = false))
+        assertEquals(AgoUnit.HOURS to 23L, agoParts(24 * 60 * 60_000L - 1, seconds = false))
+        assertEquals(AgoUnit.DAYS to 3L, agoParts(3 * 24 * 60 * 60_000L + 5, seconds = false))
+    }
+
+    @Test
     fun fillCountTakesEitherPlaceholder() {
         assertEquals("12 s ago", fillCount("%1\$d s ago", 12))
         assertEquals("قبل 4 د", fillCount("قبل %1\$d د", 4))

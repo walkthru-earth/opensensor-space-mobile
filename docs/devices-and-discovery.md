@@ -138,8 +138,11 @@ Zero taps shows the map, the metric chips, the time slider, the legend, the Samp
 toggle, and the sheet at peek height. Nothing else. Every explanation sits behind
 an info button.
 
-- **Top bar.** A search field ("Search places") and an "Add your sensor" icon button with a
-  sensor icon. It is the only place on Discover that starts pairing, apart from the first-run card.
+- **Top bar.** The place search of `:ui:map` (`PlaceSearchField`), a compact search button that
+  opens into a field over the chips and folds again after a pick, and the "Add your sensor" button,
+  a `FloatingIconButton` in the primary Signal blue. It is the only place on Discover that starts
+  pairing, apart from the first-run card. The chips sit on the floating surface with
+  `FloatingControl.chipColors(overContent = true)`, blue only when chosen.
 - **Metric chips.** One row. The chips are built from the properties the visible cells actually
   report, ranked by how many visible cells report them, so the row adapts to any sensor family.
   At most three property chips show, then a "More" chip opens the sheet with every
@@ -256,7 +259,7 @@ leaves the screen. Both apps draw the same Compose `BottomSheetScaffold` standar
 
 ```
 +--------------------------------------+
-| [Search places              ] [ + ]  |
+| [Q]                            [ + ] |
 | (PM2.5) (Temp) (Humidity) (More)     |
 |                    (Sample | Real i)|
 | .1h   __    __                       |

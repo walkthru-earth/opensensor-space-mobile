@@ -295,10 +295,10 @@ private fun PickerMap(
 /** The OpenStreetMap credit while the basemap may load, and the map info with each of [lines]. */
 @Composable
 fun MapCredits(networkAllowed: Boolean, lines: List<StringResource>) {
-    val info = InfoContent(stringResource(Res.string.map_info_title), lines.map { stringResource(it) })
+    val info = InfoContent(mapInfoTitle(), lines.map { stringResource(it) })
     FloatingSurface(shape = FloatingControl.SmallShape) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = if (networkAllowed) 10.dp else 0.dp)) {
-            if (networkAllowed) Text(stringResource(Res.string.map_osm), style = MaterialTheme.typography.labelSmall)
+            if (networkAllowed) Text(osmCredit(), style = MaterialTheme.typography.labelSmall)
             InfoButton(info)
         }
     }
@@ -317,6 +317,17 @@ internal fun pickerMapInfo(networkAllowed: Boolean): List<StringResource> = list
 
 /** The basemap credits alone, for a map that draws cells but has no place search or picker. */
 fun basemapInfo(): List<StringResource> = listOf(Res.string.map_info_osm, Res.string.map_info_protomaps)
+
+/** The basemap credits and the GeoNames credit of [PlaceSearchField], for a map with search but no picker. */
+fun searchMapInfo(): List<StringResource> = basemapInfo() + Res.string.map_info_geonames
+
+/** The title of every map info sheet. */
+@Composable
+fun mapInfoTitle(): String = stringResource(Res.string.map_info_title)
+
+/** The short OpenStreetMap credit a map shows while its basemap may load. */
+@Composable
+fun osmCredit(): String = stringResource(Res.string.map_osm)
 
 /**
  * The phone location button for [CellPicker]'s controls. While [busy] a small spinner takes the

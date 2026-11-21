@@ -74,6 +74,8 @@ internal fun WindowSlider(
     val haptics = LocalHapticFeedback.current
     val stopPx = with(LocalDensity.current) { STOP.toPx() }
     val current by rememberUpdatedState(window)
+    // The gesture blocks outlive a recomposition, so they call the newest callback, not the first.
+    val report by rememberUpdatedState(onWindow)
     var expanded by remember { mutableStateOf(false) }
     // While dragging, the thumb follows the finger. Otherwise it springs to the chosen stop. With
     // reduce motion on, the thumb, the pill and its stops jump instead.
@@ -89,7 +91,7 @@ internal fun WindowSlider(
     // for a saved last hour in Real) saves it. The controller ignores a repeat.
     fun pick(w: FeedWindow) {
         if (w != current) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-        onWindow(w)
+        report(w)
         expanded = false
     }
 
