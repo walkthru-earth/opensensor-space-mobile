@@ -56,7 +56,7 @@ class OwnThingsTest {
 
     @Test
     fun anOwnPinIsLiveWhileLinkedElseAsOldAsItsNewestReading() {
-        val reading = LatestReading(endEpochS = 1_000, mean = 7f, metric = AirMetrics.PM25, displayStep = 1.0)
+        val reading = LatestReading(endEpochS = 1_000, mean = 7f, metric = AirMetrics.PM25)
         val now = 1_000_000L + 12 * 60_000
         assertEquals(OwnFreshness.Ago(AgeStep.MINUTES, 12), ownFreshness(OwnStatus(reading), now))
         // Linked, Live wins over the age of the newest stored reading.

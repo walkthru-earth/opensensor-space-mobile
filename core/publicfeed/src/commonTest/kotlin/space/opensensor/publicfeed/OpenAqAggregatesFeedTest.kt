@@ -194,7 +194,7 @@ class OpenAqAggregatesFeedTest {
         assertTrue(soilScale is CellScale.Relative)
         val pmScale = CellScale.of(pm25, table.rows.mapNotNull { it.mean("pm25") })
         assertTrue(pmScale is CellScale.Steps)
-        assertEquals(space.opensensor.family.air.WhoGuidelines.PM25.copy(names = emptyList()), pmScale.scale.who?.copy(names = emptyList()))
+        assertEquals(space.opensensor.family.air.WhoGuidelines.PM25, pmScale.scale.who)
     }
 
     @Test

@@ -9,6 +9,7 @@ import space.opensensor.data.history.parquet.ParquetType
 import space.opensensor.data.history.parquet.ParquetWriter
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
+import space.opensensor.model.AppProfile
 import space.opensensor.model.BoardTemplate
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -129,8 +130,14 @@ class CurrentBoardFilesTest {
         return sink.toByteArray()
     }
 
+    /**
+     * The catalog plus the battery charge, an auxiliary point column the catalog leaves out. The tiers
+     * aggregate any metric list, so the point rollup is still checked against the rows.
+     */
+    private val metrics: List<MetricSpec> = Metrics.all + Metrics.of(coreS3Template.datastream("battery_percent")!!, AppProfile.derive(coreS3Template))
+
     private fun buckets(vararg files: ByteArray): List<Bucket> =
-        Aggregator(thing, templates = FileTemplates.BUNDLED).apply { files.forEach { add(ParquetFile.wrap(it)) } }.buckets()
+        Aggregator(thing, metrics = metrics, templates = FileTemplates.BUNDLED).apply { files.forEach { add(ParquetFile.wrap(it)) } }.buckets()
 
     /** What one metric should hold in one bucket, from the rows alone. */
     private class Want(val values: List<Float>, val settling: Int, val point: Boolean = false) {
@@ -175,8 +182,8 @@ class CurrentBoardFilesTest {
                 assertEquals("$res interval", intervalMs, bucket.sampleIntervalMs)
                 assertEquals("$res expected rows", res.seconds * 1000 / intervalMs, bucket.expectedRows)
                 val ids = bucket.metrics.keys
-                for (id in ids) assertTrue(expected(Metrics.byId(id)!!, picked) != null, "$res $id has values it should not")
-                for (metric in Metrics.all) assertEquals("$res ${metric.id} at ${bucket.startEpochS}", expected(metric, picked), bucket.agg(metric))
+                for (id in ids) assertTrue(expected(metrics.first { it.id == id }, picked) != null, "$res $id has values it should not")
+                for (metric in metrics) assertEquals("$res ${metric.id} at ${bucket.startEpochS}", expected(metric, picked), bucket.agg(metric))
             }
         }
     }

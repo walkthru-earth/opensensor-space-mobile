@@ -110,16 +110,18 @@ class DeviceCapabilitiesTest {
     }
 
     @Test
-    fun `a template without a reviewed profile gets no family capability`() {
-        // The Waveshare template writes the batch estimate column, so only the derived gate keeps it out.
+    fun `a verified template without an overlay reads LIVE with no family cards`() {
         val caps = DeviceCapabilities.from(waveshare, profiles = { null })
-        assertNull(caps.thing)
-        assertEquals(setOf(Capability.CONFIG, Capability.SENSOR_IDENTITY), caps.capabilities)
-        assertFalse(caps.batchEstimate, "an unreviewed template must not show the estimate")
+        assertNotNull(caps.thing)
+        assertEquals(
+            setOf(Capability.LIVE, Capability.CONFIG, Capability.SENSOR_IDENTITY, AirFamily.BATCH_ESTIMATE),
+            caps.capabilities,
+        )
+        assertFalse(AirFamily.PARTICLES in caps, "the particle cards belong to the air family overlay")
     }
 
     @Test
-    fun `providers run only after the derived gate`() {
+    fun `providers run on every resolved thing`() {
         val probe = Capability("probe")
         val provider = object : DerivedMetricProvider {
             override fun derive(template: BoardTemplate) = emptyList<DerivedMetric>()
@@ -127,10 +129,10 @@ class DeviceCapabilitiesTest {
             override fun capabilitiesOf(thing: Thing) = setOf(probe)
         }
         val template = assertNotNull(BundledCatalog.template(waveshareDict))
-        val reviewed = Thing.join("t", template, BundledCatalog.profile(template.dict))
-        val derived = Thing.join("t", template, profile = null)
-        assertTrue(derived.profile.isDerived)
-        assertTrue(probe in DeviceCapabilities.capabilitiesOf(reviewed, proto = 3, providers = listOf(provider)))
-        assertFalse(probe in DeviceCapabilities.capabilitiesOf(derived, proto = 3, providers = listOf(provider)))
+        val overlaid = Thing.join("t", template, BundledCatalog.profile(template.dict))
+        val bare = Thing.join("t", template, profile = null)
+        assertTrue(probe in DeviceCapabilities.capabilitiesOf(overlaid, proto = 3, providers = listOf(provider)))
+        assertTrue(probe in DeviceCapabilities.capabilitiesOf(bare, proto = 3, providers = listOf(provider)))
+        assertEquals(setOf(Capability.CONFIG), DeviceCapabilities.capabilitiesOf(null, proto = 3, providers = listOf(provider)))
     }
 }

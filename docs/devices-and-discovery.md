@@ -81,8 +81,9 @@ Rules.
    repo root. Set the firmware checkout `ref` in `.github/workflows/verify.yml` to the commit copied,
    so CI checks the copy against it with `FirmwareTemplatesTest`. The bundle is at `b6c84e0` and holds
    three boards, M5Stack CoreS3, Waveshare ESP32-S3 SIM7670G and ELECROW CrowPanel e-paper SEN63C
-   (`elecrow-crowpanel-epaper-42`). Only CoreS3 and Waveshare have a profile. Add a reviewed `AppProfile` for that
-   `dict` under `core/model/bundled/profiles/`, or the board has no LIVE, hero or metrics card. `BundledCatalog` reads the
+   (`elecrow-crowpanel-epaper-42`). Labels, decimals, scales and the primary come from the
+   template hints and the registry. Add an `AppProfile` overlay for that `dict` under
+   `core/model/bundled/profiles/` only for a family, a hero or hidden columns. `BundledCatalog` reads the
    templates through `index.json`, which gives each its `desc`. `BundledTemplateBytesTest` checks each
    file's SHA-256 against its `index.json` desc and pins the full SHA-256 of every copied json file,
    so update its `pinned` map with the copy. `BundledCatalogTest` checks the profiles. The template
@@ -98,9 +99,9 @@ Rules.
    then the plan is that the column's own display hints label and round it. Today they parse and
    nothing renders them, see `:core:model` below.
    A board whose firmware serves its template over `GET_DESCRIPTOR` works without a bundled one,
-   the app fetches and caches it on connect (`BoardDescriptors`). Without a reviewed profile it gets
-   a profile derived from that template, which names the columns for History and Files but gives no
-   LIVE, hero or metrics card. A synced file whose footer `template.sha256` differs from the cached
+   the app fetches and caches it on connect (`BoardDescriptors`). It then renders with a profile
+   derived from that template, with LIVE, labels, decimals and scales from its hints and the
+   registry. A synced file whose footer `template.sha256` differs from the cached
    template's full digest evicts it, and the next connect fetches it again.
 3. If it uses a new transport, follow "Adding a transport" in the cross-platform guide.
 4. Optional. A family may provide a `FamilyPresenter` with its own hero, registered in

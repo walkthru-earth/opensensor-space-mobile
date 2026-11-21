@@ -93,13 +93,13 @@ class StationCardTest {
     /** The archive line's shown text and what a screen reader gets for it. */
     private fun archiveLine(lastSyncedMs: Long?): Pair<String, String> {
         AirFamily.install()
-        val day = LatestDay(86_400, 12.34f, 1f, AirMetrics.PM25_CORRECTED, 0.1)
+        val day = LatestDay(86_400, 12.34f, 1f, AirMetrics.PM25_CORRECTED)
         val glance = ArchiveGlance(files = 1, lastSyncedMs = lastSyncedMs, lastDataUtcNs = 1L, lastDay = day)
         var result: Pair<String, String>? = null
         runComposeUiTest {
             mainClock.autoAdvance = false
             show(1f) { KnownRow(row.copy(rssi = null, archive = glance), DetailLevel.SIMPLE, onClick = {}) }
-            val config = onNode(hasText("12.3", substring = true), useUnmergedTree = true).fetchSemanticsNode().config
+            val config = onNode(hasText("12 µg", substring = true), useUnmergedTree = true).fetchSemanticsNode().config
             result = config[SemanticsProperties.Text].joinToString() to config[SemanticsProperties.ContentDescription].joinToString()
         }
         return result!!
@@ -112,7 +112,7 @@ class StationCardTest {
             val (shown, spoken) = archiveLine(synced)
             assertTrue("/⁠" in shown, "the shown unit can wrap after its slash in '$shown'")
             assertTrue('⁠' !in spoken, "the spoken line carries a word joiner, '$spoken'")
-            assertTrue("12.3" in spoken, "the spoken line has the value, '$spoken'")
+            assertTrue("12 µg/m³" in spoken, "the spoken line has the value, '$spoken'")
         }
     }
 

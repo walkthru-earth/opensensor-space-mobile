@@ -202,7 +202,7 @@ class DevicesBridgeTest {
     }
 
     @Test fun glancesJoinEachThingsLatestDay() = runTest {
-        val day = LatestDay(86_400, 12f, 0.5f, AirMetrics.PM25, 0.1)
+        val day = LatestDay(86_400, 12f, 0.5f, AirMetrics.PM25)
         val glances = MutableStateFlow(mapOf("s" to ArchiveGlance(2, 3, 100), "t" to ArchiveGlance(1, 2, 7)))
         val days = mapOf("s" to MutableStateFlow<LatestDay?>(null), "t" to MutableStateFlow<LatestDay?>(null))
         val out = IosKnown.withDays(glances) { days.getValue(it) }
@@ -214,7 +214,7 @@ class DevicesBridgeTest {
     }
 
     @Test fun aSlowOrFailingDayNeverHoldsBackAnotherThing() = runTest {
-        val day = LatestDay(86_400, 12f, 0.5f, AirMetrics.PM25, 0.1)
+        val day = LatestDay(86_400, 12f, 0.5f, AirMetrics.PM25)
         val glances = MutableStateFlow(mapOf("s" to ArchiveGlance(2, 3, 100), "t" to ArchiveGlance(1, 2, 7), "u" to ArchiveGlance(1, 1, 1)))
         val out = IosKnown.withDays(glances) {
             when (it) {

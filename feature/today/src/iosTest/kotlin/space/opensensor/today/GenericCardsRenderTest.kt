@@ -27,12 +27,12 @@ class GenericCardsRenderTest {
     private fun label(state: TodayUiState, column: String) = state.capabilities.thing!!.datastreams.first { it.name == column }.label("en")
 
     @Test
-    fun theSoilHeroShowsMoistureAtItsDisplayStep() = SoilFixture.served {
+    fun theSoilHeroShowsMoistureAtItsDecimals() = SoilFixture.served {
         runComposeUiTest {
             val state = soil(DetailLevel.SIMPLE)
             setContent { MaterialTheme { GenericMetricHero(state) } }
             onAllNodesWithText(label(state, SoilFixture.MOISTURE), useUnmergedTree = true).assertCountEquals(1)
-            onAllNodesWithText("0.3", useUnmergedTree = true).assertCountEquals(1)
+            onAllNodesWithText("0.31", useUnmergedTree = true).assertCountEquals(1)
             onAllNodesWithText("m3/m3", useUnmergedTree = true).assertCountEquals(1)
             onAllNodesWithText(label(state, SoilFixture.TEMPERATURE), useUnmergedTree = true).assertCountEquals(0)
         }
@@ -75,7 +75,7 @@ class GenericCardsRenderTest {
             source = "https://example.org/scale",
             steps = listOf(ScaleStep(0.2, LocalizedText(mapOf("en" to "Dry")), "C08040"), ScaleStep(null, LocalizedText(mapOf("en" to "Moist")), "2E7D32")),
         )
-        val column = SoilFixture.capabilities().thing!!.primary.first().copy(displayStep = 0.01, scale = scale)
+        val column = SoilFixture.capabilities().thing!!.primary!!.copy(decimals = 2, scale = scale)
         val reading = SoilFixture.capabilities().reading(soilSample)
         runComposeUiTest {
             setContent { MaterialTheme { HeroValue(column, reading, fresh = true, onCard = Color.Black, quiet = Color.DarkGray) } }

@@ -86,7 +86,6 @@ import space.opensensor.devices.resources.scan_tag_setup
 import space.opensensor.devices.resources.scan_unnamed
 import space.opensensor.family.air.WhoStep
 import space.opensensor.family.air.stepOf
-import space.opensensor.model.AppProfile
 import space.opensensor.settings.DetailLevel
 import space.opensensor.strings.resources.conn_connecting
 import space.opensensor.strings.resources.conn_ready
@@ -264,7 +263,7 @@ private fun wifiTagText(tag: WifiTag, level: DetailLevel): String =
 internal val LocalArchiveUnits = staticCompositionLocalOf { UnitFormatter.Metric }
 
 /**
- * How the archive line shows [day]. The mean rounds to the profile's display step in [units], and a
+ * How the archive line shows [day]. The mean shows with the metric's decimals in [units], and a
  * unit [units] converts keeps its own decimals. The card shows the unit through [wholeUnit]. [step]
  * is the WHO step of a metric with a health scale. Null when such a metric's mean has no step, so
  * the line never shows a banded value unjudged.
@@ -275,7 +274,7 @@ internal fun dayLine(day: LatestDay, units: UnitFormatter): DayLine? {
     val metric = day.metric
     val mean = day.mean.toDouble()
     val step = if (metric.banded) metric.stepOf(mean) ?: return null else null
-    return DayLine(units.format(mean, metric.unit, day.displayStep, AppProfile.decimalsOf(day.displayStep)), units.unit(metric.unit), step)
+    return DayLine(units.format(mean, metric.unit, metric.decimals), units.unit(metric.unit), step)
 }
 
 /**

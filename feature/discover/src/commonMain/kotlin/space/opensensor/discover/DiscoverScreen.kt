@@ -122,7 +122,6 @@ import space.opensensor.map.moveCamera
 import space.opensensor.map.rememberMapStyle
 import space.opensensor.map.rememberNearMe
 import space.opensensor.map.rememberPlaceIndex
-import space.opensensor.model.AppProfile
 import space.opensensor.model.HealthScale
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.CellScale
@@ -913,7 +912,7 @@ private fun OwnList(own: List<OwnPin>, status: Map<String, OwnStatus>, now: Long
         val latest = thingStatus?.reading
         val reading = latest?.let { r ->
             val mean = (if (simple) r.passedMean else r.mean) ?: return@let null
-            "${metricLabel(r.metric)} ${units.format(mean.toDouble(), r.metric.unit, r.displayStep, AppProfile.decimalsOf(r.displayStep))} ${units.unit(r.metric.unit)}".trimEnd()
+            "${metricLabel(r.metric)} ${units.format(mean.toDouble(), r.metric.unit, r.metric.decimals)} ${units.unit(r.metric.unit)}".trimEnd()
         }
         val flags = if (!simple && latest != null && latest.flaggedRows > 0) latest.flags else 0
         val freshness = ownFreshness(thingStatus, now)

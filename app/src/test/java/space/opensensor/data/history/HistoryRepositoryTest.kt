@@ -111,10 +111,10 @@ class HistoryRepositoryTest {
         assertEquals(27.93f, day.mean!!, 0.01f)
         assertEquals(105f / 8640f, day.coverage, 1e-6f)
         assertTrue(day.points.all { it.endS - it.startS == 10L })
-        // Board temperature is not gated by pms_status and has no envelope.
-        val temp = repo.observe(thing, AirMetrics.BOARD_TEMP, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
-        assertEquals(41.40f, temp.mean!!, 0.01f)
-        assertNull(temp.points.first().min)
+        // The light count is gated by its own status, not pms_status, and has no envelope.
+        val light = repo.observe(thing, Metrics.byId("light_ch0_raw")!!, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        assertEquals(2.03f, light.mean!!, 0.01f)
+        assertNull(light.points.first().min)
 
         // A day with no data is empty, not an error.
         val empty = repo.observe(thing, AirMetrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart - 86_400)).first()

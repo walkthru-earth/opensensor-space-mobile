@@ -96,6 +96,7 @@ import space.opensensor.today.resources.board_discharging
 import space.opensensor.today.resources.board_external_power
 import space.opensensor.today.resources.board_millivolts
 import space.opensensor.today.resources.board_temp
+import space.opensensor.today.resources.board_temp_label
 import space.opensensor.today.resources.board_temp_unsupported
 import space.opensensor.today.resources.board_title
 import space.opensensor.today.resources.board_usb_millivolts
@@ -769,7 +770,7 @@ internal fun BoardCard(
                     if (temperature != null) {
                         TemperatureValue(temperature, live)
                     } else {
-                        BigValue(AirMetrics.BOARD_TEMP.label, NO_VALUE, LocalTodayUnits.current.unit(AirMetrics.BOARD_TEMP.unit))
+                        BigValue(stringResource(Res.string.board_temp_label), NO_VALUE, LocalTodayUnits.current.unit("°C"))
                     }
                     BodyText(
                         stringResource(

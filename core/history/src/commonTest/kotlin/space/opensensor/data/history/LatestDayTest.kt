@@ -65,15 +65,12 @@ class LatestDayTest {
     }
 
     @Test
-    fun `a non air thing shows its primary metric with its profile display step`() {
+    fun `a non air thing shows its primary metric with its profile decimals`() {
         val metrics = Metrics.of(probe, profile)
-        val out = LatestDays.latest(
-            mapOf(TEMPERATURE to listOf(day(86_400, 14.5f)), MOISTURE to listOf(day(86_400, 0.314f))),
-            metrics,
-        ) { LatestDays.displayStepOf(it, listOf(probe)) { profile } }
+        val out = LatestDays.latest(mapOf(TEMPERATURE to listOf(day(86_400, 14.5f)), MOISTURE to listOf(day(86_400, 0.314f))), metrics)
         assertEquals(MOISTURE, out?.metric?.id)
-        assertEquals(0.01, out?.displayStep)
-        assertEquals(0.1, LatestDays.displayStepOf(metrics.first { it.id == TEMPERATURE }, listOf(probe)) { profile })
+        assertEquals(2, out?.metric?.decimals)
+        assertEquals(1, metrics.first { it.id == TEMPERATURE }.decimals)
     }
 
     @Test
@@ -115,6 +112,6 @@ class LatestDayTest {
             dictionaryHref = null,
         )
 
-        val profile = AppProfile(dict = probe.dict, family = Family.GENERIC, primary = listOf(MOISTURE), displayStep = mapOf(MOISTURE to 0.01))
+        val profile = AppProfile(dict = probe.dict, family = Family.GENERIC, primary = MOISTURE, decimals = mapOf(MOISTURE to 2, TEMPERATURE to 1))
     }
 }

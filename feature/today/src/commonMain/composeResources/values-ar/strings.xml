@@ -189,6 +189,7 @@
     <string name="readings_absent">قيم الجسيمات مفقودة (تظهر فارغة، وليست صفرًا)</string>
     <string name="readings_cf1">CF=1 خام %1$s، %2$s، %3$s µg/m³ (PM1، PM2.5، PM10)</string>
     <string name="particles_title">الجسيمات في كل 0.1 لتر حسب الحجم (µm)</string>
+    <string name="board_temp_label">حرارة اللوحة</string>
     <string name="board_temp">درجة حرارة اللوحة، وليست حرارة المحيط</string>
     <string name="board_ambient_note">درجة حرارة المحيط من المستشعر</string>
     <string name="board_temp_unsupported">درجة الحرارة المباشرة غير مدعومة في هذا البرنامج الثابت بعد</string>

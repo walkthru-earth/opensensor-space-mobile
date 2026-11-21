@@ -204,8 +204,14 @@ its role is `physicalMeasurement` or `modelResult`. The spec's id and column are
 column name, with no mapping of older ids. The spec takes its gate from `opensensor:valid_when`,
 its warm-up from `opensensor:settle_s`, its rollup from `opensensor:aggregate`, its unit and its
 `opensensor:plausible_range` from the template. A missing aggregate rolls up as a mean. An unknown
-one becomes `point` (the last value), so counters stay point. The profile's primary columns come
-first, and `Metrics.defaultOf` opens History on the first of them.
+one becomes `point` (the last value), so counters stay point. The profile (`AppProfile.derive`)
+gives each spec its label by language, its decimals (column `opensensor:decimals`, then the registry,
+then 0 for an integer column and 2 otherwise), its display unit (`UcumDisplay`) and its scale. The
+scale is the column `opensensor:scale`, then the registry scale of its `opensensor:property`, else
+none, never a column name. The primary is the Collection `opensensor:primary`, then the template's,
+then the first `physicalMeasurement` column with a scale, then the first `physicalMeasurement`
+column. It comes first, and `Metrics.defaultOf` opens History on it. Auxiliary columns, such as
+the board temperature and battery, are not metrics.
 
 **Derived metrics come from providers.** A `DerivedMetricProvider` (`:core:model`) reads a template
 and returns `DerivedMetric`s, each a derived `Datastream` with a label, a `RowFormula` over its

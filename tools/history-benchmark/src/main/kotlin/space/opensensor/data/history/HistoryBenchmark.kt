@@ -52,7 +52,7 @@ open class HistoryBenchmark {
                     ParquetWriter.Column(ParquetIndexer.SEQ, ParquetType.INT64),
                     ParquetWriter.Column("pms_status", ParquetType.INT32),
                     ParquetWriter.Column(AirMetrics.PM25.column, ParquetType.INT32),
-                    ParquetWriter.Column(AirMetrics.BOARD_TEMP.column, ParquetType.FLOAT),
+                    ParquetWriter.Column("imu_temperature_c", ParquetType.FLOAT),
                 ),
                 keyValueMetadata = mapOf(OpenSensorFooter.KEY to opensensorFooterJson(dict = null, desc = null, intervalMs = 10_000, thing = thing))
             )
