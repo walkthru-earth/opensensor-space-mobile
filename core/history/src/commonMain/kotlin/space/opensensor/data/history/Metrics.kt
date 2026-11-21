@@ -290,4 +290,13 @@ object Metrics {
         val first = metrics.firstOrNull { it.primary && !it.derived } ?: return metrics.firstOrNull()
         return metrics.firstOrNull { it.derived && it.property == first.property && first.basis == Basis.RAW } ?: first
     }
+
+    /**
+     * [metrics] without each raw column whose corrected view is also in [metrics], the two sharing one
+     * property. Simple shows the corrected value only, and raw only where no view exists.
+     */
+    fun withoutViewedRaw(metrics: List<MetricSpec>): List<MetricSpec> {
+        val viewed = metrics.filter { it.basis == Basis.CORRECTED }.mapTo(HashSet()) { it.property }
+        return metrics.filterNot { it.basis == Basis.RAW && it.property in viewed }
+    }
 }

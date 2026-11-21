@@ -48,10 +48,10 @@ import space.opensensor.data.local.database.ArchivedFileDao
 import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.settings.AppSettings
 import space.opensensor.data.settings.DetailLevel
-import space.opensensor.family.air.AirMetrics
 import space.opensensor.files.DeviceFiles
 import space.opensensor.files.FileMetricsController
 import space.opensensor.files.FilesController
+import space.opensensor.model.Basis
 import space.opensensor.model.BoardTemplate
 import space.opensensor.storage.DerivedQuota
 import space.opensensor.ui.components.ScreenMessage
@@ -103,19 +103,20 @@ data class FileChartState(
 internal data class FileSummaryRequest(val thing: String, val files: List<ArchivedFile>)
 
 /**
- * #92. The metrics the Files chart offers, the same rule as History. Corrected PM2.5 comes first and
- * is the default. Once the files are read and none has a humidity reading, corrected is dropped and raw
- * leads. Simple never offers raw next to corrected, Detailed always does. Simple offers only the
- * primary metric and its corrected view, Detailed every metric of [catalog] ([MetricCatalog.union]),
- * in the stable order of the thing's own [template] ([Metrics.pickerOrder]).
+ * #92. The metrics the Files chart offers, the same rule as History. A corrected view comes first and
+ * is the default. Once the files are read and none has a value of it, the view is dropped and its raw
+ * column leads. Simple never offers raw next to its corrected view, Detailed always does. Simple
+ * offers only the primary metric and its corrected view, Detailed every metric of [catalog]
+ * ([MetricCatalog.union]), in the stable order of the thing's own [template] ([Metrics.pickerOrder]).
  */
 internal fun fileChartMetrics(summaries: List<FileSummary>, detailed: Boolean, catalog: List<MetricSpec>, template: BoardTemplate? = null): List<MetricSpec> {
-    val corrected = summaries.isEmpty() || summaries.any { (it.agg(AirMetrics.PM25_CORRECTED)?.n ?: 0) > 0 }
+    val viewed = catalog.filter { m -> m.basis == Basis.CORRECTED && (summaries.isEmpty() || summaries.any { (it.agg(m)?.n ?: 0) > 0 }) }
+        .mapTo(HashSet()) { it.property }
     return Metrics.pickerOrder(catalog, template).filter { m ->
-        when (m) {
-            AirMetrics.PM25_CORRECTED -> corrected
-            AirMetrics.PM25 -> detailed || !corrected
-            else -> detailed || m.primary
+        when (m.basis) {
+            Basis.CORRECTED -> m.property in viewed
+            Basis.RAW -> detailed || (m.primary && m.property !in viewed)
+            null -> detailed || m.primary
         }
     }
 }

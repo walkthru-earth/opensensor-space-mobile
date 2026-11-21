@@ -56,6 +56,7 @@ import space.opensensor.data.history.HistoryRange
 import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
+import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.localDateOf
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
@@ -74,7 +75,6 @@ import space.opensensor.designsystem.metricLabel
 import space.opensensor.designsystem.pm25CorrectionInfo
 import space.opensensor.designsystem.preferredLanguage
 import space.opensensor.designsystem.touchTarget
-import space.opensensor.family.air.AirMetrics
 import space.opensensor.family.air.moodOf
 import space.opensensor.history.resources.Res
 import space.opensensor.history.resources.chart_touch
@@ -338,15 +338,16 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
 
 /**
  * The History metric chips. Detailed and Developer offer every metric with data, auxiliary ones last,
- * corrected PM2.5 first and raw second. Simple offers only the primary metric, corrected PM2.5 only,
- * and raw only when no corrected value exists, so it is still labelled raw. A board with no primary
+ * a corrected view first and its raw column second. Simple offers only the primary metric, its
+ * corrected view only ([Metrics.withoutViewedRaw]), and raw only when no corrected value exists, so it
+ * is still labelled raw. A board with no primary
  * metric offers its measurements, never an auxiliary one unless nothing else exists, so Simple is
  * never empty.
  */
 internal fun pickerMetrics(available: List<MetricSpec>, level: DetailLevel): List<MetricSpec> {
     if (level.detailed) return available
     val shown = available.filter { it.primary }.ifEmpty { available.filterNot { it.auxiliary } }.ifEmpty { available }
-    return if (AirMetrics.PM25_CORRECTED in shown) shown - AirMetrics.PM25 else shown
+    return Metrics.withoutViewedRaw(shown)
 }
 
 /** The archive info line about PM colours. Simple never names WHO. */

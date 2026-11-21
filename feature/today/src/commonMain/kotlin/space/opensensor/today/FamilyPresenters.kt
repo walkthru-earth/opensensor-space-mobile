@@ -2,14 +2,16 @@ package space.opensensor.today
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import space.opensensor.family.air.AirFamily
+import space.opensensor.model.Capability
 import space.opensensor.model.Role
 import space.opensensor.model.Thing
 import space.opensensor.model.ThingDatastream
 
 /**
- * How one family draws Today, picked by the app profile's `hero` through [HeroRegistry]. [Hero]
- * fills the [TodayCard.NOW] slot. [simpleCards] sit after today so far and [detailedCards] after
- * the batch estimate, so the shared cards never move. A presenter reads [TodayUiState] only, never
+ * How one family draws Today, picked by the app profile's `hero` or the Thing's capabilities
+ * through [HeroRegistry]. [Hero] fills the [TodayCard.NOW] slot. [simpleCards] sit after today so
+ * far and [detailedCards] after the batch estimate, so the shared cards never move. A presenter reads [TodayUiState] only, never
  * the transport, and is the same on Android and iOS.
  */
 interface FamilyPresenter {
@@ -26,14 +28,18 @@ interface FamilyPresenter {
     fun Hero(state: TodayUiState, modifier: Modifier)
 }
 
-/** The family presenters by app profile `hero` id. Every other id, or none, gets [GenericPresenter]. */
+/**
+ * The family presenters by app profile `hero` id. A Thing whose profile names no known hero gets
+ * [AirPresenter] when it has [AirFamily.PARTICLES], found by property, and [GenericPresenter] otherwise.
+ */
 object HeroRegistry {
     /** The air family's peacock hero with WHO moods. */
     const val AIR_MOOD = "air-mood"
 
     private val presenters: Map<String, FamilyPresenter> = mapOf(AIR_MOOD to AirPresenter)
 
-    fun presenterFor(hero: String?): FamilyPresenter = hero?.let(presenters::get) ?: GenericPresenter
+    fun presenterFor(hero: String?, capabilities: Set<Capability> = emptySet()): FamilyPresenter =
+        hero?.let(presenters::get) ?: if (AirFamily.PARTICLES in capabilities) AirPresenter else GenericPresenter
 }
 
 /**

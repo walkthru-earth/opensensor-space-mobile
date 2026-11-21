@@ -37,6 +37,7 @@ import space.opensensor.data.sync.FileArchive
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.family.air.AirQc
+import space.opensensor.family.air.QcRules
 import space.opensensor.model.BoardTemplate
 import space.opensensor.storage.AtomicFiles
 import space.opensensor.storage.DerivedQuota
@@ -135,7 +136,7 @@ class HistoryDeriverTest {
             files.rows += indexer.indexed(ArchivedFile(thing = thing, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
             assertEquals(1, deriver.deriveStale().daysRebuilt)
             val sources = files.rows.map { it.toRecord() }
-            val checkId = AirQc(AirFamily.PARTICLE_BINS).id
+            val checkId = AirQc.ID_PREFIX + QcRules.VERSION
             assertTrue(sources.all { ArchiveHistoryTiers.sourceLine(it, CoreS3Files).endsWith(":q$checkId") })
             // The signature an install wrote before the check, the same source lines without their check id.
             val unchecked = MessageDigest.getInstance("SHA-256").run {
@@ -357,7 +358,7 @@ class HistoryDeriverTest {
         assertEquals(79, daily.leaves.size) // 77 + source_file_index + qc_flags
         // The air check of #91 read the rows, its flags sit beside the raw columns.
         assertEquals(105, daily.readColumn(RowChecks.FLAGS_COLUMN).size)
-        assertEquals(AirQc(AirFamily.PARTICLE_BINS).id, daily.metadata.keyValueMetadata[RowChecks.CHECKS_KEY])
+        assertEquals(AirQc.ID_PREFIX + QcRules.VERSION, daily.metadata.keyValueMetadata[RowChecks.CHECKS_KEY])
         assertEquals(ParquetLogicalType.TimeUnit.MICROS, daily.leaf("event_time_utc_us").timestampUtcUnit)
         // A day file never carries the contract key an indexer reads.
         assertTrue(OpenSensorFooter.KEY !in daily.metadata.keyValueMetadata)

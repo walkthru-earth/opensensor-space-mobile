@@ -140,7 +140,7 @@ internal object ModelJson {
     fun parseProfile(text: String): AppProfile {
         val dto = decode<ProfileDto>(text)
         require(FileChecksum.isSha256Hex(dto.dict)) { "app profile has a malformed dict digest" }
-        return AppProfile(dict = dto.dict, family = Family(dto.family), hero = dto.hero, hidden = dto.hidden.toSet())
+        return AppProfile(dict = dto.dict, hero = dto.hero, hidden = dto.hidden.toSet())
     }
 
     private inline fun <reified T> decode(text: String): T = try {
@@ -423,7 +423,6 @@ internal class StepDto(
 @Serializable
 internal class ProfileDto(
     val dict: String,
-    val family: String,
     val hero: String? = null,
     val hidden: List<String> = emptyList(),
 )

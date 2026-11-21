@@ -35,7 +35,7 @@ class DeviceCapabilitiesTest {
 
     @Test fun waveshareHasEveryCapability() {
         val caps = DeviceCapabilities.from(waveshare)
-        assertEquals(AirFamily.FAMILY, caps.thing?.profile?.family)
+        assertEquals("air-mood", caps.thing?.profile?.hero)
         assertEquals("ambient_temperature_c", caps.temperature?.name)
         assertTrue(caps.ambientTemperature)
         assertEquals("relative_humidity_percent", caps.humidity?.name)
@@ -110,14 +110,13 @@ class DeviceCapabilitiesTest {
     }
 
     @Test
-    fun `a verified template without an overlay reads LIVE with no family cards`() {
+    fun `a verified template without an overlay still gets the air cards by property`() {
         val caps = DeviceCapabilities.from(waveshare, profiles = { null })
         assertNotNull(caps.thing)
         assertEquals(
-            setOf(Capability.LIVE, Capability.CONFIG, Capability.SENSOR_IDENTITY, AirFamily.BATCH_ESTIMATE),
+            setOf(Capability.LIVE, Capability.CONFIG, Capability.SENSOR_IDENTITY, AirFamily.BATCH_ESTIMATE, AirFamily.PARTICLES),
             caps.capabilities,
         )
-        assertFalse(AirFamily.PARTICLES in caps, "the particle cards belong to the air family overlay")
     }
 
     @Test

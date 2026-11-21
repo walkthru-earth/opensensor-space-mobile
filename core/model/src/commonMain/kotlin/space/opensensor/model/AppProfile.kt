@@ -5,11 +5,10 @@ import space.opensensor.units.UcumDisplay
 /**
  * How the app shows the columns of one board template, keyed by [dict]. [derive] builds it from the
  * template's display hints, the thing Collection and the bundled property and scale registries. A
- * bundled profile JSON is only an overlay of [family], [hero] and [hidden], which [select] lays on top.
+ * bundled profile JSON is only an overlay of [hero] and [hidden], which [select] lays on top.
  */
 data class AppProfile(
     val dict: String,
-    val family: Family = Family.GENERIC,
     /** The column a screen opens on, see [derive], or null when the template measures nothing. */
     val primary: String? = null,
     /** Optional hero card id that a family plugin renders. */
@@ -40,13 +39,13 @@ data class AppProfile(
 
     companion object {
         /**
-         * Parses a bundled profile overlay, `dict`, `family`, `hero` and `hidden`. Unknown fields are ignored.
+         * Parses a bundled profile overlay, `dict`, `hero` and `hidden`. Unknown fields are ignored.
          *
          * @throws IllegalArgumentException when the JSON is not a valid app profile.
          */
         fun parse(json: String): AppProfile = ModelJson.parseProfile(json)
 
-        /** [derive] of [template] with [overlay]'s family, hero and hidden columns when it is for [template]'s dictionary. */
+        /** [derive] of [template] with [overlay]'s hero and hidden columns when it is for [template]'s dictionary. */
         fun select(template: BoardTemplate, overlay: AppProfile?, collection: ThingCollection? = null): AppProfile =
             derive(template, collection, overlay?.takeIf { it.dict == template.dict })
 
@@ -64,7 +63,7 @@ data class AppProfile(
          * - Primary. The Collection `opensensor:primary`, then the template's, then the first
          *   `physicalMeasurement` column with a scale, then the first `physicalMeasurement` column.
          *
-         * [overlay] adds its family and hero and hides its hidden columns, which never become primary.
+         * [overlay] adds its hero and hides its hidden columns, which never become primary.
          */
         fun derive(
             template: BoardTemplate,
@@ -83,7 +82,6 @@ data class AppProfile(
                 ?: measured.firstOrNull()?.name
             return AppProfile(
                 dict = template.dict,
-                family = overlay?.family ?: Family.GENERIC,
                 primary = primary,
                 hero = overlay?.hero,
                 labels = columns.associate { it.name to labelOf(it, collection, properties) },

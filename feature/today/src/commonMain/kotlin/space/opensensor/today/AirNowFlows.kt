@@ -24,6 +24,7 @@ import space.opensensor.family.air.LiveQc
 import space.opensensor.family.air.Pm25Basis
 import space.opensensor.family.air.Pm25NowCast
 import space.opensensor.family.air.PmNowCast
+import space.opensensor.model.Basis
 import space.opensensor.model.BoardTemplate
 
 /** The start of the current UTC hour, checked once a minute so a new hour moves the NowCast window. */
@@ -69,15 +70,15 @@ fun pm25NowCast(
 }
 
 /**
- * The PM2.5 metrics the NowCast tries for [capabilities], the EPA corrected one first and raw second.
- * Each is bound to the thing's template with [MetricCatalog.tiered] and dropped when the hourly tiers do
- * not hold it, so a template without humidity skips the corrected metric and still reads raw. Empty
- * for a thing without particles.
+ * The PM2.5 metrics the NowCast tries for [capabilities], the thing's corrected view first and its
+ * stored PM2.5 second, both found by property ([AirMetrics.pm25]). Each is bound to the thing's
+ * template with [MetricCatalog.tiered] and dropped when the hourly tiers do not hold it, so a template
+ * without a corrected view still reads raw. Empty for a thing without particles.
  */
 internal fun nowCastMetrics(capabilities: DeviceCapabilities): List<MetricSpec> {
-    val template = capabilities.thing?.template ?: return emptyList()
+    val thing = capabilities.thing ?: return emptyList()
     if (AirFamily.PARTICLES !in capabilities) return emptyList()
-    return listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25).mapNotNull { MetricCatalog.shared.tiered(it, template) }
+    return listOfNotNull(AirMetrics.pm25Corrected(thing), AirMetrics.pm25(thing)).mapNotNull { MetricCatalog.shared.tiered(it, thing.template) }
 }
 
 private fun nowCastAt(
@@ -90,7 +91,7 @@ private fun nowCastAt(
     return combine(metrics.map { observeHourlyDay(thing, it, window) }) { all ->
         all.firstNotNullOfOrNull { series ->
             PmNowCast.of(PmNowCast.hourlySlots(series.points, hourStartS))?.let { value ->
-                Pm25NowCast(value, if (series.metric.id == AirFamily.PM25_CORRECTED_ID) Pm25Basis.CORRECTED else Pm25Basis.RAW)
+                Pm25NowCast(value, if (series.metric.basis == Basis.CORRECTED) Pm25Basis.CORRECTED else Pm25Basis.RAW)
             }
         }
     }
