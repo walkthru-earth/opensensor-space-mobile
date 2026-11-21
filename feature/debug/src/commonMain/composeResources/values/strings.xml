@@ -7,9 +7,6 @@
 <resources>
     <string name="nav_debug">Debug</string>
     <string name="action_back">Back</string>
-    <string name="transport_ble">Bluetooth</string>
-    <string name="transport_lan">Wi-Fi LAN</string>
-    <string name="transport_fake">Fake device</string>
     <string name="conn_disconnected">Not connected</string>
     <string name="conn_connecting">Connecting…</string>
     <string name="msg_background_owns_command">Background sync is using this sensor. Wait for it to finish.</string>

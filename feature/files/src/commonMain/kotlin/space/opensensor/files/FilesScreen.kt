@@ -28,7 +28,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,6 +52,7 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.ManifestState
 import space.opensensor.data.SyncProgress
+import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.sync.FileSyncState
 import space.opensensor.data.sync.ManifestEntry
 import space.opensensor.data.sync.SyncPlan
@@ -65,6 +65,8 @@ import space.opensensor.designsystem.MascotGuide
 import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockIcon
+import space.opensensor.designsystem.ThingTopBar
+import space.opensensor.designsystem.headingSemantics
 import space.opensensor.designsystem.listSeparator
 import space.opensensor.designsystem.rememberNowMillis
 import space.opensensor.designsystem.spokenList
@@ -169,7 +171,8 @@ fun FilesScreen(
     /** Wraps a sync start, Android asks for the notification permission there. */
     guard: (() -> Unit) -> Unit = { it() },
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
-    subtitleLead: @Composable () -> Unit = {},
+    /** The active byte pipe, shown as a chip from the Detailed level. */
+    transport: TransportKind? = null,
     banner: (@Composable () -> Unit)? = null,
     chart: (@Composable () -> Unit)? = null,
     /** Shown when there is no device listing, before the archive groups. */
@@ -214,24 +217,18 @@ fun FilesScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(stringResource(Res.string.files_title), modifier = Modifier.semantics { heading() })
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            subtitleLead()
-                            Text(
-                                stringResource(Res.string.files_in_archive, state.shown.size, formatBytes(state.archivedBytes)),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                },
-                navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back)) }
-                    }
+            ThingTopBar(
+                title = { Text(stringResource(Res.string.files_title), modifier = Modifier.headingSemantics()) },
+                onBack = onBack,
+                backLabel = stringResource(Res.string.action_back),
+                // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.
+                transport = transport.takeIf { level.detailed },
+                subtitle = {
+                    Text(
+                        stringResource(Res.string.files_in_archive, state.shown.size, formatBytes(state.archivedBytes)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 },
                 actions = {
                     if (device != null) {

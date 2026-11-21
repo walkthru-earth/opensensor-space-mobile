@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.ble.ConnectionState
-import space.opensensor.data.ble.TransportKind
 import space.opensensor.designsystem.moodLineRes
 import space.opensensor.designsystem.moodWord
 import space.opensensor.family.air.AirMood
@@ -62,9 +61,6 @@ import space.opensensor.today.resources.pms_stale_title
 import space.opensensor.today.resources.pms_valid_title
 import space.opensensor.today.resources.pms_warming_hint
 import space.opensensor.today.resources.pms_warming_title
-import space.opensensor.today.resources.transport_ble
-import space.opensensor.today.resources.transport_fake
-import space.opensensor.today.resources.transport_lan
 import space.opensensor.units.formatFixed
 
 /** Shown where a value is missing or not read yet. Never a long dash (copy rules). */
@@ -182,16 +178,6 @@ internal fun SensorState.hintText(): String = stringResource(
             "sleeping" -> Res.string.pms_sleeping_hint
             else -> Res.string.pms_other_hint
         }
-    },
-)
-
-/** The name of a byte pipe, for chips and stat lines. */
-@Composable
-fun TransportKind.labelText(): String = stringResource(
-    when (this) {
-        TransportKind.BLE -> Res.string.transport_ble
-        TransportKind.LAN -> Res.string.transport_lan
-        TransportKind.FAKE -> Res.string.transport_fake
     },
 )
 

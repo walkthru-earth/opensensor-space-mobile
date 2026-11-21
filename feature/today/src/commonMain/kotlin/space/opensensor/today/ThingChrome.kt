@@ -22,10 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.ble.ConnectionState
-import space.opensensor.data.ble.TransportKind
-import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.StatusDot
-import space.opensensor.designsystem.TagChip
 import space.opensensor.today.resources.Res
 import space.opensensor.today.resources.conn_bluetooth_settings
 import space.opensensor.today.resources.conn_held_background
@@ -92,16 +89,4 @@ fun ConnectionBanner(
             }
         }
     }
-}
-
-/** Small chip naming the active byte pipe, Bluetooth or Wi-Fi LAN (and the fake device in debug builds). */
-@Composable
-fun TransportChip(kind: TransportKind?, modifier: Modifier = Modifier) {
-    if (kind == null) return
-    val (icon, container, content) = when (kind) {
-        TransportKind.BLE -> Triple(AppIcons.Bluetooth, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
-        TransportKind.LAN -> Triple(AppIcons.Wifi, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
-        TransportKind.FAKE -> Triple(AppIcons.BugReport, MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    TagChip(icon, kind.labelText(), container, content, modifier)
 }

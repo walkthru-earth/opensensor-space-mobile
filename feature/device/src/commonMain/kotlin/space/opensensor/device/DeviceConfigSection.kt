@@ -1,7 +1,6 @@
 package space.opensensor.device
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -17,8 +16,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,6 +36,8 @@ import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.data.sync.PlanField
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.InfoNote
+import space.opensensor.designsystem.ThingTopBar
+import space.opensensor.designsystem.headingSemantics
 import space.opensensor.device.resources.Res
 import space.opensensor.device.resources.action_cancel
 import space.opensensor.device.resources.action_reconnect
@@ -429,17 +428,13 @@ fun DeviceConfigScreen(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.device_back)) }
-                },
-                title = {
-                    Column {
-                        Text(stringResource(Res.string.device_screen_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-                        state.snapshot.name?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    }
-                },
+            ThingTopBar(
+                onBack = onBack,
+                backLabel = stringResource(Res.string.device_back),
+                title = { Text(stringResource(Res.string.device_screen_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics()) },
+                // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.
+                transport = state.snapshot.transport.takeIf { state.level.detailed },
+                subtitle = state.snapshot.name?.let { name -> { Text(name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
                 actions = {
                     if (state.snapshot.thing.offersReconnect) {
                         TextButton(onClick = taps::reconnect) { Text(stringResource(Res.string.action_reconnect)) }
