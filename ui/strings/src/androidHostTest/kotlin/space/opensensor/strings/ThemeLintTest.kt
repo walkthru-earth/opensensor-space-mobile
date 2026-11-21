@@ -36,8 +36,6 @@ class ThemeLintTest {
         "DiscoverScreen.kt shape",
         // A colour the sensor declares in its template, parsed from its hex string.
         "GenericCards.kt colour",
-        // The connection banner is a status strip in the state colours, not a content card.
-        "ThingChrome.kt card",
     )
 
     @Test

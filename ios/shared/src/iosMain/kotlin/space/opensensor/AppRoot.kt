@@ -36,6 +36,7 @@ import space.opensensor.data.history.CellTrackReader
 import space.opensensor.debug.DebugController
 import space.opensensor.debug.DebugScreen
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.ConnectionBanner
 import space.opensensor.designsystem.OpenSensorTheme
 import space.opensensor.device.DeviceConfigAction
 import space.opensensor.device.DeviceConfigController
@@ -92,7 +93,6 @@ import space.opensensor.shell.SettingsKey
 import space.opensensor.shell.SetupKey
 import space.opensensor.shell.ShellBottomBar
 import space.opensensor.shell.TodayKey
-import space.opensensor.today.ConnectionBanner
 import space.opensensor.today.TodayAction
 import space.opensensor.units.UnitFormatter
 import space.opensensor.units.UnitSystem
@@ -571,7 +571,7 @@ private fun FilesEntry(
                     status.connection,
                     reconnecting = null,
                     technical = level.developer,
-                    pairingRepair = false,
+                    pairingRepair = chrome?.pairingRepair == true,
                     onOpenBluetoothSettings = ::openAppSettings,
                     heldInBackground = status.heldInBackground,
                 )

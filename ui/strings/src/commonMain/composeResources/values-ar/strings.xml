@@ -158,7 +158,9 @@
         <item quantity="other">%1$d قراءة مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
     </plurals>
     <string name="conn_failed">تعذّر الاتصال. اقترب وحاول مرة أخرى</string>
-    <string name="conn_pairing_repair">يحتاج إقران Bluetooth إلى إصلاح. إذا أُعيد ضبط هذا المستشعر أو أُعيد تثبيت برنامجه الثابت، فانسَه في إعدادات Bluetooth في Android ثم أقرنه مجددًا. ملفاتك المؤرشفة محفوظة.</string>
+    <string name="conn_pairing_repair">يحتاج إقران Bluetooth إلى إصلاح. إذا أُعيد ضبط هذا المستشعر أو أُعيد تثبيت برنامجه الثابت، فانسَه في إعدادات Bluetooth في الهاتف ثم أقرنه مجددًا. ملفاتك المؤرشفة محفوظة.</string>
+    <string name="conn_pairing">جارٍ الإقران. أدخل الرمز الظاهر على المستشعر</string>
+    <string name="conn_link_lost">انقطع الاتصال. جارٍ إعادة الاتصال تلقائيًا…</string>
     <string name="msg_background_owns_command">المزامنة في الخلفية تستخدم هذا المستشعر. انتظر حتى تنتهي.</string>
     <string name="msg_background_owns_connect">المزامنة في الخلفية تستخدم هذا المستشعر. يبقى تقدّمها ظاهرًا. اتصل مرة أخرى عندما تنتهي.</string>
     <string name="msg_background_owns_sync">المزامنة في الخلفية تستخدم هذا المستشعر. انتظر حتى تنتهي قبل المزامنة.</string>

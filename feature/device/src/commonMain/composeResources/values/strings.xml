@@ -131,7 +131,6 @@
     <string name="wifi_switch">Sensor Wi-Fi</string>
     <string name="wifi_title">Wi-Fi</string>
     <string name="wifi_unknown">Wi-Fi state unknown</string>
-    <string name="action_cancel">Cancel</string>
     <string name="perm_lan_body">Finds your sensor on your Wi-Fi so syncing is faster. Bluetooth works without it.</string>
     <string name="msg_sticker_invalid">Enter the sticker as PMS5003T, its date and unit digits.</string>
     <string name="device_screen_title">Device</string>

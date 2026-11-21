@@ -135,7 +135,9 @@
         <item quantity="other">%1$d readings are archived but have no time yet, so they are not on the calendar.</item>
     </plurals>
     <string name="conn_failed">Could not connect. Move closer and try again</string>
-    <string name="conn_pairing_repair">Bluetooth pairing needs repair. If this sensor was reset or reflashed, forget it in Android Bluetooth settings and pair again. Your archived files are kept.</string>
+    <string name="conn_pairing_repair">Bluetooth pairing needs repair. If this sensor was reset or reflashed, forget it in the phone's Bluetooth settings and pair again. Your archived files are kept.</string>
+    <string name="conn_pairing">Pairing. Enter the code shown on the sensor</string>
+    <string name="conn_link_lost">Link lost. Reconnecting by itself…</string>
     <string name="msg_background_owns_command">Background sync is using this sensor. Wait for it to finish.</string>
     <string name="msg_background_owns_connect">Background sync is using this sensor. Its progress stays visible. Connect again when it finishes.</string>
     <string name="msg_background_owns_sync">Background sync is using this sensor. Wait for it to finish before syncing.</string>

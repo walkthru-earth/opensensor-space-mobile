@@ -35,13 +35,14 @@ import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.CardGap
+import space.opensensor.designsystem.ConnectionBanner
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.MonoFamily
 import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.headingSemantics
+import space.opensensor.strings.resources.action_cancel
 import space.opensensor.today.resources.Res
-import space.opensensor.today.resources.action_cancel
 import space.opensensor.today.resources.action_reconnect
 import space.opensensor.today.resources.device_unnamed
 import space.opensensor.today.resources.flush
@@ -63,6 +64,7 @@ import space.opensensor.today.resources.today_forget_unnamed
 import space.opensensor.today.resources.today_more
 import space.opensensor.today.resources.today_thing_short
 import space.opensensor.units.UnitFormatter
+import space.opensensor.strings.resources.Res as SharedRes
 
 /**
  * What Today hands back to its platform: navigation, and the two actions that may need an OS
@@ -163,7 +165,7 @@ internal fun TodayDialogs(
             title = { BodyText(stringResource(Res.string.flush), modifier = Modifier.headingSemantics(), heading = true) },
             text = { BodyText(stringResource(Res.string.flush_confirm)) },
             confirmButton = { TextButton(onClick = onConfirm) { FitText(stringResource(Res.string.flush_button)) } },
-            dismissButton = { TextButton(onClick = onDismiss) { FitText(stringResource(Res.string.action_cancel)) } },
+            dismissButton = { TextButton(onClick = onDismiss) { FitText(stringResource(SharedRes.string.action_cancel)) } },
         )
         TodayDialog.Forget -> AlertDialog(
             onDismissRequest = onDismiss,
@@ -181,7 +183,7 @@ internal fun TodayDialogs(
                 }
             },
             confirmButton = { TextButton(onClick = onConfirm) { FitText(stringResource(Res.string.today_forget_button)) } },
-            dismissButton = { TextButton(onClick = onDismiss) { FitText(stringResource(Res.string.action_cancel)) } },
+            dismissButton = { TextButton(onClick = onDismiss) { FitText(stringResource(SharedRes.string.action_cancel)) } },
         )
     }
 }

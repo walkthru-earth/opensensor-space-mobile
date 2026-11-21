@@ -79,7 +79,6 @@ import space.opensensor.designsystem.rememberCredentialCaptureGuard
 import space.opensensor.designsystem.switchRowSemantics
 import space.opensensor.designsystem.touchTarget
 import space.opensensor.device.resources.Res
-import space.opensensor.device.resources.action_cancel
 import space.opensensor.device.resources.action_hide
 import space.opensensor.device.resources.bonds_count
 import space.opensensor.device.resources.bonds_explain
@@ -199,6 +198,8 @@ import space.opensensor.device.resources.wifi_title
 import space.opensensor.device.resources.wifi_unknown
 import space.opensensor.family.air.PlantowerBatchCandidate
 import space.opensensor.family.air.SensorLabel
+import space.opensensor.strings.resources.action_cancel
+import space.opensensor.strings.resources.Res as SharedRes
 
 /** Shown for a value the device did not report. Never a made up default. */
 internal const val NO_VALUE = "n/a"
@@ -672,7 +673,7 @@ fun WifiCard(
                     TextButton(onClick = {
                         picked = null
                         psk = ""
-                    }) { Text(stringResource(Res.string.action_cancel)) }
+                    }) { Text(stringResource(SharedRes.string.action_cancel)) }
                 }
             }
         }

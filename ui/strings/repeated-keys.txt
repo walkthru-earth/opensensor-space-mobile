@@ -1,25 +1,11 @@
 # Keys still in more than one English catalogue, one per line with the modules that hold them.
 # CopyLintTest.repeatedKeysOnlyShrink keeps this list exact. Remove a line when its copies become one.
-action_back feature/debug feature/files ui/strings
-action_cancel app feature/device feature/today ui/strings
 action_not_now app ui/strings
 action_reconnect app feature/device feature/today
-ago_days app ui/strings
-ago_hours app ui/strings
-ago_just_now app ui/strings
-ago_minutes app ui/strings
-ago_seconds app ui/strings
 app_name app ui/strings
 batch_value feature/today ui/strings
 board_title feature/device feature/today
 chart_touch app feature/history
-conn_connecting feature/debug feature/today ui/strings
-conn_disconnected feature/debug feature/today ui/strings
-conn_failed feature/devices feature/today ui/strings
-conn_link_lost feature/devices feature/today
-conn_pairing feature/devices feature/today
-conn_pairing_repair feature/today ui/strings
-conn_ready feature/today ui/strings
 device_boot app feature/today
 device_config_read app feature/today
 device_connected_over app feature/today

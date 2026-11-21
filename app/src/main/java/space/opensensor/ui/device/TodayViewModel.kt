@@ -41,10 +41,10 @@ import space.opensensor.data.local.database.KnownDevice
 import space.opensensor.data.local.database.KnownDeviceDao
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.settings.AppSettings
+import space.opensensor.designsystem.LinkRetry
 import space.opensensor.today.TodayArchive
 import space.opensensor.today.TodayController
 import space.opensensor.today.TodayNotice
-import space.opensensor.today.TodayReconnect
 import space.opensensor.today.TodaySnapshot
 import space.opensensor.today.TodaySource
 import space.opensensor.today.pm25NowCast
@@ -168,7 +168,7 @@ private class RepositoryTodaySource(
             sync = values[5] as SyncProgress,
             archive = TodayArchive(files = archive.files, estimatedRows = archive.estimatedRows, unplacedRows = archive.unplacedRows),
             config = values[11] as ConfigSnapshot?,
-            reconnecting = reconnect?.let { TodayReconnect(it.attempt, it.maxAttempts, it.reason) },
+            reconnecting = reconnect?.let { LinkRetry(it.attempt, it.maxAttempts, it.reason) },
             needsPairingRepair = BleConnectionFailure.needsPairingRepair(connection),
             todaySoFar = values[8] as TodaySoFar?,
             heldInBackground = values[12] == DeviceOwnership.BACKGROUND,

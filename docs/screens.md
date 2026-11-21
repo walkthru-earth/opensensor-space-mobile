@@ -333,7 +333,10 @@ on Debug. Simple never names the pipe. On Android the single source is
 de-duplicated). Never derive it per screen from the session object
 ([lesson](lessons-learned.md#ui--compose)). On iOS Files reads it from `IosDeviceFiles.chrome`, Debug
 from `IosDebugSource`, Device from `DeviceConfigBridge`, and Files and Debug show the shared
-`ConnectionBanner` while the link is not ready, as Android does. History keeps its own bar for now.
+`ConnectionBanner` while the link is not ready, as Android does. The banner and
+`ConnectionState.describe` live in `:ui:designsystem`, and the link words other pages share
+(connecting, disconnected, pairing, failed, pairing repair) live in `:ui:strings`. A sensor whose pairing broke shows the repair words and a Bluetooth
+settings button on Files too (`SensorLink` on iOS). History keeps its own bar for now.
 
 ## Uses → affects
 

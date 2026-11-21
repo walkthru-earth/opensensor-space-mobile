@@ -84,7 +84,6 @@
         <item quantity="other">UTC folders %1$s</item>
     </plurals>
     <string name="files_group_unrecognised">unrecognised layout</string>
-    <string name="action_back">Back</string>
     <string name="share_file">Share Parquet file</string>
     <plurals name="share_files">
         <item quantity="one">Share %1$d Parquet file</item>
