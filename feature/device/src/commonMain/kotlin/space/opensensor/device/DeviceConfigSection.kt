@@ -155,6 +155,9 @@ sealed interface DeviceConfigAction {
 
     /** Opens the confirmation of a declared board action. */
     data class BoardAction(val action: PlanField) : DeviceConfigAction
+
+    /** Sends the changed values of one settings section, then reads page 7 back. */
+    data class SaveBoard(val fields: List<PlanField>) : DeviceConfigAction
     data class SaveSensor(val sticker: String, val batchEstimate: Boolean, val source: String) : DeviceConfigAction
 }
 
@@ -187,77 +190,70 @@ fun DeviceConfigController.onAction(action: DeviceConfigAction): Boolean {
         is DeviceConfigAction.SaveSensor -> saveSensor(action.sticker, action.batchEstimate, action.source)
         is DeviceConfigAction.BoardValue -> editBoard(action.key, action.value)
         is DeviceConfigAction.BoardAction -> requestBoardAction(action.action)
+        is DeviceConfigAction.SaveBoard -> saveBoard(action.fields)
         DeviceConfigAction.RequestLanAccess, DeviceConfigAction.ScanSticker -> return false
     }
     return true
 }
 
 /**
- * The fitted sensor card, for boards with `sensorIdentity`, at Detailed. [onScan] is null where the
- * platform has no barcode scanner, manual entry still works.
+ * The Device settings cards in the order the board template's `firmware.settings` lists them, see
+ * [DeviceSection.of] for the level gates. A protocol v1 device gets one note instead. A board section
+ * is a [GenericFieldsForm] of its declared keys with Save. [onScan] for the sensor sticker is offered
+ * only when [canScan], manual entry still works.
  */
-fun LazyListScope.sensorIdentityItem(
+fun LazyListScope.deviceSettingsItems(
     state: DeviceConfigUiState,
+    lanAccess: LanAccess,
     scan: StickerScan?,
     canScan: Boolean,
     onAction: (DeviceConfigAction) -> Unit,
 ) {
-    if (state.capabilities.sensorIdentity && state.level.detailed) {
-        item(key = "sensor") {
-            SensorIdentityCard(
-                state = state,
-                scan = scan,
-                onScan = if (canScan) ({ onAction(DeviceConfigAction.ScanSticker) }) else null,
-                onSave = { sticker, batch, source -> onAction(DeviceConfigAction.SaveSensor(sticker, batch, source)) },
-            )
-        }
-    }
-}
-
-/**
- * The configuration cards in their order. A protocol v1 device gets one note. Pairing is Detailed,
- * or Simple when it needs attention. Wi-Fi shows at every level, paired phones at Detailed. Sync over
- * Wi-Fi is Developer only, every other level keeps it on and renews the token on its own.
- */
-fun LazyListScope.deviceConfigItems(state: DeviceConfigUiState, lanAccess: LanAccess, onAction: (DeviceConfigAction) -> Unit) {
     if (state.snapshot.info != null && !state.isV2) {
         item(key = "v1") { ProtocolV1Card() }
     }
     if (!state.isV2) return
-    if (state.level.detailed || state.pairingNeedsAttention) {
-        item(key = "pairing") {
-            PairingCard(
-                state,
-                onSave = { onAction(DeviceConfigAction.SavePairing(it)) },
-                onReboot = { onAction(DeviceConfigAction.RequestReboot) },
-            )
+    state.sections.forEach { section ->
+        when (section) {
+            DeviceSection.Location -> item(key = "location") { DeviceLocationCard(state, onAction) }
+            DeviceSection.Wifi -> item(key = "wifi") {
+                WifiCard(
+                    state = state,
+                    onToggleWifi = { onAction(DeviceConfigAction.SetWifiOn(it)) },
+                    onScan = { onAction(DeviceConfigAction.ScanWifi) },
+                    onClearScan = { onAction(DeviceConfigAction.ClearWifiScan) },
+                    onJoin = { onAction(DeviceConfigAction.JoinWifi(it)) },
+                )
+            }
+            DeviceSection.Pairing -> item(key = "pairing") {
+                PairingCard(
+                    state,
+                    onSave = { onAction(DeviceConfigAction.SavePairing(it)) },
+                    onReboot = { onAction(DeviceConfigAction.RequestReboot) },
+                )
+            }
+            DeviceSection.Lan -> item(key = "lan") {
+                LanCard(
+                    state = state,
+                    access = lanAccess,
+                    onRequestAccess = { onAction(DeviceConfigAction.RequestLanAccess) },
+                    onToggleLan = { onAction(DeviceConfigAction.SetLanOn(it)) },
+                    onFetchToken = { onAction(DeviceConfigAction.FetchToken) },
+                    onRotateToken = { onAction(DeviceConfigAction.RequestRotateToken) },
+                    onReconnectBle = { onAction(DeviceConfigAction.ReconnectOverBluetooth) },
+                )
+            }
+            DeviceSection.Bonds -> item(key = "bonds") { BondsCard(state, onForgetAll = { onAction(DeviceConfigAction.RequestForgetBonds) }) }
+            DeviceSection.Sensor -> item(key = "sensor") {
+                SensorIdentityCard(
+                    state = state,
+                    scan = scan,
+                    onScan = if (canScan) ({ onAction(DeviceConfigAction.ScanSticker) }) else null,
+                    onSave = { sticker, batch, source -> onAction(DeviceConfigAction.SaveSensor(sticker, batch, source)) },
+                )
+            }
+            is DeviceSection.Board -> item(key = "board-${section.id.id}") { BoardSettingsCard(state, section, onAction) }
         }
-    }
-    item(key = "location") { DeviceLocationCard(state, onAction) }
-    item(key = "wifi") {
-        WifiCard(
-            state = state,
-            onToggleWifi = { onAction(DeviceConfigAction.SetWifiOn(it)) },
-            onScan = { onAction(DeviceConfigAction.ScanWifi) },
-            onClearScan = { onAction(DeviceConfigAction.ClearWifiScan) },
-            onJoin = { onAction(DeviceConfigAction.JoinWifi(it)) },
-        )
-    }
-    if (state.level.developer) {
-        item(key = "lan") {
-            LanCard(
-                state = state,
-                access = lanAccess,
-                onRequestAccess = { onAction(DeviceConfigAction.RequestLanAccess) },
-                onToggleLan = { onAction(DeviceConfigAction.SetLanOn(it)) },
-                onFetchToken = { onAction(DeviceConfigAction.FetchToken) },
-                onRotateToken = { onAction(DeviceConfigAction.RequestRotateToken) },
-                onReconnectBle = { onAction(DeviceConfigAction.ReconnectOverBluetooth) },
-            )
-        }
-    }
-    if (state.level.detailed) {
-        item(key = "bonds") { BondsCard(state, onForgetAll = { onAction(DeviceConfigAction.RequestForgetBonds) }) }
     }
 }
 
@@ -448,8 +444,7 @@ fun DeviceConfigScreen(
                 item(key = "not_ready") { InfoNote(stringResource(Res.string.device_not_ready)) }
             }
             if (lead != null) item(key = "lead") { lead() }
-            sensorIdentityItem(state, scan, canScan, onAction)
-            deviceConfigItems(state, lanAccess, onAction)
+            deviceSettingsItems(state, lanAccess, scan, canScan, onAction)
         }
     }
 }

@@ -242,6 +242,8 @@
     <string name="location_moving_no_gnss">لا يحتوي هذا المستشعر على GPS، لذلك لا تحمل قراءاته أي موقع</string>
     <string name="location_use_gnss">استخدام GPS المستشعر</string>
     <string name="location_cell_change">القراءات الجديدة تستخدم المنطقة الجديدة. الملفات السابقة تحتفظ بالقديمة، ويبدأ ملف جديد.</string>
+    <string name="board_title">إعدادات المستشعر</string>
+    <string name="board_save">الحفظ على الجهاز</string>
     <string name="board_saved">حُفظ على الجهاز</string>
     <string name="board_not_confirmed">لم يؤكد الجهاز كل القيم</string>
     <string name="board_failed">تعذّر الحفظ. حاول مجددًا</string>

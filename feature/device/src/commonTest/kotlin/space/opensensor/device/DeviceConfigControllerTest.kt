@@ -33,6 +33,7 @@ import space.opensensor.model.ConfigApplies
 import space.opensensor.model.ConfigKeySpec
 import space.opensensor.model.ConfigKeyType
 import space.opensensor.model.ConfigValues
+import space.opensensor.model.ManifestSection
 import space.opensensor.model.ManifestStep
 import space.opensensor.model.SetupManifest
 import space.opensensor.model.SiteField
@@ -1032,6 +1033,19 @@ class DeviceConfigControllerTest {
         c.editBoard("panel.theme", "light")
         assertFalse(c.saveBoardAndWait(fields))
         assertEquals(DeviceBoardResult.NOT_CONFIRMED, c.state.value.board.result)
+    }
+
+    @Test
+    fun theSettingsSaveSendsTheSectionValues() = runTest {
+        val manifest = board.copy(settings = listOf(ManifestSection(StepId("panel"), listOf("panel.theme"))))
+        val source = located(FakeSource()).apply { boardAnswer = BoardSettings(mapOf("panel.theme" to "light")) }
+        val c = controller(source, manifest = manifest)
+        val section = c.state.value.sections.filterIsInstance<DeviceSection.Board>().single()
+        assertEquals(StepId("panel"), section.id)
+        c.onAction(DeviceConfigAction.BoardValue("panel.theme", "dark"))
+        c.onAction(DeviceConfigAction.SaveBoard(section.fields))
+        assertEquals(listOf("panel.theme=dark\n"), source.wire)
+        assertEquals(DeviceBoardResult.SAVED, c.state.value.board.result)
     }
 
     @Test

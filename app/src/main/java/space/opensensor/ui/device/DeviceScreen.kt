@@ -31,8 +31,7 @@ import space.opensensor.device.DeviceConfigAction
 import space.opensensor.device.DeviceConfigUiState
 import space.opensensor.device.LanAccess
 import space.opensensor.device.StickerScan
-import space.opensensor.device.deviceConfigItems
-import space.opensensor.device.sensorIdentityItem
+import space.opensensor.device.deviceSettingsItems
 import space.opensensor.today.TransportChip
 import space.opensensor.ui.components.ConnectionBanner
 import space.opensensor.ui.device.cards.AutoSyncCard
@@ -132,9 +131,6 @@ fun DeviceScreen(
                         level = state.detailLevel,
                     )
                 }
-                // Device configuration beyond Auto-sync and Wi-Fi is Detailed. Simple still shows the
-                // pairing card when it needs attention (default PIN or a pending restart).
-                sensorIdentityItem(config, extras.stickerScan, canScan = true) { onAction(DeviceAction.Config(it)) }
                 item(key = "autosync") {
                     AutoSyncCard(
                         state,
@@ -143,7 +139,8 @@ fun DeviceScreen(
                         onRemoveCompanion = { onAction(DeviceAction.RemoveCompanion) },
                     )
                 }
-                deviceConfigItems(config, extras.lanAccess) { onAction(DeviceAction.Config(it)) }
+                // The board template's settings sections, in its order, gated by the detail level.
+                deviceSettingsItems(config, extras.lanAccess, extras.stickerScan, canScan = true) { onAction(DeviceAction.Config(it)) }
             }
         }
     }
