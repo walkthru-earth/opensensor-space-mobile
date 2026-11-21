@@ -10,7 +10,6 @@ ago_just_now app ui/strings
 ago_minutes app ui/strings
 ago_seconds app ui/strings
 app_name app ui/strings
-autosync_title app ui/strings
 batch_value feature/today ui/strings
 board_title feature/device feature/today
 chart_touch app feature/history

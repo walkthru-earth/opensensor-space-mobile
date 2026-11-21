@@ -43,6 +43,8 @@ import space.opensensor.data.history.TemplateRederive
 import space.opensensor.data.history.TimeEstimate
 import space.opensensor.data.history.UtcDayRange
 import space.opensensor.data.history.info
+import space.opensensor.data.local.database.KnownDeviceDao
+import space.opensensor.data.local.database.ThingEpochDao
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.ListCursors
 import space.opensensor.data.sync.ThingPlaces
@@ -95,6 +97,12 @@ internal object IosArchive {
 
     /** Each own fixed Thing's saved cell, for its pin on Discover (#226). Only the cell, never coordinates. */
     val places: ThingPlaces get() = database.places
+
+    /** The known sensors of My devices, without the LAN token (#303). */
+    val knownDevices: KnownDeviceDao get() = database.knownDevices
+
+    /** Each known sensor's thing generations, current and older. */
+    val thingEpochs: ThingEpochDao get() = database.thingEpochs
 
     /** Drops the saved cells of [things] once their sensor is forgotten, so none stays on the phone. */
     suspend fun forgetPlaces(things: List<String>) {

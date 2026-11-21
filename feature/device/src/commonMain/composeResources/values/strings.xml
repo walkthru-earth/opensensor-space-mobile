@@ -248,4 +248,11 @@
     <string name="board_action_confirm">The device runs this now and may drop the connection for a moment.</string>
     <string name="board_action_button">Run</string>
     <string name="msg_board_action_sent">The device took the action</string>
+    <string name="autosync_title">Auto-sync</string>
+    <plurals name="autosync_on">
+        <item quantity="one">On. Every %1$d minute, even with the app closed.</item>
+        <item quantity="other">On. Every %1$d minutes, even with the app closed.</item>
+    </plurals>
+    <string name="autosync_off">Off</string>
+    <string name="autosync_on_system">On. iOS picks when it runs.</string>
 </resources>

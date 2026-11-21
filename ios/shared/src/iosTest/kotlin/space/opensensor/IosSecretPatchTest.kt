@@ -58,8 +58,8 @@ class IosSecretPatchTest {
     private fun IosLink.reply(frame: Frame) = offer(FrameCodec.encode(frame).toNSData())
 
     private class NoRecords : KnownRecordStorage {
-        override fun load(): String? = null
-        override fun save(text: String) = Unit
+        override fun load(): List<KnownRecord> = emptyList()
+        override fun save(records: List<KnownRecord>) = Unit
     }
 
     /**

@@ -540,7 +540,8 @@ bytes are kept only when their SHA-256 is the footer desc (`TemplateHrefs`, see
 public sensors", turns them all off. When it is off, Discover
 shows the bundled sample on the bundled basemap. When the network fails, Real shows the last kept
 index and its cells from the block cache, labelled cached with its age, and with nothing kept it
-shows the failed load with Retry. Own pins, their readings and Live read only the phone. Pairing
+shows the failed load with Retry. Own pins, their readings and Live read only the phone. Both apps
+pass the phone's sources as `DiscoverPorts` to one `followPhone` in `:feature:discover`. Pairing
 and sync never need the network. `AGENTS.md` records this boundary.
 
 ### Public feed

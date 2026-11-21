@@ -14,6 +14,7 @@ import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.Resolution
 import space.opensensor.data.history.TierBucket
 import space.opensensor.data.history.TrackRow
+import space.opensensor.data.sync.ThingPlace
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
 import space.opensensor.publicfeed.H3Grid
@@ -35,6 +36,16 @@ class OwnThingsTest {
     @Test
     fun aForgottenThingLosesItsPin() {
         assertEquals(emptyList(), knownOwnThings(listOf(place), names = mapOf("b" to "Other")))
+    }
+
+    @Test
+    fun bothAppsShowTheSavedPlacesOfKnownThingsByName() = runTest {
+        val saved = flowOf(listOf(ThingPlace("a", "85283473fffffff", 1L), ThingPlace("b", "", 2L, moving = true)))
+        val names = MutableStateFlow<Map<String, String?>>(mapOf("a" to " Rooftop "))
+        val shown = observeKnownOwnThings(saved, names)
+        assertEquals(listOf(place.copy(name = "Rooftop")), shown.first())
+        names.value = mapOf("a" to null, "b" to "Bike")
+        assertEquals(listOf(place, OwnThing("b", "Bike", "", 2L, moving = true)), shown.first())
     }
 
     @Test
