@@ -98,7 +98,7 @@ class YourFirstBoardTest {
     @Test
     fun metricsTakeTheirLabelsDecimalsAndPrimaryFromTheTemplate() {
         val metrics = Metrics.of(acme, providers = emptyList())
-        assertEquals(listOf("soil_moisture_pct", "soil_temperature_c"), metrics.map { it.id })
+        assertEquals(listOf("soil_moisture_pct", "soil_temperature_c", "battery_mv"), metrics.map { it.id })
         val moisture = metrics.first()
         assertTrue(moisture.primary)
         assertEquals(moisture, Metrics.defaultOf(metrics))
@@ -107,10 +107,11 @@ class YourFirstBoardTest {
         assertEquals(1, moisture.decimals)
         assertEquals("%", moisture.unit)
         assertNotNull(moisture.healthScale)
-        val temperature = metrics.last()
+        val temperature = metrics[1]
         assertEquals("°C", temperature.unit)
         assertEquals(2, temperature.decimals)
         assertNull(temperature.healthScale)
+        assertTrue(metrics.last().auxiliary)
     }
 
     @Test
