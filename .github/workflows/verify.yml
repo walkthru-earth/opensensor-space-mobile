@@ -209,7 +209,8 @@ jobs:
           } 2>&1 | tee ios/build/ci/toolchain.log
       - name: Run native archive and transfer checks
         run: ios/tests/verify-native.sh 2>&1 | tee ios/build/ci/native-tests.log
-      # The step limit leaves the job time to save the caches before the Xcode steps.
+      # The step limit ends a hung run before the job limit in most cases, so the caches below can
+      # still save. Slow setup or a slow save can still reach the job limit first.
       - name: Run shared Kotlin tests on iOS simulator
         id: kotlin-tests
         timeout-minutes: 40
