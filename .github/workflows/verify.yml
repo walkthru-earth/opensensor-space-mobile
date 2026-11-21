@@ -171,7 +171,9 @@ jobs:
         with:
           cache-provider: external
       # Pull requests restore the Gradle user home and the Kotlin/Native toolchain and never save
-      # them. A changed build starts from the newest entry of this runner.
+      # them. The Gradle home key ends with the commit, so each main push saves the build outputs of
+      # its source changes, and a run starts from the newest entry of the same build files, then of
+      # this runner.
       - name: Restore Gradle user home
         id: gradle-home
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -179,8 +181,10 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-home-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', '**/*.gradle.kts', 'build-logic/src/**') }}
-          restore-keys: gradle-home-${{ runner.os }}-${{ runner.arch }}-
+          key: gradle-home-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', '**/*.gradle.kts', 'build-logic/src/**') }}-${{ github.sha }}
+          restore-keys: |
+            gradle-home-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', '**/*.gradle.kts', 'build-logic/src/**') }}-
+            gradle-home-${{ runner.os }}-${{ runner.arch }}-
       - id: konan-key
         uses: ./.github/actions/konan-cache-key
         with:
@@ -205,13 +209,13 @@ jobs:
           } 2>&1 | tee ios/build/ci/toolchain.log
       - name: Run native archive and transfer checks
         run: ios/tests/verify-native.sh 2>&1 | tee ios/build/ci/native-tests.log
-      # The step limit leaves the job time to save the caches and upload the logs of a slow run.
+      # The step limit leaves the job time to save the caches before the Xcode steps.
       - name: Run shared Kotlin tests on iOS simulator
         id: kotlin-tests
         timeout-minutes: 40
         run: ./gradlew --no-daemon --stacktrace verifyIos 2>&1 | tee ios/build/ci/kotlin-tests.log
       # Only main saves, right after the step that fills the caches, so a later step that fails or
-      # times out cannot lose them. A run that passed saves the exact key once. A run whose Kotlin
+      # times out cannot lose them. A run that passed saves the exact key. A run whose Kotlin
       # tests failed or timed out saves what it built under a partial key, which the next run
       # restores through the prefix and then completes, instead of starting cold again. The
       # compilers of older Kotlin versions go first, so an entry restored through a prefix does not
@@ -232,7 +236,7 @@ jobs:
           path: ~/.konan
           key: >-
             ${{ steps.konan-key.outputs.key }}${{ steps.kotlin-tests.outcome != 'success'
-            && format('-partial-{0}', github.run_id) || '' }}
+            && format('-partial-{0}-{1}', github.run_id, github.run_attempt) || '' }}
       - name: Save Gradle user home
         if: >-
           !cancelled() && github.ref == 'refs/heads/main' && steps.gradle-home.outputs.cache-hit != 'true'
@@ -244,7 +248,7 @@ jobs:
             ~/.gradle/wrapper
           key: >-
             ${{ steps.gradle-home.outputs.cache-primary-key }}${{ steps.kotlin-tests.outcome != 'success'
-            && format('-partial-{0}', github.run_id) || '' }}
+            && format('-partial-{0}-{1}', github.run_id, github.run_attempt) || '' }}
       # One Debug simulator build serves both the packaged app and the Swift tests, so the
       # shared Kotlin framework and the app compile once instead of twice.
       - name: Build unsigned simulator app and tests
@@ -335,8 +339,10 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-home-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', '**/*.gradle.kts', 'build-logic/src/**') }}
-          restore-keys: gradle-home-${{ runner.os }}-${{ runner.arch }}-
+          key: gradle-home-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', '**/*.gradle.kts', 'build-logic/src/**') }}-${{ github.sha }}
+          restore-keys: |
+            gradle-home-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', '**/*.gradle.kts', 'build-logic/src/**') }}-
+            gradle-home-${{ runner.os }}-${{ runner.arch }}-
       - id: konan-key
         uses: ./.github/actions/konan-cache-key
         with:

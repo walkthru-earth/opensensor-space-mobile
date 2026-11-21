@@ -46,9 +46,10 @@ result and its run saves the `main` caches. The device Release build runs on `ma
 not on pull requests, in its own job ("iOS device Release build", 45 minute timeout) beside "iOS
 native validation" (60 minutes). The Release job only reads the Gradle and Kotlin/Native caches, so
 it never saves over the ones the validation job writes. In "iOS native validation" the Kotlin tests
-stop after 40 minutes, the Xcode build after 20 and the Swift tests after 15, so a hung step still
-leaves the job time to save its caches and upload its logs. A warm run takes about 22 minutes and
-a cold Kotlin/Native cache about 45. A slow macOS runner can still end a step at its limit, and so
+stop after 40 minutes, the Xcode build after 20 and the Swift tests after 15. The caches are saved
+right after the Kotlin tests, so a later step that hangs cannot lose them. The step limits add up
+to more than the job limit, so a late hang can still reach the 60 minutes first and end the job
+before its logs upload. A warm run takes about 22 minutes and a cold Kotlin/Native cache about 45. A slow macOS runner can still end a step at its limit, and so
 can a hung test. Read the log of the last step that ran, then rerun the job when it shows a slow
 runner.
 CI runs ktlint on every file, while the local hook checks only staged files, so run
@@ -414,7 +415,7 @@ job restores only.
 | Cache | Saved by | Read by |
 | --- | --- | --- |
 | Gradle on Linux (`setup-gradle`, `cache-read-only` off `main`) | the Linux gradle job on `main` | the Linux gradle and release jobs |
-| Gradle home on macOS (`actions/cache/restore` and `actions/cache/save`) | "iOS native validation" on `main`, when the exact key missed | both macOS jobs |
+| Gradle home on macOS (`actions/cache/restore` and `actions/cache/save`) | "iOS native validation" on every `main` push | both macOS jobs |
 | `~/.konan` (`actions/cache/restore` and `actions/cache/save`) | the Linux gradle job and "iOS native validation" on `main`, when the exact key missed | every Gradle job |
 | pre-commit hook environments | the hooks job on `main`, when the exact key missed | the hooks job |
 
@@ -439,14 +440,16 @@ appears, add the library to that list and to the catalog.
 
 The Linux Gradle action keys its home entry by job id and falls back to the newest entry of the
 same OS. The read-only release job has never saved one, so it restores the newest Linux entry the
-verify gradle job saved on `main`. The macOS Gradle home key hashes the catalog, the wrapper, the
-build scripts and `build-logic`, and its restore key drops that hash, so a build change starts from
-the previous entry instead of an empty home. The basic provider of the Gradle action has no such
+verify gradle job saved on `main`. The macOS Gradle home key is a hash of the catalog, the wrapper,
+the build scripts and `build-logic`, then the commit. Each `main` push saves its entry, so the
+build cache holds the outputs of the latest sources. A run restores the newest entry of the same
+build files, then the newest of the runner, so a build change starts from the previous entry
+instead of an empty home. The basic provider of the Gradle action has no such
 fallback and saves only in a post step, which a cancelled job skips.
 
 On `main` "iOS native validation" saves both caches right after the Kotlin tests. When those tests
-fail or reach their time limit, it saves what they built under the key plus `-partial-` and the run
-id. The next run restores that entry through the restore key and finishes the work, so one cold
+fail or reach their time limit, it saves what they built under the key plus `-partial-`, the run
+id and the attempt. The next run restores that entry through the restore key and finishes the work, so one cold
 run that times out does not leave every later run cold too.
 
 ## Fake device (debug builds, `FakeTransport`)
