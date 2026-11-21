@@ -44,7 +44,7 @@ data class HistoryUiState(
     val thing: String? = null,
     /** Thing generations to choose from, oldest first. The last one is the current thing. */
     val things: List<String> = emptyList(),
-    /** The charted metric. History opens on the thing's `opensensor:primary` ([openingMetric]). */
+    /** The charted metric. History opens on the thing's `opensensor:primary` ([thingMetrics]). */
     val metric: MetricSpec,
     val availableMetrics: List<MetricSpec> = emptyList(),
     val range: HistoryRange = HistoryRange.DAY,
@@ -142,8 +142,7 @@ class HistoryController(
             flowOf(ThingMetrics())
         } else {
             combine(tiers.observeMetricsWithData(s), index.observeThing(s), catalog.union) { ids, records, union ->
-                val available = union.filter { it.id in ids }
-                ThingMetrics(available, openingMetric(available, records, templates))
+                thingMetrics(union.filter { it.id in ids }, records, templates)
             }
         }
     }.onEach { result ->
@@ -274,18 +273,22 @@ class HistoryController(
 }
 
 /** The metrics with tier data for one thing, and the one History opens on, null while there are none. */
-private data class ThingMetrics(val available: List<MetricSpec> = emptyList(), val opening: MetricSpec? = null)
+internal data class ThingMetrics(val available: List<MetricSpec> = emptyList(), val opening: MetricSpec? = null)
 
 /**
- * The metric History opens on among [available], the `opensensor:primary` of the template the newest
- * resolvable of [records] names ([Metrics.defaultOf], the corrected view where the template derives one),
- * else the first primary of [available]. Null when [available] is empty.
+ * The picker list and the opening metric of a Thing from the [withData] metrics its tiers hold. The
+ * template is the one the newest resolvable of [records] names. The list keeps [Metrics.pickerOrder]
+ * for that template, its own metrics first. The opening metric is its `opensensor:primary`
+ * ([Metrics.defaultOf], the corrected view where the template derives one), else the first primary
+ * of the list. No opening metric when [withData] is empty.
  */
-internal fun openingMetric(available: List<MetricSpec>, records: List<ArchiveRecord>, templates: FileTemplates): MetricSpec? {
-    if (available.isEmpty()) return null
-    val ids = available.mapTo(HashSet()) { it.id }
+internal fun thingMetrics(withData: List<MetricSpec>, records: List<ArchiveRecord>, templates: FileTemplates): ThingMetrics {
     val template = records.sortedWith(compareByDescending<ArchiveRecord> { it.lastUtcNs ?: Long.MIN_VALUE }.thenByDescending { it.syncedAtEpochMs })
         .firstNotNullOfOrNull { templates.template(it.dictionarySha256, it.templateSha256) }
+    val available = Metrics.pickerOrder(withData, template)
+    if (available.isEmpty()) return ThingMetrics()
+    val ids = available.mapTo(HashSet()) { it.id }
     val own = template?.let { t -> Metrics.defaultOf(Metrics.of(t).filter { it.id in ids }) }
-    return own?.let { o -> available.firstOrNull { it.id == o.id } } ?: Metrics.defaultOf(available) ?: available.first()
+    val opening = own?.let { o -> available.firstOrNull { it.id == o.id } } ?: Metrics.defaultOf(available) ?: available.first()
+    return ThingMetrics(available, opening)
 }

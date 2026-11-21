@@ -211,8 +211,12 @@ scale is the column `opensensor:scale`, then the registry scale of its `opensens
 none, never a column name. The primary is the Collection `opensensor:primary`, then the template's,
 then the first `physicalMeasurement` column with a scale, then the first `physicalMeasurement`
 column. It comes first, and History opens on it (`Metrics.defaultOf` over the metrics of the
-template the Thing's newest file resolves) until the user picks another metric. Auxiliary columns, such as
-the board temperature and battery, are not metrics.
+template the Thing's newest file resolves) until the user picks another metric. An
+`auxiliaryInformation` column is a metric too when it is numeric and its unit shows a symbol
+(`Metrics.charts`), so the board temperature and battery chart while codes, flags and counts do not.
+Auxiliary metrics sort after the measurements, and Simple never offers them. The union keeps the
+order of its templates, never of their dicts, and each picker lists the Thing's own template order
+first (`Metrics.pickerOrder`), then the rest.
 
 **Derived metrics come from providers.** A `DerivedMetricProvider` (`:core:model`) reads a template
 and returns `DerivedMetric`s, each a derived `Datastream` with a label, a `RowFormula` over its

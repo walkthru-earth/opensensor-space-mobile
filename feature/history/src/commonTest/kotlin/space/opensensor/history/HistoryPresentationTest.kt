@@ -4,6 +4,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveRecord
+import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.startOfDay
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
@@ -104,5 +105,16 @@ class HistoryPresentationTest {
         // A board with no primary metric still offers its metrics in Simple.
         val noPrimary = listOf(AirMetrics.PARTICLES_GT03, AirMetrics.PARTICLES_GT25)
         assertEquals(noPrimary, pickerMetrics(noPrimary, DetailLevel.SIMPLE))
+    }
+
+    @Test
+    fun anAuxiliaryMetricChartsInDetailedOnly() {
+        val battery = MetricSpec(id = "battery_mv", column = "battery_mv", label = "battery", unit = "mV", auxiliary = true)
+        val withPrimary = listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM10, battery)
+        assertEquals(listOf(AirMetrics.PM25_CORRECTED), pickerMetrics(withPrimary, DetailLevel.SIMPLE))
+        assertEquals(withPrimary, pickerMetrics(withPrimary, DetailLevel.DETAILED))
+        val noPrimary = listOf(AirMetrics.PARTICLES_GT03, battery)
+        assertEquals(listOf(AirMetrics.PARTICLES_GT03), pickerMetrics(noPrimary, DetailLevel.SIMPLE))
+        assertEquals(listOf(battery), pickerMetrics(listOf(battery), DetailLevel.SIMPLE))
     }
 }

@@ -337,14 +337,15 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
 }
 
 /**
- * The History metric chips. Detailed and Developer offer every measured metric, corrected PM2.5 first
- * and raw second. Simple offers only the primary metric, corrected PM2.5 only, and raw
- * only when no corrected value exists, so it is still labelled raw. A board with no primary metric
- * offers them all, so Simple is never empty.
+ * The History metric chips. Detailed and Developer offer every metric with data, auxiliary ones last,
+ * corrected PM2.5 first and raw second. Simple offers only the primary metric, corrected PM2.5 only,
+ * and raw only when no corrected value exists, so it is still labelled raw. A board with no primary
+ * metric offers its measurements, never an auxiliary one unless nothing else exists, so Simple is
+ * never empty.
  */
 internal fun pickerMetrics(available: List<MetricSpec>, level: DetailLevel): List<MetricSpec> {
     if (level.detailed) return available
-    val shown = available.filter { it.primary }.ifEmpty { available }
+    val shown = available.filter { it.primary }.ifEmpty { available.filterNot { it.auxiliary } }.ifEmpty { available }
     return if (AirMetrics.PM25_CORRECTED in shown) shown - AirMetrics.PM25 else shown
 }
 
