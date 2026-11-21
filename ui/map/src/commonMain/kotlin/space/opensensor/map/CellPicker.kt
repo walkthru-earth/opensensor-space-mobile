@@ -211,16 +211,23 @@ private fun PickerMap(
     val region = remember { if (start == null) TimeZoneRegions.regionFor(TimeZone.currentSystemDefault().id) else null }
     val ink = MaterialTheme.colorScheme.onSurface
     val chosenCell = remember(selected) { CellPickerGrid.pickable(selected)?.let(H3Index::fromHex) }
+    val focusedCell = remember(focus?.cell, chosenCell) {
+        CellPickerGrid.pickable(focus?.cell)?.let(H3Index::fromHex)?.takeIf { it != chosenCell }
+    }
     // Up to about 800 cell boundaries, built off the main thread. The last grid stays until the next is ready.
     val gridJson by produceState(remember { CellOutlines.geoJson(h3, emptyList()) }, cells, chosenCell) {
         value = withContext(Dispatchers.Default) { CellOutlines.geoJson(h3, cells.filterNot { it == chosenCell }) }
     }
+    val focusedJson = remember(focusedCell) { CellOutlines.geoJson(h3, listOfNotNull(focusedCell)) }
     val selectedJson = remember(chosenCell) { CellOutlines.geoJson(h3, listOfNotNull(chosenCell), chosenCell) }
     val mapState = rememberBaseMapState(
         style = style,
         center = start ?: region?.let { LatLng((it.south + it.north) / 2, (it.west + it.east) / 2) } ?: LatLng(0.0, 0.0),
         zoom = if (start != null) CellPickerGrid.PICK_ZOOM else 3.0,
     ) {
+        val focused = rememberGeoJsonSource(GeoJsonData.JsonString(focusedJson))
+        FillLayer(id = "picker-focused-fill", source = focused, color = const(FOCUS_COLOR), opacity = const(0.28f))
+        LineLayer(id = "picker-focused-outline", source = focused, color = const(FOCUS_COLOR), width = const(2.5.dp))
         val grid = rememberGeoJsonSource(GeoJsonData.JsonString(gridJson))
         // Transparent, so the whole cell takes the tap, not only its outline.
         FillLayer(
@@ -342,3 +349,6 @@ fun PickerLocateButton(onClick: () -> Unit, contentDescription: String, busy: Bo
 
 // A town fills the screen and the grid shows.
 private const val PLACE_ZOOM = 13.0
+
+// Distinct accent for the phone/GNSS reference cell before the user taps to select one.
+private val FOCUS_COLOR = Color(0xFF1B8A5A)

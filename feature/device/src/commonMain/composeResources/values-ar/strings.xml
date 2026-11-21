@@ -192,6 +192,7 @@
     <string name="location_permission">استخدم موقع الهاتف التقريبي لتحريك الخريطة قرب هذا المستشعر</string>
     <string name="location_permission_settings">اسمح بالموقع التقريبي في الإعدادات لتحريك الخريطة قرب هذا المستشعر</string>
     <string name="location_placement">اضغط على المنطقة التي يوجد فيها المستشعر</string>
+    <string name="location_choose_first">اختر منطقة على الخريطة أولًا</string>
     <string name="location_precision_info">تُحفظ المنطقة فقط، وليس المكان الدقيق. موقع الهاتف يحرّك الخريطة فقط.</string>
     <string name="location_area_km2">نحو %1$s كم²</string>
     <string name="location_area_m2">نحو %1$s م²</string>

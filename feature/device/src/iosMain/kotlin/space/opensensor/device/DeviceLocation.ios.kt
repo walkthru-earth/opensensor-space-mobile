@@ -56,7 +56,7 @@ private class CellLocation(private val onPermissionResult: () -> Unit) {
         override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
             val fix = didUpdateLocations.lastOrNull() as? CLLocation
             val age = fix?.let { NSDate().timeIntervalSince1970 - it.timestamp.timeIntervalSince1970 }
-            val cell = if (fix != null && age != null && age in 0.0..120.0 && fix.horizontalAccuracy >= 0.0 && platformH3Grid().available) {
+            val cell = if (fix != null && age != null && age in 0.0..900.0 && fix.horizontalAccuracy >= 0.0 && platformH3Grid().available) {
                 fix.coordinate.useContents { platformH3Grid().latLngToCell(latitude, longitude, resolution) }
                     .takeIf { it != 0L }?.let(H3Index::toHex)
             } else {

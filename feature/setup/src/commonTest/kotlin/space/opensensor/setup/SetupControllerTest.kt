@@ -320,6 +320,40 @@ class SetupControllerTest {
     }
 
     @Test
+    fun mobilityFoldsIntoLocationWhenBothArePlanned() = runTest(UnconfinedTestDispatcher()) {
+        val manifest = Plans.manifest(
+            Plans.step("name", req = false),
+            Plans.step("mobility", req = false),
+            Plans.step("location", req = true),
+            Plans.step("wifi", req = false),
+        )
+        val c = walking(FakePort(), Plans.plan(manifest, Plans.page(cell = Plans.CELL)))
+        assertEquals(listOf(StepId.NAME, StepId.LOCATION, StepId.WIFI), c.state.value.order)
+        assertTrue(StepId.MOBILITY in c.state.value.hidden)
+        val acks = Acks()
+        c.next(ack = acks.ack) // Name
+        assertEquals(SetupPage.Step(StepId.LOCATION), c.at)
+        c.next(ack = acks.ack) // Location (also acks hidden Mobility)
+        assertTrue(StepId.MOBILITY in acks.sent.last())
+        assertEquals(SetupPage.Step(StepId.WIFI), c.at)
+    }
+
+    @Test
+    fun mobilityStaysAckedWhenSwitchingFixedToMovingOnSyntheticLocation() = runTest(UnconfinedTestDispatcher()) {
+        val manifest = Plans.manifest(Plans.step("mobility", req = false), Plans.step("wifi", req = false))
+        val c = walking(FakePort(), Plans.plan(manifest, Plans.page(mobility = "fixed")))
+        assertEquals(SetupPage.Step(StepId.LOCATION), c.at)
+        assertTrue(StepId.MOBILITY in c.state.value.hidden)
+        // Switching to moving drops the synthetic Location step while the Location page is still open.
+        c.onPlan(Plans.plan(manifest, Plans.page(mobility = "moving")), DetailLevel.SIMPLE)
+        assertTrue(StepId.MOBILITY in c.state.value.hidden)
+        val acks = Acks()
+        c.next(ack = acks.ack)
+        assertTrue(StepId.MOBILITY in acks.sent.last())
+        assertEquals(SetupPage.Step(StepId.WIFI), c.at)
+    }
+
+    @Test
     fun aStepThatLeavesThePlanStillAdvances() = runTest(UnconfinedTestDispatcher()) {
         // No template Location, so a fixed Thing gets the app's own. Choosing moving drops it.
         val manifest = Plans.manifest(Plans.step("wifi"))
