@@ -201,13 +201,29 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
     val countries = rememberCountryIndex()
     val h3 = remember { platformH3Grid() }
     var needsCellWarning by remember { mutableStateOf(false) }
+    var pendingCountryCell by remember { mutableStateOf<String?>(null) }
     val selectCell: (String) -> Unit = { cell ->
         needsCellWarning = false
         onAction(DeviceConfigAction.LocationCell(cell, DeviceLocationDraft.RESOLUTION))
-        countries?.let { onAction(DeviceConfigAction.LocationCountry(it.countryForCell(h3, cell).orEmpty())) }
+        val index = countries
+        if (index != null) {
+            pendingCountryCell = null
+            onAction(DeviceConfigAction.LocationCountry(index.countryForCell(h3, cell).orEmpty()))
+        } else {
+            pendingCountryCell = cell
+        }
     }
     val latestSelectCell by rememberUpdatedState(selectCell)
     val latestDraftCell by rememberUpdatedState(draft.cell)
+    val latestOnAction by rememberUpdatedState(onAction)
+    LaunchedEffect(countries, pendingCountryCell) {
+        val index = countries ?: return@LaunchedEffect
+        val cell = pendingCountryCell ?: return@LaunchedEffect
+        pendingCountryCell = null
+        if (cell == latestDraftCell) {
+            latestOnAction(DeviceConfigAction.LocationCountry(index.countryForCell(h3, cell).orEmpty()))
+        }
+    }
     // The controller runs the fix (#315). The picker only draws its state.
     val fix = state.phoneFix
     val locating = fix.locating
@@ -220,7 +236,6 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
             if (latestDraftCell.isEmpty()) latestSelectCell(cell)
         }
     }
-    val latestOnAction by rememberUpdatedState(onAction)
     val close = {
         latestOnAction(DeviceConfigAction.StopLocating)
         onClose()
@@ -324,7 +339,12 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
                                 value = draft.country,
-                                onValueChange = { if (it.length <= 2) onAction(DeviceConfigAction.LocationCountry(it)) },
+                                onValueChange = {
+                                    if (it.length <= 2) {
+                                        pendingCountryCell = null
+                                        onAction(DeviceConfigAction.LocationCountry(it))
+                                    }
+                                },
                                 label = { Text(stringResource(Res.string.location_country)) },
                                 // The hint turns into the reason when the code cannot be saved, and is read out then.
                                 isError = !countryValid(draft.country),

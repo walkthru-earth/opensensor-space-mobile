@@ -250,7 +250,7 @@ class SetupController(
     fun onPlan(plan: SetupPlan?, level: DetailLevel) {
         _state.update { s ->
             if (plan == null || !s.paired) return@update s
-            val hasLocation = plan.steps.any { it.id == StepId.LOCATION }
+            val hasLocation = plan.steps.any { it.id == StepId.LOCATION } || s.page == SetupPage.Step(StepId.LOCATION)
             val visible = plan.steps.map { it.id }.filter { shows(it, level, hasLocation) }
             val hidden = plan.steps.map { it.id }.filter { !shows(it, level, hasLocation) }
             val order = merge(s.order, visible, hidden, (s.page as? SetupPage.Step)?.id)
