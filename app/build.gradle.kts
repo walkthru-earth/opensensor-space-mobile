@@ -220,7 +220,7 @@ android.sourceSets.getByName("test") {
 dependencies {
     // Pure modules: contract mirror, file format, analysis. Nothing Android below :app.
     implementation(project(":core:protocol"))
-    // The bundled board templates, for the fake board and previews to name a current dictionary.
+    // Board templates, the metric registry and the bundled catalog.
     implementation(project(":core:model"))
     implementation(project(":core:parquet"))
     implementation(project(":core:history"))
@@ -228,6 +228,10 @@ dependencies {
     implementation(project(":family:air"))
     // Request session, sync policies, planner and progress maths, shared with iOS.
     implementation(project(":core:sync"))
+    // The demo sensor, debug builds and host tests only. The release classpath must not hold it
+    // (checkReleaseHasNoDemo, #310).
+    debugImplementation(project(":core:demo"))
+    testImplementation(project(":core:demo"))
     implementation(project(":core:storage"))
     // The Thing kinds the app lists (data/di/ThingModule) and the PublishGate in front of FileItems.
     implementation(project(":core:thing"))
@@ -328,4 +332,50 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.hilt.work)
     ksp(libs.androidx.hilt.compiler)
+}
+
+// The demo sensor is for debug builds only (#310). This fails `verify` when the release runtime
+// classpath reaches :core:demo, when the debug one no longer does (so the check still sees it), or
+// when the main or release sources name the demo package or its addresses. It reads the resolved
+// dependency graph only, so no release build runs. release.yml also scans the release APK itself
+// (tools/check_apk_no_demo.py). The name avoids "release" so it needs no signing keys.
+val checkNoDemoShipped = tasks.register("checkNoDemoShipped") {
+    group = "verification"
+    description = "Fails when a release build could reach the demo sensor (#310)"
+    fun projectsOf(configuration: String) = configurations.named(configuration)
+        .flatMap { it.incoming.resolutionResult.rootComponent }
+        .map { root ->
+            val seen = HashSet<ComponentIdentifier>()
+            val queue = ArrayDeque(listOf(root))
+            val paths = sortedSetOf<String>()
+            while (queue.isNotEmpty()) {
+                val component = queue.removeFirst()
+                if (!seen.add(component.id)) continue
+                (component.id as? ProjectComponentIdentifier)?.let { paths += it.projectPath }
+                component.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { queue += it.selected }
+            }
+            paths.joinToString("\n")
+        }
+    val releaseProjects = projectsOf("releaseRuntimeClasspath")
+    val debugProjects = projectsOf("debugRuntimeClasspath")
+    inputs.property("releaseProjects", releaseProjects)
+    inputs.property("debugProjects", debugProjects)
+    val shippedSources = files(fileTree("src/main"), fileTree("src/release"))
+    inputs.files(shippedSources).withPropertyName("shippedSources").withPathSensitivity(PathSensitivity.RELATIVE)
+    val report = layout.buildDirectory.file("reports/checkNoDemoShipped.txt")
+    outputs.file(report)
+    doLast {
+        val demo = ":core:demo"
+        val problems = buildList {
+            if (demo in releaseProjects.get().lines()) add("releaseRuntimeClasspath reaches $demo")
+            if (demo !in debugProjects.get().lines()) add("debugRuntimeClasspath lost $demo, so this check no longer sees it")
+            val markers = listOf("space.opensensor.demo", "FA:KE:")
+            shippedSources.asFileTree.forEach { source ->
+                val text = source.readText()
+                markers.filter { it in text }.forEach { add("${source.path} names $it") }
+            }
+        }
+        if (problems.isNotEmpty()) throw GradleException("The demo sensor can reach a release build (#310)\n" + problems.joinToString("\n"))
+        report.get().asFile.writeText("release runtime projects\n${releaseProjects.get()}\n")
+    }
 }

@@ -63,7 +63,6 @@ import space.opensensor.data.ble.SnapshotPoller
 import space.opensensor.data.ble.TransportException
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.ble.TransportUnavailableException
-import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.history.BoardDescriptors
 import space.opensensor.data.history.HistoryDeriver
 import space.opensensor.data.history.HistoryIndexer
@@ -93,6 +92,7 @@ import space.opensensor.data.sync.SyncEngine
 import space.opensensor.data.sync.ThingPlace
 import space.opensensor.data.sync.ThingPlaces
 import space.opensensor.data.sync.ThingSetupWatch
+import space.opensensor.demo.DemoSensor
 import space.opensensor.link.AuthKind
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.FrameSink
@@ -110,7 +110,7 @@ import java.nio.file.Files
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Facade and link ownership regressions on virtual time, with [FakeTransport] and in-memory DAOs.
+ * Facade and link ownership regressions on virtual time, with [DemoSensor] and in-memory DAOs.
  * Collection state, synchronous protection and fresh listings use the same controller as the app.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -358,7 +358,7 @@ class DeviceFacadeTest {
     @Test
     fun `a location read keeps the fixed Thing's Discover pin and drops its cell once it moves`() = harnessTest { h ->
         h.device.locationCell = "8828308281fffff"
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         assertEquals("8828308281fffff", h.repo.readLocation()?.location?.cell)
         assertEquals(listOf(h.device.thing to "8828308281fffff"), h.places.all.map { it.thing to it.cell })
@@ -370,7 +370,7 @@ class DeviceFacadeTest {
     @Test
     fun `every page 1 read feeds the setup watch and none happens without a location call`() = harnessTest { h ->
         val needs = h.setupWatch.needs(flowOf(emptyList()))
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         assertTrue("connecting reads no page 1 for setup", needs.first().isEmpty())
         h.repo.readLocation()
@@ -381,7 +381,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `a location save keeps the pin the page it reads back gives`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         val saved = h.repo.writeLocation(ConfigPatch.build { location("8828308281fffff", "") })
         assertEquals("8828308281fffff", saved?.location?.cell)
@@ -394,7 +394,7 @@ class DeviceFacadeTest {
     @Test
     fun `forgetting a Thing removes its saved cell`() = harnessTest { h ->
         h.device.locationCell = "8828308281fffff"
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         h.repo.readLocation()
         assertEquals(1, h.places.all.size)
@@ -405,7 +405,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `forgetting a sensor drops its nickname`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         assertTrue(h.forgottenSettings.isEmpty())
         h.repo.forget(ADDRESS)
@@ -415,13 +415,13 @@ class DeviceFacadeTest {
 
     @Test
     fun `a connect while a forget runs is refused and the forget completes`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         val gate = CompletableDeferred<Unit>()
         h.places.removeGate = gate
         val forgot = async { h.owner.forget(ADDRESS) }
         h.until { h.repo.busy.value }
-        assertFalse("a connect during a forget is refused", h.repo.connect(ADDRESS, "OS-6b40", fake = true))
+        assertFalse("a connect during a forget is refused", h.repo.connect(ADDRESS, "OS-6b40", demo = true))
         gate.complete(Unit)
         h.until { forgot.isCompleted }
         assertTrue(forgot.await())
@@ -430,18 +430,18 @@ class DeviceFacadeTest {
 
     @Test
     fun `a connect is refused from the moment a forget takes the command slot`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         assertTrue(h.owner.tryBeginForget())
-        assertFalse("no connect lands between the slot and the forget mark", h.repo.connect(ADDRESS, "OS-6b40", fake = true))
+        assertFalse("no connect lands between the slot and the forget mark", h.repo.connect(ADDRESS, "OS-6b40", demo = true))
         h.owner.endForget()
-        assertTrue(h.repo.connect(ADDRESS, "OS-6b40", fake = true))
+        assertTrue(h.repo.connect(ADDRESS, "OS-6b40", demo = true))
     }
 
     @Test
     fun `forgetting a Thing removes the saved cells of its older epochs`() = harnessTest { h ->
         h.device.locationCell = "8828308281fffff"
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         h.repo.readLocation()
         h.thingEpochs.recordIfAbsent(ThingEpoch(ADDRESS, "older-thing", null, 1L, observedFromAuthenticatedBle = true))
@@ -553,10 +553,10 @@ class DeviceFacadeTest {
 
     @Test
     fun `new Connect survives a disconnect claim delayed by cleanup`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "Synthetic sensor", fake = true)
+        h.repo.connect(ADDRESS, "Synthetic sensor", demo = true)
         h.until { h.repo.plan.value != null }
         val delayedDisconnect = h.owner.claimDisconnectIntent()
-        h.repo.connect(ADDRESS, "Synthetic sensor", fake = true)
+        h.repo.connect(ADDRESS, "Synthetic sensor", demo = true)
         h.until { h.repo.connectionState.value.isReady }
         h.test.runCurrent()
         h.owner.disconnectNow(delayedDisconnect)
@@ -581,7 +581,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `collection takes idle reconnect backoff and Stop prevents later idle opens`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "Synthetic sensor", fake = true)
+        h.repo.connect(ADDRESS, "Synthetic sensor", demo = true)
         h.until { h.repo.plan.value != null }
         h.device.disconnect()
         h.until { h.owner.reconnecting.value != null }
@@ -599,7 +599,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `a worker never lends an interactive device session`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "Synthetic sensor", fake = true)
+        h.repo.connect(ADDRESS, "Synthetic sensor", demo = true)
         h.until { h.repo.connectionState.value.isReady }
         val result = h.repo.syncInBackground(ADDRESS, null, owner = "synthetic-worker", protection = KeepAlive.None)
         assertNotNull(result.skipped)
@@ -633,7 +633,7 @@ class DeviceFacadeTest {
     @Test
     fun `connection synchronizes UTC before listing without a user action`() = harnessTest { h ->
         h.clockEpochOffset = 1_793_318_400_987L
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         val sent = h.repo.session.value!!.frames.records.value.filter { it.direction == FrameDirection.TX }.map { it.type }
         assertTrue(sent.indexOf(Opcode.SET_TIME) in 0 until sent.indexOf(Opcode.LIST))
@@ -646,7 +646,7 @@ class DeviceFacadeTest {
         h.clockEpochOffset = 1_793_318_400_987L
         val gate = CompletableDeferred<Unit>()
         h.thingDeriveGate = gate
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         // The derive waits behind a History pass, yet the connection lists and a collection completes.
         h.until { h.repo.plan.value != null }
         assertEquals(listOf(h.device.thing), h.thingDerives)
@@ -660,7 +660,7 @@ class DeviceFacadeTest {
     @Test
     fun `the clock is set once on connect, quietly, and records the anchor`() = harnessTest { h ->
         h.clockEpochOffset = 1_793_318_400_987L
-        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.repo.connect(ADDRESS, "AQ-6b40", demo = true)
         h.until { h.repo.plan.value != null && !h.repo.busy.value }
         assertEquals(1, h.factory.requests.count { it == Opcode.SET_TIME })
         assertEquals("the automatic SET_TIME on connect", 1, h.clockAnchorsBeforeList.size)
@@ -673,7 +673,7 @@ class DeviceFacadeTest {
     @Test
     fun `a phone clock before the build floor is never sent and the files still list`() = harnessTest { h ->
         // Virtual epoch zero is a wrong phone clock, older than the app build.
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         assertTrue(h.repo.plan.value!!.toDownload.isNotEmpty())
         assertEquals(0, h.factory.requests.count { it == Opcode.SET_TIME })
@@ -682,7 +682,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `sync all lists again and downloads a file finalized after the previous listing`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         h.repo.syncAll()
         h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
@@ -703,7 +703,7 @@ class DeviceFacadeTest {
     @Test
     fun `smart sync uses its fresh listing instead of the plan from connection`() = harnessTest { h ->
         h.clockEpochOffset = 1_793_318_400_987L
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         val newer = h.newFile()
         h.device.files += newer
@@ -717,7 +717,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `failed pre sync listing retains old files but never declares up to date`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         h.repo.syncAll()
         h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
@@ -739,7 +739,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `overlapping sync requests reserve preparation only once`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         val before = h.factory.requests.count { it == Opcode.LIST }
 
@@ -754,7 +754,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `cancelling sync before preparation starts releases its operation slot`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         val before = h.factory.requests.count { it == Opcode.LIST }
 
@@ -771,7 +771,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `cancelling during list retains the previous snapshot without leaving refresh running`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         val previous = h.repo.manifest.value.last
         h.factory.listDelayMs = 60_000
@@ -792,7 +792,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `lost link reconnects and resumes the interrupted sync`() = harnessTest(chunkDelayMs = 1) { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         val wanted = h.repo.plan.value!!.toDownload.map { it.name }.toSet()
 
@@ -808,7 +808,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `resume after reconnect uses the new session's listing, not the previous plan`() = harnessTest(chunkDelayMs = 1) { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         h.repo.syncAll()
         h.until { h.repo.sync.value.filesDone >= 1 }
@@ -816,7 +816,7 @@ class DeviceFacadeTest {
 
         // While the link is down the card changes: every file not yet archived is gone and one new
         // file appears. A resume driven by the previous plan would OPEN names that no longer exist.
-        val replacement = FakeTransport.FakeFile(
+        val replacement = DemoSensor.DemoFile(
             "thing=${h.device.thing}/year=2026/month=09/day=17/data_0900_${h.device.bootId}_20000-20089-90.parquet",
             h.device.files.first { it.name in done }.bytes,
         )
@@ -832,7 +832,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `cancelReconnect during a reconnect stops it`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady }
         h.device.disconnect()
         h.until { h.repo.reconnecting.value != null }
@@ -847,7 +847,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `idle reconnect stops at the first open that needs pairing repair`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady }
         h.factory.reconnectFailure = DisconnectCause.Auth(AuthKind.BOND_MISSING)
         h.device.disconnect()
@@ -873,7 +873,7 @@ class DeviceFacadeTest {
             h.knownDao.setLanToken(ADDRESS, NEW_TOKEN, 47391)
         }
 
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady }
 
         assertNull("the hook ran", h.thingEpochs.beforeRecord)
@@ -887,7 +887,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `a new sensor enrolls with Auto-sync off and no companion`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady }
 
         val row = h.knownDao.get(ADDRESS)!!
@@ -1030,7 +1030,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `overlapping config commands are refused instead of clearing each other's busy flag`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null && !h.repo.busy.value }
 
         h.factory.configDelayMs = 100
@@ -1054,7 +1054,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `Wi-Fi sync switched off is switched back on once below Developer and left alone at Developer`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null && !h.repo.busy.value }
         assertEquals("already on, nothing sent", 0, h.factory.requests.count { it == Opcode.SET_CONFIG })
 
@@ -1063,7 +1063,7 @@ class DeviceFacadeTest {
         h.until { !h.repo.busy.value && h.repo.config.value?.config?.lan?.on == 0 }
         h.repo.disconnect()
         h.until { h.repo.session.value == null }
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null && !h.repo.busy.value }
         assertEquals("Developer keeps it off", 0, h.repo.config.value?.config?.lan?.on)
         assertEquals(1, h.factory.requests.count { it == Opcode.SET_CONFIG })
@@ -1071,7 +1071,7 @@ class DeviceFacadeTest {
         h.developer = false
         h.repo.disconnect()
         h.until { h.repo.session.value == null }
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady && h.repo.config.value?.config?.lan?.on == 1 && !h.repo.busy.value }
         assertEquals("one quiet lan.on=1", 2, h.factory.requests.count { it == Opcode.SET_CONFIG })
         assertEquals("only the explicit save says so", 1, h.events.count { it is DeviceEvent.Info && it.message is DeviceMessage.ConfigSaved })
@@ -1079,7 +1079,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `a saved setting is reported as a typed code`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null && !h.repo.busy.value }
 
         h.repo.applyConfig(ConfigPatch.build { lanOn(true) }, DeviceMessage.ConfigChange.LAN_ON)
@@ -1091,7 +1091,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `clearing bonds and a default save report which settings changed`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null && !h.repo.busy.value }
 
         h.repo.clearBonds()
@@ -1125,7 +1125,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `raw command refuses REBOOT and SET_CONFIG in the data layer`() = runTest {
-        val device = FakeTransport(chunkDelayMs = 0, liveIntervalMs = 3_600_000, dispatcher = StandardTestDispatcher(testScheduler))
+        val device = DemoSensor(chunkDelayMs = 0, liveIntervalMs = 3_600_000, dispatcher = StandardTestDispatcher(testScheduler))
         val session = DeviceSession.over(device, backgroundScope)
         session.link.open()
         try {
@@ -1189,7 +1189,7 @@ class DeviceFacadeTest {
     @Test
     fun `a lent UI link stays open after the collection returns it`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = null))
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.connectionState.value.isReady }
         val lent = async { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }.also { h.until { it.isCompleted } }.await()
         assertEquals(1, h.factory.fakeConnects)
@@ -1202,7 +1202,7 @@ class DeviceFacadeTest {
     fun `the UI connecting during a collection keeps the link after release`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = null))
         val lent = async { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }.also { h.until { it.isCompleted } }.await()
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         runCurrent()
         assertEquals("the UI reuses the lent link", 1, h.factory.fakeConnects)
         lent.release()
@@ -1343,7 +1343,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `a lend while the facade collection runs is Busy`() = harnessTest(chunkDelayMs = 1) { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         h.repo.syncAll()
         h.until { h.repo.sync.value.running }
@@ -1398,7 +1398,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `the last sync and the archive summary survive a disconnect and a reconnect`() = harnessTest { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         h.repo.syncAll()
         h.until { !h.repo.collectionState.value.active && !h.repo.busy.value && h.archived.rows.size == h.device.files.size }
@@ -1411,7 +1411,7 @@ class DeviceFacadeTest {
         assertEquals(SyncEndReason.COMPLETED, last.endReason)
         assertEquals(h.device.files.size, last.outcomes.size)
 
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         assertEquals(last, h.owner.sync.value)
         assertEquals(h.archived.rows.size, h.repo.archiveTimeSummary.value.files)
@@ -1431,7 +1431,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `ownership names who holds the device through an interactive and a background run`() = harnessTest(chunkDelayMs = 1) { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         assertEquals(DeviceOwnership.IDLE, h.repo.ownershipNow())
         h.repo.syncAll()
@@ -1453,7 +1453,7 @@ class DeviceFacadeTest {
 
     @Test
     fun `a link that died during a stopped sync does not stay in the slot`() = harnessTest(chunkDelayMs = 1) { h ->
-        h.repo.connect(ADDRESS, "OS-6b40", fake = true)
+        h.repo.connect(ADDRESS, "OS-6b40", demo = true)
         h.until { h.repo.plan.value != null }
         h.repo.syncAll()
         h.until { h.archived.rows.isNotEmpty() }
@@ -1506,7 +1506,7 @@ class DeviceFacadeTest {
 
     private inner class Harness(val test: TestScope, chunkDelayMs: Long = 0, val endpoint: String = ADDRESS, sharedAdmission: CollectionAdmission = CollectionAdmission()) {
         val dispatcher = StandardTestDispatcher(test.testScheduler)
-        val device = FakeTransport(address = endpoint, chunkDelayMs = chunkDelayMs, liveIntervalMs = 3_600_000, dispatcher = dispatcher).also {
+        val device = DemoSensor(address = endpoint, chunkDelayMs = chunkDelayMs, liveIntervalMs = 3_600_000, dispatcher = dispatcher).also {
             // The 1 MiB benchmark file only slows the tests down.
             it.files.removeAll { f -> f.name.startsWith("benchmarks/") }
         }
@@ -1647,7 +1647,7 @@ class DeviceFacadeTest {
             lanPort = 47390,
         )
 
-        fun newFile() = FakeTransport.FakeFile(
+        fun newFile() = DemoSensor.DemoFile(
             "thing=${device.thing}/year=2026/month=09/day=17/data_0900_${device.bootId}_20000-20089-90.parquet",
             device.files.first().bytes,
         )
@@ -1678,16 +1678,16 @@ class DeviceFacadeTest {
     }
 
     /**
-     * BLE and fake requests get a new [TransportLink] over the one [FakeTransport], as the debug
+     * BLE and fake requests get a new [TransportLink] over the one [DemoSensor], as the debug
      * fake does. LAN requests get a link whose open fails.
      */
-    private class TestTransports(private val device: FakeTransport, private val scope: CoroutineScope) : TransportSource {
+    private class TestTransports(private val device: DemoSensor, private val scope: CoroutineScope) : TransportSource {
         var lanFailure: Exception = LanConnectException(LanFailure.UNREACHABLE)
 
         /** When set, the LAN link's open fails with this typed close, as the TCP driver reports a BYE. */
         var lanClose: LinkClosedException? = null
 
-        /** When set, LAN links open over the fake device, so a test can end an open LAN session. */
+        /** When set, LAN links open over the demo sensor, so a test can end an open LAN session. */
         var lanOpens = false
         val openLanLinks = CopyOnWriteArrayList<AndroidLink>()
         val lanTransports = CopyOnWriteArrayList<FailingLanTransport>()
@@ -1811,8 +1811,9 @@ class DeviceFacadeTest {
                 override suspend fun open(sink: FrameSink): LinkInfo = throw close
             }
         }
-        override fun fake(address: String): AndroidLink = counted()
-        override fun isFake(transport: DeviceTransport): Boolean = (transport as? TransportLink)?.wrapped === observedDevice
+        override fun demo(address: String): AndroidLink = counted()
+        override fun isDemoAddress(address: String): Boolean = false
+        override fun isDemo(transport: DeviceTransport): Boolean = (transport as? TransportLink)?.wrapped === observedDevice
 
         private fun requireRadio() {
             unavailable?.let { throw TransportUnavailableException(it, "synthetic ${it.name}") }

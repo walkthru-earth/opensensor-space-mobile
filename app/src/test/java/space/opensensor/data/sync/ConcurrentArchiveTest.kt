@@ -22,9 +22,9 @@ import space.opensensor.data.archive.RoomArchiveIndex
 import space.opensensor.data.archive.SyncEngineModule
 import space.opensensor.data.ble.DeviceSession
 import space.opensensor.data.coroutines.WallClock
-import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.local.database.ArchivedFile
 import space.opensensor.data.local.database.DerivedArchivedFileQueries
+import space.opensensor.demo.DemoSensor
 import space.opensensor.storage.AlreadyCommitted
 import space.opensensor.storage.FakeStorageBudget
 import java.io.File
@@ -41,7 +41,7 @@ class ConcurrentArchiveTest {
     private lateinit var archive: FileArchive
     private lateinit var engine: SyncEngine
     private val dao = InMemoryDao()
-    private val transports = ArrayList<FakeTransport>()
+    private val transports = ArrayList<DemoSensor>()
     private val name = "legacy-parquet/retained.parquet"
     private val bytes = requireNotNull(javaClass.classLoader!!.getResourceAsStream("parquet/device/v1-none-90rows-dated.parquet")).use { it.readBytes() }
 
@@ -61,15 +61,15 @@ class ConcurrentArchiveTest {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private suspend fun device(payload: ByteArray = bytes): Pair<FakeTransport, DeviceSession> {
-        val fake = FakeTransport(address = "fake-${transports.size}", chunkDelayMs = 1, liveIntervalMs = 3_600_000)
+    private suspend fun device(payload: ByteArray = bytes): Pair<DemoSensor, DeviceSession> {
+        val fake = DemoSensor(address = "fake-${transports.size}", chunkDelayMs = 1, liveIntervalMs = 3_600_000)
         transports += fake
         fake.files.clear()
-        fake.files += FakeTransport.FakeFile(name, payload)
+        fake.files += DemoSensor.DemoFile(name, payload)
         return fake to DeviceSession.over(fake, scope).also { it.link.open() }
     }
 
-    private suspend fun download(device: Pair<FakeTransport, DeviceSession>, thing: String, progress: (FileProgress) -> Unit = {}): FileOutcome =
+    private suspend fun download(device: Pair<DemoSensor, DeviceSession>, thing: String, progress: (FileProgress) -> Unit = {}): FileOutcome =
         engine.download(device.second, thing, device.first.address, name, device.first.files.single().bytes.size.toLong(), device.first.maxRead, onProgress = progress)
 
     @Test

@@ -14,7 +14,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import space.opensensor.app.R
-import space.opensensor.data.fake.FakeTransport
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.devices.DevicesAction
 import space.opensensor.devices.DevicesPlatform
@@ -31,7 +30,7 @@ private val AndroidDevices = DevicesPlatform(collectInBackground = true)
 
 /**
  * The Android route for the shared My devices screen. It binds Bluetooth and Local Network
- * permissions, notification permission for the Collect all worker and debug fake entries. The
+ * permissions, notification permission for the Collect all worker and debug demo sensor entries. The
  * list and scan lifecycle are shared in `:feature:devices`.
  */
 @Composable
@@ -85,28 +84,21 @@ fun ScanScreen(
             }
         },
         topActions = {
-            if (viewModel.showFakeEntry) {
+            if (viewModel.demoEntries.isNotEmpty()) {
                 var open by remember { mutableStateOf(false) }
                 IconButton(onClick = { open = true }) { Icon(AppIcons.MoreVert, contentDescription = stringResource(R.string.scan_more)) }
                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.scan_fake)) },
-                        leadingIcon = { Icon(AppIcons.BugReport, contentDescription = null) },
-                        onClick = {
-                            open = false
-                            viewModel.connectFake()
-                            onConnected(FakeTransport.FAKE_ADDRESS)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.scan_fake_lan)) },
-                        leadingIcon = { Icon(AppIcons.BugReport, contentDescription = null) },
-                        onClick = {
-                            open = false
-                            viewModel.connectFakeLan()
-                            onConnected(FakeTransport.FAKE_LAN_ADDRESS)
-                        },
-                    )
+                    viewModel.demoEntries.forEach { entry ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(entry.label)) },
+                            leadingIcon = { Icon(AppIcons.BugReport, contentDescription = null) },
+                            onClick = {
+                                open = false
+                                viewModel.connectDemo(entry)
+                                onConnected(entry.address)
+                            },
+                        )
+                    }
                 }
             }
         },

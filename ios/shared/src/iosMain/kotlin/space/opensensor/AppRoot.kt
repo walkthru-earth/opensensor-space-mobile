@@ -480,6 +480,10 @@ private fun MyDevicesEntry(
         topActions = {
             IconButton(onClick = onFiles) { Icon(AppIcons.Storage, contentDescription = filesTitle()) }
             IconButton(onClick = onHistory) { Icon(AppIcons.Schedule, contentDescription = historyTitle()) }
+            // Debug binaries only (#310). Opens the shared demo sensor like a found one.
+            if (IosDemo.enabled) {
+                IconButton(onClick = { onOpen(IosDemo.PERIPHERAL, true) }) { Icon(AppIcons.BugReport, contentDescription = IosDemo.LABEL) }
+            }
         },
     )
 }

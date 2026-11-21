@@ -108,6 +108,14 @@ A force quit stops everything. Downloaded bytes and index records stay for the n
   shared denylist and redaction.
 - **Sticker scan.** VisionKit `DataScannerViewController` (`StickerScanner.swift`), shown only where
   `isSupported`. The camera is asked on the Scan tap, and only the decoded string reaches Kotlin.
+- **Demo sensor.** A debug binary (`Platform.isDebugBinary`) shows a bug icon on My devices that
+  opens the shared `DemoSensor` of `:core:demo` (#310). `IosDemo` reads it into `CompanionState`
+  like a Bluetooth sensor and serves an `IosLink` over it, `mainViewController` routes its fixed
+  peripheral id to it and every other id to Swift, and `SensorSync.collections` lends its link to
+  the shared collections. Today, Files, Device settings, Debug and Sync run the same Kotlin as for a
+  real sensor. Swift has no demo code, and a release binary never offers it. Once opened it is a
+  known sensor, so Collect all and Auto-sync include it, but they sync it only while it is open,
+  as the demo never dials.
 
 ## Build and run
 

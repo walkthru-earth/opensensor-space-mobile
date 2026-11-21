@@ -16,6 +16,8 @@ kotlin {
             implementation(project(":core:units"))
             implementation(project(":core:settings"))
             implementation(project(":core:sync"))
+            // The shared demo sensor, opened from My devices only in a debug binary (IosDemo).
+            implementation(project(":core:demo"))
             implementation(project(":core:archive"))
             // The Thing kinds the app lists at launch (ThingKindsIos.kt).
             implementation(project(":core:thing"))

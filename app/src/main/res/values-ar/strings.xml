@@ -18,8 +18,6 @@
     <string name="nav_back">رجوع</string>
 
     <!-- Scan (Home) -->
-    <string name="scan_fake">جهاز وهمي للتصحيح</string>
-    <string name="scan_fake_lan">جهاز وهمي للتصحيح (عبر LAN)</string>
     <string name="scan_more">المزيد</string>
 
     <!-- Today -->

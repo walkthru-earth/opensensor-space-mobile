@@ -51,7 +51,7 @@ enum class TransportKind {
 /**
  * The five GATT attributes of the OpenSensor Sync service, abstracted so the same protocol/sync code runs
  * over a real Bluetooth GATT link (`BleLinkDriver` in `app/`), a LAN TCP socket (`TcpLinkDriver` in
- * `app/`) or an in-process fake device.
+ * `app/`) or the in-process demo sensor (`:core:demo`).
  *
  * Byte-level only: framing and JSON live one layer up in [DeviceSession].
  */

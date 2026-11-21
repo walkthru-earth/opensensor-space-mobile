@@ -94,7 +94,7 @@ fun ConnectionBanner(
     }
 }
 
-/** Small chip naming the active byte pipe, Bluetooth or Wi-Fi LAN (and the fake device in debug builds). */
+/** Small chip naming the active byte pipe, Bluetooth or Wi-Fi LAN (and the demo sensor in debug builds). */
 @Composable
 fun TransportChip(kind: TransportKind?, modifier: Modifier = Modifier) {
     if (kind == null) return

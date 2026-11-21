@@ -60,6 +60,20 @@ fun mainViewController(
     }
     MapCache.configure(cachesDirectory(), mapCacheBytes)
     IosMemoryPressure.install()
+    // A debug binary opens the shared demo sensor from My devices (#310). Its ids stay in Kotlin,
+    // every other id goes to Swift unchanged. A release binary has no demo and keeps Swift's routes.
+    val demo = IosDemo.forApp(state, devices)
+    val openSensor = demo?.opening(openSensor, disconnect) ?: openSensor
+    val openBluetoothSensor = demo?.opening(openBluetoothSensor, disconnect) ?: openBluetoothSensor
+    val openLanOnly = demo?.opening(openLanOnly, disconnect) ?: openLanOnly
+    val disconnectSensor = demo?.closing(disconnectSensor) ?: disconnectSensor
+    val disconnect = demo?.closingAll(disconnect) ?: disconnect
+    val syncBluetooth = demo?.syncing(syncBluetooth) ?: syncBluetooth
+    val syncOneFile = demo?.syncingOne(syncOneFile) ?: syncOneFile
+    val closeIdle = demo?.closingIdle(closeIdle) ?: closeIdle
+    val linkFor = demo?.linking(linkFor) ?: linkFor
+    val bluetoothLinkFor = demo?.linking(bluetoothLinkFor) ?: bluetoothLinkFor
+    val command = demo?.commanding(command) ?: command
     // A user path that opens, connects or syncs a sensor the Collect all pass holds or plans stops
     // the pass first, the same rule for opening, Wi-Fi only, Smart Sync and Files. An open that may
     // take Bluetooth also stops a pass on Bluetooth. Restart reopen and cancel are not user takes.

@@ -9,6 +9,7 @@ Host scripts and one Gradle module. None of them ships in an app. See
 | `hooks/ktlint.sh` | The pre-commit ktlint run on the staged Kotlin files, with a pinned binary |
 | `setup-signing.sh` | Creates the release keystore under `secrets/` and sets the GitHub Actions signing secrets. It never prints a password |
 | `check_apk_abis.py` | Fails when an APK ships native code for an ABI the app does not support. `verify.yml` and `release.yml` run it |
+| `check_apk_no_demo.py` | Fails when a release APK or its R8 mapping carries the debug demo sensor of `:core:demo`. `release.yml` runs it on the release APK, `verify.yml` with `--expect-present` on the debug APK |
 | `check_live_key_drift.py` | Fails when the firmware has a LIVE dictionary digest the app fixtures do not know. `live-key-drift.yml` runs it |
 | `check_discover_collection.py` | Fails when the live Discover Collection lists no cells file the app can draw. `live-key-drift.yml` runs it |
 | `make_parquet_fixtures.py` | Builds the Parquet reader fixtures of `:core:parquet` with PyArrow as the oracle |

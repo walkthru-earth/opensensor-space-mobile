@@ -355,15 +355,18 @@ class SensorSync internal constructor(
     ): SensorCollections {
         lock.lock()
         try {
-            return shared ?: SensorCollections(
-                this,
-                IosLinkProvider({ null }, 20.seconds, Dispatchers.Main, dial, pick = pick),
-                recordClockAnchor,
-                work,
-                callbacks,
-                keepAlive = IosKeepAlive(protect, unprotect, callbacks),
-                progressInterval = progressInterval,
-            ).also { shared = it }
+            // A debug binary lends the demo sensor's link here too (IosDemo).
+            return shared ?: IosDemo.collections(this, { appPick, appDial ->
+                SensorCollections(
+                    this,
+                    IosLinkProvider({ null }, 20.seconds, Dispatchers.Main, appDial, pick = appPick),
+                    recordClockAnchor,
+                    work,
+                    callbacks,
+                    keepAlive = IosKeepAlive(protect, unprotect, callbacks),
+                    progressInterval = progressInterval,
+                )
+            }, pick, dial).also { shared = it }
         } finally {
             lock.unlock()
         }

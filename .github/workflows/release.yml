@@ -192,6 +192,11 @@ jobs:
         shell: bash
         run: python3 tools/check_apk_abis.py app/build/outputs/apk/release/app-release.apk
 
+      # The demo sensor is debug only (#310). Its classes and addresses must be in neither the dex nor the R8 mapping.
+      - name: Check the release APK has no demo sensor
+        shell: bash
+        run: python3 tools/check_apk_no_demo.py app/build/outputs/apk/release/app-release.apk --mapping app/build/outputs/mapping/release/mapping.txt
+
       - name: Name and checksum the artifacts
         id: files
         shell: bash

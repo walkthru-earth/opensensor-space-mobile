@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import space.opensensor.app.BuildConfig
 import space.opensensor.data.DeviceConnectionManager
 import space.opensensor.data.DeviceOwnership
 import space.opensensor.data.DeviceSnapshot
@@ -29,7 +28,8 @@ import space.opensensor.data.ble.BleScanner
 import space.opensensor.data.ble.BluetoothStatus
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.ScannedDevice
-import space.opensensor.data.fake.FakeTransport
+import space.opensensor.data.demo.DemoDevices
+import space.opensensor.data.demo.DemoEntry
 import space.opensensor.data.history.LatestDay
 import space.opensensor.data.history.LatestDays
 import space.opensensor.data.history.MetricSpec
@@ -85,6 +85,7 @@ class ScanViewModel @Inject constructor(
     private val autoSyncScheduler: AutoSyncScheduler,
     settings: AppSettings,
     setupWatch: ThingSetupWatch,
+    demoDevices: DemoDevices,
 ) : ViewModel() {
 
     /** Per-thing totals come from one grouped query, so the list never loads every archived row (#63). */
@@ -102,8 +103,8 @@ class ScanViewModel @Inject constructor(
 
     val detailLevel: StateFlow<DetailLevel> = settings.detailLevel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailLevel.SIMPLE)
 
-    /** The debug fake entries, never in a release build. */
-    val showFakeEntry: Boolean = BuildConfig.DEBUG
+    /** The demo sensor entries, empty in a release build. */
+    val demoEntries: List<DemoEntry> = demoDevices.entries
 
     /** Room behind the shared known-device port. The token ciphertext never leaves this class. */
     private val knownStore = object : KnownDeviceStore {
@@ -220,7 +221,7 @@ class ScanViewModel @Inject constructor(
     }
 
     fun connect(address: String, name: String?) {
-        connectIfIdle(address, name, fake = false)
+        connectIfIdle(address, name, demo = false)
     }
 
     private fun connectLanIfAvailable(address: String, name: String?) {
@@ -230,26 +231,21 @@ class ScanViewModel @Inject constructor(
             val known = knownDeviceDao.get(address) ?: return@launch
             val thing = known.thing ?: return@launch
             if (!known.hasLanToken || thing !in manager.lanDevices.value) return@launch
-            connectIfIdle(address, name, fake = false, preference = TransportPreference.LAN_ONLY)
+            connectIfIdle(address, name, demo = false, preference = TransportPreference.LAN_ONLY)
         }
     }
 
-    fun connectFake() {
-        connectIfIdle(FakeTransport.FAKE_ADDRESS, "OS-6b40 (fake)", fake = true)
-    }
-
-    /** Debug: the same fake, behaving like the LAN pipe (payload_max 1024, GET_TOKEN refused). */
-    fun connectFakeLan() {
-        connectIfIdle(FakeTransport.FAKE_LAN_ADDRESS, "OS-6b40 (fake LAN)", fake = true)
+    fun connectDemo(entry: DemoEntry) {
+        connectIfIdle(entry.address, entry.name, demo = true)
     }
 
     /** Opening a device observes an existing owner; it never interrupts its connection or transfer. */
-    private fun connectIfIdle(address: String, name: String?, fake: Boolean, preference: TransportPreference = TransportPreference.AUTO) {
+    private fun connectIfIdle(address: String, name: String?, demo: Boolean, preference: TransportPreference = TransportPreference.AUTO) {
         stopScan()
         val controller = manager.controller(address)
         val connection = controller.connectionState.value
         if (connection.isReady || connection.isBusy || controller.reconnecting.value != null || controller.backgroundOwner.value != null) return
-        controller.connect(address, name, fake = fake, preference = preference)
+        controller.connect(address, name, demo = demo, preference = preference)
     }
 
     override fun onCleared() {

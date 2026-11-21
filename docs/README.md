@@ -36,7 +36,7 @@ before planning new work. Use [architecture.md](architecture.md), [sync-engine.m
 | Reproduce history host benchmarks and understand their limits | [perf/history-2026-10-11.md](perf/history-2026-10-11.md) | `tools/history-benchmark/` |
 | Recover UTC after reboot, automatic clock sync, corrected day partitions | [time-reconciliation.md](time-reconciliation.md) | `core/archive/`, `core/history/`, `data/history/`, `ios/` |
 | Touch the Parquet reader/writer, GeoParquet, codecs, fixtures, oracles | [parquet.md](parquet.md) | `core/parquet/`, `tools/*.py` |
-| Build, sign, release, run hooks/CI, use the fake device | [build-and-release.md](build-and-release.md) | `tools/`, `.github/workflows/`, `data/fake/` |
+| Build, sign, release, run hooks/CI, use the demo sensor | [build-and-release.md](build-and-release.md) | `tools/`, `.github/workflows/`, `core/demo/`, `data/demo/` |
 | Set a sensor's private location, tap only H3 provisioning, precision and country policy | [device-location.md](device-location.md) | `feature/device/`, `ui/map/` |
 | See why the shell and navigation are shared | [adr/0001-shared-navigation.md](adr/0001-shared-navigation.md) | `feature/shell/` |
 | Read the public privacy policy draft | [privacy-policy.md](privacy-policy.md) | None |

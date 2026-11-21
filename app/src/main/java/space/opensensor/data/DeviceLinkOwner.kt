@@ -58,7 +58,6 @@ import space.opensensor.data.coroutines.ApplicationScope
 import space.opensensor.data.coroutines.IoDispatcher
 import space.opensensor.data.coroutines.WallClock
 import space.opensensor.data.coroutines.suspendRunCatching
-import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.history.BoardDescriptors
 import space.opensensor.data.history.DescriptorOutcome
 import space.opensensor.data.history.HistoryRefresher
@@ -373,7 +372,10 @@ class DeviceLinkOwner @Inject constructor(
     val events: SharedFlow<DeviceEvent> = _events.asSharedFlow()
 
     val currentDisplayName: String? get() = _session.value?.transport?.displayName
-    val isFake: Boolean get() = _session.value?.transport?.let(transportFactory::isFake) == true
+    val isDemo: Boolean get() = _session.value?.transport?.let(transportFactory::isDemo) == true
+
+    /** True when [address] belongs to a demo sensor, never in a release build. */
+    fun isDemoAddress(address: String): Boolean = transportFactory.isDemoAddress(address)
 
     /** Manifest joined with the archive, see [planWithProgress]. */
     val plan: StateFlow<SyncPlan?> = planWithProgress(_manifest, _info, archivedFileDao::observeIdentitiesForThing, _sync, archive::partialLengths, pruned.observeAll())
@@ -405,7 +407,7 @@ class DeviceLinkOwner @Inject constructor(
     // ------------------------------------------------------------------ connect
 
     /**
-     * Connect to [address] (or the fake device when [fake]). Safe to call while connected to the same peer.
+     * Connect to [address] (or the demo sensor when [demo]). Safe to call while connected to the same peer.
      *
      * Transport choice (contract, "LAN transport"): prefer LAN when the device's thing is currently
      * discovered on the network *and* a token is stored, else BLE; if the LAN connect fails for any
@@ -414,7 +416,7 @@ class DeviceLinkOwner @Inject constructor(
      * never falls back to Bluetooth when that permission is unavailable. False when a collection
      * holds the device or a forget runs and the connect was refused. An accepted connect clears the last failure.
      */
-    fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO): Boolean {
+    fun connect(address: String, name: String?, demo: Boolean = false, preference: TransportPreference = TransportPreference.AUTO): Boolean {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
         var previous: Job? = null
         val job = stateLock.withLock {
@@ -433,7 +435,7 @@ class DeviceLinkOwner @Inject constructor(
                 connectMutex.withLock {
                     if (!connectionIntent.owns(claim) || collectionActive.value) return@withLock
                     cancelReconnect()
-                    connectLocked(address, name, fake, preference, claim)
+                    connectLocked(address, name, demo, preference, claim)
                     if (!connectionIntent.owns(claim)) closeSessionLocked()
                 }
             }.also {
@@ -461,7 +463,7 @@ class DeviceLinkOwner @Inject constructor(
      * Body of [connect]; true when a session is Ready afterwards. Caller holds [connectMutex].
      * [listAfter] = false skips the background `LIST` when the caller lists itself and waits.
      */
-    private suspend fun connectLocked(address: String, name: String?, fake: Boolean, preference: TransportPreference, claim: Long, listAfter: Boolean = true): Boolean {
+    private suspend fun connectLocked(address: String, name: String?, demo: Boolean, preference: TransportPreference, claim: Long, listAfter: Boolean = true): Boolean {
         if (backgroundOwner.value != null) {
             _events.tryEmit(DeviceEvent.Info(DeviceMessage.BackgroundOwnsConnect))
             return false
@@ -472,7 +474,7 @@ class DeviceLinkOwner @Inject constructor(
             // the existing link watcher the new claim so future loss still reconnects it. A link a
             // collection opened now belongs to the UI too and stays open after the collection.
             lendOwned = null
-            watchLink(existing, address, name, fake, claim, preference)
+            watchLink(existing, address, name, demo, claim, preference)
             return true
         }
         closeSessionLocked()
@@ -483,8 +485,8 @@ class DeviceLinkOwner @Inject constructor(
         val known = knownDeviceDao.get(address)
 
         var transport: AndroidLink? = null
-        if (fake) {
-            transport = transportFactory.fake(address)
+        if (demo) {
+            transport = transportFactory.demo(address)
         } else if (preference != TransportPreference.BLE_ONLY) {
             when (val lan = tryLan(address, name ?: known?.name, known)) {
                 is LanAttempt.Opened -> transport = lan.link
@@ -505,7 +507,7 @@ class DeviceLinkOwner @Inject constructor(
             }
         }
         val opened = try {
-            openSession(transport, address, name, fake, claim = claim, preference = preference)
+            openSession(transport, address, name, demo, claim = claim, preference = preference)
         } catch (e: CancellationException) {
             withContext(NonCancellable) { closeSessionLocked() }
             throw e
@@ -694,7 +696,7 @@ class DeviceLinkOwner @Inject constructor(
      * [watch] = false (background sync) skips the lost-link auto-reconnect: the worker has no user
      * to keep informed and simply tries again at its next period.
      */
-    private suspend fun openSession(transport: AndroidLink, address: String, name: String?, fake: Boolean, watch: Boolean = true, claim: Long? = null, preference: TransportPreference = TransportPreference.AUTO): Boolean {
+    private suspend fun openSession(transport: AndroidLink, address: String, name: String?, demo: Boolean, watch: Boolean = true, claim: Long? = null, preference: TransportPreference = TransportPreference.AUTO): Boolean {
         // The LAN probe arrives already open on this link. A link opens once.
         val session = _session.value?.takeIf { it.transport === transport && it.link.state.value !is LinkState.Closed }
             ?: newSession(transport)
@@ -729,7 +731,7 @@ class DeviceLinkOwner @Inject constructor(
             }
             val now = clock.nowEpochMs()
             val previous = knownDeviceDao.get(address)
-            val authenticatedBle = transport.kind == TransportKind.BLE || fake
+            val authenticatedBle = transport.kind == TransportKind.BLE || demo
             val expected = previous?.let { DeviceContinuityPolicy.Identity(it.address, it.deviceId, it.thing) }
             val continuity = DeviceContinuityPolicy.evaluate(expected, DeviceContinuityPolicy.Identity(address, info.dev, info.thing), authenticatedBle)
             if (continuity is DeviceContinuityPolicy.Decision.Reject) {
@@ -805,7 +807,7 @@ class DeviceLinkOwner @Inject constructor(
         setupDone.complete(Unit)
         // Verification and enrollment must finish before link loss can start an automatic
         // reconnect. A rejected or half-open session must never re-enroll itself later.
-        if (watch && claim != null && connectionIntent.owns(claim)) watchLink(session, address, name, fake, claim, preference)
+        if (watch && claim != null && connectionIntent.owns(claim)) watchLink(session, address, name, demo, claim, preference)
         return true
     }
 
@@ -1037,8 +1039,7 @@ class DeviceLinkOwner @Inject constructor(
         if (prefer == LinkPreference.LAN && tokenPolicy.isStale(address) && known?.hasLanToken != true) {
             throw LinkClosedException(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED))
         }
-        val fake = address == FakeTransport.FAKE_ADDRESS || address == FakeTransport.FAKE_LAN_ADDRESS
-        var link: AndroidLink? = if (fake) transportFactory.fake(address) else null
+        var link: AndroidLink? = if (transportFactory.isDemoAddress(address)) transportFactory.demo(address) else null
         if (link == null && prefer != LinkPreference.BLE) {
             when (val lan = tryLan(address, name, known, target = background?.lanTarget)) {
                 is LanAttempt.Opened -> link = lan.link
@@ -1056,7 +1057,7 @@ class DeviceLinkOwner @Inject constructor(
             }
         }
         val opened = try {
-            openSession(link, address, name, fake = transportFactory.isFake(link), watch = false)
+            openSession(link, address, name, demo = transportFactory.isDemo(link), watch = false)
         } catch (e: CancellationException) {
             withContext(NonCancellable) { closeSessionLocked() }
             throw e
@@ -1080,7 +1081,7 @@ class DeviceLinkOwner @Inject constructor(
                     if (lendOwned === session) {
                         closeSessionLocked()
                     } else if (uiConnectionWanted.get() && session.isUsable && connectionIntent.owns(uiClaim)) {
-                        watchLink(session, session.address, session.transport.displayName, transportFactory.isFake(session.transport), uiClaim, uiPreference)
+                        watchLink(session, session.address, session.transport.displayName, transportFactory.isDemo(session.transport), uiClaim, uiPreference)
                     }
                 }
             }
@@ -1106,7 +1107,7 @@ class DeviceLinkOwner @Inject constructor(
      * AUTO uses LAN when discovered and Bluetooth otherwise; LAN_ONLY cannot use Bluetooth.
      * An active collection owns reconnect and resume itself, so its loss is never retried here.
      */
-    private fun watchLink(session: DeviceSession, address: String, name: String?, fake: Boolean, claim: Long, preference: TransportPreference = TransportPreference.AUTO) {
+    private fun watchLink(session: DeviceSession, address: String, name: String?, demo: Boolean, claim: Long, preference: TransportPreference = TransportPreference.AUTO) {
         val watch = scope.launch(start = CoroutineStart.LAZY) {
             // A link that closed on its own counts as lost even while the transport still says Ready.
             val lost = combine(session.connectionState, session.link.state) { transport, link ->
@@ -1124,7 +1125,7 @@ class DeviceLinkOwner @Inject constructor(
             }
             if (collectionActive.value) return@launch
             Log.w(TAG, "link lost ($reason); idle auto-reconnect starts")
-            val reconnect = scope.launch(start = CoroutineStart.LAZY) { reconnectLoop(address, name, fake, reason, claim, preference) }
+            val reconnect = scope.launch(start = CoroutineStart.LAZY) { reconnectLoop(address, name, demo, reason, claim, preference) }
             val me = coroutineContext[Job]
             val start = stateLock.withLock {
                 // A close replaced this watcher, or a Stop arrived after the loss was seen: no reconnect.
@@ -1155,7 +1156,7 @@ class DeviceLinkOwner @Inject constructor(
         if (published) watch.start() else watch.cancel()
     }
 
-    private suspend fun reconnectLoop(address: String, name: String?, fake: Boolean, reason: String, claim: Long, preference: TransportPreference) {
+    private suspend fun reconnectLoop(address: String, name: String?, demo: Boolean, reason: String, claim: Long, preference: TransportPreference) {
         try {
             for (attempt in 1..RECONNECT_ATTEMPTS) {
                 val allowed = stateLock.withLock {
@@ -1175,7 +1176,7 @@ class DeviceLinkOwner @Inject constructor(
                     val cur = _session.value
                     if (cur != null && cur.isUsable) return@withLock true
                     lastOpenFailure = null
-                    val opened = connectLocked(address, name, fake, preference, claim, listAfter = true)
+                    val opened = connectLocked(address, name, demo, preference, claim, listAfter = true)
                     if (!connectionIntent.owns(claim)) {
                         closeSessionLocked()
                         null
@@ -1354,7 +1355,7 @@ class DeviceLinkOwner @Inject constructor(
                         // or the device stays "owned" and every background worker skips it.
                         closeSessionLocked()
                     } else if (uiConnectionWanted.get() && connectionIntent.owns(uiClaim)) {
-                        watchLink(session, session.address, session.transport.displayName, transportFactory.isFake(session.transport), uiClaim, uiPreference)
+                        watchLink(session, session.address, session.transport.displayName, transportFactory.isDemo(session.transport), uiClaim, uiPreference)
                     }
                 }
             }
@@ -1652,7 +1653,7 @@ class DeviceLinkOwner @Inject constructor(
         if (!tryBeginCommand()) return refuseBusy()
         val address = session.address
         val name = session.transport.displayName
-        val fake = isFake
+        val demo = isDemo
         val claim = connectionIntent.claim()
         uiClaim = claim
         uiPreference = TransportPreference.AUTO
@@ -1669,7 +1670,7 @@ class DeviceLinkOwner @Inject constructor(
                 delay(REBOOT_RECONNECT_DELAY_MS)
                 connectMutex.withLock {
                     if (!connectionIntent.owns(claim)) return@withLock
-                    connectLocked(address, name, fake, TransportPreference.AUTO, claim)
+                    connectLocked(address, name, demo, TransportPreference.AUTO, claim)
                     if (!connectionIntent.owns(claim)) closeSessionLocked()
                 }
             } catch (e: DeviceErrorException) {
@@ -1683,7 +1684,7 @@ class DeviceLinkOwner @Inject constructor(
             } finally {
                 // A rejected reboot keeps the original session. The new explicit intent invalidated
                 // its old link watcher, so re-arm it if that session still belongs to this action.
-                if (connectionIntent.owns(claim) && _session.value === session) watchLink(session, address, name, fake, claim)
+                if (connectionIntent.owns(claim) && _session.value === session) watchLink(session, address, name, demo, claim)
                 endCommand()
             }
         }

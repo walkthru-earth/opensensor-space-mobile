@@ -12,9 +12,9 @@ The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads throug
 
 | Change | Owner | Contract / test |
 | --- | --- | --- |
-| GATT, pairing, frames | `ble/`, `DeviceLinkOwner.kt` | `docs/transports.md`, `docs/protocol-quickref.md`, fake transport tests |
+| GATT, pairing, frames | `ble/`, `DeviceLinkOwner.kt` | `docs/transports.md`, `docs/protocol-quickref.md`, demo sensor tests (`:core:demo`) |
 | TCP, discovery, token, WifiLock | `lan/` | `docs/transports.md`; mDNS addresses only, token from bonded BLE |
-| Plan, read windows, resume, archive | `DeviceFacade.kt`, `core/sync/` | `docs/sync-engine.md`; fake faults and CRC/PAR1 verification |
+| Plan, read windows, resume, archive | `DeviceFacade.kt`, `core/sync/` | `docs/sync-engine.md`; demo sensor faults and CRC/PAR1 verification |
 | Worker, foreground lifetime, triggers | `background/` | `docs/background-sync.md`; all triggers enqueue the same worker |
 | Index, derived history, Room | `history/`, `local/security/`, `core/database/` | `docs/history-pipeline.md`, `docs/data-model.md` |
 | Archive files, sync engine bindings | `archive/`, `sync/` | `docs/sync-engine.md`, `docs/data-model.md` |

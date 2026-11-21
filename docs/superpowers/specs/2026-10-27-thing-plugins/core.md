@@ -116,7 +116,7 @@ Code.
   - `Recording` kinds only. Written files pass `ParquetVerify` and `OpenSensorFooter.parse`, `FileTemplates` resolves them, `Metrics.of` returns at least one metric, and `FileItems` gives the expected item.
   - `RemoteFeed` kinds. Feed rows map to the template's properties, nothing is written to `archive/`.
   - `PrivateRead` kinds. Nothing is written to `archive/` and no ticket is issued.
-- Fixtures are recorded `LinkDriver` scripts (as `FakeTransport` does) and recorded sampler traces. DuckDB and PyArrow stay the oracles.
+- Fixtures are recorded `LinkDriver` scripts (as `DemoSensor` does) and recorded sampler traces. DuckDB and PyArrow stay the oracles.
 - Fixtures pick templates by pinned `dict`, never by schema prefix.
 
 ## 9. Modules

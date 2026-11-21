@@ -74,7 +74,7 @@ flowchart LR
 | Room (`AppDatabase`), DataStore, files on disk, backup | [`docs/data-model.md`](docs/data-model.md) |
 | Index → tiers → derived day → charts; metrics, moods, time estimate | [`docs/history-pipeline.md`](docs/history-pipeline.md) |
 | Own Parquet reader/writer, GeoParquet 2.0, fixtures, oracles | [`docs/parquet.md`](docs/parquet.md) |
-| Stack, build, hooks, CI, signing, fake device | [`docs/build-and-release.md`](docs/build-and-release.md) |
+| Stack, build, hooks, CI, signing, demo sensor | [`docs/build-and-release.md`](docs/build-and-release.md) |
 | Lessons learned, grouped by concern | [`docs/lessons-learned.md`](docs/lessons-learned.md) |
 
 ## iOS app
@@ -108,7 +108,7 @@ as workflow artifacts; iOS signing and TestFlight setup are documented in
 [`docs/build-and-release.md`](docs/build-and-release.md#github-actions-ios-validation).
 
 Ready-made APKs: every push to `main` refreshes the rolling [`latest`](../../releases/tag/latest)
-pre-release; a `v*` tag publishes a permanent release. Details, signing and the debug fake device:
+pre-release; a `v*` tag publishes a permanent release. Details, signing and the debug demo sensor:
 [`docs/build-and-release.md`](docs/build-and-release.md).
 The release page distributes Android APKs and links to iOS simulator artifacts in
 Actions. Signed iPhone/TestFlight distribution is not available yet.

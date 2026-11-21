@@ -34,8 +34,8 @@ interface AndroidLink :
 }
 
 /**
- * An [AndroidLink] over an [DeviceTransport] that has no driver of its own, the debug fake and test
- * transports. The fake is reused across connections, so each connection gets a new wrapper.
+ * An [AndroidLink] over an [DeviceTransport] that has no driver of its own, the debug demo sensor and test
+ * transports. The demo sensor is reused across connections, so each connection gets a new wrapper.
  */
 class TransportLink(private val transport: DeviceTransport, scope: CoroutineScope) :
     AndroidLink,
@@ -44,7 +44,7 @@ class TransportLink(private val transport: DeviceTransport, scope: CoroutineScop
     private val driver = TransportLinkDriver(transport, scope, frames)
     override val kind: TransportKind get() = transport.kind
 
-    /** The wrapped transport, for identity checks such as `isFake`. */
+    /** The wrapped transport, for identity checks such as `isDemo`. */
     val wrapped: DeviceTransport get() = transport
 
     override suspend fun open(sink: FrameSink): LinkInfo = driver.open(sink)

@@ -1,7 +1,7 @@
-# Build, verify, release. Stack, hooks, CI, signing, the fake device
+# Build, verify, release. Stack, hooks, CI, signing, the demo sensor
 
-**Scope:** toolchain versions, permissions declared, the `verify` gate, git hooks, GitHub Actions, release signing, and the debug-only fake device used by tests and demos.
-**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `gradle/gradle-daemon-jvm.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/opensensor.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `.github/dependabot.yml`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
+**Scope:** toolchain versions, permissions declared, the `verify` gate, git hooks, GitHub Actions, release signing, and the debug-only demo sensor used by tests and demos.
+**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `gradle/gradle-daemon-jvm.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/opensensor.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `.github/dependabot.yml`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `tools/check_apk_no_demo.py`, `core/demo/`, `app/src/debug/`, `app/src/release/`, `ios/shared/.../IosDemo.kt`, `AndroidManifest.xml`.
 **Related:** [architecture.md](architecture.md) (modules the gate builds), [status.md](status.md) (what the gate proves and what it cannot).
 
 ## Gate
@@ -381,17 +381,37 @@ and the build definitions. Both iOS jobs add the Xcode version to the key. The v
 writes the Gradle cache only on `main`, from the Linux gradle job and "iOS native validation". The
 iOS device Release build and release builds only read the Gradle cache and only restore `~/.konan`.
 
-## Fake device (debug builds, `FakeTransport`)
+## Demo sensor (debug builds, `:core:demo`)
 
-Menu → *Debug: fake device* (`FA:KE:00:00:00:01`) speaks proto 3 in-process, three small
-`PAR1…PAR1` files + one **1 MiB** benchmark file (≈ 8 s at the fake's chunk pace, enough to watch
-the notification, Stop, and a `.partial` resume), correct CRCs, `live` JSON every **10 s**, a fake
-configuration (pairing, Wi-Fi, LAN), a Wi-Fi scan list (`home` / `walkthru-field` / `CoffeeShop
-Guest` can be joined; anything else → `failed`), a fake token, an 8 KiB serial log, and a `REBOOT`
-that drops the link and applies pending `ble.*` changes. Persists for the process, like NVS.
-*Debug: fake device (as LAN)* (`FA:KE:00:00:00:02`) is the same device with `payload_max` 1024 and
-`GET_TOKEN` → `ERROR` 13, **not a socket**. Fault hooks for tests: `dropLeadingChunks(readIndex)`,
-`closedDelayMs`. Extend the fake rather than mocking.
+One in-process board, `DemoSensor` in `:core:demo` `commonMain`, drives both apps in debug builds
+(#310). It implements the `DeviceTransport` port, so the shared `DeviceSession`, `SyncEngine` and
+every screen run over it as over a radio. It speaks proto 3 with three small `PAR1…PAR1` files plus
+one **1 MiB** benchmark file (about 8 s at its chunk pace, enough to watch the notification, Stop
+and a `.partial` resume), correct CRCs, `live` JSON every **10 s** built from the bundled CoreS3
+board template (`DemoLive`, so it names no sensor), a configuration (pairing, Wi-Fi, LAN), a Wi-Fi
+scan list (`home`, `walkthru-field` and `CoffeeShop Guest` can be joined, anything else `failed`), a
+token, an 8 KiB serial log, and a `REBOOT` that drops the link and applies pending `ble.*` changes.
+It persists for the process, like NVS. Fault hooks for tests are `dropLeadingChunks(readIndex)` and
+`closedDelayMs`. Extend it rather than mocking.
+
+- **Android.** `app/src/debug` binds `DemoDevices` to `DebugDemoDevices` and is the only source set
+  that depends on `:core:demo` (`debugImplementation`). `app/src/release` binds `DemoDevices.None`.
+  My devices → More shows *Demo sensor* (`FA:KE:00:00:00:01`) and *Demo sensor over Wi-Fi*
+  (`FA:KE:00:00:00:02`, `payload_max` 1024 and `GET_TOKEN` → `ERROR` 13, **not a socket**).
+  `TransportFactory.demo` and `isDemoAddress` read `DemoDevices`, so `src/main` names no demo
+  class or address.
+- **iOS.** `IosDemo` in `ios/shared` stands in for the Swift Bluetooth adapter for one fixed
+  peripheral id. `mainViewController` routes that id to it and every other id to Swift unchanged,
+  and `SensorSync.collections` lends its link to the shared collections, so Today, Files, Device
+  settings, Debug and sync run the same Kotlin. My devices shows a bug icon that opens it, only when
+  `Platform.isDebugBinary` is true. Swift has no demo code. The release framework links the module
+  but never offers or opens it.
+- **Release checks.** `:app:checkNoDemoShipped` runs in `verify`. It fails when
+  `releaseRuntimeClasspath` reaches `:core:demo`, when `debugRuntimeClasspath` loses it, or when
+  `src/main` or `src/release` names the demo package or a `FA:KE:` address. `verify.yml` runs
+  `tools/check_apk_no_demo.py --expect-present` on the debug APK to prove the scan still sees the
+  demo, and `release.yml` runs it on the signed release APK and its R8 mapping, which must carry
+  no demo class or address.
 
 ## Bundled places
 
@@ -407,7 +427,7 @@ byte for byte the same for the same download. `BundledPlacesTest` keeps it under
 | `libs.versions.toml` | all modules |
 | `verify` task in root `build.gradle.kts`, `build-logic/src/main/kotlin/Gates.kt` | pre-push hook and `verify.yml` (both call it) |
 | manifest permissions | AGENTS.md non-negotiables; `LanPermission`, `NotificationPermission`, `RuntimeAccess` |
-| `FakeTransport` behaviour | `AutoSyncRunnerTest`, `HistoryDeriverTest` and every debug demo |
+| `DemoSensor` behaviour | `DemoSensorTest`, `DeviceFacadeTest`, `AutoSyncRunnerTest`, `ConcurrentArchiveTest`, `IosDemoTest` and the debug demo on both phones |
 | `.editorconfig` ktlint rules | the pre-commit hook and CI's `pre-commit --all-files` |
 | `app/src/main/keepRules/*.keep` or the release `optimization` block | the published APK; needs a host `-Popensensor.localRelease=true` build and a phone run |
 | `app/lint-baseline.xml` | `lintDebug` in `verify`; new warnings fail the gate |

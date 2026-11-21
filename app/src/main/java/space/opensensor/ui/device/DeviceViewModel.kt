@@ -41,7 +41,6 @@ import space.opensensor.data.ble.ConfigSnapshot
 import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.ThingStatus
 import space.opensensor.data.ble.TransportKind
-import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.lan.LanDevice
 import space.opensensor.data.local.database.KnownDevice
@@ -81,7 +80,7 @@ data class DeviceUiState(
     val syncRunning: Boolean = false,
     /** A background worker or Collect all holds this device, see [ThingStatus]. */
     val heldInBackground: Boolean = false,
-    val isFake: Boolean = false,
+    val isDemo: Boolean = false,
     val detailLevel: DetailLevel = DetailLevel.SIMPLE,
     /** The phone has the companion-device feature (the "wake when nearby" setup can be offered). */
     val companionSupported: Boolean = false,
@@ -142,7 +141,7 @@ class DeviceViewModel @AssistedInject constructor(
     val lanReconnectAvailable: StateFlow<Boolean> = combine(enrolledDevice, repository.lanDevices) { known, discovered ->
         hasLanReconnectTarget(known, discovered)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-    private val fakeEndpoint = deviceAddress == FakeTransport.FAKE_ADDRESS || deviceAddress == FakeTransport.FAKE_LAN_ADDRESS
+    private val demoEndpoint = repository.isDemoAddress(deviceAddress)
 
     val sensorInstallation: StateFlow<SensorInstallation?> = sensorInstallationDao.observeCurrent(deviceAddress)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -190,8 +189,8 @@ class DeviceViewModel @AssistedInject constructor(
             info = info,
             status = status,
             config = config,
-            isFake = repository.isFake || fakeEndpoint,
-            bonded = session?.address?.let { repository.isFake || transportFactory.isBonded(it) } == true,
+            isDemo = repository.isDemo || demoEndpoint,
+            bonded = session?.address?.let { repository.isDemo || transportFactory.isBonded(it) } == true,
         )
     }
     private val core = combine(sessionCore, enrolledDevice) { base, enrolled -> base.copy(name = base.name ?: enrolled?.name) }
@@ -222,7 +221,7 @@ class DeviceViewModel @AssistedInject constructor(
             syncRunning = activity.syncRunning,
             heldInBackground = activity.heldInBackground,
             detailLevel = level,
-            companionSupported = companionPresence.supported && !base.isFake,
+            companionSupported = companionPresence.supported && !base.isDemo,
             companionBusy = companionBusy,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DeviceUiState())
@@ -385,7 +384,7 @@ class DeviceViewModel @AssistedInject constructor(
         localEvents.tryEmit(ScreenMessage.Text(message, isError = !ok))
         reconnectAfterCompanion?.let { (address, name) ->
             reconnectAfterCompanion = null
-            if (address == addr) repository.connect(address, name, fake = false, preference = TransportPreference.BLE_ONLY)
+            if (address == addr) repository.connect(address, name, demo = false, preference = TransportPreference.BLE_ONLY)
         }
     }
 
@@ -395,12 +394,12 @@ class DeviceViewModel @AssistedInject constructor(
         val s = uiState.value
         val addr = s.address ?: return
         repository.disconnect()
-        repository.connect(addr, s.name, fake = s.isFake, preference = TransportPreference.BLE_ONLY)
+        repository.connect(addr, s.name, demo = s.isDemo, preference = TransportPreference.BLE_ONLY)
     }
 
     fun reconnect() {
         val s = uiState.value
-        repository.connect(deviceAddress, s.name, fake = fakeEndpoint)
+        repository.connect(deviceAddress, s.name, demo = demoEndpoint)
     }
 
     fun reconnectLanOnly() {

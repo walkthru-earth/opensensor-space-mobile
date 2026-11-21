@@ -60,7 +60,9 @@ concern you are changing in `docs/README.md`.
   one Room KMP schema on the bundled SQLite driver for both phones, and it targets Android and iOS
   (`opensensor.kmp.android-library`). Every other `:core` module
   (`model`, `protocol`, `parquet`, `history`, `publicfeed`, `units`, `archive`,
-  `storage`, `net`, `sync`, `settings`, `stac`, `thing`, `thing:testkit`) compiles for JVM and iOS from `commonMain`.
+  `storage`, `net`, `sync`, `settings`, `stac`, `thing`, `thing:testkit`, `demo`) compiles for JVM and iOS from `commonMain`.
+  `:core:demo` is the debug demo sensor. Only Android's debug source set and an iOS debug binary
+  open it, and `:app:checkNoDemoShipped` keeps it out of a release APK.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, positional file reads, zlib,
   H3). Every `:feature:*` module and `:ui:designsystem`, `:ui:map`, `:ui:permissions` and `:ui:strings`
   are Compose for Android and iOS (`opensensor.kmp.compose-feature`). A sensor family (`:family:air`) holds its own science and plugs in through

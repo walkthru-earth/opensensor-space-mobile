@@ -163,7 +163,7 @@ flowchart LR
   SESS --> TR{{"LinkDriver"}}
   TR --> BLE["data/ble/BleLinkDriver"]
   TR --> LAN["data/lan/TcpLinkDriver"]
-  TR --> FAKE["data/fake/FakeTransport (debug)"]
+  TR --> DEMO["core/demo DemoSensor<br/>(debug, through DemoDevices)"]
   REPO --> COLLECT["core/sync CollectionController<br/>PROCESS, retry, ArchiveCollector"]
   COLLECT --> SYNC["core/sync SyncEngine → data/sync/FileArchive"]
   SYNC --> ROOM[("Room (core/database) + filesDir")]
@@ -189,7 +189,7 @@ flowchart LR
 | `data/local/` | `di/DatabaseModule` (opens the shared `AppDatabase` of `:core:database`), `security/LanTokenCipher` and `SecureKnownDeviceDao` |
 | `data/settings/`, `data/storage/` | The Android view of `:core:settings` (`AppSettings`, `DiscoverStore`) and of `:core:storage` (`AndroidStorageBudget`, `AppStorageControls`) |
 | `data/di/` | `ThingModule` (the `ThingKinds` list), coroutine and data bindings |
-| `data/fake/FakeTransport.kt` | In-process proto 3 device with fault hooks |
+| `data/demo/DemoDevices.kt` | The demo sensor port. `app/src/debug` binds it to the in-process `DemoSensor` of `:core:demo`, `app/src/release` binds it empty |
 | `ui/` | Android hosts of the shared screens. `Navigation.kt` supplies the Android entries to the shared `AppShell` (`:feature:shell`), each `*Route.kt` and `*ViewModel.kt` hosts one `:feature` screen, `permissions/` launches the system dialogs, and `ui/files` adds the Android slots and the chart by file |
 
 `DeviceSession`, `FrameRecorder`, `LanTokenPolicy`, `LanAutoEnable`, `DeviceContinuityPolicy`,
@@ -323,8 +323,8 @@ not phone cold-open latency or a qualified latency improvement.
 
 | If you change… | It is consumed by… | So re-check… |
 | --- | --- | --- |
-| `core/protocol/Frames.kt` (opcodes, layouts) | `DeviceSession`, `FakeTransport`, `FrameRecorder`, `DebugScreen` raw box | the firmware contract first (owner), `FrameCodec*Test`, the fake |
-| `DeviceTransport` interface | `BleLinkDriver`, `TcpLinkDriver`, `FakeTransport` (through `TransportLink`), `DeviceSession`, `DeviceLinkOwner` | `TcpLinkDriverTest` loopback, `:core:sync` `SyncEngineTest` |
+| `core/protocol/Frames.kt` (opcodes, layouts) | `DeviceSession`, `DemoSensor`, `FrameRecorder`, `DebugScreen` raw box | the firmware contract first (owner), `FrameCodec*Test`, `DemoSensorTest` |
+| `DeviceTransport` interface | `BleLinkDriver`, `TcpLinkDriver`, `DemoSensor` (through `TransportLink` on Android, `IosDemo` on iOS), `DeviceSession`, `DeviceLinkOwner` | `TcpLinkDriverTest` loopback, `:core:sync` `SyncEngineTest` |
 | `Metrics` registry | `Aggregator`, `HistoryDeriver`, `DailyDerivedBuilder`, History picker, charts, Today cards | `AggregationTest`, `HistoryDeriverTest`, Room `metric_bucket` rows (id strings) |
 | Room entities | `SyncEngine`, `HistoryIndexer/Deriver/Repository`, ViewModels | a new migration + `core/database/schemas/<n>.json`, `DERIVE_VERSION` if tier meaning changed |
 | `ParquetWriter` output | `DailyDerivedBuilder`, `tools/validate_parquet_samples.py` | PyArrow + DuckDB oracle run |

@@ -27,8 +27,8 @@ val runIos = iosBuildsEnabled
 
 tasks.register("verify") {
     group = "verification"
-    description = "lintDebug, assembleDebug, :app unit tests, every shared module's host tests, and verifyIos on a Mac"
-    dependsOn(":app:lintDebug", ":app:assembleDebug", ":app:testDebugUnitTest")
+    description = "lintDebug, assembleDebug, :app unit tests, the no-demo release check, every shared module's host tests, and verifyIos on a Mac"
+    dependsOn(":app:lintDebug", ":app:assembleDebug", ":app:testDebugUnitTest", ":app:checkNoDemoShipped")
     if (runIos) dependsOn(verifyIos)
 }
 

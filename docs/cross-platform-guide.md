@@ -480,7 +480,7 @@ Everything not listed here is shared Kotlin and behaves the same.
 | Archive access | Read-only FileProvider over the export cache | Share and Save only, never in the Files app |
 | Backup | Settings to cloud, archive device-to-device only | Settings backed up, archive excluded |
 | Sticker scan | Google Code Scanner, no camera permission | VisionKit `DataScannerViewController`, camera asked on the Scan tap, Scan hidden where unsupported |
-| Fake devices | Debug builds only (`TransportFactory`) | None |
+| Demo sensor | Debug builds only (`DemoDevices` in `app/src/debug`) | Debug binaries only (`IosDemo`) |
 | Idle Bluetooth link | Kept while the thing is open | Closed when the last page for the sensor leaves or the app leaves the screen |
 
 Both apps keep the raw command denylist (`REBOOT`, `SET_CONFIG`) and frame redaction in

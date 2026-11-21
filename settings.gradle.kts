@@ -49,6 +49,8 @@ include(":core:stac")
 include(":core:thing")
 // The ThingKindContract every kind passes from its own tests.
 include(":core:thing:testkit")
+// The demo sensor both phones open in debug builds only (#310).
+include(":core:demo")
 // The design system, shared Compose for Android and iOS (docs/screens.md, Design system).
 include(":ui:designsystem")
 // The shared MapLibre map, its styles, zoom controls, tile cache, cell outlines and Near me.

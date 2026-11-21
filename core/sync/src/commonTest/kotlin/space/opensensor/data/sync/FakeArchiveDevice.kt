@@ -25,7 +25,7 @@ import kotlin.random.Random
 /**
  * The file half of a CoreS3 over [DeviceTransport], enough for the engine: LIST, LIST_SINCE, OPEN, READ in
  * CHUNKs of `mtu - 10` bytes and CLOSE. Replies are sent from [scope] like the firmware's storage worker, so
- * a test's virtual clock drives every delay. Fault hooks match Android's debug `FakeTransport`.
+ * a test's virtual clock drives every delay. Fault hooks match the debug `DemoSensor` of `:core:demo`.
  */
 class FakeArchiveDevice(
     private val scope: CoroutineScope,

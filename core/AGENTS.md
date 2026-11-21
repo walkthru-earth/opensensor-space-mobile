@@ -23,6 +23,7 @@ gate when a `:core` source names one. Open the doc of the module you change.
 | `stac/` | The STAC File Item (`FileItems.build`) and Thing Collection (`ThingCollections.build`) of a synced file, pure functions with no upload, network or Room, and `CanonicalJson` | [devices and discovery](../docs/devices-and-discovery.md) |
 | `thing/` | The `ThingKind` contract, `OpenSensorBoardKind`, the `ThingKinds` registry, `PublishGate` and `PlatformNeedsTable`. It never uploads | [devices and discovery](../docs/devices-and-discovery.md), [store compliance](../docs/store-compliance.md) |
 | `thing/testkit/` | `ThingKindContract`, the checks every kind runs from its own tests | [devices and discovery](../docs/devices-and-discovery.md) |
+| `demo/` | `DemoSensor`, the in-process board behind the `DeviceTransport` port that drives both apps in debug builds only, and `DemoLive`, its LIVE values from a board template | [build and release](../docs/build-and-release.md) |
 
 Rules that hold across modules.
 

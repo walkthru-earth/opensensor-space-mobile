@@ -21,7 +21,6 @@ import org.junit.Test
 import space.opensensor.data.BackgroundSyncResult
 import space.opensensor.data.ble.DeviceSession
 import space.opensensor.data.ble.TransportKind
-import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.lan.LanDevice
 import space.opensensor.data.local.database.ArchivedFile
 import space.opensensor.data.local.database.DerivedArchivedFileQueries
@@ -34,6 +33,7 @@ import space.opensensor.data.sync.SyncEngine
 import space.opensensor.data.sync.SyncPlanner
 import space.opensensor.data.sync.androidSyncEngine
 import space.opensensor.data.sync.thingParquetFixture
+import space.opensensor.demo.DemoSensor
 import java.io.File
 import java.io.IOException
 import java.net.InetAddress
@@ -41,7 +41,7 @@ import java.nio.file.Files
 
 /**
  * The auto-sync worker's decision logic ([AutoSyncRunner] / [BackgroundSyncPolicy]) against a gateway
- * whose "sync" is the real LIST → plan → download path over the in-process [FakeTransport], so
+ * whose "sync" is the real LIST → plan → download path over the in-process [DemoSensor], so
  * "new files" and "nothing new" come from actual transfers, not canned numbers.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -357,11 +357,11 @@ class AutoSyncRunnerTest {
     @Test
     fun `collect all transfers distinct devices simultaneously using real sessions and engine`() = runTest(gateway.dispatcher) {
         val payload = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/device/v1-none-90rows-dated.parquet")).use { it.readBytes() }
-        val second = FakeTransport(address = otherAddr, chunkDelayMs = 0, liveIntervalMs = 3_600_000, thing = "thing-b", deviceId = "441bf6e26b41", dispatcher = gateway.dispatcher)
+        val second = DemoSensor(address = otherAddr, chunkDelayMs = 0, liveIntervalMs = 3_600_000, thing = "thing-b", deviceId = "441bf6e26b41", dispatcher = gateway.dispatcher)
         gateway.peers[otherAddr] = second
         listOf(gateway.fake, second).forEach { fake ->
             fake.files.clear()
-            fake.files += FakeTransport.FakeFile("legacy-parquet/readings.parquet", thingParquetFixture(payload, fake.thing))
+            fake.files += DemoSensor.DemoFile("legacy-parquet/readings.parquet", thingParquetFixture(payload, fake.thing))
         }
         gateway.devices += device(token = null)
         gateway.devices += device(address = otherAddr, token = null, thing = second.thing)
@@ -385,14 +385,14 @@ class AutoSyncRunnerTest {
 
     /**
      * Gateway whose device list, LAN browse result, bond table and current session are plain
-     * fields, and whose `sync` does the real thing over one [FakeTransport]: LIST, [SyncPlanner]
+     * fields, and whose `sync` does the real thing over one [DemoSensor]: LIST, [SyncPlanner]
      * against the in-memory archive table, [SyncEngine.download] for each missing file.
      */
     private class TestGateway(tmp: File) : AutoSyncGateway {
         val dispatcher = StandardTestDispatcher(TestCoroutineScheduler())
-        val fake = FakeTransport(chunkDelayMs = 0, liveIntervalMs = 3_600_000, dispatcher = dispatcher)
+        val fake = DemoSensor(chunkDelayMs = 0, liveIntervalMs = 3_600_000, dispatcher = dispatcher)
         private val scope = CoroutineScope(SupervisorJob() + dispatcher)
-        val peers = java.util.concurrent.ConcurrentHashMap<String, FakeTransport>()
+        val peers = java.util.concurrent.ConcurrentHashMap<String, DemoSensor>()
         var beforeSync: suspend (KnownDevice) -> Unit = {}
         val dao = InMemoryDao()
         private val engine = androidSyncEngine(FileArchive(tmp), dao, windowRetryBackoffMs = 1, io = dispatcher)

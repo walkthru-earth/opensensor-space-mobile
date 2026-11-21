@@ -34,7 +34,6 @@ import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.DeviceSession
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.coroutines.ApplicationScope
-import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.history.HistoryRepository
 import space.opensensor.data.history.TodaySoFar
 import space.opensensor.data.local.database.KnownDevice
@@ -141,7 +140,7 @@ private class RepositoryTodaySource(
     enrolled: Flow<KnownDevice?>,
     todaySoFar: Flow<TodaySoFar?>,
 ) : TodaySource {
-    private val fakeEndpoint = address == FakeTransport.FAKE_ADDRESS || address == FakeTransport.FAKE_LAN_ADDRESS
+    private val demoEndpoint = repository.isDemoAddress(address)
 
     override val snapshot: StateFlow<TodaySnapshot> = combine(
         repository.session, repository.connectionState, repository.info, repository.status, repository.live,
@@ -186,7 +185,7 @@ private class RepositoryTodaySource(
     override fun stopSync() = repository.cancelSync()
 
     override fun reconnect() {
-        repository.connect(address, snapshot.value.name, fake = fakeEndpoint)
+        repository.connect(address, snapshot.value.name, demo = demoEndpoint)
     }
 
     override fun disconnect() = repository.disconnect()

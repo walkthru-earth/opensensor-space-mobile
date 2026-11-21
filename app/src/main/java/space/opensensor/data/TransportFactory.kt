@@ -10,14 +10,11 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import space.opensensor.app.BuildConfig
 import space.opensensor.data.ble.BleLinkDriver
 import space.opensensor.data.ble.DeviceTransport
 import space.opensensor.data.ble.TransportUnavailableException
-import space.opensensor.data.coroutines.ApplicationScope
 import space.opensensor.data.coroutines.IoDispatcher
-import space.opensensor.data.fake.FakeTransport
+import space.opensensor.data.demo.DemoDevices
 import space.opensensor.data.lan.TcpLinkDriver
 import space.opensensor.link.UnavailableKind
 import java.net.InetAddress
@@ -32,20 +29,27 @@ interface TransportSource {
     fun ble(address: String): AndroidLink
     fun bleUnattended(address: String, connectTimeoutMs: Long): AndroidLink
     fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AndroidLink
-    fun fake(address: String): AndroidLink
-    fun isFake(transport: DeviceTransport): Boolean
+
+    /** A new link to the demo sensor at [address]. Only a debug build has one. */
+    fun demo(address: String): AndroidLink
+
+    /** True when [address] belongs to a demo sensor, always false in a release build. */
+    fun isDemoAddress(address: String): Boolean
+
+    /** True when [transport] is a demo sensor link. */
+    fun isDemo(transport: DeviceTransport): Boolean
 }
 
 /**
  * Creates [AndroidLink]s. The repository decides *which* one (LAN when the device is discovered
- * on the network and a token is held, else BLE); this class only builds them. The fake is
- * debug-only.
+ * on the network and a token is held, else BLE); this class only builds them. Demo sensors come from
+ * [DemoDevices], which a release build binds empty.
  */
 @Singleton
 class TransportFactory @Inject constructor(
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-    @ApplicationScope private val appScope: CoroutineScope,
+    private val demoDevices: DemoDevices,
 ) : TransportSource {
 
     /**
@@ -94,16 +98,9 @@ class TransportFactory @Inject constructor(
     override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AndroidLink =
         TcpLinkDriver(address = address, displayName = name, host = host, port = port, token = token, ioDispatcher = ioDispatcher)
 
-    private val fakes = HashMap<String, FakeTransport>()
+    override fun demo(address: String): AndroidLink = checkNotNull(demoDevices.link(address)) { "no demo sensor in this build" }
 
-    /** One fake per address, kept for the process lifetime so its "NVS" survives disconnects and fake reboots. */
-    override fun fake(address: String): AndroidLink {
-        check(BuildConfig.DEBUG) { "fake device is debug-only" }
-        val device = synchronized(fakes) {
-            fakes.getOrPut(address) { FakeTransport(address = address, simulateLan = address == FakeTransport.FAKE_LAN_ADDRESS) }
-        }
-        return TransportLink(device, appScope)
-    }
+    override fun isDemoAddress(address: String): Boolean = demoDevices.isDemo(address)
 
-    override fun isFake(transport: DeviceTransport): Boolean = (transport as? TransportLink)?.wrapped is FakeTransport
+    override fun isDemo(transport: DeviceTransport): Boolean = demoDevices.owns(transport)
 }

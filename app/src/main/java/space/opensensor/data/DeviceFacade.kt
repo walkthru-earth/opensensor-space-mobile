@@ -402,14 +402,17 @@ class DeviceFacade internal constructor(
     val syncDiagnostics get() = linkOwner.syncDiagnostics
     val events get() = linkOwner.events
     val currentDisplayName get() = linkOwner.currentDisplayName
-    val isFake get() = linkOwner.isFake
+    val isDemo get() = linkOwner.isDemo
     val plan get() = linkOwner.plan
     val interactiveSessionAddress get() = linkOwner.interactiveSessionAddress
     val currentKnownDevice get() = linkOwner.currentKnownDevice
     val knownDevices get() = linkOwner.knownDevices
     val connectsRunning get() = linkOwner.connectsRunning
     val connectFailure get() = linkOwner.connectFailure
-    fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO): Boolean = linkOwner.connect(address, name, fake, preference)
+    fun connect(address: String, name: String?, demo: Boolean = false, preference: TransportPreference = TransportPreference.AUTO): Boolean = linkOwner.connect(address, name, demo, preference)
+
+    /** True when [address] belongs to a demo sensor, never in a release build. */
+    fun isDemoAddress(address: String): Boolean = linkOwner.isDemoAddress(address)
     fun disconnect() {
         val disconnectClaim = linkOwner.claimDisconnectIntent()
         val intentId = controller.state.value.intentId

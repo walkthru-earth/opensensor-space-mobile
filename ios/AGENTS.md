@@ -44,6 +44,8 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   and the link stays. Only the Developer `saveWifiAccess` action shows token errors. A missing credential
   or a lost enrollment ends Wi-Fi with `.lanDisconnected`, and a failed Wi-Fi connect with a
   Bluetooth fallback falls back with that same notice. Nothing here asks the user.
+- The debug demo sensor lives in Kotlin only (`IosDemo`, `IosDemoTest`). Keep Swift free of demo
+  code, and keep every demo entry behind `IosDemo.enabled` (`Platform.isDebugBinary`).
 - The setup wizard reads the link through `iosSetupLink` (`SetupIos.kt`, `SetupIosLinkTest`).
   `CompanionState.closedId` marks a link that closed before INFO passed, except the user's own
   disconnect, so the wizard shows Unreachable rather than Connecting forever.

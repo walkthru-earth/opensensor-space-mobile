@@ -304,7 +304,7 @@ Timeouts carry `DisconnectCause.Timeout` with the failed phase.
 
 `DeviceSession`, `SyncEngine` and `ArchiveCollector` run on it. Android native
 `TcpLinkDriver` and `BleLinkDriver` feed its `FrameSink`. `TransportLinkDriver` adapts the
-fake and compatibility `DeviceTransport` paths. iOS uses the connection's `IosLink`.
+demo sensor and compatibility `DeviceTransport` paths. iOS uses the connection's `IosLink`.
 
 - One session per physical connection. A single router coroutine owns every reply frame. A
   request is registered before its write, owns the link until its terminal frame
@@ -584,5 +584,5 @@ it.
 | `WINDOW_RETRIES` / backoff | `SyncEngineTest`, "recovered N" copy, worst-case file time |
 | `FileArchive` paths | Export zips (byte-exact mirror), `HistoryIndexer` file lookup, `data_extraction_rules.xml` (`archive/` in device transfer) |
 | `SyncEngine` post-verify upsert | `archived_file` row + index columns ([data-model.md](data-model.md)); `HistoryDeriver` signature (`name:crc32`) |
-| `DeviceSession` request/terminal mapping | `TerminalRules`, `FakeTransport`, `FakeArchiveDevice` |
+| `DeviceSession` request/terminal mapping | `TerminalRules`, `DemoSensor`, `FakeArchiveDevice` |
 | `CollectionState` and typed disconnect causes | facade progress, active retry, service loss and worker result mapping |
