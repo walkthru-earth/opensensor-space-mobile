@@ -38,6 +38,16 @@ class AppProfileTest {
     }
 
     @Test
+    fun aUcumExponentShowsAsASuperscriptInArabicAndEnglish() {
+        val title = "\"title\": \"Soil water content\", \"opensensor:title_i18n\": {\"ar\": \"محتوى ماء التربة\"}"
+        val vwc = """{"name": "vwc", "type": "float", "unit": "m3/m3", "roles": ["physicalMeasurement"], $title}"""
+        val column = Thing.join("vwc-1", BoardTemplate.parse(template(vwc))).datastream("vwc")!!
+        assertEquals("Soil water content", column.label("en"))
+        assertEquals("محتوى ماء التربة", column.label("ar"))
+        assertEquals("m³/m³", column.displayUnit)
+    }
+
+    @Test
     fun theTemplatePrimaryWinsAndOnlyItsOwnScaleApplies() {
         assertEquals("soil_moisture_pct", thing.primary?.name)
         assertEquals(Family.GENERIC, thing.profile.family)

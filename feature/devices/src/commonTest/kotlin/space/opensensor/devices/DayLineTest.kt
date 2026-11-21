@@ -29,9 +29,9 @@ class DayLineTest {
 
     @Test
     fun `a metric without a scale shows a neutral line at its decimals`() {
-        val moisture = MetricSpec(id = "soil_moisture", column = "soil_moisture", label = "Soil moisture", unit = "m3/m3", sourceUnit = "m3/m3", primary = true, decimals = 2)
-        assertEquals(DayLine("0.31", "m3/m3", null), dayLine(day(moisture, 0.3149f), UnitFormatter.Metric))
-        assertEquals(DayLine("25", "m3/m3", null), dayLine(day(moisture.copy(decimals = 0), 24.6f), UnitFormatter.Metric))
+        val moisture = MetricSpec(id = "soil_moisture", column = "soil_moisture", label = "Soil moisture", unit = "m³/m³", sourceUnit = "m3/m3", primary = true, decimals = 2)
+        assertEquals(DayLine("0.31", "m³/m³", null), dayLine(day(moisture, 0.3149f), UnitFormatter.Metric))
+        assertEquals(DayLine("25", "m³/m³", null), dayLine(day(moisture.copy(decimals = 0), 24.6f), UnitFormatter.Metric))
     }
 
     @Test
