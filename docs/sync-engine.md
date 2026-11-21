@@ -539,19 +539,41 @@ Stop targets the controller intent and cleanup completes before ownership is rel
 
 ## Thing setup
 
-`ThingSetupPolicy.needsSetup(advertFlags, config)` in `core/sync` is the one rule both phones use
-to say a Thing still needs setup (#272). It reads the advert flags byte and the CONFIG page 1, and
-either may be null when the phone has not seen it. It sends nothing and changes nothing.
+`ThingSetupPolicy.needsSetup(advertFlags, config, manifest)` in `core/sync` is the one rule both
+phones use to say a Thing still needs setup (#272). It reads the advert flags byte, the CONFIG page 1
+and the board template's `firmware.setup` ([SetupManifest](devices-and-discovery.md)). The flags and
+the page may be null when the phone has not seen them. It sends nothing and changes nothing.
 
 - Advert bit 6 `setup` (`Advertisement.needsSetup`) set means setup is needed. CoreS3 `v6.24` and
-  Waveshare `v2.18` set it (firmware #147). Older firmware leaves it at 0.
-- Otherwise page 1 `thing.setup` is the answer when the page carries it. 0 means no setup, even with
-  an empty cell.
-- Without `thing.setup` (older firmware) the rule is derived. A `fixed` Thing, or a page with no
-  `thing.mobility` that still reports a `location` object, needs setup until `location.cell` holds an
-  H3 cell. Any valid cell counts, since the board clears the bit for any stored cell.
-- A `moving` Thing never needs a cell. A mobility value this build does not know claims nothing.
+  Waveshare `v2.18` set it (firmware #147).
+- Page 1 `thing.setup` 1 means setup is needed.
+- Otherwise `SetupPlan.of(manifest, config).pending` answers. Page 1 `thing.setup` 0 never lowers
+  the app floors below.
 - Without bit 6 and without page 1, nothing is claimed.
+
+`SetupPlan` merges the manifest, the device's setup record (`thing.setup_v`, `thing.setup_ack`, read
+through `SetupAck`) and the app floors into the ordered steps both wizards walk.
+
+- The steps keep the manifest order. Find, Pair, Permission and Done belong to the app and are never
+  in a plan.
+- A catalog id (`StepId.KNOWN`) is drawn by the app's own page, and any keys listed for it are ignored.
+  Only location and mobility can be required, as only they have a fact on page 1.
+- A board id whose `config_keys` survive `SetupPlan.fieldsOf` is a generic form. Those keys are board
+  keys on page 7 only. A secret, an app key, a key under a reserved prefix (`ble.`, `wifi.`, `lan.`,
+  `location.`, `thing.`, `owner.`, `sensor.`) and a type `ConfigFields.declared` cannot read are left
+  out, and an action key always confirms. Without such keys an optional board id is dropped, and a
+  required one is unsupported, so setup stays pending until the app is updated.
+- Location is required on a fixed Thing whatever the manifest says. A `fixed` Thing, or a page with
+  no `thing.mobility` that still reports a `location` object, needs an H3 cell in `location.cell`.
+  Any valid cell counts. When the manifest omits location, a fixed Thing gets the app's own location
+  step first, with no ack bit. A `moving` Thing never needs a cell. A mobility this build does not
+  know is not fixed.
+- A declared step is done when its fact holds and the device holds bit `i` of `setup_ack` for the
+  plan's `setup_v`. A `setup_v` that differs reads as nothing done. Steps past the 31st are dropped.
+- `SetupPlan.ackWith(ids)` is the `setup_ack` to send once steps are done or skipped, the device's bits
+  plus their own.
+- `SetupPlan.manifestOf(info, served)` resolves the manifest from the board's served or bundled
+  template, or `SetupManifest.NONE`.
 
 A caller passes advert flags only from an advert newer than its last page 1 read. Right after a
 save, a cached advert can still carry bit 6 while a fresh page 1 already says setup is done. The
