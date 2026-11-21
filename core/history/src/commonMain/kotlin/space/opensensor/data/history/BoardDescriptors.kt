@@ -26,13 +26,19 @@ import space.opensensor.net.BlockStore
  * SHA-256. [DeviceCapabilities] hands them to the catalog resolver ahead of the bundled ones. Holds at
  * most [limit], the oldest goes first, so a board that keeps serving fresh templates cannot grow it.
  */
-class ServedTemplates(private val limit: Int = BoardDescriptors.MAX_TEMPLATES) {
+class ServedTemplates(
+    private val limit: Int = BoardDescriptors.MAX_TEMPLATES,
+    /** The metric union each added template joins, so its columns chart and aggregate with no app change. */
+    val catalog: MetricCatalog = MetricCatalog(),
+) {
     private val _all = MutableStateFlow<List<BoardTemplate>>(emptyList())
     val all: StateFlow<List<BoardTemplate>> = _all.asStateFlow()
 
+    /** Holds [template], the newest of at most [limit], and adds its metrics to [catalog]. */
     fun add(template: BoardTemplate) {
         requireNotNull(template.key.desc) { "a served template carries its desc" }
         _all.update { held -> if (held.any { it.key.desc == template.key.desc }) held else (held + template).takeLast(limit) }
+        catalog.adopt(template)
     }
 
     /** Drops the template whose full desc is [desc], if held. */
@@ -41,8 +47,8 @@ class ServedTemplates(private val limit: Int = BoardDescriptors.MAX_TEMPLATES) {
     }
 
     companion object {
-        /** The app's one set, shared by Android and iOS. */
-        val shared = ServedTemplates()
+        /** The app's one set, shared by Android and iOS, growing [MetricCatalog.shared]. */
+        val shared = ServedTemplates(catalog = MetricCatalog.shared)
     }
 }
 

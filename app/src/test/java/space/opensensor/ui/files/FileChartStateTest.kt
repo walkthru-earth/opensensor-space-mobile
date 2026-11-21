@@ -7,7 +7,7 @@ import org.junit.Test
 import space.opensensor.data.history.ArchiveQueryResult
 import space.opensensor.data.history.FileSummary
 import space.opensensor.data.history.MetricAgg
-import space.opensensor.data.history.Metrics
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.local.database.ArchivedFile
 import space.opensensor.family.air.AirFamily
 import space.opensensor.family.air.AirMetrics
@@ -27,6 +27,8 @@ class FileChartStateTest {
         sourceDevice = thing,
     )
 
+    private val catalog get() = MetricCatalog.shared.union.value
+
     private fun summary(name: String) = FileSummary(name, 1, 1, 0, 0L, 0L, emptyMap())
 
     @Test
@@ -35,12 +37,12 @@ class FileChartStateTest {
         val second = FileSummaryRequest("thing-b", listOf(file("thing-b", "two.parquet")))
         val oldResult = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(first, listOf(summary("one.parquet")))
 
-        val loading = fileChartState(AirMetrics.PM25, true, null, second, oldResult)
+        val loading = fileChartState(AirMetrics.PM25, true, null, second, oldResult, catalog)
         assertTrue(loading.loading)
         assertTrue(loading.page.isEmpty())
         assertEquals(0, loading.total)
 
-        val loaded = fileChartState(AirMetrics.PM25, true, null, second, ArchiveQueryResult(second, listOf(summary("two.parquet"))))
+        val loaded = fileChartState(AirMetrics.PM25, true, null, second, ArchiveQueryResult(second, listOf(summary("two.parquet"))), catalog)
         assertFalse(loaded.loading)
         assertEquals("two.parquet", loaded.page.single().name)
     }
@@ -51,11 +53,11 @@ class FileChartStateTest {
         val current = FileSummaryRequest("thing-a", old.files + file("thing-a", "two.parquet"))
         val oldResult = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(old, listOf(summary("one.parquet")))
 
-        val loading = fileChartState(AirMetrics.PM25, true, 80, current, oldResult)
+        val loading = fileChartState(AirMetrics.PM25, true, 80, current, oldResult, catalog)
         assertTrue(loading.loading)
         assertTrue(loading.page.isEmpty())
 
-        val loaded = fileChartState(AirMetrics.PM25, true, 80, current, ArchiveQueryResult(current, listOf(summary("one.parquet"), summary("two.parquet"))))
+        val loaded = fileChartState(AirMetrics.PM25, true, 80, current, ArchiveQueryResult(current, listOf(summary("one.parquet"), summary("two.parquet"))), catalog)
         assertFalse(loaded.loading)
         assertEquals(0, loaded.offset)
         assertEquals(2, loaded.page.size)
@@ -70,15 +72,15 @@ class FileChartStateTest {
         // #92. Corrected is the default at every level. Raw is a chip only in Detailed.
         val request = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
         val result = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, listOf(humid("one.parquet"), dry("two.parquet")))
-        val simple = fileChartState(null, false, null, request, result)
+        val simple = fileChartState(null, false, null, request, result, catalog)
         assertEquals(AirMetrics.PM25_CORRECTED, simple.metric)
         assertFalse(AirMetrics.PM25 in simple.metrics)
-        val detailed = fileChartState(null, true, null, request, result)
+        val detailed = fileChartState(null, true, null, request, result, catalog)
         assertEquals(AirMetrics.PM25_CORRECTED, detailed.metric)
         assertEquals(listOf(AirMetrics.PM25_CORRECTED, AirMetrics.PM25), detailed.metrics.take(2))
-        assertEquals(AirMetrics.PM25, fileChartState(AirMetrics.PM25, true, null, request, result).metric)
+        assertEquals(AirMetrics.PM25, fileChartState(AirMetrics.PM25, true, null, request, result, catalog).metric)
         // Raw picked in Detailed, then the level goes back to Simple. The chart returns to corrected.
-        assertEquals(AirMetrics.PM25_CORRECTED, fileChartState(AirMetrics.PM25, false, null, request, result).metric)
+        assertEquals(AirMetrics.PM25_CORRECTED, fileChartState(AirMetrics.PM25, false, null, request, result, catalog).metric)
     }
 
     @Test
@@ -87,7 +89,7 @@ class FileChartStateTest {
         val request = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
         val result = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, listOf(dry("one.parquet")))
         for (detailed in listOf(false, true)) {
-            val state = fileChartState(null, detailed, null, request, result)
+            val state = fileChartState(null, detailed, null, request, result, catalog)
             assertEquals(AirMetrics.PM25, state.metric)
             assertFalse(AirMetrics.PM25_CORRECTED in state.metrics)
             assertEquals(AirMetrics.PM25, state.metrics.first())
@@ -99,7 +101,7 @@ class FileChartStateTest {
         // #136. No summary is read yet, so nothing says the files lack humidity. Simple keeps corrected.
         val request = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
         val pending = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, null)
-        val simple = fileChartState(null, false, null, request, pending)
+        val simple = fileChartState(null, false, null, request, pending, catalog)
         assertTrue(simple.loading)
         assertEquals(AirMetrics.PM25_CORRECTED, simple.metric)
         assertFalse(AirMetrics.PM25 in simple.metrics)
@@ -109,11 +111,11 @@ class FileChartStateTest {
     fun `Simple offers only the primary metric and Detailed every metric`() {
         val request = FileSummaryRequest("thing-a", listOf(file("thing-a", "one.parquet")))
         val result = ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(request, listOf(humid("one.parquet")))
-        val simple = fileChartState(null, false, null, request, result).metrics
+        val simple = fileChartState(null, false, null, request, result, catalog).metrics
         assertTrue(simple.isNotEmpty() && simple.all { it.primary })
         assertFalse(AirMetrics.PARTICLES_GT03 in simple)
         assertFalse(AirMetrics.PM10 in simple)
-        val detailed = fileChartState(null, true, null, request, result).metrics
-        assertEquals(Metrics.all, detailed)
+        val detailed = fileChartState(null, true, null, request, result, catalog).metrics
+        assertEquals(catalog, detailed)
     }
 }

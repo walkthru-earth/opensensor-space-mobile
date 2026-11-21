@@ -1,5 +1,6 @@
 package space.opensensor.thing
 
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.Metrics
 import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.data.protocol.DeviceInfo
@@ -101,10 +102,10 @@ class ThingKindsTest {
         assertEquals(emptyList(), OpenSensorBoardKind.derivedMetrics)
         try {
             Metrics.install(ThingKinds(listOf(healthKind)).metricProviders)
-            assertNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
+            assertNull(MetricCatalog.shared.byId(AirFamily.PM25_CORRECTED_ID))
             Metrics.install(kinds.metricProviders)
             assertEquals(listOf<DerivedMetricProvider>(AirFamily), Metrics.providers)
-            assertNotNull(Metrics.byId(AirFamily.PM25_CORRECTED_ID))
+            assertNotNull(MetricCatalog.shared.byId(AirFamily.PM25_CORRECTED_ID))
             AirFamily.install(kinds.metricProviders)
             assertEquals(listOf<DerivedMetricProvider>(AirFamily), Metrics.providers)
         } finally {

@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.v2.runComposeUiTest
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -15,7 +16,7 @@ import kotlin.test.assertTrue
 class ThingChipsSemanticsTest {
     private val old = "0a1b2c3d4e5f60718293a4b5c6d7e8f9"
     private val current = "f9e8d7c6b5a49382716051e4d3c2b1a0"
-    private val state = HistoryUiState(thing = current, things = listOf(old, current))
+    private val state = HistoryUiState(metric = checkNotNull(MetricCatalog.shared.union.value.firstOrNull()), thing = current, things = listOf(old, current))
 
     /** Every text and description a screen reader can reach, merged as it reads them. */
     private fun spoken(level: DetailLevel): List<String> {

@@ -25,17 +25,18 @@ class LatestDayTest {
 
     private val corrected = AirMetrics.PM25_CORRECTED.id
     private val raw = AirMetrics.PM25.id
+    private val union get() = MetricCatalog.shared.union.value
 
     @Test
     fun `the corrected day wins when it is the newest and raw shows otherwise`() {
         // Same day, the corrected view wins the tie.
-        val humid = LatestDays.latest(mapOf(corrected to listOf(day(172_800, 8f)), raw to listOf(day(172_800, 11f))))
+        val humid = LatestDays.latest(mapOf(corrected to listOf(day(172_800, 8f)), raw to listOf(day(172_800, 11f))), union)
         assertEquals(corrected to 8f, humid?.let { it.metric.id to it.mean })
         // No humidity sensor, so raw.
-        val cores3 = LatestDays.latest(mapOf(raw to listOf(day(172_800, 20f))))
+        val cores3 = LatestDays.latest(mapOf(raw to listOf(day(172_800, 20f))), union)
         assertEquals(raw to 20f, cores3?.let { it.metric.id to it.mean })
         // The humidity sensor stopped, the newest day is raw only.
-        val oldRh = LatestDays.latest(mapOf(corrected to listOf(day(0, 7f)), raw to listOf(day(86_400, 12f), day(0, 9f))))
+        val oldRh = LatestDays.latest(mapOf(corrected to listOf(day(0, 7f)), raw to listOf(day(86_400, 12f), day(0, 9f))), union)
         assertEquals(raw to 12f, oldRh?.let { it.metric.id to it.mean })
         assertEquals(86_400L, oldRh?.startEpochS)
         assertEquals(1f, oldRh?.coverage)
@@ -43,25 +44,25 @@ class LatestDayTest {
 
     @Test
     fun `days without valid rows and other metrics never stand for the thing`() {
-        assertNull(LatestDays.latest(mapOf(raw to listOf(day(86_400, 0f, valid = 0)))))
-        assertNull(LatestDays.latest(emptyMap()))
+        assertNull(LatestDays.latest(mapOf(raw to listOf(day(86_400, 0f, valid = 0))), union))
+        assertNull(LatestDays.latest(emptyMap(), union))
         // Humidity has data, but it is not the main metric while PM2.5 has a day.
-        val out = LatestDays.latest(mapOf(AirMetrics.HUMIDITY.id to listOf(day(172_800, 60f)), raw to listOf(day(86_400, 5f))))
+        val out = LatestDays.latest(mapOf(AirMetrics.HUMIDITY.id to listOf(day(172_800, 60f)), raw to listOf(day(86_400, 5f))), union)
         assertEquals(raw, out?.metric?.id)
     }
 
     @Test
     fun `a day whose mean is not finite never stands for the thing`() {
-        assertNull(LatestDays.latest(mapOf(raw to listOf(day(86_400, Float.NaN)))))
+        assertNull(LatestDays.latest(mapOf(raw to listOf(day(86_400, Float.NaN))), union))
         // The newer corrected day has no finite mean, so the older finite raw day shows.
-        val out = LatestDays.latest(mapOf(corrected to listOf(day(172_800, Float.POSITIVE_INFINITY)), raw to listOf(day(86_400, 6f))))
+        val out = LatestDays.latest(mapOf(corrected to listOf(day(172_800, Float.POSITIVE_INFINITY)), raw to listOf(day(86_400, 6f))), union)
         assertEquals(raw to 6f, out?.let { it.metric.id to it.mean })
         // The newest raw day is NaN, the day before it shows.
-        val older = LatestDays.latest(mapOf(raw to listOf(day(172_800, Float.NaN), day(86_400, 4f))))
+        val older = LatestDays.latest(mapOf(raw to listOf(day(172_800, Float.NaN), day(86_400, 4f))), union)
         assertEquals(86_400L to 4f, older?.let { it.startEpochS to it.mean })
         // PM2.5 has valid rows but no finite day, so it still is the main metric and nothing shows, as
         // observe picks it from the metrics with data. Humidity never stands in.
-        assertNull(LatestDays.latest(mapOf(raw to listOf(day(86_400, Float.NaN)), AirMetrics.HUMIDITY.id to listOf(day(86_400, 60f)))))
+        assertNull(LatestDays.latest(mapOf(raw to listOf(day(86_400, Float.NaN)), AirMetrics.HUMIDITY.id to listOf(day(86_400, 60f))), union))
     }
 
     @Test
@@ -84,7 +85,7 @@ class LatestDayTest {
             override fun observeDays(thing: String) = flowOf(DaySpan(3, 8 * 86_400L, 10 * 86_400L))
             override fun observeMetricsWithData(thing: String) = flowOf(setOf(raw, corrected, AirMetrics.HUMIDITY.id))
         }
-        val out = LatestDays.observe(tiers, "t", lookbackDays = 2).first()
+        val out = LatestDays.observe(tiers, "t", flowOf(union), lookbackDays = 2).first()
         assertEquals(raw to 6f, out?.let { it.metric.id to it.mean })
         assertEquals(setOf(Triple(corrected, 9 * 86_400L, 11 * 86_400L), Triple(raw, 9 * 86_400L, 11 * 86_400L)), tiers.asked.toSet())
     }

@@ -1,8 +1,10 @@
 package space.opensensor.data.history
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import space.opensensor.data.local.database.MetricBucketDao
@@ -22,13 +24,17 @@ class RoomHistoryTiers @Inject constructor(private val bucketDao: MetricBucketDa
             DaySpan(n, first, last)
         }.distinctUntilChanged()
 
-    override fun observeMetricsWithData(thing: String): Flow<Set<String>> {
-        val metrics = Metrics.all
-        if (metrics.isEmpty()) return flowOf(emptySet())
-        return combine(
-            metrics.map { spec ->
-                bucketDao.observeAllDays(spec.id).map { rows -> spec.id.takeIf { rows.any { it.thing == thing && it.validRows > 0 } } }
-            },
-        ) { ids -> ids.filterNotNull().toSet() }.distinctUntilChanged()
-    }
+    /** The ids of [MetricCatalog.shared] with valid day rows of [thing], read again as the catalog grows. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeMetricsWithData(thing: String): Flow<Set<String>> = MetricCatalog.shared.union.flatMapLatest { metrics ->
+        if (metrics.isEmpty()) {
+            flowOf(emptySet())
+        } else {
+            combine(
+                metrics.map { spec ->
+                    bucketDao.observeAllDays(spec.id).map { rows -> spec.id.takeIf { rows.any { it.thing == thing && it.validRows > 0 } } }
+                },
+            ) { ids -> ids.filterNotNull().toSet() }
+        }
+    }.distinctUntilChanged()
 }

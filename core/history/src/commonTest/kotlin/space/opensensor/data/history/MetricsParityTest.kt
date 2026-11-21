@@ -36,7 +36,7 @@ class MetricsParityTest {
 
     @Test
     fun everyStoredMetricHasTheSameLabelUnitGateSettleAndScaleOnEveryBoardThatShowsIt() {
-        Metrics.all.filter { spec -> spec.auxColumn == null && things.any { it.datastream(spec.column) != null } }.forEach { spec ->
+        MetricCatalog.shared.union.value.filter { spec -> spec.auxColumn == null && things.any { it.datastream(spec.column) != null } }.forEach { spec ->
             val shown = showing(spec.column)
             assertTrue(shown.isNotEmpty(), "no bundled board shows ${spec.id}")
             shown.forEach { (thing, ds) ->

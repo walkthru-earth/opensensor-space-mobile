@@ -10,6 +10,7 @@ import space.opensensor.data.history.DaySpan
 import space.opensensor.data.history.HistoryTiers
 import space.opensensor.data.history.LatestReading
 import space.opensensor.data.history.LocationSource
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.Resolution
 import space.opensensor.data.history.TierBucket
 import space.opensensor.data.history.TrackRow
@@ -80,14 +81,14 @@ class OwnThingsTest {
         }
         val linked = MutableStateFlow(setOf("b"))
         val uploaded = MutableStateFlow(emptySet<String>())
-        val out = observeOwnStatus(tiers, flowOf(setOf("a", "b")), linked, uploaded)
+        val out = observeOwnStatus(tiers, flowOf(setOf("a", "b")), linked, uploaded, MetricCatalog().union)
         val first = out.first()
         assertEquals(day + 900, first["a"]?.reading?.endEpochS)
         assertEquals(false to false, first["a"]?.let { it.live to it.shared })
         assertEquals(OwnStatus(null, live = true, shared = false), first["b"])
         uploaded.value = setOf("a")
         assertEquals(true, out.first()["a"]?.shared)
-        assertEquals(emptyMap(), observeOwnStatus(tiers, flowOf(emptySet()), linked, uploaded).first())
+        assertEquals(emptyMap(), observeOwnStatus(tiers, flowOf(emptySet()), linked, uploaded, MetricCatalog().union).first())
     }
 
     /** Every cell centres on its own low bits, and every outline is one small triangle. */

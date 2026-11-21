@@ -1,13 +1,14 @@
 package space.opensensor.family.air
 
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.Metrics
 import space.opensensor.data.protocol.LiveReading
 
 /**
  * The air family's named metrics, the columns of the bundled air boards that the air cards and their
- * tests name. Each one resolves from [Metrics.catalog] on every read, so it follows the families the app
- * installed ([Metrics.install]) and a catalog without it never fails to load. Generic code reads
+ * tests name. Each one resolves from [MetricCatalog.shared] on every read, so it follows the families the
+ * app installed ([Metrics.install]) and a catalog without it never fails to load. Generic code reads
  * [Metrics] and never these. The derived ones exist once [AirFamily] is installed.
  */
 object AirMetrics {
@@ -34,7 +35,7 @@ object AirMetrics {
     val AMBIENT_TEMP: MetricSpec get() = named("ambient_temperature_c")
     val HUMIDITY: MetricSpec get() = named(AirFamily.RELATIVE_HUMIDITY)
 
-    private fun named(id: String): MetricSpec = requireNotNull(Metrics.byId(id)) { "no bundled template has $id" }
+    private fun named(id: String): MetricSpec = requireNotNull(MetricCatalog.shared.byId(id)) { "no bundled template has $id" }
 }
 
 /** The PM sensor state, the `pms_status` code from the dictionary. */

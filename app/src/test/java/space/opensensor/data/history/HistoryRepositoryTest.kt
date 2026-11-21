@@ -112,7 +112,7 @@ class HistoryRepositoryTest {
         assertEquals(105f / 8640f, day.coverage, 1e-6f)
         assertTrue(day.points.all { it.endS - it.startS == 10L })
         // The light count is gated by its own status, not pms_status, and has no envelope.
-        val light = repo.observe(thing, Metrics.byId("light_ch0_raw")!!, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        val light = repo.observe(thing, MetricCatalog.shared.byId("light_ch0_raw")!!, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(2.03f, light.mean!!, 0.01f)
         assertNull(light.points.first().min)
 

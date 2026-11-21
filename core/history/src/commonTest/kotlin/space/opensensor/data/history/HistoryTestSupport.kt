@@ -150,4 +150,4 @@ fun withCoreS3Dict(
  * The CoreS3 visible plus infrared light count, a measured integer metric with no settle window.
  * It stands in where a test needs a second stored metric beside PM2.5.
  */
-val LightMetric: MetricSpec get() = checkNotNull(Metrics.byId("light_ch0_raw"))
+val LightMetric: MetricSpec get() = checkNotNull(MetricCatalog.shared.byId("light_ch0_raw"))

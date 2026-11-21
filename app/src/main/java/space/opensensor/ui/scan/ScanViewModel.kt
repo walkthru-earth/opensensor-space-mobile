@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -15,6 +16,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -32,8 +35,8 @@ import space.opensensor.data.ble.ScannedDevice
 import space.opensensor.data.fake.FakeTransport
 import space.opensensor.data.history.LatestDay
 import space.opensensor.data.history.LatestDays
+import space.opensensor.data.history.MetricCatalog
 import space.opensensor.data.history.MetricSpec
-import space.opensensor.data.history.Metrics
 import space.opensensor.data.history.TierBucket
 import space.opensensor.data.local.database.ArchivedFileDao
 import space.opensensor.data.local.database.KnownDeviceDao
@@ -64,7 +67,7 @@ import javax.inject.Inject
  * The [LatestDays.latest] day of each thing, from every thing's day buckets of each of [metrics]
  * (one list per metric, in that order), so My devices shows each thing's main metric (#221).
  */
-internal fun latestDays(rows: List<List<MetricBucket>>, metrics: List<MetricSpec> = Metrics.all): Map<String, LatestDay> {
+internal fun latestDays(rows: List<List<MetricBucket>>, metrics: List<MetricSpec>): Map<String, LatestDay> {
     val byThing = HashMap<String, MutableMap<String, MutableList<TierBucket>>>()
     for (list in rows) {
         for (b in list) {
@@ -88,9 +91,12 @@ class ScanViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** Per-thing totals come from one grouped query, so the list never loads every archived row (#63). */
+    @OptIn(ExperimentalCoroutinesApi::class)
     private val summaries: Flow<Map<String, ArchiveGlance>> = combine(
         archivedFileDao.observeThingGlances(),
-        combine(Metrics.all.map { bucketDao.observeAllDays(it.id) }) { latestDays(it.toList()) },
+        MetricCatalog.shared.union.flatMapLatest { metrics ->
+            if (metrics.isEmpty()) flowOf(emptyMap()) else combine(metrics.map { bucketDao.observeAllDays(it.id) }) { latestDays(it.toList(), metrics) }
+        },
     ) { glances, latestDay ->
         glances.associate { g -> g.thing to ArchiveGlance(g.files, g.lastSyncedMs, g.lastDataUtcNs, latestDay[g.thing]) }
     }

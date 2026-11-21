@@ -15,6 +15,7 @@ import space.opensensor.data.history.CellTrack
 import space.opensensor.data.history.HistoryTiers
 import space.opensensor.data.history.LatestReading
 import space.opensensor.data.history.LatestReadings
+import space.opensensor.data.history.MetricSpec
 import space.opensensor.publicfeed.CellGeoJson
 import space.opensensor.publicfeed.CellRow
 import space.opensensor.publicfeed.H3Grid
@@ -48,15 +49,22 @@ data class OwnStatus(val reading: LatestReading? = null, val live: Boolean = fal
 /**
  * The [OwnStatus] of each own Thing on both phones. [things] are the Thing UUIDs with a saved place,
  * [live] the ones the phone holds a link to and [uploaded] the ones with a file that went up. Each
- * Thing's newest reading comes from [tiers], this phone's history, so it works with no network.
+ * Thing's newest reading comes from [tiers], this phone's history, so it works with no network, among
+ * [metrics], the catalog the phone knows ([space.opensensor.data.history.MetricCatalog.union]).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-fun observeOwnStatus(tiers: HistoryTiers, things: Flow<Set<String>>, live: Flow<Set<String>>, uploaded: Flow<Set<String>>): Flow<Map<String, OwnStatus>> {
+fun observeOwnStatus(
+    tiers: HistoryTiers,
+    things: Flow<Set<String>>,
+    live: Flow<Set<String>>,
+    uploaded: Flow<Set<String>>,
+    metrics: Flow<List<MetricSpec>>,
+): Flow<Map<String, OwnStatus>> {
     val readings = things.distinctUntilChanged().flatMapLatest { keys ->
         if (keys.isEmpty()) {
             flowOf(emptyMap())
         } else {
-            combine(keys.map { key -> LatestReadings.observe(tiers, key).map { key to it } }) { it.toMap() }
+            combine(keys.map { key -> LatestReadings.observe(tiers, key, metrics).map { key to it } }) { it.toMap() }
         }
     }
     return combine(readings, live, uploaded) { latest, linked, shared ->
