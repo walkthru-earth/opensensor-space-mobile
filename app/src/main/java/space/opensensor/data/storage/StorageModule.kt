@@ -35,7 +35,7 @@ import space.opensensor.storage.JvmStorageTree
 import space.opensensor.storage.QuotaEnforcer
 import space.opensensor.storage.StorageBudget
 import space.opensensor.storage.StorageClass
-import space.opensensor.storage.StorageJanitor
+import space.opensensor.data.sync.StorageJanitor
 import space.opensensor.storage.StorageRole
 import space.opensensor.storage.StorageRoots
 import space.opensensor.storage.StorageTree
@@ -207,5 +207,5 @@ object StorageModule {
     @Provides
     @Singleton
     fun provideHistoryStartup(orchestrator: HistoryOrchestrator, janitor: StorageJanitor, blocks: BlockCache, templateHrefs: TemplateHrefs): HistoryStartup =
-        HistoryStartup(orchestrator, janitor, blocks, log = { Log.i("HistoryStartup", it) }, templateHrefs = templateHrefs)
+        HistoryStartup(orchestrator, { janitor.run() }, { blocks.enforce() }, log = { Log.i("HistoryStartup", it) }, templateHrefs = templateHrefs)
 }

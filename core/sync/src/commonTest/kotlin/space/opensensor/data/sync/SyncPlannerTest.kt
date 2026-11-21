@@ -1,5 +1,6 @@
 package space.opensensor.data.sync
 
+import space.opensensor.archive.HivePartition
 import space.opensensor.archive.PrunedFile
 import space.opensensor.data.protocol.Frame
 import space.opensensor.data.protocol.SafeName

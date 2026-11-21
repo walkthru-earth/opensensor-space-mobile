@@ -25,7 +25,7 @@ import space.opensensor.model.TemplateKey
 import space.opensensor.net.BlockCache
 import space.opensensor.net.MemoryBlockStore
 import space.opensensor.storage.StorageEntry
-import space.opensensor.storage.StorageJanitor
+import space.opensensor.data.sync.StorageJanitor
 import space.opensensor.storage.StorageRoots
 import space.opensensor.storage.StorageTree
 import kotlin.test.Test
@@ -133,13 +133,18 @@ class HistoryOrchestratorTest {
         override fun delete(path: String) = Unit
     }
 
-    private fun TestScope.janitor(log: (String) -> Unit) =
-        StorageJanitor(StorageRoots(emptyMap()), NoTree, store, index, StandardTestDispatcher(testScheduler), clock = { 42L }, log = log)
+    /** The run of a real janitor, the step each platform hands [HistoryStartup]. */
+    private fun TestScope.janitor(log: (String) -> Unit): suspend () -> Unit {
+        val janitor = StorageJanitor(StorageRoots(emptyMap()), NoTree, store, index, StandardTestDispatcher(testScheduler), clock = { 42L }, log = log)
+        return { janitor.run() }
+    }
 
-    /** One cached feed block over a zero quota, so [BlockCache.enforce] evicts it. */
-    private fun TestScope.blocks(onQuota: () -> Unit): Pair<BlockCache, MemoryBlockStore> {
+    /** The quota step of one cached feed block over a zero quota, so [BlockCache.enforce] evicts it. */
+    private fun TestScope.blocks(onQuota: () -> Unit): Pair<suspend () -> Unit, MemoryBlockStore> {
         val blockStore = MemoryBlockStore().apply { write("feed-block", ByteArray(8)) }
-        return BlockCache(blockStore, { onQuota(); 0L }, StandardTestDispatcher(testScheduler)) to blockStore
+        val cache = BlockCache(blockStore, { onQuota(); 0L }, StandardTestDispatcher(testScheduler))
+        val quota: suspend () -> Unit = { cache.enforce() }
+        return quota to blockStore
     }
 
     @Test

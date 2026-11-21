@@ -14,6 +14,8 @@ kotlin {
             api(project(":core:protocol"))
             // DeviceCapabilities and Metrics, which takes the kinds' derived metric providers.
             api(project(":core:history"))
+            // ThingSource, the per Thing row a kind builds in sourceFor.
+            api(project(":core:sync"))
             // FileItems, which only PublishGate calls.
             api(project(":core:stac"))
             // The public feed a RemoteFeed kind reads.

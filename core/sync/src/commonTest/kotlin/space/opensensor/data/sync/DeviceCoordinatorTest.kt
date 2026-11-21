@@ -18,7 +18,6 @@ import space.opensensor.data.protocol.Opcode
 import space.opensensor.link.DisconnectCause
 import space.opensensor.link.LinkClosedException
 import space.opensensor.storage.StorageEntry
-import space.opensensor.storage.StorageJanitor
 import space.opensensor.storage.StorageRole
 import space.opensensor.storage.StorageRoots
 import space.opensensor.storage.StorageTree

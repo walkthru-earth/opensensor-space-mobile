@@ -8,14 +8,15 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveRecord
+import space.opensensor.archive.ArchiveGates
 import space.opensensor.archive.ArchiveStore
+import space.opensensor.archive.ArchiveWriters
+import space.opensensor.archive.HivePartition
 import space.opensensor.archive.ClockAnchorStore
 import space.opensensor.archive.EmptyClockAnchorStore
 import space.opensensor.data.history.parquet.ByteReader
 import space.opensensor.data.history.parquet.ParquetFile
 import space.opensensor.data.history.parquet.ParquetFormatException
-import space.opensensor.data.sync.DeviceCoordinator
-import space.opensensor.data.sync.HivePartition
 import kotlin.time.Clock
 
 /**
@@ -37,8 +38,8 @@ class ArchiveIndexRepair(
     private val nowEpochMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val log: (String) -> Unit = {},
     private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
-    /** The archive's one coordinator. Each row update runs under its thing gate. */
-    private val coordinator: DeviceCoordinator = DeviceCoordinator(),
+    /** The archive's one set of writer gates, shared with sync. Each row update runs under its thing gate. */
+    private val coordinator: ArchiveWriters = ArchiveGates(),
     /** Resolves each file's board template for its valid row count. */
     private val templates: FileTemplates = FileTemplates.SERVED,
     /**

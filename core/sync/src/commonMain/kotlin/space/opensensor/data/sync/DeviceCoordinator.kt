@@ -1,6 +1,8 @@
 package space.opensensor.data.sync
 
+import space.opensensor.archive.ArchiveGates
 import space.opensensor.archive.ArchiveKey
+import space.opensensor.archive.ArchiveWriters
 import space.opensensor.archive.PrunedFiles
 import space.opensensor.collection.CollectionLink
 import space.opensensor.link.DisconnectCause
@@ -15,22 +17,19 @@ import space.opensensor.sync.SyncLock
  *
  * - **Admission.** One collection per thing at a time ([tryAdmit], [admit]). A second link to the
  *   same thing, Bluetooth beside Wi-Fi, is refused as busy and waits for the next attempt.
- * - **Writer lease.** One writer per archive identity ([withWriter]), waiters included. A download,
- *   the janitor's partial sweep and adoption, and the old file cleanup of that file take it.
- * - **Thing gate.** One index or file mutation per thing ([withThing]), held only around the
- *   short change, so a row read under it is still live when it is written.
- * - **Lock order.** A writer lease first, then the thing gate. Never a
- *   lease while holding the gate, and never the gate twice, since neither lock is reentrant.
+ * - **Writer lease and thing gate.** The [ArchiveWriters] of `:core:archive` ([ArchiveGates]). A
+ *   download, the janitor's partial sweep and adoption, and the old file cleanup of that file take the
+ *   lease, and every short index or file change takes the gate, lease first.
  * - **Tombstones.** A file the user removed in Settings is in [pruned]. The engine checks
  *   [removedByUser] under the writer lease before `OPEN`, and the cleanup writes the tombstone
  *   under the same lease, so a sync planned before the removal never downloads the file again.
  */
-class DeviceCoordinator(
-    /** Files removed in Settings, which sync skips while the device lists them at the same size. */
-    val pruned: PrunedFiles = PrunedFiles.None,
-) {
-    private val leases = WriterLeases()
-    private val gate = ArchiveMutationGate()
+class DeviceCoordinator private constructor(private val gates: ArchiveGates) : ArchiveWriters by gates {
+    constructor(
+        /** Files removed in Settings, which sync skips while the device lists them at the same size. */
+        pruned: PrunedFiles = PrunedFiles.None,
+    ) : this(ArchiveGates(pruned))
+
     private val lock = SyncLock()
     private val admitted = HashSet<String>()
 
@@ -66,12 +65,6 @@ class DeviceCoordinator(
         return outer
     }
 
-    /** Runs [block] holding the writer lease of [key]. */
-    suspend fun <T> withWriter(key: ArchiveKey, block: suspend () -> T): T = leases.withLease(key, block)
-
-    /** Runs [block] holding the gate of [thing]. Never call it with the gate already held. */
-    suspend fun <T> withThing(thing: String, block: suspend () -> T): T = gate.withThing(thing, block)
-
     /**
      * Whether the user removed [key] at [bytes] from this phone, the planner's REMOVED rule. Call it
      * under the writer lease of [key], so the answer holds until the lease ends.
@@ -83,8 +76,8 @@ class DeviceCoordinator(
     internal fun admittedCount(): Int = lock.withLock { admitted.size }
 
     /** Writer leases held or waited for, for tests. */
-    internal fun activeWriters(): Int = leases.activeCount()
+    internal fun activeWriters(): Int = gates.activeWriters()
 
     /** Thing gates held or waited for, for tests. */
-    internal fun activeThings(): Int = gate.activeCount()
+    internal fun activeThings(): Int = gates.activeThings()
 }

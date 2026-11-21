@@ -1,5 +1,12 @@
-package space.opensensor.storage
+package space.opensensor.data.sync
 
+import space.opensensor.storage.AtomicFiles
+import space.opensensor.storage.DerivedQuota
+import space.opensensor.storage.StorageClass
+import space.opensensor.storage.StorageEntry
+import space.opensensor.storage.StorageRole
+import space.opensensor.storage.StorageRoots
+import space.opensensor.storage.StorageTree
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
@@ -15,8 +22,6 @@ import space.opensensor.archive.PrunedFiles
 import space.opensensor.data.protocol.ParquetVerify
 import space.opensensor.data.protocol.Sha256
 import space.opensensor.data.protocol.toHex
-import space.opensensor.data.sync.ArchiveRecordIndexer
-import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.sync.nowEpochMs
 
 /**

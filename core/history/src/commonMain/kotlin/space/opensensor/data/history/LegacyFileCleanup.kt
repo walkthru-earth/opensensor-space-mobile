@@ -11,10 +11,10 @@ import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveKey
 import space.opensensor.archive.ArchiveRecord
 import space.opensensor.archive.ArchiveStore
+import space.opensensor.archive.ArchiveWriters
 import space.opensensor.archive.PrunedFile
 import space.opensensor.archive.PrunedFiles
 import space.opensensor.data.history.parquet.ParquetFile
-import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.storage.StorageClass
 import space.opensensor.storage.StorageRole
 import space.opensensor.storage.StorageRoots
@@ -58,7 +58,7 @@ data class UtcDayRange(val fromEpochDay: Long, val toEpochDay: Long) {
 /**
  * Removes device files in the old layout ([UtcColumns.isLegacyLayout]) from the phone archive, from
  * Settings › Storage. Phone only. Nothing is sent to a device and its card is never touched. Each
- * removed file leaves a [PrunedFile] in the coordinator's [DeviceCoordinator.pruned], so a later sync
+ * removed file leaves a [PrunedFile] in the coordinator's [ArchiveWriters.pruned], so a later sync
  * skips it while the device still lists it at the same size. Clearing them lets the next sync download
  * those files again.
  *
@@ -83,8 +83,8 @@ class LegacyFileCleanup(
     private val index: ArchiveIndex,
     private val roots: StorageRoots,
     private val tree: StorageTree,
-    /** The archive's one coordinator, shared with sync, repair and the janitor. */
-    private val coordinator: DeviceCoordinator,
+    /** The archive's one set of writer gates, shared with sync, repair and the janitor. */
+    private val coordinator: ArchiveWriters,
     private val io: CoroutineDispatcher,
     /** Rebuilds the derived days of the removed files, per thing. */
     private val afterRemoval: suspend (Map<String, Set<Long>>) -> Unit = {},

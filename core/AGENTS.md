@@ -13,7 +13,7 @@ gate when a `:core` source names one. Open the doc of the module you change.
 | `parquet/` | The Parquet reader and writer and the codec SPI. `ByteReader`, `RangeSource`, `ParquetFile`, `ParquetReader` | [parquet](../docs/parquet.md) |
 | `net/` | HTTP range reads (`HttpRangeSource`) and the disk block cache (`CachedRangeSource`, `BlockCache`) | [parquet](../docs/parquet.md) |
 | `storage/` | `StorageClass`, `StorageRoots`, `AtomicFiles`, `StorageBudget`, `RetentionPolicy`, `QuotaEnforcer`, `MemoryPressure` | [data model](../docs/data-model.md) |
-| `archive/` | The archive layout, the verifier, records and the `ArchiveStore` and `ArchiveIndex` ports | [data model](../docs/data-model.md) |
+| `archive/` | The archive layout, the verifier, records, `HivePartition`, the `ArchiveWriters` gates and the `ArchiveStore` and `ArchiveIndex` ports | [data model](../docs/data-model.md) |
 | `sync/` | `LinkSession`, `DeviceSession`, `SyncEngine`, `ArchiveCollector`, `CollectionController` in `collection/`, `DeviceCoordinator`, `StorageJanitor`, `SmartSyncPolicy` | [sync engine](../docs/sync-engine.md), [transports](../docs/transports.md) |
 | `history/` | Metrics, indexing, tiers, daily Parquet, `HistoryOrchestrator`, `DeviceCapabilities`, `BoardDescriptors`, `TemplateHrefs`, `LegacyFileCleanup` | [history pipeline](../docs/history-pipeline.md) |
 | `database/` | The Room KMP database (`AppDatabase`), its DAOs, migrations and exported schemas | [data model](../docs/data-model.md) |
@@ -29,8 +29,11 @@ Rules that hold across modules.
 - Every file writer goes through `AtomicFiles`. `StorageJanitor` sweeps Scratch at start, enforces
   the derived quota and never deletes Durable data. Only the user's old format cleanup in Settings
   (`LegacyFileCleanup`) removes archive files, phone only, and leaves a `PrunedFiles` record.
-- One `DeviceCoordinator` per archive owns thing admission, writer leases, thing gates and
-  tombstones. Every archive index write takes its thing gate, lease first then gate, readers never.
+- One `DeviceCoordinator` per archive owns thing admission and tombstones, and delegates the writer
+  leases and thing gates to `ArchiveGates` in `:core:archive`, which `:core:history` sees as
+  `ArchiveWriters`. Every archive index write takes its thing gate, lease first then gate, readers never.
+- `:core:history` never depends on `:core:sync`, and no package is declared in two `:core` modules
+  (`CorePackagesAreNotSplitTest`).
 - `ParquetFile` and `ByteReader` are `AutoCloseable`, open them with `use`.
 - Each app builds the `ThingKinds` registry as a plain list, Android in `data/di/ThingModule` and
   iOS in `ThingKindsIos.kt`, with no self registration, and hands `ThingKinds.metricProviders` to

@@ -12,7 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import space.opensensor.data.sync.FileSyncState
-import space.opensensor.data.sync.HivePartition
+import space.opensensor.archive.HivePartition
 import space.opensensor.data.sync.ManifestEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals

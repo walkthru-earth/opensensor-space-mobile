@@ -61,7 +61,7 @@ import space.opensensor.storage.IosStorageTree
 import space.opensensor.storage.QuotaEnforcer
 import space.opensensor.storage.StorageBudget
 import space.opensensor.storage.StorageClass
-import space.opensensor.storage.StorageJanitor
+import space.opensensor.data.sync.StorageJanitor
 import space.opensensor.storage.StorageRole
 import space.opensensor.storage.StorageRoots
 import space.opensensor.storage.trimOnMemoryPressure
@@ -178,7 +178,7 @@ internal object IosArchive {
      * then [rebuildDerived], and again whenever a record waits for its index. [startIndexRepair]
      * starts it once.
      */
-    val historyStartup by lazy { HistoryStartup(history, janitor, feedBlocks, log = ::println, rederive = templateRederive, templateHrefs = templateHrefs) }
+    val historyStartup by lazy { HistoryStartup(history, { janitor.run() }, { feedBlocks.enforce() }, log = ::println, rederive = templateRederive, templateHrefs = templateHrefs) }
 
     /** The one template gate of the process, shared by [tiers] and [historyStartup]. */
     private val templateRederive by lazy { TemplateRederive(index, log = ::println) }

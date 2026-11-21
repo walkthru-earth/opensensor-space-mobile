@@ -1,5 +1,6 @@
 package space.opensensor.data.sync
 
+import space.opensensor.archive.HivePartition
 import kotlinx.coroutines.flow.first
 import space.opensensor.archive.ArchiveIndex
 import space.opensensor.archive.ArchiveRecord

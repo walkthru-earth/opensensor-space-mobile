@@ -16,9 +16,9 @@ kotlin {
             api(project(":core:parquet"))
             // History reads the archive through its records (ArchiveRecord) and, later, its ports.
             api(project(":core:archive"))
-            // The Hive partition parser names a file's producer thing, which index repair checks.
-            api(project(":core:sync"))
-            // HistoryStartup applies the feed block quota of the public feed cache after the janitor.
+            // TemplateHrefs fetches a footer href template and BoardDescriptors keeps served ones in a
+            // BlockStore. The link stack (:core:sync) stays out, History sees the archive's writer gates
+            // through ArchiveWriters and the janitor and feed quota as HistoryStartup steps.
             api(project(":core:net"))
             // TimeZone and LocalDate are part of the public HistoryWindow and Columns API.
             api(libs.kotlinx.datetime)
@@ -34,6 +34,8 @@ kotlin {
         commonTest.dependencies {
             // Tests only. The board fixtures are air boards, so their metrics come from the air family.
             implementation(project(":family:air"))
+            // Tests only. The real janitor and coordinator, and cloud catch up beside History.
+            implementation(project(":core:sync"))
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.test)
         }

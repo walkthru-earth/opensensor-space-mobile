@@ -6,8 +6,6 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import space.opensensor.net.BlockCache
-import space.opensensor.storage.StorageJanitor
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
@@ -16,8 +14,9 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * one over its archive and calls [start] once at process start, so neither can drop a step.
  *
  * 1. The storage [janitor] sweeps temps and stale partials and adopts orphan finals (#60). It logs its
- *    own report.
- * 2. The feed [blocks] quota applies, even when the janitor failed (#94).
+ *    own report. Each platform passes the `StorageJanitor` run of `:core:sync`.
+ * 2. The feed [blockQuota] applies, even when the janitor failed (#94). Each platform passes the
+ *    `BlockCache.enforce` of `:core:net`, so History compiles against neither module.
  * 3. [HistoryOrchestrator.run], the backfill and the platform derive, so a file the janitor adopted is
  *    indexed in the same start.
  * 4. Beside it [rederive], the one gate for template changes. It derives again only the things whose
@@ -32,8 +31,8 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 class HistoryStartup(
     val orchestrator: HistoryOrchestrator,
-    private val janitor: StorageJanitor,
-    private val blocks: BlockCache,
+    private val janitor: suspend () -> Unit,
+    private val blockQuota: suspend () -> Unit,
     private val log: (String) -> Unit = {},
     val rederive: TemplateRederive = TemplateRederive(orchestrator.index, log = log),
     private val templateHrefs: TemplateHrefs? = null,
@@ -53,9 +52,9 @@ class HistoryStartup(
         job.load()?.let { return it }
         val launched = scope.launch(start = CoroutineStart.LAZY) {
             try {
-                step("storage janitor") { janitor.run() }
+                step("storage janitor") { janitor() }
             } finally {
-                step("feed block quota") { blocks.enforce() }
+                step("feed block quota") { blockQuota() }
             }
             coroutineScope {
                 launch { orchestrator.run(deriveAll) }

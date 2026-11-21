@@ -24,7 +24,7 @@ import space.opensensor.data.history.parquet.ByteReader
 import space.opensensor.net.BlockCache
 import space.opensensor.net.MemoryBlockStore
 import space.opensensor.storage.StorageEntry
-import space.opensensor.storage.StorageJanitor
+import space.opensensor.data.sync.StorageJanitor
 import space.opensensor.storage.StorageRoots
 import space.opensensor.storage.StorageTree
 
@@ -77,8 +77,8 @@ class AppStartupTest {
     fun processStartRunsTheSharedHistoryStart() {
         val startup = HistoryStartup(
             HistoryOrchestrator(ArchiveIndexRepair(EmptyStore, EmptyIndex, io = Dispatchers.Unconfined), EmptyIndex),
-            StorageJanitor(StorageRoots(emptyMap()), NoTree, EmptyStore, EmptyIndex, Dispatchers.Unconfined),
-            BlockCache(MemoryBlockStore(), { 0L }, Dispatchers.Unconfined),
+            { StorageJanitor(StorageRoots(emptyMap()), NoTree, EmptyStore, EmptyIndex, Dispatchers.Unconfined).run() },
+            { BlockCache(MemoryBlockStore(), { 0L }, Dispatchers.Unconfined).enforce() },
         )
         val app = OpenSensorApplication()
         app.skipHiltInject()

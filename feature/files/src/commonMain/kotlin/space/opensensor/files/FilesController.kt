@@ -34,7 +34,7 @@ import space.opensensor.archive.ExportSink
 import space.opensensor.archive.ExportSpace
 import space.opensensor.archive.StagedFile
 import space.opensensor.data.sync.FileSyncState
-import space.opensensor.data.sync.HivePartition
+import space.opensensor.archive.HivePartition
 import space.opensensor.data.sync.ManifestEntry
 import space.opensensor.storage.StorageException
 import space.opensensor.storage.isOutOfSpace

@@ -87,7 +87,9 @@ at launch with one call, `AirFamily.install(kinds.metricProviders)`, when it bui
 modules use it in their tests only, as the real fixture of the air boards. `CoreStaysAirFreeTest`
 in `:family:air` fails the gate when a production source under `core/` names an air term.
 
-`:core:history` exposes `:core:parquet` and `:core:protocol` as `api`, and
+`:core:history` exposes `:core:parquet`, `:core:protocol`, `:core:archive` and `:core:net` as `api`, and never depends on `:core:sync`. It
+takes the writer gates as `ArchiveWriters` and the start up sweeps as plain suspend functions. A test in
+`:family:air` fails the gate when two `:core` modules declare the same package. Separately,
 `:core:publicfeed` exposes `:core:parquet`, `:core:net` (its
 `OpenAqAggregatesFeed` takes an `HttpRangeEngine` and reads through `HttpRangeSource`) and
 kotlinx-datetime (daily rows carry a local date). `:core:net` exposes `:core:parquet`. Android
@@ -208,7 +210,7 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `publicfeed` | Discover feed port, the sample and OpenAQ feeds, H3 and viewport cover |
 | `units` | Display units and axis ticks |
 | `storage` | Durable/Derived/Scratch roots, atomic no-replace commits, free-space budget, quota and memory pressure |
-| `archive` | Layout, verifier, records and store/index ports. Android uses file adapters, iosMain supplies `IosArchiveStore` and `LegacyReceiptImport` |
+| `archive` | Layout, verifier, records, `HivePartition`, the `ArchiveWriters` writer and thing gates, and store/index ports. Android uses file adapters, iosMain supplies `IosArchiveStore` and `LegacyReceiptImport` |
 | `database` | The Room KMP schema (`AppDatabase`, entities, DAOs, migrations, exported schemas in `core/database/schemas/`) on the bundled SQLite driver, `RoomArchiveIndex` and `RoomPrunedFiles` for both phones. iosMain opens `Application Support/database/opensensor.db` through `IosArchiveDatabase` |
 | `sync` | `LinkSession`, typed `DeviceSession` views, `SyncEngine`, `ArchiveCollector`, `CollectionController`, policies, progress and `StorageJanitor` |
 | `settings` | Shared DataStore preferences, keys and detail level. iOS supplies its Application Support path and one-time UserDefaults import |

@@ -3,7 +3,7 @@ package space.opensensor.files
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import space.opensensor.data.sync.FileSyncState
-import space.opensensor.data.sync.HivePartition
+import space.opensensor.archive.HivePartition
 import space.opensensor.data.sync.ManifestEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals

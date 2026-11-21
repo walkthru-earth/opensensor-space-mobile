@@ -6,7 +6,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import space.opensensor.data.sync.FileSyncState
-import space.opensensor.data.sync.HivePartition
+import space.opensensor.archive.HivePartition
 import space.opensensor.data.sync.ManifestEntry
 import kotlin.time.Instant
 
