@@ -48,3 +48,5 @@ commit `verify.yml` pins.
 
 Why the build needs JDK 25, and the rest of the build and CI, are in
 [docs/build-and-release.md](docs/build-and-release.md).
+
+To add your own board or sensor without changing the app, start with [docs/your-first-board.md](docs/your-first-board.md).

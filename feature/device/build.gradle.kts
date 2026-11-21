@@ -28,6 +28,12 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
         }
+        commonTest {
+            // The Acme soil probe template and a full `opensensor` footer, test fixtures of the core
+            // modules, for the end to end test of a board no app code names.
+            kotlin.srcDir(rootProject.file("core/model/src/acmeFixture/kotlin"))
+            kotlin.srcDir(rootProject.file("core/history/src/legacyFooterFixtures/kotlin"))
+        }
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
