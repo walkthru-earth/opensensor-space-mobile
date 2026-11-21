@@ -49,9 +49,9 @@ it never saves over the ones the validation job writes. In "iOS native validatio
 stop after 40 minutes, the Xcode build after 20 and the Swift tests after 15. The caches are saved
 right after the Kotlin tests, so a later step that hangs cannot lose them. The step limits add up
 to more than the job limit, so a late hang can still reach the 60 minutes first and end the job
-before its logs upload. A warm run takes about 22 minutes and a cold Kotlin/Native cache about 45. A slow macOS runner can still end a step at its limit, and so
-can a hung test. Read the log of the last step that ran, then rerun the job when it shows a slow
-runner.
+before its logs upload. The job takes about 22 minutes, even with an empty Gradle home. A slow
+macOS runner can still end a step at its limit, and so can a hung test. Read the log of the last
+step that ran, then rerun the job when it shows a slow runner.
 CI runs ktlint on every file, while the local hook checks only staged files, so run
 `pre-commit run --all-files` before a merge that touches many Kotlin files.
 
