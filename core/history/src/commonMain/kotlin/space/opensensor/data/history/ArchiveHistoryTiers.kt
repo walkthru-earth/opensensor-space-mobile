@@ -33,8 +33,8 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * from the verified, indexed telemetry files on that day's timeline, through the shared [Aggregator],
  * keeping the buckets that start inside the day.
  *
- * Each day is cached in memory by its source signature (file name, CRC, estimate and the template the
- * file resolves to), so a new file or a newly served template rebuilds only its days and an unchanged
+ * Each day is cached in memory by its [DeriveSignature] (file name, CRC, estimate and the template the
+ * file resolves to, under the shared derive version), so a new file or a newly served template rebuilds only its days and an unchanged
  * day costs one string comparison. A thing's days are checked again when [rederive] finds that a
  * template change touched one of its files, settled and with a cooldown. The cache is a least
  * recently used map within [budgetBytes] of estimated size (#61), and [trim] gives memory back on
@@ -240,11 +240,8 @@ class ArchiveHistoryTiers(
             return bytes
         }
 
-        /** The identity of one day's sources, sorted [sourceLine]s (the derive signature without the hash). */
-        fun signature(files: List<ArchiveRecord>, templates: FileTemplates): String = files
-            .map { sourceLine(it, templates) }
-            .sorted()
-            .joinToString("\n")
+        /** The identity of one day's sources, the [DeriveSignature] Android records for the same day. */
+        fun signature(files: List<ArchiveRecord>, templates: FileTemplates): String = DeriveSignature.of(files, templates)
 
         /**
          * One source of a day signature on both phones, `name:crc32[:est<anchor>:<first>]:t<template>[:q<check>]`.

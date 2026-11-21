@@ -78,7 +78,7 @@ class RoomDerivedDayFiles internal constructor(
 
     override suspend fun open(thing: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): LocalRangeSource? {
         val day = dayDao.get(thing, epochDay) ?: return null
-        val signature = HistoryDeriver.signatureOf(sources, templates)
+        val signature = DeriveSignature.of(sources, templates)
         if (day.dailyFile == null || day.sourceSignature != signature) return null
         return synchronized(store.commitLock) {
             val manifest = store.manifestFile(thing, epochDay)

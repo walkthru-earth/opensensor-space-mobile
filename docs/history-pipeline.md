@@ -294,8 +294,9 @@ row before any mean, min or max. A row without a valid RH yields no corrected va
 without humidity has no `pm25_epa` buckets and every screen falls back to `pm25`, labelled raw.
 Both PM2.5 specs carry `property = "pm25"` for the WHO scale and a `basis` (`CORRECTED` or `RAW`)
 for the label. Daily files keep the raw `pm25_cf1_ug_m3` and RH columns, so they need no change.
-A change to what a day holds bumps `HistoryDeriver.DERIVE_VERSION` on Android and `TierCodec.VERSION`
-on iOS. A change to the day file that its readers must know about bumps `DailyParquetBuilder.BUILDER`
+A change to what a day holds bumps `DeriveSignature.VERSION` in `:core:history`, the one derive
+version of both phones. Android's `derived_day` signature, the tiers iOS saves and the iOS daily
+manifest all start from it. `TierCodec.VERSION` changes only with the saved tier byte layout. A change to the day file that its readers must know about bumps `DailyParquetBuilder.BUILDER`
 and `DERIVED_VERSION` together, and both platforms check `BUILDER`, so cached days rebuild once. An
 optional key or column, such as the #91 checks, bumps neither.
 
@@ -400,12 +401,12 @@ picker of the old format cleanup offers the same span plus one day (`StorageCont
 
 ### When a day is rebuilt
 
-`derived_day.sourceSignature` = SHA-256 over `derive-v<DERIVE_VERSION>` + the day's sorted
+`derived_day.sourceSignature` = `DeriveSignature.of`, SHA-256 over `derive-v<VERSION>` + the day's sorted
 `ArchiveHistoryTiers.sourceLine`s, `name:crc32`, the anchor of an estimated file and `t<template>`,
 the full desc (or `dict:<dict>` for a bundled one without) that `FileTemplates.digestOf` resolves now,
 `-` for none, then `q<check id>` when a row check reads the file. A rule change bumps
 `QcRules.VERSION`, so the check id changes and only the checked days rebuild, with no
-`DERIVE_VERSION` change. iOS tiers and day files use the same lines. `deriveStale()` rebuilds exactly the days
+`DeriveSignature.VERSION` change. iOS keeps its saved tiers under the same signature, and its day files salt the same version. `deriveStale()` rebuilds exactly the days
 whose set changed (late file, re-synced mismatch, deleted file, new anchor, a template that starts or
 stops resolving) and drops days with no sources. `ArchiveHistoryTiers` checks a thing's days again when
 `TemplateRederive` finds a template change that touched one of its files, and the Android derived day reader (`RoomDerivedDayFiles`) uses the deriver's
@@ -541,9 +542,9 @@ controller over a fake archive. It runs as the Android host test and on the iOS 
 
 | Edit… | Affects… |
 | --- | --- |
-| A bundled template or app profile, or `Metrics` | `metric_bucket.metricId` strings, picker chips and the default metric, `DailyDerivedBuilder` columns, the Today cards if PM2.5. Bump `DERIVE_VERSION` |
+| A bundled template or app profile, or `Metrics` | `metric_bucket.metricId` strings, picker chips and the default metric, `DailyDerivedBuilder` columns, the Today cards if PM2.5. Bump `DeriveSignature.VERSION` |
 | `WhoGuidelines` edges (`:family:air`) | `AirMood`, `MetricSpec.healthScale`, chart axis snap and colours, Home/Today moods, calendar colours, Discover |
-| `Aggregator` semantics | `DERIVE_VERSION`, `AggregationTest`, `HistoryDeriverTest` |
+| `Aggregator` semantics | `DeriveSignature.VERSION`, `AggregationTest`, `HistoryDeriverTest` |
 | `TimeEstimate` | day signatures (anchor), dashed drawing, daily file's estimated column |
 | `Columns.slotSeconds` / `axisMax` | every chart; `ColumnsTest` |
 | `HistoryRepository.observe` | History and Today (local-day fold), `HistoryRepositoryTest` |
