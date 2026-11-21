@@ -250,8 +250,9 @@ class SetupController(
     fun onPlan(plan: SetupPlan?, level: DetailLevel) {
         _state.update { s ->
             if (plan == null || !s.paired) return@update s
-            val visible = plan.steps.map { it.id }.filter { shows(it, level) }
-            val hidden = plan.steps.map { it.id }.filter { !shows(it, level) }
+            val hasLocation = plan.steps.any { it.id == StepId.LOCATION }
+            val visible = plan.steps.map { it.id }.filter { shows(it, level, hasLocation) }
+            val hidden = plan.steps.map { it.id }.filter { !shows(it, level, hasLocation) }
             val order = merge(s.order, visible, hidden, (s.page as? SetupPage.Step)?.id)
             val page = if (s.page == SetupPage.Loading) {
                 order.firstOrNull { id -> plan.step(id)?.done == false }?.let(SetupPage::Step)
@@ -388,9 +389,10 @@ class SetupController(
     companion object {
         const val NICKNAME_MAX = 32
 
-        /** Lan is never a wizard page. Pairing and bonds have one from Detailed. */
-        internal fun shows(id: StepId, level: DetailLevel): Boolean = when (id) {
+        /** Lan is never a wizard page. Mobility folds into Location when both are planned. Pairing and bonds show from Detailed. */
+        internal fun shows(id: StepId, level: DetailLevel, hasLocation: Boolean = false): Boolean = when (id) {
             StepId.LAN -> false
+            StepId.MOBILITY -> !hasLocation
             StepId.PAIRING, StepId.BONDS -> level.detailed
             else -> true
         }

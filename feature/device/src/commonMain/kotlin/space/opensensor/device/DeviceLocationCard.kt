@@ -90,8 +90,10 @@ import space.opensensor.device.resources.site_title
 import space.opensensor.map.CellFocus
 import space.opensensor.map.CellPicker
 import space.opensensor.map.PickerLocateButton
+import space.opensensor.map.rememberCountryIndex
 import space.opensensor.permissions.AccessDialogTexts
 import space.opensensor.permissions.AccessDialogs
+import space.opensensor.publicfeed.platformH3Grid
 
 @Composable
 internal fun DeviceLocationCard(state: DeviceConfigUiState, onAction: (DeviceConfigAction) -> Unit) {
@@ -194,6 +196,12 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
     val draft = loc.draft
     val title = stringResource(Res.string.location_title)
     val request = rememberDeviceLocationRequest()
+    val countries = rememberCountryIndex()
+    val h3 = remember { platformH3Grid() }
+    val selectCell: (String) -> Unit = { cell ->
+        onAction(DeviceConfigAction.LocationCell(cell, DeviceLocationDraft.RESOLUTION))
+        countries?.let { onAction(DeviceConfigAction.LocationCountry(it.countryForCell(h3, cell).orEmpty())) }
+    }
     // The controller runs the fix (#315). The picker only draws its state.
     val fix = state.phoneFix
     val locating = fix.locating
@@ -238,7 +246,7 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
                 }
                 CellPicker(
                     selected = draft.cell.ifEmpty { null },
-                    onSelect = { cell -> onAction(DeviceConfigAction.LocationCell(cell, DeviceLocationDraft.RESOLUTION)) },
+                    onSelect = selectCell,
                     modifier = Modifier.weight(1f),
                     focus = focus,
                     enabled = canPick,
@@ -266,40 +274,53 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
                         draft.cell.isNotEmpty() -> stringResource(Res.string.location_set)
                         else -> stringResource(Res.string.location_placement)
                     }
-                    Text(status, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                    // The cell size in words. Detailed adds the H3 resolution and the cell id.
-                    Text(areaText(draft.resolution, state.level.detailed), style = MaterialTheme.typography.labelMedium)
-                    if (state.level.detailed && draft.cell.isNotEmpty()) Text(draft.cell, style = MaterialTheme.typography.labelMedium)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(status, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                            // The cell size in words. Detailed adds the H3 resolution and the cell id.
+                            val area = areaText(draft.resolution, state.level.detailed)
+                            val areaLine = if (!state.level.detailed && draft.country.isNotEmpty()) "$area · ${draft.country}" else area
+                            Text(areaLine, style = MaterialTheme.typography.labelMedium)
+                            if (state.level.detailed && draft.cell.isNotEmpty()) Text(draft.cell, style = MaterialTheme.typography.labelMedium)
+                        }
+                        if (!state.level.detailed && draft.cell.isNotEmpty()) {
+                            TextButton(enabled = canPick && !locating, onClick = { onAction(DeviceConfigAction.ClearLocation) }) {
+                                Text(stringResource(Res.string.location_clear))
+                            }
+                        }
+                    }
                     if (loc.cellChanges) InfoNote(stringResource(Res.string.location_cell_change))
                     loc.gnssCell?.takeIf { it != draft.cell }?.let { gnss ->
                         OutlinePillButton(
                             stringResource(Res.string.location_use_gnss),
                             onClick = {
-                                onAction(DeviceConfigAction.LocationCell(gnss, DeviceLocationDraft.RESOLUTION))
+                                selectCell(gnss)
                                 focus = CellFocus(gnss, (focus?.serial ?: 0) + 1)
                             },
                             enabled = canPick && !locating,
                         )
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = draft.country,
-                            onValueChange = { if (it.length <= 2) onAction(DeviceConfigAction.LocationCountry(it)) },
-                            label = { Text(stringResource(Res.string.location_country)) },
-                            // The hint turns into the reason when the code cannot be saved, and is read out then.
-                            isError = !countryValid(draft.country),
-                            supportingText = {
-                                Text(
-                                    stringResource(if (countryValid(draft.country)) Res.string.location_country_info else Res.string.location_country_error),
-                                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                                )
-                            },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                            enabled = !loc.working,
-                        )
-                        TextButton(enabled = canPick && !locating && draft.cell.isNotEmpty(), onClick = { onAction(DeviceConfigAction.ClearLocation) }) {
-                            Text(stringResource(Res.string.location_clear))
+                    if (state.level.detailed) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = draft.country,
+                                onValueChange = { if (it.length <= 2) onAction(DeviceConfigAction.LocationCountry(it)) },
+                                label = { Text(stringResource(Res.string.location_country)) },
+                                // The hint turns into the reason when the code cannot be saved, and is read out then.
+                                isError = !countryValid(draft.country),
+                                supportingText = {
+                                    Text(
+                                        stringResource(if (countryValid(draft.country)) Res.string.location_country_info else Res.string.location_country_error),
+                                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                                    )
+                                },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                enabled = !loc.working,
+                            )
+                            TextButton(enabled = canPick && !locating && draft.cell.isNotEmpty(), onClick = { onAction(DeviceConfigAction.ClearLocation) }) {
+                                Text(stringResource(Res.string.location_clear))
+                            }
                         }
                     }
                 }
