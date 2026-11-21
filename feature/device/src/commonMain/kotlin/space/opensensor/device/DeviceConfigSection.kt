@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -34,11 +35,14 @@ import space.opensensor.data.protocol.ConfigFields
 import space.opensensor.data.protocol.ConfigGroup
 import space.opensensor.data.protocol.ConfigProblem
 import space.opensensor.data.protocol.ThingMobility
+import space.opensensor.data.sync.PlanField
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.InfoNote
 import space.opensensor.device.resources.Res
 import space.opensensor.device.resources.action_cancel
 import space.opensensor.device.resources.action_reconnect
+import space.opensensor.device.resources.board_action_button
+import space.opensensor.device.resources.board_action_confirm
 import space.opensensor.device.resources.bonds_confirm
 import space.opensensor.device.resources.bonds_forget
 import space.opensensor.device.resources.bonds_forget_button
@@ -55,6 +59,7 @@ import space.opensensor.device.resources.device_not_ready
 import space.opensensor.device.resources.device_refresh
 import space.opensensor.device.resources.device_screen_title
 import space.opensensor.device.resources.lan_reconnect_ble
+import space.opensensor.device.resources.msg_board_action_sent
 import space.opensensor.device.resources.msg_bonds_cleared
 import space.opensensor.device.resources.msg_busy
 import space.opensensor.device.resources.msg_config_rejected_lan
@@ -144,6 +149,12 @@ sealed interface DeviceConfigAction {
     data object ReconnectOverBluetooth : DeviceConfigAction
     data object RequestForgetBonds : DeviceConfigAction
     data object ScanSticker : DeviceConfigAction
+
+    /** Drafts one declared board value. Nothing is sent until the caller saves. */
+    data class BoardValue(val key: String, val value: String) : DeviceConfigAction
+
+    /** Opens the confirmation of a declared board action. */
+    data class BoardAction(val action: PlanField) : DeviceConfigAction
     data class SaveSensor(val sticker: String, val batchEstimate: Boolean, val source: String) : DeviceConfigAction
 }
 
@@ -174,6 +185,8 @@ fun DeviceConfigController.onAction(action: DeviceConfigAction): Boolean {
         DeviceConfigAction.ReconnectOverBluetooth -> reconnectOverBluetooth()
         DeviceConfigAction.RequestForgetBonds -> requestForgetBonds()
         is DeviceConfigAction.SaveSensor -> saveSensor(action.sticker, action.batchEstimate, action.source)
+        is DeviceConfigAction.BoardValue -> editBoard(action.key, action.value)
+        is DeviceConfigAction.BoardAction -> requestBoardAction(action.action)
         DeviceConfigAction.RequestLanAccess, DeviceConfigAction.ScanSticker -> return false
     }
     return true
@@ -280,11 +293,15 @@ fun DeviceConfigDialogs(dialog: DeviceConfigDialog, onConfirm: () -> Unit, onDis
         DeviceConfigDialog.RotateToken -> Triple(Res.string.rotate_title, Res.string.rotate_confirm, Res.string.rotate_button)
         DeviceConfigDialog.ForgetBonds -> Triple(Res.string.bonds_forget, Res.string.bonds_confirm, Res.string.bonds_forget_button)
         DeviceConfigDialog.PairingNone -> Triple(Res.string.pairing_none_title, Res.string.pairing_none_confirm, Res.string.pairing_none_button)
+        is DeviceConfigDialog.BoardAction -> Triple(null, Res.string.board_action_confirm, Res.string.board_action_button)
     }
+    // A board action is named by its template label, else its key.
+    val heading = title?.let { stringResource(it) }
+        ?: (dialog as DeviceConfigDialog.BoardAction).action.let { it.label?.get(Locale.current.language) ?: it.field.key }
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = if (dialog == DeviceConfigDialog.Reboot) ({ Icon(AppIcons.RestartAlt, contentDescription = null) }) else null,
-        title = { Text(stringResource(title), Modifier.semantics { heading() }) },
+        title = { Text(heading, Modifier.semantics { heading() }) },
         text = { Text(stringResource(body)) },
         confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(button)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.action_cancel)) } },
@@ -312,6 +329,7 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
     DeviceConfigNotice.SensorNotConfirmed -> getString(Res.string.msg_sensor_not_confirmed)
     DeviceConfigNotice.SensorFailed -> getString(Res.string.msg_sensor_failed)
     DeviceConfigNotice.Busy -> getString(Res.string.msg_busy)
+    DeviceConfigNotice.BoardActionSent -> getString(Res.string.msg_board_action_sent)
     is DeviceConfigNotice.Saved -> {
         val line = getString(
             when (notice.change) {

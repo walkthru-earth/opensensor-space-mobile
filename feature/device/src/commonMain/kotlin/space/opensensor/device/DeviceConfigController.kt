@@ -24,17 +24,26 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import space.opensensor.data.WifiScanState
+import space.opensensor.data.history.ServedTemplates
 import space.opensensor.data.protocol.ConfigField
 import space.opensensor.data.protocol.ConfigFields
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.ConfigValidationException
+import space.opensensor.data.protocol.DeviceInfo
+import space.opensensor.data.protocol.FieldType
 import space.opensensor.data.protocol.PairMode
+import space.opensensor.data.protocol.SetupAck
 import space.opensensor.data.protocol.ThingMobility
 import space.opensensor.data.protocol.WifiState
+import space.opensensor.data.sync.PlanField
+import space.opensensor.data.sync.SetupPlan
 import space.opensensor.family.air.SensorLabel
 import space.opensensor.family.air.sensorIdentity
+import space.opensensor.model.BoardTemplate
 import space.opensensor.model.H3Cell
+import space.opensensor.model.SetupManifest
 import space.opensensor.model.SiteField
+import space.opensensor.model.StepId
 import space.opensensor.settings.DetailLevel
 
 /** A question the Device section asks before it changes the device. Only one is open at a time. */
@@ -67,6 +76,14 @@ sealed interface DeviceConfigDialog {
         override val value = PairMode.NONE.wire
     }
 
+    /**
+     * A board key of type action, declared by the template. It always confirms and needs a quiet
+     * link, whatever the template says ([ConfigFields.merge]).
+     */
+    data class BoardAction(val action: PlanField) : DeviceConfigDialog {
+        val field: ConfigField get() = action.field
+    }
+
     companion object {
         val FIELDS: List<Field> = listOf(RotateToken, ForgetBonds, PairingNone)
 
@@ -92,9 +109,17 @@ class DeviceConfigController(
     private val source: DeviceConfigSource,
     detailLevel: Flow<DetailLevel>,
     readOnReady: Boolean = false,
+    templates: StateFlow<List<BoardTemplate>> = ServedTemplates.shared.all,
+    private val manifestOf: (DeviceInfo?, List<BoardTemplate>) -> SetupManifest = SetupPlan::manifestOf,
 ) {
     private val location = MutableStateFlow(DeviceLocationState())
     private val site = MutableStateFlow(DeviceSiteState())
+    private val board = MutableStateFlow(DeviceBoardState())
+
+    /** The template of the connected board, from its `INFO` and the templates this phone holds. */
+    private val manifest: Flow<SetupManifest> =
+        combine(source.snapshot.map { it.info }.distinctUntilChanged(), templates) { info, served -> manifestOf(info, served) }
+            .distinctUntilChanged()
 
     /**
      * A site write failed, maybe with `ERROR` 12 `nvs`. The next site save that succeeds then reads
@@ -102,8 +127,10 @@ class DeviceConfigController(
      */
     private var rereadAfterFailure = false
 
-    val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel, location, site) { snapshot, level, loc, owner ->
-        DeviceConfigUiState(snapshot, level, loc, owner)
+    private val forms = combine(location, site, board) { loc, owner, settings -> Triple(loc, owner, settings) }
+
+    val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel, forms, manifest) { snapshot, level, (loc, owner, settings), declared ->
+        DeviceConfigUiState(snapshot, level, loc, owner, declared, settings)
     }.stateIn(scope, SharingStarted.Eagerly, DeviceConfigUiState(source.snapshot.value))
 
     private val _dialog = MutableStateFlow<DeviceConfigDialog?>(null)
@@ -128,6 +155,15 @@ class DeviceConfigController(
                         refreshSite()
                     }
                 }
+        }
+        // Page 7 is read only when the template declares a board key a form may show.
+        scope.launch {
+            combine(source.snapshot.map { DeviceConfigUiState(it).let { s -> s.ready && s.isV2 } }.distinctUntilChanged(), manifest) { ready, declared ->
+                ready && boardFields(declared).isNotEmpty()
+            }.distinctUntilChanged().collectLatest { read ->
+                board.value = DeviceBoardState()
+                if (read) refreshBoard()
+            }
         }
         if (readOnReady) {
             scope.launch {
@@ -165,6 +201,7 @@ class DeviceConfigController(
             scope.launch {
                 refreshLocation()
                 refreshSite()
+                if (board.value.supported != null || board.value.result == DeviceBoardResult.READ_FAILED) refreshBoard()
             }
         }
     }
@@ -263,6 +300,125 @@ class DeviceConfigController(
                 rereadAfterFailure = true
                 site.value = current.copy(working = false, result = DeviceSiteResult.FAILED)
                 DeviceSiteResult.FAILED
+            }
+        }
+    }
+
+    /**
+     * Sends the setup record once the steps [ids] are done or skipped, `thing.setup_v` with the bits
+     * of the plan's other done steps plus theirs, and reads page 1 back. True when nothing needs
+     * sending (no declared step, or every bit already set) or the board kept the bits, false when the
+     * link refused it or the board did not keep them. Only the wizard's Next, Skip and Done call this.
+     */
+    suspend fun ackSetup(ids: Collection<StepId>): Boolean {
+        val plan = state.value.setupPlan ?: return true
+        val version = plan.version ?: return true
+        if (ids.mapNotNull(plan::step).none { it.ackIndex != null && !it.acked }) return true
+        val ack = plan.ackWith(ids) ?: return true
+        val loc = location.value
+        if (!now.canEdit || loc.working) {
+            _notices.tryEmit(DeviceConfigNotice.Busy)
+            return false
+        }
+        val patch = ConfigPatch.build { setupAck(version, ack) }
+        location.value = loc.copy(working = true)
+        val kept = try {
+            val page = source.writeLocation(patch)
+            location.value = (page?.let(loc::withPage) ?: loc).copy(working = false)
+            page != null && (SetupAck.done(page.thing, version) and ack) == ack
+        } catch (e: CancellationException) {
+            location.value = loc
+            throw e
+        } catch (_: Exception) {
+            location.value = loc
+            false
+        }
+        if (!kept) _notices.tryEmit(DeviceConfigNotice.Failed(DeviceConfigCommand.SET_CONFIG))
+        return kept
+    }
+
+    /** Reads page 7. The draft follows the board, so a refresh drops unsaved choices. */
+    private suspend fun refreshBoard() {
+        if (board.value.working) return
+        board.value = board.value.copy(working = true, result = null)
+        board.value = try {
+            val stored = readWhenFree { source.readBoardSettings() }
+            if (stored == null) DeviceBoardState(supported = false) else DeviceBoardState(supported = true, stored = stored)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            board.value.copy(working = false, result = DeviceBoardResult.READ_FAILED)
+        }
+    }
+
+    /** Drafts one board value. Only [saveBoardAndWait] sends anything. */
+    fun editBoard(key: String, value: String) {
+        val current = board.value
+        if (current.supported != true || current.working) return
+        board.value = current.copy(draft = current.draft + (key to value), result = null)
+    }
+
+    /**
+     * Sends the changed values of [fields] in one `SET_CONFIG`, each checked against its declared
+     * type, then compares the page 7 readback with what was sent. True when nothing changed or the
+     * board kept every value. An action is never sent here, see [requestBoardAction].
+     */
+    suspend fun saveBoardAndWait(fields: List<PlanField>): Boolean {
+        val current = board.value
+        val changes = current.changes(fields)
+        if (changes.isEmpty()) return true
+        if (!now.canEdit || now.snapshot.syncRunning || current.working) {
+            _notices.tryEmit(DeviceConfigNotice.Busy)
+            return false
+        }
+        val patch = try {
+            ConfigPatch.build { changes.forEach { (field, value) -> field(field, value) } }
+        } catch (e: ConfigValidationException) {
+            board.value = current.copy(result = DeviceBoardResult.FAILED)
+            _notices.tryEmit(DeviceConfigNotice.Problem(e.problem))
+            return false
+        }
+        board.value = current.copy(working = true, result = null)
+        return try {
+            val read = source.writeBoardSettings(patch)
+            val matches = read != null && changes.all { (field, value) -> read[field.key] == value }
+            board.value = when {
+                read == null -> current.copy(result = DeviceBoardResult.NOT_CONFIRMED)
+                matches -> DeviceBoardState(supported = true, stored = read, result = DeviceBoardResult.SAVED)
+                else -> current.copy(stored = read, result = DeviceBoardResult.NOT_CONFIRMED)
+            }
+            matches
+        } catch (e: CancellationException) {
+            board.value = current
+            throw e
+        } catch (_: Exception) {
+            board.value = current.copy(result = DeviceBoardResult.FAILED)
+            false
+        }
+    }
+
+    /** A declared board action opens its confirmation, when the link is quiet. Nothing is sent before Confirm. */
+    fun requestBoardAction(action: PlanField) {
+        if (action.field.type != FieldType.Action) return
+        if (allows(now, action.field)) _dialog.value = DeviceConfigDialog.BoardAction(action)
+    }
+
+    private fun sendBoardAction(field: ConfigField) {
+        val patch = try {
+            ConfigPatch.build { field(field, "1") }
+        } catch (e: ConfigValidationException) {
+            _notices.tryEmit(DeviceConfigNotice.Problem(e.problem))
+            return
+        }
+        scope.launch {
+            try {
+                val read = source.writeBoardSettings(patch)
+                if (read != null) board.value = board.value.copy(stored = read)
+                _notices.tryEmit(DeviceConfigNotice.BoardActionSent)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _notices.tryEmit(DeviceConfigNotice.Failed(DeviceConfigCommand.SET_CONFIG))
             }
         }
     }
@@ -385,6 +541,7 @@ class DeviceConfigController(
         when (open) {
             DeviceConfigDialog.Reboot -> if (s.canDisrupt) source.reboot() else _notices.tryEmit(DeviceConfigNotice.Busy)
             is DeviceConfigDialog.Field -> if (allows(s, open.field)) send(open) else _notices.tryEmit(DeviceConfigNotice.Busy)
+            is DeviceConfigDialog.BoardAction -> if (allows(s, open.field)) sendBoardAction(open.field) else _notices.tryEmit(DeviceConfigNotice.Busy)
         }
     }
 
@@ -494,6 +651,9 @@ class DeviceConfigController(
     }
 
     companion object {
+        /** Every board key of [manifest] a form may show. */
+        fun boardFields(manifest: SetupManifest): List<PlanField> = SetupPlan.fieldsOf(manifest, manifest.configKeys.keys.toList())
+
         const val WIFI_POLL_MS = 3_000L
         const val WIFI_POLL_ATTEMPTS = 20
 

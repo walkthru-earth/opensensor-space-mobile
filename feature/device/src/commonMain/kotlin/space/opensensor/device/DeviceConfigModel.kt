@@ -8,10 +8,13 @@ import space.opensensor.data.ble.ConnectionState
 import space.opensensor.data.ble.ThingStatus
 import space.opensensor.data.ble.TransportKind
 import space.opensensor.data.history.DeviceCapabilities
+import space.opensensor.data.protocol.BoardSettings
 import space.opensensor.data.protocol.ConfigPatch
 import space.opensensor.data.protocol.ConfigProblem
 import space.opensensor.data.protocol.DeviceInfo
 import space.opensensor.data.protocol.PairMode
+import space.opensensor.data.sync.SetupPlan
+import space.opensensor.model.SetupManifest
 import space.opensensor.model.ThingSite
 import space.opensensor.settings.DetailLevel
 
@@ -54,7 +57,13 @@ data class DeviceConfigUiState(
     val level: DetailLevel = DetailLevel.SIMPLE,
     val location: DeviceLocationState = DeviceLocationState(),
     val site: DeviceSiteState = DeviceSiteState(),
+    /** The board template's steps, sections and keys, [SetupManifest.NONE] when no template is known. */
+    val manifest: SetupManifest = SetupManifest.NONE,
+    val board: DeviceBoardState = DeviceBoardState(),
 ) {
+    /** The setup steps of this Thing, from [manifest] and the last page 1 read. Null before page 1 is read. */
+    val setupPlan: SetupPlan? get() = location.page?.let { SetupPlan.of(manifest, it) }
+
     /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
     val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(snapshot.info)
     val isV2: Boolean get() = capabilities.configurable
@@ -109,6 +118,9 @@ sealed interface DeviceConfigNotice {
 
     /** The sensor took a new token. [stored] when this phone already holds it, else fetch it again later. */
     data class TokenRotated(val stored: Boolean) : DeviceConfigNotice
+
+    /** The board took a confirmed board action. */
+    data object BoardActionSent : DeviceConfigNotice
 
     /** The sensor still reports Wi-Fi `connecting` after a minute of reads. */
     data object WifiStillJoining : DeviceConfigNotice
@@ -165,6 +177,15 @@ interface DeviceConfigSource {
      * command guard, then reads pages 5 and 6 back. Null when the board no longer reports a site.
      */
     suspend fun writeSite(patch: ConfigPatch): ThingSite? = null
+
+    /** Page 7, the board's declared keys, or null when this platform cannot read it. Throws on `ERROR`. */
+    suspend fun readBoardSettings(): BoardSettings? = null
+
+    /**
+     * Sends [patch], which holds declared board keys only, under the platform command guard, then
+     * reads page 7 back.
+     */
+    suspend fun writeBoardSettings(patch: ConfigPatch): BoardSettings? = null
 
     /** `GET_CONFIG`. */
     fun refreshConfig()

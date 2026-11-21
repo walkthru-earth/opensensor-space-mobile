@@ -9,6 +9,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import space.opensensor.data.protocol.DeviceGatt
+import space.opensensor.data.sync.PlanStep
+import space.opensensor.data.sync.PlanStepKind
+import space.opensensor.data.sync.SetupPlan
+import space.opensensor.model.StepId
+import space.opensensor.settings.DetailLevel
 
 /** One nearby sensor on Find. [added] rows are already known and start a re-run. */
 data class SetupCandidate(val id: String, val name: String?, val added: Boolean)
@@ -38,9 +43,8 @@ sealed interface SetupLink {
 enum class SetupFailure { UPDATE_FIRMWARE, PAIRING, UNREACHABLE, BLUETOOTH }
 
 /**
- * What the wizard needs from a platform. The nickname and the setup flag stay on the phone
- * (`SettingsRepository`). Nothing here sends a frame, the Location and Wi-Fi pages go through
- * `DeviceConfigController`.
+ * What the wizard needs from a platform. The nickname stays on the phone (`SettingsRepository`).
+ * Nothing here sends a frame, every step page and its ack go through `DeviceConfigController`.
  */
 interface SetupPort {
     val nearby: Flow<List<SetupCandidate>>
@@ -59,8 +63,22 @@ interface SetupPort {
     suspend fun saveNickname(id: String, nickname: String?)
 }
 
+/**
+ * The wizard's page. [Find] lists nearby sensors and pairs the picked one. [Loading] waits for the
+ * paired sensor's page 1, which the [SetupPlan] needs. [Step] is one step of that plan, [Done] the summary.
+ */
+sealed interface SetupPage {
+    data object Find : SetupPage
+
+    data object Loading : SetupPage
+
+    data class Step(val id: StepId) : SetupPage
+
+    data object Done : SetupPage
+}
+
 data class SetupUiState(
-    val page: SetupStep,
+    val page: SetupPage = SetupPage.Find,
     val candidates: List<SetupCandidate> = emptyList(),
     val finding: Boolean = false,
     val selected: SetupCandidate? = null,
@@ -68,27 +86,48 @@ data class SetupUiState(
     val paired: Boolean = false,
     val failure: SetupFailure? = null,
     val nickname: String = "",
-    /** The Thing holds a saved location that satisfies the required Location page. */
-    val located: Boolean = false,
-    /** Whether the sensor has the owner site keys. Null until it answered, false leaves Site out. */
-    val siteSupported: Boolean? = null,
-    /** Next on Site is saving the site. Skip waits for it, so the save and a skip never race. */
-    val siteSaving: Boolean = false,
+    /** The paired Thing's setup steps, null until its page 1 was read. */
+    val plan: SetupPlan? = null,
+    /**
+     * The step pages in walk order. It keeps a step that left the plan, a Location dropped once the
+     * Thing moves, so Next and Back still pass it.
+     */
+    val order: List<StepId> = emptyList(),
+    /** Planned steps without a page at this level. Their bits ride along with every ack. */
+    val hidden: List<StepId> = emptyList(),
+    /** Next is saving the page or writing its ack. Skip waits for it, Back leaves it and the page stays. */
+    val saving: Boolean = false,
+    /** The sensor did not confirm this page's step bit, the page says so and offers Retry. */
+    val ackFailed: Boolean = false,
     val askClose: Boolean = false,
     val closed: Boolean = false,
 ) {
     val nicknameValid: Boolean get() = nickname.trim().length <= SetupController.NICKNAME_MAX
 
-    /** Next is on unless this is a required page whose fact is not saved yet. */
-    val canAdvance: Boolean get() = nicknameValid && (!page.required || satisfied(page))
+    /** The plan step of this page, null off a step or once the step left the plan. */
+    val step: PlanStep? get() = (page as? SetupPage.Step)?.let { plan?.step(it.id) }
 
-    /** Whether [step] is walked. Site is left out once the sensor says it has no site keys. */
-    fun shows(step: SetupStep): Boolean = step != SetupStep.Site || siteSupported != false
-
-    fun satisfied(step: SetupStep): Boolean = when (step) {
-        is SetupStep.Location -> located
-        else -> true
+    /**
+     * Next is on unless the page is saving, the nickname is too long, the step is required and its fact
+     * is not on the Thing yet, or the step needs a newer app. A step that left the plan passes.
+     */
+    val canAdvance: Boolean get() = when (val p = page) {
+        is SetupPage.Step -> !saving && (p.id != StepId.NAME || nicknameValid) && step.let { it == null || (it.kind != PlanStepKind.UNSUPPORTED && (!it.required || it.satisfied)) }
+        SetupPage.Done -> !saving
+        SetupPage.Find, SetupPage.Loading -> false
     }
+
+    /** A board step's template label in [language], null on a page that keeps its own title. */
+    fun title(language: String): String? = step?.label?.get(language)
+
+    /** Skip shows on an optional step, and is off while Next saves. */
+    val canSkip: Boolean get() = step?.skippable == true && !saving
+
+    /** Done is reached only once every required step holds its fact. */
+    val doneAllowed: Boolean get() = plan?.steps.orEmpty().none { it.required && (!it.satisfied || it.kind == PlanStepKind.UNSUPPORTED) }
+
+    /** Back shows on every step but the first, Done closes instead. */
+    val canGoBack: Boolean get() = (page as? SetupPage.Step)?.let { order.indexOf(it.id) > 0 } == true
 
     /** Display name on Done, `nickname ?: name`. */
     val displayName: String? get() = nickname.trim().ifEmpty { null } ?: selected?.name
@@ -98,15 +137,22 @@ data class SetupUiState(
 }
 
 /**
- * Walks [steps] for one sensor. Back goes one page but stops at Name once paired, since unpairing
- * belongs to settings. Closing after pairing asks first, and the sensor stays added. Nothing about
- * the run is persisted besides the nickname, so a resumed run
- * ([resumeId]) opens at the first required page, Location for the board, and reconnects silently.
- * A [pick] is a new sensor tapped outside Find, paired at once as if chosen there, so Name still
- * comes first. Find lists it first while it pairs, even before a scan hears it. With [offer] the
- * pick is a sensor that asked for setup by itself (#272). It is only listed first on Find, as
- * pairing stays the owner's tap. Done, which clears the flag, is reached only once every required
- * page is satisfied.
+ * Walks the [SetupPlan] of one sensor, the board template's steps merged with its page 1 record and the
+ * app floors. Find pairs the picked sensor, then the wizard waits on Loading for the plan
+ * ([onPlan]) and opens the first step not done, or the first step when all are. Back goes one step but
+ * stops at the first, since unpairing belongs to settings. Closing after pairing asks first, and the
+ * sensor stays added.
+ *
+ * Next saves the page when it has something to save, then sets the step's bit in `thing.setup_ack`
+ * through `ack`, and moves on only once both are confirmed. Skip on an optional step sets the bit too.
+ * Lan never has a page, pairing and bonds only from Detailed, and the bits of those hidden steps are
+ * sent with every ack. Done is reached only once every required step holds its fact, and its Close
+ * sets the hidden bits still clear.
+ *
+ * A resumed run ([resumeId]) reconnects silently and opens where the plan says. A [pick] is a new
+ * sensor tapped outside Find, paired at once as if chosen there. Find lists it first while it pairs,
+ * even before a scan hears it. With [offer] the pick is a sensor that asked for setup by itself
+ * (#272). It is only listed first on Find, as pairing stays the owner's tap.
  *
  * [opened] tells the shared setup watch that the wizard ran for a sensor, when it opens on a resume
  * or an offer, whenever it pairs and again when it closes, so it does not open by itself again this
@@ -115,15 +161,13 @@ data class SetupUiState(
 class SetupController(
     private val scope: CoroutineScope,
     private val port: SetupPort,
-    val steps: List<SetupStep> = SetupFlows.BOARD,
     resumeId: String? = null,
     resumeName: String? = null,
     pick: SetupCandidate? = null,
     offer: Boolean = false,
     private val opened: (String) -> Unit = {},
 ) {
-    private val pages: List<SetupStep> = steps.filter { it.isPage }
-    private val _state = MutableStateFlow(SetupUiState(page = pages.first()))
+    private val _state = MutableStateFlow(SetupUiState())
     val state: StateFlow<SetupUiState> = _state.asStateFlow()
     private var linkJob: Job? = null
     private var nearbyJob: Job? = null
@@ -135,9 +179,9 @@ class SetupController(
     init {
         if (resumeId != null) {
             val candidate = SetupCandidate(resumeId, resumeName, added = true)
-            val page = pages.firstOrNull { it.required } ?: SetupStep.Name
-            _state.update { it.copy(page = page, selected = candidate, paired = true) }
+            _state.update { it.copy(page = SetupPage.Loading, selected = candidate, paired = true) }
             pair(candidate, silent = true)
+            scope.launch { port.nickname(resumeId)?.let { nickname -> _state.update { it.copy(nickname = nickname) } } }
         } else {
             offered?.let { opened(it.id) }
             picked?.let { p -> _state.update { it.copy(candidates = listOf(p)) } }
@@ -152,9 +196,9 @@ class SetupController(
         return if (list.any { it.id.equals(p.id, ignoreCase = true) }) list else listOf(p) + list
     }
 
-    /** Starts the scan, after the platform granted the access [steps] binds to Find. */
+    /** Starts the scan, after the platform granted Bluetooth from the Look for sensors tap. */
     fun find() {
-        if (_state.value.page != SetupStep.Find) return
+        if (_state.value.page != SetupPage.Find) return
         _state.update { it.copy(finding = true, failure = null) }
         port.startFind()
     }
@@ -162,7 +206,7 @@ class SetupController(
     /** Picks [candidate] on Find and pairs with it. An added row runs setup again. */
     fun choose(candidate: SetupCandidate) {
         val s = _state.value
-        if (s.page != SetupStep.Find || s.pairing) return
+        if (s.page != SetupPage.Find || s.pairing) return
         pair(candidate, silent = false)
     }
 
@@ -186,7 +230,7 @@ class SetupController(
             SetupLink.UpdateFirmware -> SetupFailure.UPDATE_FIRMWARE
             SetupLink.NoBluetooth -> SetupFailure.BLUETOOTH
         }
-        // A resumed run is already on Name and the forms wait for the link, so a silent failure stays quiet.
+        // A resumed run already waits for the plan and the forms wait for the link, so a silent failure stays quiet.
         if (silent) return
         if (failure != null) {
             _state.update { it.copy(pairing = false, failure = failure) }
@@ -195,93 +239,131 @@ class SetupController(
         }
         if (_state.value.paired) return
         val nickname = port.nickname(candidate.id).orEmpty()
-        _state.update { it.copy(pairing = false, paired = true, page = SetupStep.Name, nickname = nickname) }
+        _state.update { it.copy(pairing = false, paired = true, page = SetupPage.Loading, nickname = nickname) }
+    }
+
+    /**
+     * The paired Thing's plan at [level], each time page 1 or the template changes. A null plan before
+     * the first one keeps Loading, a null one later keeps the last. The first plan opens the first step
+     * not done.
+     */
+    fun onPlan(plan: SetupPlan?, level: DetailLevel) {
+        _state.update { s ->
+            if (plan == null || !s.paired) return@update s
+            val visible = plan.steps.map { it.id }.filter { shows(it, level) }
+            val hidden = plan.steps.map { it.id }.filter { !shows(it, level) }
+            val order = merge(s.order, visible, hidden, (s.page as? SetupPage.Step)?.id)
+            val page = if (s.page == SetupPage.Loading) {
+                order.firstOrNull { id -> plan.step(id)?.done == false }?.let(SetupPage::Step)
+                    ?: order.firstOrNull()?.let(SetupPage::Step)
+                    ?: SetupPage.Done
+            } else {
+                s.page
+            }
+            s.copy(plan = plan, order = order, hidden = hidden, page = page)
+        }
     }
 
     fun setNickname(value: String) {
         _state.update { it.copy(nickname = value.replace('\n', ' ').take(NICKNAME_MAX + 1)) }
     }
 
-    /** Whether the Thing holds a saved location, from the Location form's confirmed read or write. */
-    fun onLocated(located: Boolean) {
-        _state.update { it.copy(located = located) }
-    }
-
     /**
-     * Whether the sensor has the owner site keys, from the site form's read of page 5. When it has
-     * none while Site shows, the wizard moves on, as if Site were never in the list.
+     * Next. On a step it runs [save] when the page has something to save, saves the nickname on Name,
+     * then sets the step's bit with [ack], and moves on once both are confirmed. A refused save or an
+     * unconfirmed ack stays on the page and sets [SetupUiState.ackFailed], as does a save that ends
+     * after Back left it. On Done it sets the hidden bits still clear and leaves.
      */
-    fun onSiteSupport(supported: Boolean?) {
-        _state.update { it.copy(siteSupported = supported) }
-        if (supported == false && _state.value.page == SetupStep.Site) advance()
-    }
-
-    /** The next page. On Name it saves the nickname first, a blank one shows the advertised name. */
-    fun next() {
+    fun next(save: (suspend () -> Boolean)? = null, ack: suspend (Collection<StepId>) -> Boolean = { true }) {
         val s = _state.value
         if (!s.canAdvance) return
-        when (s.page) {
-            SetupStep.Find -> return
-            SetupStep.Name -> {
-                val id = s.selected?.id ?: return
-                scope.launch {
+        when (val page = s.page) {
+            is SetupPage.Step -> busy(page) {
+                if (page.id == StepId.NAME) {
+                    val id = s.selected?.id ?: return@busy false
                     port.saveNickname(id, s.nickname.trim().ifEmpty { null })
-                    advance()
                 }
-                return
+                (save == null || save()) && acked(page, ack)
             }
-            SetupStep.Done -> return finish()
-            else -> advance()
+            SetupPage.Done -> {
+                if (acks(s, page).isEmpty()) return finish()
+                busy(page) { acked(page, ack) }
+            }
+            SetupPage.Find, SetupPage.Loading -> Unit
         }
     }
 
-    /**
-     * Next on Site with changed values. Runs [save], the explicit site write, and moves on only when
-     * it reports the board confirmed every value. A refusal or an unconfirmed readback stays on Site
-     * with its reason. When Back left Site while the save ran, its result never moves the wizard.
-     */
-    fun saveSiteThenNext(save: suspend () -> Boolean) {
+    /** Skips an optional step, setting its bit too. Ignored while Next saves. */
+    fun skip(ack: suspend (Collection<StepId>) -> Boolean = { true }) {
         val s = _state.value
-        if (s.page != SetupStep.Site || s.siteSaving) return
-        _state.update { it.copy(siteSaving = true) }
+        val page = s.page as? SetupPage.Step ?: return
+        if (!s.canSkip) return
+        busy(page) { acked(page, ack) }
+    }
+
+    /** Sends only the step bits again after [SetupUiState.ackFailed], the page's values are already saved. */
+    fun retryAck(ack: suspend (Collection<StepId>) -> Boolean) {
+        val s = _state.value
+        if (!s.ackFailed || s.saving) return
+        busy(s.page) { acked(s.page, ack) }
+    }
+
+    /** The bits a page sets, its own and the hidden steps' on a step, the hidden ones still clear on Done. */
+    private fun acks(s: SetupUiState, page: SetupPage): List<StepId> = when (page) {
+        is SetupPage.Step -> listOf(page.id) + s.hidden
+        SetupPage.Done -> s.hidden.filter { s.plan?.step(it)?.acked == false }
+        SetupPage.Find, SetupPage.Loading -> emptyList()
+    }
+
+    /** Sets the bits of [from], and marks [SetupUiState.ackFailed] when the sensor did not confirm them while still on [from]. */
+    private suspend fun acked(from: SetupPage, ack: suspend (Collection<StepId>) -> Boolean): Boolean {
+        val ok = ack(acks(_state.value, from))
+        if (!ok) _state.update { if (it.page == from) it.copy(ackFailed = true) else it }
+        return ok
+    }
+
+    /** Runs [work] with Next and Skip off, and moves on when it succeeds while the wizard is still on [from]. */
+    private fun busy(from: SetupPage, work: suspend () -> Boolean) {
+        _state.update { it.copy(saving = true, ackFailed = false) }
         scope.launch {
-            val saved = try {
-                save()
+            val ok = try {
+                work()
             } finally {
-                _state.update { it.copy(siteSaving = false) }
+                _state.update { it.copy(saving = false) }
             }
-            if (saved && _state.value.page == SetupStep.Site) advance()
+            if (ok && _state.value.page == from) {
+                if (from == SetupPage.Done) finish() else advance()
+            }
         }
-    }
-
-    /** Skips a skippable page without writing anything. Ignored while a site save runs. */
-    fun skip() {
-        val s = _state.value
-        if (s.page.skippable && !s.siteSaving) advance()
     }
 
     private fun advance() {
         val s = _state.value
-        val next = pages.drop(pages.indexOf(s.page) + 1).firstOrNull(s::shows) ?: return
-        if (next == SetupStep.Done && pages.any { it.required && !s.satisfied(it) }) return
-        _state.update { it.copy(page = next) }
+        val at = (s.page as? SetupPage.Step)?.id ?: return
+        val next = s.order.getOrNull(s.order.indexOf(at) + 1)
+        when {
+            next != null -> _state.update { it.copy(page = SetupPage.Step(next)) }
+            s.doneAllowed -> _state.update { it.copy(page = SetupPage.Done) }
+        }
     }
 
-    /** One page back. On Name after pairing, and on Find, it asks to close instead. */
+    /** One step back. On the first step, and on Find or Loading, it asks to close instead. On Done it closes. */
     fun back() {
         val s = _state.value
-        val at = pages.indexOf(s.page)
-        when {
-            s.page == SetupStep.Done -> finish()
-            at <= 0 || (s.page == SetupStep.Name && s.paired) -> requestClose()
-            else -> pages.take(at).lastOrNull(s::shows)?.let { page -> _state.update { it.copy(page = page) } }
+        when (val page = s.page) {
+            SetupPage.Done -> finish()
+            is SetupPage.Step -> {
+                val at = s.order.indexOf(page.id)
+                if (at <= 0) requestClose() else _state.update { it.copy(page = SetupPage.Step(s.order[at - 1]), ackFailed = false) }
+            }
+            SetupPage.Find, SetupPage.Loading -> requestClose()
         }
     }
 
     /** Closes at once before pairing or on Done. After pairing it asks first. */
     fun requestClose() {
         val s = _state.value
-        if (s.paired && s.page != SetupStep.Done) _state.update { it.copy(askClose = true) } else finish()
+        if (s.paired && s.page != SetupPage.Done) _state.update { it.copy(askClose = true) } else finish()
     }
 
     fun dismissClose() {
@@ -305,5 +387,27 @@ class SetupController(
 
     companion object {
         const val NICKNAME_MAX = 32
+
+        /** Lan is never a wizard page. Pairing and bonds have one from Detailed. */
+        internal fun shows(id: StepId, level: DetailLevel): Boolean = when (id) {
+            StepId.LAN -> false
+            StepId.PAIRING, StepId.BONDS -> level.detailed
+            else -> true
+        }
+
+        /**
+         * The walk order after a new plan. The [old] order keeps its places, less steps the level now
+         * hides (but never [current]), and a newly [visible] step goes right after the step before it in
+         * the plan, or first.
+         */
+        internal fun merge(old: List<StepId>, visible: List<StepId>, hidden: List<StepId>, current: StepId?): List<StepId> {
+            val order = old.filterTo(ArrayList()) { it !in hidden || it == current }
+            visible.forEachIndexed { index, id ->
+                if (id in order) return@forEachIndexed
+                val before = visible.subList(0, index).lastOrNull { it in order }
+                order.add(before?.let { order.indexOf(it) + 1 } ?: 0, id)
+            }
+            return order
+        }
     }
 }

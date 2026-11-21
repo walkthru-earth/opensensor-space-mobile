@@ -238,4 +238,12 @@
     <string name="location_moving_no_gnss">This sensor has no GPS, so its readings carry no location</string>
     <string name="location_use_gnss">Use sensor GPS</string>
     <string name="location_cell_change">New readings use the new area. Earlier files keep the old one, and a new file starts.</string>
+    <string name="board_saved">Saved on the device</string>
+    <string name="board_not_confirmed">The device did not confirm every value</string>
+    <string name="board_failed">Could not save. Try again</string>
+    <string name="board_read_failed">Could not read the device settings</string>
+    <string name="board_range">%1$d to %2$d</string>
+    <string name="board_action_confirm">The device runs this now and may drop the connection for a moment.</string>
+    <string name="board_action_button">Run</string>
+    <string name="msg_board_action_sent">The device took the action</string>
 </resources>

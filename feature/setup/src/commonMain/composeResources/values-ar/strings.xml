@@ -32,4 +32,8 @@
     <string name="setup_leave">مغادرة</string>
     <string name="setup_stay">بقاء</string>
     <string name="setup_site_title">بيانات الموقع</string>
+    <string name="setup_bonds_title">الهواتف المقترنة</string>
+    <string name="setup_board_title">إعدادات المستشعر</string>
+    <string name="setup_unsupported">حدّث التطبيق لإكمال إعداد هذا المستشعر.</string>
+    <string name="setup_ack_failed">لم يؤكد المستشعر هذه الخطوة. أبقه قريبًا وحاول مجددًا.</string>
 </resources>

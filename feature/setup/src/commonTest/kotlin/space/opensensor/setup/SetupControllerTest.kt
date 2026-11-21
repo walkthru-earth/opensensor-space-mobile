@@ -7,11 +7,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import space.opensensor.data.protocol.ConfigFields
-import space.opensensor.permissions.AccessKind
-import space.opensensor.permissions.PermissionTriggers
-import space.opensensor.permissions.UserAction
-import space.opensensor.thing.OpenSensorBoardKind
+import space.opensensor.data.protocol.DeviceConfig
+import space.opensensor.data.protocol.SetupAck
+import space.opensensor.data.sync.PlanStepKind
+import space.opensensor.data.sync.SetupPlan
+import space.opensensor.model.ConfigApplies
+import space.opensensor.model.ConfigKeySpec
+import space.opensensor.model.ConfigKeyType
+import space.opensensor.model.ConfigValues
+import space.opensensor.model.LocalizedText
+import space.opensensor.model.ManifestStep
+import space.opensensor.model.SetupManifest
+import space.opensensor.model.StepId
+import space.opensensor.settings.DetailLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -35,8 +43,38 @@ internal class FakePort : SetupPort {
     fun ready(id: String, protocol: Int? = 3) { links.getValue(id).value = SetupLink.Ready(protocol) }
 }
 
+/** The steps a test template declares, and page 1 as a board reports it. */
+internal object Plans {
+    const val CELL = "8828308281fffff"
+
+    fun step(id: String, req: Boolean = false, vararg keys: String) = ManifestStep(StepId(id), req, keys.toList())
+
+    private val panelTheme = ConfigKeySpec("panel.theme", ConfigKeyType.ENUM, ConfigValues.Choices(listOf("light", "dark")), ConfigApplies.IMMEDIATELY, page = 7)
+
+    fun manifest(vararg steps: ManifestStep) = SetupManifest(setup = steps.toList(), configKeys = mapOf(panelTheme.key to panelTheme))
+
+    /** Every catalog step, Name to Bonds, with Location required. */
+    val BOARD = manifest(step("name"), step("location", req = true), step("site"), step("wifi"), step("pairing"), step("lan"), step("bonds"))
+    val BOARD_V = SetupAck.version(BOARD.setup.map { it.id.id })
+
+    fun page(mobility: String? = "fixed", cell: String? = "", setupV: Int? = null, ack: Int? = null): DeviceConfig {
+        val thing = listOfNotNull(
+            mobility?.let { """"mobility":"$it"""" },
+            setupV?.let { """"setup_v":$it""" },
+            ack?.let { """"setup_ack":$it""" },
+        )
+        val loc = """"location":{"cell":${cell?.let { "\"$it\"" } ?: "null"},"resolution":8}"""
+        return DeviceConfig.parse("{$loc,\"thing\":{${thing.joinToString(",")}}}")
+    }
+
+    fun plan(manifest: SetupManifest = BOARD, page: DeviceConfig = page()) = SetupPlan.of(manifest, page)
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class SetupControllerTest {
+    private val name = StepId.NAME
+    private val location = StepId.LOCATION
+
     private fun TestScope.controller(port: FakePort, resume: String? = null) =
         SetupController(backgroundScope, port, resumeId = resume, resumeName = "OS-1").also { testScheduler.runCurrent() }
 
@@ -49,49 +87,263 @@ class SetupControllerTest {
         return c
     }
 
-    @Test
-    fun boardPagesRunFindNameLocationSiteWifiDone() {
-        val pages = SetupFlows.BOARD.filter { it.isPage }
-        assertEquals(listOf("find", "name", "location", "site", "wifi", "done"), pages.map { it.id })
-        assertEquals(SetupFlows.BOARD, SetupFlows.of(OpenSensorBoardKind.id))
-        assertEquals(listOf(SetupStep.Site, SetupFlows.WIFI), pages.filter { it.skippable })
-        assertEquals(listOf<SetupStep>(SetupFlows.LOCATION), pages.filter { it.required })
+    /** Paired and walking [plan] at [level]. */
+    private fun TestScope.walking(port: FakePort, plan: SetupPlan = Plans.plan(), level: DetailLevel = DetailLevel.SIMPLE): SetupController =
+        paired(port).also { it.onPlan(plan, level) }
+
+    private val SetupController.at: SetupPage get() = state.value.page
+
+    /** Records the acks the wizard asks for, answering [answer]. */
+    private class Acks(var answer: Boolean = true) {
+        val sent = mutableListOf<List<StepId>>()
+        val ack: suspend (Collection<StepId>) -> Boolean = { ids -> sent += ids.toList(); answer }
     }
 
     @Test
-    fun permissionStepsBindTheNextTapAndSharingIsNoStep() {
-        val flow = SetupFlows.BOARD
-        assertEquals(UserAction.FIND_SENSORS, flow.accessFor(SetupStep.Find))
-        assertNull(flow.accessFor(SetupFlows.WIFI), "setup never asks for local network")
-        assertNull(flow.accessFor(SetupStep.Name))
-        assertTrue(AccessKind.BLUETOOTH in PermissionTriggers.of(UserAction.FIND_SENSORS).required)
-        assertTrue(flow.none { it.id.contains("shar") || it.id.contains("upload") })
-    }
-
-    @Test
-    fun wifiKeysComeFromTheFieldTable() {
-        assertTrue(SetupFlows.WIFI.keys.all { ConfigFields.of(it) != null })
-    }
-
-    @Test
-    fun pairingOpensName() = runTest(UnconfinedTestDispatcher()) {
+    fun pairingWaitsForThePlanThenOpensTheFirstStepNotDone() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = paired(port)
-        assertEquals(SetupStep.Name, c.state.value.page)
+        assertEquals(SetupPage.Loading, c.at)
         assertTrue(c.state.value.paired)
         assertFalse(port.finding)
+        assertFalse(c.state.value.canAdvance)
+        c.onPlan(null, DetailLevel.SIMPLE)
+        assertEquals(SetupPage.Loading, c.at, "no plan before page 1 is read")
+        // Name is acked on the device, so the walk opens at Location.
+        c.onPlan(Plans.plan(page = Plans.page(setupV = Plans.BOARD_V, ack = 0b1)), DetailLevel.SIMPLE)
+        assertEquals(SetupPage.Step(location), c.at)
     }
 
     @Test
-    fun backStopsAtNameAfterPairingAndCloseAsks() = runTest(UnconfinedTestDispatcher()) {
+    fun aPlanWithEveryStepDoneOpensTheFirstStepToEditAgain() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL, setupV = Plans.BOARD_V, ack = 0b1111111)))
+        assertEquals(SetupPage.Step(name), c.at)
+    }
+
+    @Test
+    fun theStepsFollowTheTemplateOrderAndLevel() = runTest(UnconfinedTestDispatcher()) {
+        val simple = walking(FakePort())
+        assertEquals(listOf("name", "location", "site", "wifi"), simple.state.value.order.map { it.id })
+        val detailed = walking(FakePort(), level = DetailLevel.DETAILED)
+        assertEquals(listOf("name", "location", "site", "wifi", "pairing", "bonds"), detailed.state.value.order.map { it.id })
+        val developer = walking(FakePort(), level = DetailLevel.DEVELOPER)
+        assertFalse(StepId.LAN in developer.state.value.order, "Wi-Fi sync is never a wizard page")
+    }
+
+    @Test
+    fun withoutATemplateAFixedThingWalksOnlyTheLocationStep() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort(), Plans.plan(SetupManifest.NONE))
+        assertEquals(listOf(location), c.state.value.order)
+        assertEquals(SetupPage.Step(location), c.at)
+        val moving = walking(FakePort(), Plans.plan(SetupManifest.NONE, Plans.page(mobility = "moving")))
+        assertEquals(SetupPage.Done, moving.at)
+    }
+
+    @Test
+    fun aRequiredLocationKeepsNextAndSkipOffUntilTheBoardHoldsACell() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
-        val c = paired(port)
+        val c = walking(port)
+        val acks = Acks()
+        c.next(ack = acks.ack)
+        assertEquals(SetupPage.Step(location), c.at)
+        assertFalse(c.state.value.canAdvance)
+        assertFalse(c.state.value.canSkip)
+        c.skip(acks.ack)
+        c.next(ack = acks.ack)
+        assertEquals(SetupPage.Step(location), c.at)
+        assertEquals(1, acks.sent.size, "only Name was acked")
+        c.onPlan(Plans.plan(page = Plans.page(cell = Plans.CELL)), DetailLevel.SIMPLE)
+        assertTrue(c.state.value.canAdvance)
+        c.next(ack = acks.ack)
+        assertEquals(SetupPage.Step(StepId.SITE), c.at)
+    }
+
+    @Test
+    fun nextAcksTheStepWithTheHiddenStepsAndMovesOn() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort())
+        val acks = Acks()
+        c.next(ack = acks.ack)
+        assertEquals(listOf(listOf(name, StepId.PAIRING, StepId.LAN, StepId.BONDS)), acks.sent)
+        assertEquals(SetupPage.Step(location), c.at)
+    }
+
+    @Test
+    fun skipAcksAnOptionalStepAndMovesOn() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL)))
         c.next()
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        c.next()
+        assertEquals(SetupPage.Step(StepId.SITE), c.at)
+        assertTrue(c.state.value.canSkip)
+        val acks = Acks()
+        c.skip(acks.ack)
+        assertEquals(StepId.SITE, acks.sent.single().first())
+        assertEquals(SetupPage.Step(StepId.WIFI), c.at)
+    }
+
+    @Test
+    fun aFailedSaveOrAckStaysOnThePage() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL)))
+        c.next()
+        c.next()
+        assertEquals(SetupPage.Step(StepId.SITE), c.at)
+        val acks = Acks()
+        c.next(save = { false }, ack = acks.ack)
+        assertEquals(SetupPage.Step(StepId.SITE), c.at, "a refused or unconfirmed save stays")
+        assertTrue(acks.sent.isEmpty(), "nothing is acked before the save is confirmed")
+        acks.answer = false
+        c.next(save = { true }, ack = acks.ack)
+        assertEquals(SetupPage.Step(StepId.SITE), c.at, "an ack the device did not confirm stays")
+        c.skip(acks.ack)
+        assertEquals(SetupPage.Step(StepId.SITE), c.at)
+        acks.answer = true
+        c.next(save = { true }, ack = acks.ack)
+        assertEquals(SetupPage.Step(StepId.WIFI), c.at)
+    }
+
+    @Test
+    fun anUnconfirmedAckSaysWhyAndRetrySendsOnlyTheAck() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL)))
+        c.next()
+        c.next()
+        val acks = Acks(answer = false)
+        var saves = 0
+        c.next(save = { saves++; true }, ack = acks.ack)
+        assertEquals(SetupPage.Step(StepId.SITE), c.at)
+        assertTrue(c.state.value.ackFailed, "the page says the sensor did not confirm")
+        c.retryAck(acks.ack)
+        assertTrue(c.state.value.ackFailed, "a second miss still says why")
+        acks.answer = true
+        c.retryAck(acks.ack)
+        assertEquals(1, saves, "Retry sends only the ack, the values are already on the sensor")
+        assertEquals(3, acks.sent.size)
+        assertEquals(SetupPage.Step(StepId.WIFI), c.at)
+        assertFalse(c.state.value.ackFailed)
+    }
+
+    @Test
+    fun aRefusedSaveIsNoAckFailureAndBackClearsOne() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL)))
+        c.next()
+        c.next()
+        val acks = Acks(answer = false)
+        c.next(save = { false }, ack = acks.ack)
+        assertFalse(c.state.value.ackFailed, "a refused save shows its own error")
+        c.skip(acks.ack)
+        assertTrue(c.state.value.ackFailed, "a Skip whose ack is not confirmed says why too")
         c.back()
-        assertEquals(SetupStep.Name, c.state.value.page)
+        assertFalse(c.state.value.ackFailed)
+        c.retryAck(acks.ack)
+        assertEquals(1, acks.sent.size, "Retry does nothing once the page left the failure")
+    }
+
+    @Test
+    fun skipWaitsForASaveAndASaveEndingAfterBackNeverMoves() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL)))
+        c.next()
+        c.next()
+        val result = CompletableDeferred<Boolean>()
+        c.next(save = { result.await() })
+        assertTrue(c.state.value.saving)
+        assertFalse(c.state.value.canSkip)
+        c.skip()
+        assertEquals(SetupPage.Step(StepId.SITE), c.at, "Skip cannot race the save")
         c.back()
-        assertEquals(SetupStep.Name, c.state.value.page)
+        assertEquals(SetupPage.Step(location), c.at)
+        result.complete(true)
+        assertEquals(SetupPage.Step(location), c.at, "a save that ends after Back never moves the wizard")
+        assertFalse(c.state.value.saving)
+    }
+
+    @Test
+    fun doneWaitsForEveryRequiredStep() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL)))
+        repeat(3) { c.next() }
+        assertEquals(SetupPage.Step(StepId.WIFI), c.at)
+        // The board's cell went away after Location, so Wi-Fi Next must not reach Done.
+        c.onPlan(Plans.plan(), DetailLevel.SIMPLE)
+        c.next()
+        assertEquals(SetupPage.Step(StepId.WIFI), c.at)
+        c.onPlan(Plans.plan(page = Plans.page(cell = Plans.CELL)), DetailLevel.SIMPLE)
+        c.skip()
+        assertEquals(SetupPage.Done, c.at)
+    }
+
+    @Test
+    fun closeOnDoneAcksTheHiddenStepsNotDoneThenLeaves() = runTest(UnconfinedTestDispatcher()) {
+        // Every page is acked, the hidden ones are not, so setup would stay pending.
+        val c = walking(FakePort(), Plans.plan(page = Plans.page(cell = Plans.CELL, setupV = Plans.BOARD_V, ack = 0b1111)))
+        repeat(4) { c.next() }
+        assertEquals(SetupPage.Done, c.at)
+        val acks = Acks(answer = false)
+        c.next(ack = acks.ack)
+        assertEquals(listOf(listOf(StepId.PAIRING, StepId.LAN, StepId.BONDS)), acks.sent)
+        assertFalse(c.state.value.closed, "an unconfirmed ack stays on Done")
+        assertTrue(c.state.value.ackFailed)
+        acks.answer = true
+        c.retryAck(acks.ack)
+        assertEquals(2, acks.sent.size)
+        assertTrue(c.state.value.closed)
+    }
+
+    @Test
+    fun anUnsupportedRequiredStepOffersNeitherNextNorSkip() = runTest(UnconfinedTestDispatcher()) {
+        val manifest = Plans.manifest(Plans.step("calibrate", req = true))
+        val c = walking(FakePort(), Plans.plan(manifest, Plans.page(mobility = "moving")))
+        assertEquals(SetupPage.Step(StepId("calibrate")), c.at)
+        assertEquals(PlanStepKind.UNSUPPORTED, c.state.value.step?.kind)
+        assertFalse(c.state.value.canAdvance)
+        assertFalse(c.state.value.canSkip)
+    }
+
+    @Test
+    fun aBoardStepTitleIsItsTemplateLabelInTheAppLanguage() = runTest(UnconfinedTestDispatcher()) {
+        val label = LocalizedText(mapOf(LocalizedText.UNTAGGED to "Display", "ar" to "الشاشة"))
+        val manifest = Plans.manifest(ManifestStep(StepId("panel"), keys = listOf("panel.theme"), label = label), Plans.step("tune", false, "panel.theme"))
+        val c = walking(FakePort(), Plans.plan(manifest, Plans.page(mobility = "moving")))
+        assertEquals("Display", c.state.value.title("en"))
+        assertEquals("الشاشة", c.state.value.title("ar"))
+        c.next()
+        assertEquals(SetupPage.Step(StepId("tune")), c.at)
+        assertNull(c.state.value.title("en"), "a step without a label keeps the Sensor settings title")
+    }
+
+    @Test
+    fun aBoardStepShowsItsFieldsAndSavesBeforeItsAck() = runTest(UnconfinedTestDispatcher()) {
+        val manifest = Plans.manifest(Plans.step("panel", false, "panel.theme"))
+        val c = walking(FakePort(), Plans.plan(manifest, Plans.page(mobility = "moving")))
+        assertEquals(PlanStepKind.GENERIC, c.state.value.step?.kind)
+        assertEquals(listOf("panel.theme"), c.state.value.step?.fields?.map { it.field.key })
+        val order = mutableListOf<String>()
+        c.next(save = { order += "save"; true }, ack = { order += "ack"; true })
+        assertEquals(listOf("save", "ack"), order)
+        assertEquals(SetupPage.Done, c.at)
+    }
+
+    @Test
+    fun aStepThatLeavesThePlanStillAdvances() = runTest(UnconfinedTestDispatcher()) {
+        // No template Location, so a fixed Thing gets the app's own. Choosing moving drops it.
+        val manifest = Plans.manifest(Plans.step("wifi"))
+        val c = walking(FakePort(), Plans.plan(manifest))
+        assertEquals(SetupPage.Step(location), c.at)
+        assertFalse(c.state.value.canAdvance)
+        c.onPlan(Plans.plan(manifest, Plans.page(mobility = "moving")), DetailLevel.SIMPLE)
+        assertEquals(SetupPage.Step(location), c.at, "the page stays while the owner reads it")
+        assertTrue(c.state.value.canAdvance)
+        c.next()
+        assertEquals(SetupPage.Step(StepId.WIFI), c.at)
+        c.back()
+        assertEquals(SetupPage.Step(location), c.at)
+    }
+
+    @Test
+    fun backStopsAtTheFirstStepAfterPairingAndCloseAsks() = runTest(UnconfinedTestDispatcher()) {
+        val c = walking(FakePort())
+        c.next()
+        assertEquals(SetupPage.Step(location), c.at)
+        c.back()
+        assertEquals(SetupPage.Step(name), c.at)
+        c.back()
+        assertEquals(SetupPage.Step(name), c.at)
         assertTrue(c.state.value.askClose)
         c.dismissClose()
         c.requestClose()
@@ -109,74 +361,13 @@ class SetupControllerTest {
     }
 
     @Test
-    fun locationHasNoSkipAndNextWaitsForASavedCell() = runTest(UnconfinedTestDispatcher()) {
-        val port = FakePort()
-        val c = paired(port)
-        c.next()
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
-        assertFalse(SetupFlows.LOCATION.skippable)
-        c.skip()
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
-        assertFalse(c.state.value.canAdvance)
-        c.next()
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
-        c.onLocated(true)
-        c.onLocated(false)
-        c.next()
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
-    }
-
-    @Test
-    fun doneNeedsASavedLocation() = runTest(UnconfinedTestDispatcher()) {
-        val port = FakePort()
-        val c = paired(port)
-        c.next()
-        repeat(3) { c.skip() }
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
-    }
-
-    @Test
-    fun wifiSkipsToDoneOnceLocated() = runTest(UnconfinedTestDispatcher()) {
-        val port = FakePort()
-        val c = paired(port)
-        c.next()
-        c.onLocated(true)
-        c.next()
-        assertEquals(SetupStep.Site, c.state.value.page)
-        c.skip()
-        assertEquals(SetupFlows.WIFI, c.state.value.page)
-        c.skip()
-        assertEquals(SetupStep.Done, c.state.value.page)
-        c.skip()
-        assertEquals(SetupStep.Done, c.state.value.page)
-        c.next()
-        assertTrue(c.state.value.closed)
-    }
-
-    @Test
-    fun losingTheSavedLocationOnWifiKeepsDoneClosed() = runTest(UnconfinedTestDispatcher()) {
-        val port = FakePort()
-        val c = paired(port)
-        c.next()
-        c.onLocated(true)
-        c.next()
-        assertEquals(SetupStep.Site, c.state.value.page)
-        c.skip()
-        assertEquals(SetupFlows.WIFI, c.state.value.page)
-        // The board's cell went away after Location, so Wi-Fi Skip must not reach Done.
-        c.onLocated(false)
-        c.skip()
-        assertEquals(SetupFlows.WIFI, c.state.value.page)
-    }
-
-    @Test
     fun oldFirmwareFailsWithUpdateFirmware() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = controller(port)
         c.choose(port.nearby.value.first())
         port.ready("AA", protocol = 2)
         assertEquals(SetupFailure.UPDATE_FIRMWARE, c.state.value.failure)
-        assertEquals(SetupStep.Find, c.state.value.page)
+        assertEquals(SetupPage.Find, c.at)
     }
 
     @Test
@@ -217,13 +408,14 @@ class SetupControllerTest {
     }
 
     @Test
-    fun aNewSensorPickedOnMyDevicesPairsAtOnceAndOpensName() = runTest(UnconfinedTestDispatcher()) {
+    fun aNewSensorPickedOnMyDevicesPairsAtOnce() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = SetupController(backgroundScope, port, pick = SetupCandidate("AA", "OS-1", added = false))
         assertTrue("connect AA" in port.calls)
         assertTrue(c.state.value.pairing)
         port.ready("AA")
-        assertEquals(SetupStep.Name, c.state.value.page)
+        assertEquals(SetupPage.Loading, c.at)
+        assertTrue(c.state.value.paired)
     }
 
     @Test
@@ -233,7 +425,7 @@ class SetupControllerTest {
         val opened = mutableListOf<String>()
         val offer = SetupCandidate("CC", "OS-3", added = false)
         val c = SetupController(backgroundScope, port, pick = offer, offer = true, opened = { opened += it })
-        assertEquals(SetupStep.Find, c.state.value.page)
+        assertEquals(SetupPage.Find, c.at)
         assertEquals(listOf(offer), c.state.value.candidates)
         assertFalse(port.calls.any { it.startsWith("connect") }, "pairing stays the owner's tap")
         assertEquals(listOf("CC"), opened)
@@ -255,14 +447,14 @@ class SetupControllerTest {
         val port = FakePort()
         val c = SetupController(backgroundScope, port, pick = SetupCandidate("BB", "OS-2", added = false), offer = true)
         c.find()
-        assertEquals(SetupStep.Find, c.state.value.page)
+        assertEquals(SetupPage.Find, c.at)
         assertFalse(c.state.value.paired)
         assertTrue(port.calls.none { it.startsWith("connect") }, "the open alone never connects")
 
         c.choose(c.state.value.candidates.single { it.id == "BB" })
         assertEquals(listOf("connect BB"), port.calls.filter { it.startsWith("connect") })
         port.ready("BB")
-        assertEquals(SetupStep.Name, c.state.value.page)
+        assertEquals(SetupPage.Loading, c.at)
     }
 
     @Test
@@ -281,27 +473,30 @@ class SetupControllerTest {
     }
 
     @Test
-    fun anAddedSensorRunsSetupAgain() = runTest(UnconfinedTestDispatcher()) {
+    fun anAddedSensorRunsSetupAgainWithItsNickname() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         port.nicknames["BB"] = "Kitchen"
         val c = controller(port)
         c.choose(port.nearby.value[1])
         port.ready("BB")
-        assertEquals(SetupStep.Name, c.state.value.page)
+        assertEquals(SetupPage.Loading, c.at)
         assertEquals("Kitchen", c.state.value.nickname)
     }
 
     @Test
-    fun resumeOpensAtLocationAndReconnectsSilently() = runTest(UnconfinedTestDispatcher()) {
+    fun resumeWaitsForThePlanAndReconnectsSilently() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         val c = controller(port, resume = "AA")
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
-        assertFalse(c.state.value.canAdvance)
+        assertEquals(SetupPage.Loading, c.at)
+        assertTrue(c.state.value.paired)
         assertTrue("connect AA" in port.calls)
         port.links.getValue("AA").value = SetupLink.Unreachable
         assertNull(c.state.value.failure)
+        c.onPlan(Plans.plan(page = Plans.page(setupV = Plans.BOARD_V, ack = 0b1)), DetailLevel.SIMPLE)
+        assertEquals(SetupPage.Step(location), c.at)
+        assertFalse(c.state.value.canAdvance)
         c.back()
-        assertEquals(SetupStep.Name, c.state.value.page)
+        assertEquals(SetupPage.Step(name), c.at)
         c.back()
         assertTrue(c.state.value.askClose)
     }
@@ -309,14 +504,15 @@ class SetupControllerTest {
     @Test
     fun nicknameIsAtMost32CharactersAndOnlyReachesTheStore() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
-        val c = paired(port)
+        val c = walking(port)
         c.setNickname("x".repeat(40))
         assertFalse(c.state.value.nicknameValid)
+        assertFalse(c.state.value.canAdvance)
         c.next()
-        assertEquals(SetupStep.Name, c.state.value.page)
+        assertEquals(SetupPage.Step(name), c.at)
         c.setNickname("  Balcony  ")
         c.next()
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
+        assertEquals(SetupPage.Step(location), c.at)
         assertEquals("Balcony", port.nicknames["AA"])
         assertEquals("Balcony", c.state.value.displayName)
         assertEquals(listOf("saveNickname AA"), port.calls.filter { it.contains("AA") && !it.startsWith("connect") })
@@ -327,115 +523,10 @@ class SetupControllerTest {
     fun aBlankNicknameShowsTheAdvertisedName() = runTest(UnconfinedTestDispatcher()) {
         val port = FakePort()
         port.nicknames["AA"] = "Old"
-        val c = paired(port)
+        val c = walking(port)
         c.setNickname(" ")
         c.next()
         assertNull(port.nicknames["AA"])
         assertEquals("OS-1", c.state.value.displayName)
-    }
-
-    // ------------------------------------------------------------------ site (#272)
-
-    /** Paired, Location saved, and on the page after it. */
-    private fun TestScope.pastLocation(port: FakePort): SetupController {
-        val c = paired(port)
-        c.next()
-        c.onLocated(true)
-        c.next()
-        return c
-    }
-
-    @Test
-    fun siteFollowsLocationAndSkipMovesOnToWifi() = runTest(UnconfinedTestDispatcher()) {
-        val port = FakePort()
-        val c = pastLocation(port)
-        assertEquals(SetupStep.Site, c.state.value.page)
-        assertFalse(SetupStep.Site.required)
-        assertTrue(c.state.value.canAdvance, "Site is optional")
-        c.skip()
-        assertEquals(SetupFlows.WIFI, c.state.value.page)
-        c.back()
-        assertEquals(SetupStep.Site, c.state.value.page)
-        c.back()
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
-    }
-
-    @Test
-    fun aSiteSaveMovesOnOnlyWhenTheBoardConfirmedIt() = runTest(UnconfinedTestDispatcher()) {
-        val c = pastLocation(FakePort())
-        var saves = 0
-        c.saveSiteThenNext {
-            saves++
-            false
-        }
-        assertEquals(SetupStep.Site, c.state.value.page, "a refused or unconfirmed save stays on Site")
-        assertFalse(c.state.value.siteSaving)
-        c.saveSiteThenNext {
-            saves++
-            true
-        }
-        assertEquals(SetupFlows.WIFI, c.state.value.page)
-        assertEquals(2, saves)
-    }
-
-    @Test
-    fun skipWaitsForASiteSaveAndBackDropsItsResult() = runTest(UnconfinedTestDispatcher()) {
-        val c = pastLocation(FakePort())
-        val result = CompletableDeferred<Boolean>()
-        c.saveSiteThenNext { result.await() }
-        assertTrue(c.state.value.siteSaving)
-        c.skip()
-        assertEquals(SetupStep.Site, c.state.value.page, "Skip cannot race the save")
-        var second = false
-        c.saveSiteThenNext {
-            second = true
-            true
-        }
-        assertFalse(second, "one save at a time")
-        c.back()
-        assertEquals(SetupFlows.LOCATION, c.state.value.page)
-        result.complete(true)
-        assertFalse(c.state.value.siteSaving)
-        assertEquals(SetupFlows.LOCATION, c.state.value.page, "a save that ends after Back never moves the wizard")
-    }
-
-    @Test
-    fun siteNextWithoutAnEditMovesOn() = runTest(UnconfinedTestDispatcher()) {
-        val c = pastLocation(FakePort())
-        c.onSiteSupport(true)
-        c.next()
-        assertEquals(SetupFlows.WIFI, c.state.value.page)
-    }
-
-    @Test
-    fun aBoardWithoutSiteKeysLeavesSiteOutBothWays() = runTest(UnconfinedTestDispatcher()) {
-        val port = FakePort()
-        val c = paired(port)
-        c.onSiteSupport(false)
-        c.next()
-        c.onLocated(true)
-        c.next()
-        assertEquals(SetupFlows.WIFI, c.state.value.page, "Next on Location skips the hidden Site")
-        c.back()
-        assertEquals(SetupFlows.LOCATION, c.state.value.page, "Back on Wi-Fi skips it too")
-    }
-
-    @Test
-    fun learningOnSiteThatTheBoardHasNoSiteKeysMovesOn() = runTest(UnconfinedTestDispatcher()) {
-        val c = pastLocation(FakePort())
-        c.onSiteSupport(null)
-        assertEquals(SetupStep.Site, c.state.value.page, "unknown keeps Site")
-        c.onSiteSupport(false)
-        assertEquals(SetupFlows.WIFI, c.state.value.page)
-    }
-
-    @Test
-    fun siteSkipNeverReachesDoneWithoutALocation() = runTest(UnconfinedTestDispatcher()) {
-        val port = FakePort()
-        val c = pastLocation(port)
-        c.onLocated(false)
-        c.skip()
-        c.skip()
-        assertEquals(SetupFlows.WIFI, c.state.value.page)
     }
 }
