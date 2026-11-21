@@ -103,6 +103,10 @@ class FakeTransport(
     @Volatile var locationCell = ""
 
     @Volatile var mobility = "fixed"
+
+    @Volatile var setupV = 0
+
+    @Volatile var setupAck = 0
     private var ssid = ""
     private var pskSet = false
     private var wifiState = "off"
@@ -408,7 +412,7 @@ class FakeTransport(
     private fun configFlags(): Int = if (pendingPairMode != null || pendingPin != null) 1 else 0
 
     private fun locationJson(): String =
-        """{"location":{"cell":"$locationCell","resolution":8,"cell_resolution":${if (locationCell.isEmpty()) "null" else "8"},"lat":null,"lon":null,"country":""},"thing":{"mobility":"$mobility"}}"""
+        """{"location":{"cell":"$locationCell","resolution":8,"cell_resolution":${if (locationCell.isEmpty()) "null" else "8"},"lat":null,"lon":null,"country":""},"thing":{"mobility":"$mobility","setup_v":$setupV,"setup_ack":$setupAck}}"""
 
     private fun configJson(): String {
         val effectivePin = pendingPin ?: pin
@@ -440,6 +444,8 @@ class FakeTransport(
                 "location.resolution" -> v.toIntOrNull() == 8
                 "location.country" -> v.isEmpty() || Regex("[A-Z]{2}").matches(v)
                 "thing.mobility" -> v == "fixed" || v == "moving"
+                "thing.setup_v" -> (v.toIntOrNull() ?: 0) >= 1
+                "thing.setup_ack" -> (v.toIntOrNull() ?: -1) >= 0
                 else -> false
             }
             if (!ok) return k
@@ -457,6 +463,8 @@ class FakeTransport(
                 "lan.on" -> { lanOn = v == "1"; logLine("LAN ${if (lanOn) "ON" else "OFF"}") }
                 "location.cell" -> locationCell = v
                 "thing.mobility" -> mobility = v
+                "thing.setup_v" -> setupV = v.toInt()
+                "thing.setup_ack" -> setupAck = v.toInt()
             }
         }
         logLine("CONFIG SET keys=${parsed.joinToString(",") { it.first }}")

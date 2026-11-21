@@ -89,6 +89,7 @@ import space.opensensor.data.sync.ArchiveCollector
 import space.opensensor.data.sync.DeviceCoordinator
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.data.sync.FileOutcome
+import space.opensensor.data.sync.SetupPlan
 import space.opensensor.data.sync.SyncEngine
 import space.opensensor.data.sync.ThingPlace
 import space.opensensor.data.sync.ThingPlaces
@@ -375,7 +376,15 @@ class DeviceFacadeTest {
         assertTrue("connecting reads no page 1 for setup", needs.first().isEmpty())
         h.repo.readLocation()
         assertEquals(listOf(ADDRESS), needs.first().map { it.id })
-        h.repo.writeLocation(ConfigPatch.build { location("8828308281fffff", "") })
+        val plan = SetupPlan.of(SetupPlan.manifestOf(h.repo.info.value, emptyList()), null)
+        h.repo.writeLocation(
+            ConfigPatch.build {
+                location("8828308281fffff", "")
+                val version = plan.version
+                val ack = plan.ackWith(plan.steps.map { it.id })
+                if (version != null && ack != null) setupAck(version, ack)
+            },
+        )
         assertTrue("the page read back after a save clears the need", needs.first().isEmpty())
     }
 
