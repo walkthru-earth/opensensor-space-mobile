@@ -1,25 +1,36 @@
 package space.opensensor.discover
 
 import space.opensensor.designsystem.pm25LabelRes
+import space.opensensor.family.air.AirFamily
+import space.opensensor.family.air.AirProperty
 import space.opensensor.family.air.Pm25Basis
+import space.opensensor.model.DisplayGroup
+import space.opensensor.model.LocalizedText
+import space.opensensor.model.PropertyEntry
+import space.opensensor.model.PropertyRegistry
+import space.opensensor.publicfeed.DiscoverCollection
 import space.opensensor.publicfeed.FeedProperty
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
- * #92 and #145. The public feed has no humidity, so its PM2.5 is always labelled raw. Every other
- * id the app knows gets the app's own string, and only an unknown id keeps the feed label.
+ * #92 and #145. The public feed has no humidity, so its PM2.5 is always labelled raw. A property the
+ * Collection ties to a registry entry takes the registry's words, and only a property the registry
+ * does not list keeps the feed label.
  */
 class DiscoverLabelsTest {
-    private val pm25 = FeedProperty("pm25", "PM2.5", "µg/m³", "Air")
-    private val pm10 = FeedProperty("pm10", "PM10", "µg/m³", "Air")
+    init {
+        AirFamily.install()
+    }
+
+    private fun described(id: String, label: String, category: String = "Air") =
+        DiscoverCollection.BUNDLED.describe(listOf(FeedProperty(id, label, "u", category))).single()
+
+    private val pm25 = described("pm25", "PM2.5")
     private val unknown = FeedProperty("radon", "Radon", "Bq/m³", "Air")
 
-    /** Every id the fixtures in tools/discover-fixture publish, plus pressure. */
-    private val knownIds = listOf("pm25", "pm10", "pm1", "um003", "temperature", "humidity", "pressure", "co2", "no2")
+    private fun label(property: FeedProperty, language: String = "en") = shownLabel(property, language) { it.key }
 
     @Test
     fun theFeedPm25IsLabelledRaw() {
@@ -27,32 +38,68 @@ class DiscoverLabelsTest {
     }
 
     @Test
-    fun everyKnownIdHasItsOwnDistinctString() {
-        val resources = knownIds.map { id -> assertNotNull(shownLabelRes(FeedProperty(id, "Feed $id", "u", "Air")), id) }
-        assertEquals(knownIds.size, resources.map { it.key }.toSet().size)
-        assertNotEquals(pm25LabelRes(Pm25Basis.RAW), shownLabelRes(pm10))
+    fun theBundledCollectionTiesEachKnownFeedIdToItsProperty() {
+        assertEquals(AirProperty.PM10, described("pm10", "PM10").property)
+        assertEquals(AirProperty.PARTICLE_COUNTS.first(), described("um003", "um003").property)
+        assertEquals(AirProperty.RELATIVE_HUMIDITY, described("humidity", "Humidity").property)
+        assertNull(described("pressure", "Pressure").property)
+        assertNull(described("no2", "NO2").property)
     }
 
     @Test
-    fun aCollectionTitleShowsForAnIdTheAppDoesNotKnow() {
-        // The Collection's column title arrives as the property label. A known id keeps the app's string.
+    fun aRegistryPropertyTakesTheShortLabelInItsLanguage() {
+        assertEquals("PM10", label(described("pm10", "Feed pm10")))
+        assertEquals("Temperature", label(described("temperature", "Feed temperature", "Weather")))
+        assertEquals("درجة الحرارة", label(described("temperature", "Feed temperature", "Weather"), "ar"))
+        assertEquals("الرطوبة", label(described("humidity", "Feed humidity", "Weather"), "ar"))
+        assertEquals("CO₂", label(described("co2", "Feed co2")))
+        assertEquals(">0.3 µm", label(described("um003", "Feed um003")))
+    }
+
+    @Test
+    fun withoutAShortLabelInTheLanguageTheRegistryLabelShows() {
+        val registry = PropertyRegistry(
+            listOf(
+                PropertyEntry(
+                    uri = AirProperty.AIR_TEMPERATURE,
+                    label = LocalizedText(mapOf("en" to "Air temperature", "ar" to "درجة حرارة الهواء")),
+                    shortLabel = LocalizedText(mapOf("en" to "Temperature")),
+                    definition = LocalizedText(mapOf("en" to "Air temperature.")),
+                    group = DisplayGroup.CLIMATE,
+                    decimals = 1,
+                ),
+            ),
+        )
+        val temperature = described("temperature", "Feed temperature", "Weather")
+        assertEquals("Temperature", shownLabel(temperature, "en", registry) { it.key })
+        assertEquals("درجة حرارة الهواء", shownLabel(temperature, "ar", registry) { it.key })
+    }
+
+    @Test
+    fun pressureAndNo2KeepTheAppString() {
+        assertEquals("discover_property_pressure", label(described("pressure", "Feed pressure", "Weather")))
+        assertEquals("discover_property_no2", label(described("no2", "Feed no2")))
+    }
+
+    @Test
+    fun aCollectionTitleShowsForAPropertyTheRegistryDoesNotList() {
+        // The Collection's column title arrives as the property label.
         val soil = FeedProperty("soil_moisture", "Soil moisture", "m³/m³", "Soil")
         assertNull(shownLabelRes(soil))
-        assertEquals("Soil moisture", shownLabel(soil) { error("an unknown id resolves no string") })
-        assertNotNull(shownLabelRes(pm10.copy(label = "Particulate matter 10")))
+        assertEquals("Soil moisture", shownLabel(soil, "en") { error("an unknown id resolves no string") })
+        val unlisted = FeedProperty("lux", "Light", "lx", "Weather", property = "urn:example:property:not_in_registry")
+        assertEquals("Light", shownLabel(unlisted, "en") { error("an unlisted property resolves no string") })
     }
 
     @Test
     fun anUnknownIdKeepsTheFeedLabel() {
         assertNull(shownLabelRes(unknown))
-        assertEquals("Radon", shownLabel(unknown) { error("an unknown id resolves no string") })
+        assertEquals("Radon", shownLabel(unknown, "ar") { error("an unknown id resolves no string") })
         assertEquals("Peat", shownCategory("Peat") { error("an unknown category resolves no string") })
     }
 
     @Test
-    fun aKnownIdNeverShowsTheFeedLabel() {
-        val temperature = FeedProperty("temperature", "Temperature", "°C", "Weather")
-        assertEquals("discover_property_temperature", shownLabel(temperature) { it.key })
+    fun aKnownCategoryUsesTheAppString() {
         assertEquals("discover_category_weather", shownCategory("Weather") { it.key })
     }
 }

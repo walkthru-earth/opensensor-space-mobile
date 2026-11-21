@@ -1,41 +1,42 @@
 package space.opensensor.family.air
 
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import space.opensensor.model.HealthScale
 import space.opensensor.publicfeed.DiscoverCollection
 import space.opensensor.publicfeed.StepScale
 
 /**
- * The scales the air family ships for a feed that has no Collection yet (the bundled sample and the
- * OpenAQ manifest feed), installed as [DiscoverCollection.BUNDLED] by [AirFamily.install]. PM2.5 and
- * PM10 on the WHO 2021 guideline and interim targets, the same edges and colours as [WhoGuidelines]
- * and [WhoStep], with the registry step names [WhoGuidelines] carries.
+ * The Collection the air family ships for a feed that has none yet (the bundled sample and the
+ * OpenAQ manifest feed), installed as [DiscoverCollection.BUNDLED] by [AirFamily.install]. It ties
+ * each feed property id the air family knows to its `opensensor:property`, so Discover labels it
+ * from the property registry, and names the registry's WHO 2021 scales for PM2.5 and PM10. Their
+ * edges, colours and step names come from the bundled scale registry, never from a copy here.
  */
 object AirDiscover {
-    /** The `who-2021-pm25` and `who-2021-pm10` scales as a STAC Collection, for [DiscoverCollection.installBundled]. */
+    /** The feed property ids the air family knows, each to its `opensensor:property` URI. */
+    val PROPERTIES: Map<String, String> = mapOf(
+        "pm25" to AirProperty.PM25,
+        "pm10" to AirProperty.PM10,
+        "pm1" to AirProperty.PM1,
+        "um003" to AirProperty.PARTICLE_COUNTS.first(),
+        "temperature" to AirProperty.AIR_TEMPERATURE,
+        "humidity" to AirProperty.RELATIVE_HUMIDITY,
+        "co2" to AirProperty.CARBON_DIOXIDE,
+    )
+
+    /** The registry scale of each feed property that has one. */
+    private val SCALES: Map<String, String> = mapOf(
+        "pm25" to WhoGuidelines.PM25_ID,
+        "pm10" to WhoGuidelines.PM10_ID,
+    )
+
+    /** The Collection, for [DiscoverCollection.installBundled]. */
     val COLLECTION: String by lazy {
-        """
-            {"type":"Collection","id":"discover-cells-bundled",
-             "opensensor:scales":{
-               "${WhoGuidelines.PM25_ID}":${scale(WhoGuidelines.PM25)},
-               "${WhoGuidelines.PM10_ID}":${scale(WhoGuidelines.PM10)}},
-             "item_assets":{"data":{"table:columns":[
-               {"name":"pm25__mean","opensensor:scale":"${WhoGuidelines.PM25_ID}"},
-               {"name":"pm10__mean","opensensor:scale":"${WhoGuidelines.PM10_ID}"}]}}}
-        """.trimIndent()
-    }
-
-    private fun scale(who: HealthScale): String {
-        val uppers = who.edges.map { it.toString() } + "null"
-        val steps = uppers.indices.joinToString(",") { i ->
-            val label = JsonObject(who.names[i].byLanguage.mapValues { JsonPrimitive(it.value) })
-            """{"upper":${uppers[i]},"label":$label,"color_hint":"${hex(WhoStep.entries[i].color)}"}"""
+        val columns = PROPERTIES.entries.joinToString(",") { (id, uri) ->
+            val scale = SCALES[id]?.let { ""","opensensor:scale":"$it"""" }.orEmpty()
+            """{"name":"${id}__mean","opensensor:property":"$uri"$scale}"""
         }
-        return """{"source":"${WhoGuidelines.URL}","unit":"${who.unit}","guideline":${who.guideline},"steps":[$steps]}"""
+        """{"type":"Collection","id":"discover-cells-bundled","item_assets":{"data":{"table:columns":[$columns]}}}"""
     }
-
-    private fun hex(argb: Int): String = (argb and 0xFFFFFF).toString(16).padStart(6, '0').uppercase()
 }
 
 /**

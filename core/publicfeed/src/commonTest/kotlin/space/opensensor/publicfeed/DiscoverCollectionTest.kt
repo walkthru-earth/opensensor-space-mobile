@@ -10,6 +10,7 @@ import space.opensensor.family.air.who
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -313,5 +314,21 @@ class DiscoverCollectionTest {
         }
         assertNull(DiscoverCollection.BUNDLED.scale("co2"))
         assertNull(DiscoverCollection.BUNDLED.title("pm25"))
+    }
+
+    @Test
+    fun aColumnTiedToAPropertyCarriesItIntoTheDescribedFeed() {
+        val collection = DiscoverCollection.parse(
+            """{"type":"Collection","id":"c","item_assets":{"data":{"table:columns":[
+              {"name":"soil__mean","opensensor:property":"urn:example:soil"},{"name":"lux__mean"}]}}}""",
+            "https://example.org/",
+        )
+        assertEquals("urn:example:soil", collection.property("soil"))
+        assertNull(collection.property("lux"))
+        val described = collection.describe(
+            listOf(FeedProperty("soil", "Soil", "%", "Soil"), FeedProperty("lux", "Light", "lx", "Weather")),
+        )
+        assertEquals(listOf("urn:example:soil", null), described.map { it.property })
+        assertNotNull(DiscoverCollection.BUNDLED.property("pm25"))
     }
 }

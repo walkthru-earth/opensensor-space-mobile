@@ -42,7 +42,8 @@ data class FeedSnapshot(val partition: FeedPartition?, val cachedAtEpochMs: Long
 /**
  * One property from the dictionary named in the file's key value metadata. [label] is the discover
  * Collection's column title when it has one ([DiscoverCollection.describe]). [scale] is the scale
- * the Collection gives the property, null for the neutral ramp. It is never read from the file.
+ * the Collection gives the property, null for the neutral ramp. [property] is the `opensensor:property`
+ * URI the Collection ties it to, for its registry label. Neither is ever read from the file.
  */
 @Serializable
 data class FeedProperty(
@@ -52,6 +53,7 @@ data class FeedProperty(
     val category: String,
     val precision: Double? = null,
     @Transient val scale: Scale? = null,
+    @Transient val property: String? = null,
 )
 
 @Serializable

@@ -16,6 +16,8 @@ object AirProperty {
     const val PM25_CF1 = "urn:walkthru-earth:property:pm25_cf1_mass_concentration"
     const val PM10_CF1 = "urn:walkthru-earth:property:pm10_cf1_mass_concentration"
     const val RELATIVE_HUMIDITY = "http://vocab.nerc.ac.uk/collection/P07/current/CFSN0413/"
+    const val AIR_TEMPERATURE = "http://vocab.nerc.ac.uk/collection/P07/current/CFSN0023/"
+    const val CARBON_DIOXIDE = "http://vocab.nerc.ac.uk/standard_name/mole_fraction_of_carbon_dioxide_in_air/"
     const val BATCH_ESTIMATE = "urn:walkthru-earth:property:pm25_batch_candidate_mass_concentration"
 
     /** The prefix of a particle count bin, `particle_count_gt_<size>`, per 0.1 L. */
