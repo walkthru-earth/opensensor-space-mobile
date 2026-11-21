@@ -104,7 +104,7 @@ jobs:
         with:
           path: ~/.konan
           key: ${{ steps.konan-key.outputs.key }}
-          restore-keys: ${{ steps.konan-key.outputs.restore-prefix }}
+          restore-keys: ${{ steps.konan-key.outputs.restore-keys }}
       - run: ./gradlew --no-daemon verify
         env:
           OPENSENSOR_FIRMWARE_DIR: ${{ github.workspace }}/opensensor-space-firmware
@@ -165,22 +165,37 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ steps.jdk.outputs.version }}
+      # The steps below cache the Gradle user home, not the action. Its basic cache has no fallback,
+      # so every build file or catalog change started from an empty home (docs/build-and-release.md).
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
-          cache-provider: basic
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-provider: external
+      # Pull requests restore the Gradle user home and the Kotlin/Native toolchain and never save
+      # them. The Gradle home key ends with the commit, so each main push saves the build outputs of
+      # its source changes, and a run starts from the newest entry of the same build files, then of
+      # this runner.
+      - name: Restore Gradle user home
+        id: gradle-home
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-home-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', '**/*.gradle.kts', 'build-logic/src/**') }}-${{ github.sha }}
+          restore-keys: |
+            gradle-home-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', '**/*.gradle.kts', 'build-logic/src/**') }}-
+            gradle-home-${{ runner.os }}-${{ runner.arch }}-
       - id: konan-key
         uses: ./.github/actions/konan-cache-key
         with:
           xcode: ${{ env.XCODE_VERSION }}
-      # Pull requests restore the Kotlin/Native toolchain and never save it.
       - name: Restore Kotlin Native toolchain
         id: konan
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.konan
           key: ${{ steps.konan-key.outputs.key }}
-          restore-keys: ${{ steps.konan-key.outputs.restore-prefix }}
+          restore-keys: ${{ steps.konan-key.outputs.restore-keys }}
       - name: Check Apple toolchain
         run: |
           test "$(uname -m)" = arm64
@@ -194,24 +209,51 @@ jobs:
           } 2>&1 | tee ios/build/ci/toolchain.log
       - name: Run native archive and transfer checks
         run: ios/tests/verify-native.sh 2>&1 | tee ios/build/ci/native-tests.log
+      # The step limit ends a hung run before the job limit in most cases, so the caches below can
+      # still save. Slow setup or a slow save can still reach the job limit first.
       - name: Run shared Kotlin tests on iOS simulator
+        id: kotlin-tests
+        timeout-minutes: 40
         run: ./gradlew --no-daemon --stacktrace verifyIos 2>&1 | tee ios/build/ci/kotlin-tests.log
-      # Only main saves, once per key. The compilers of older Kotlin versions go first, so an entry
-      # restored through the prefix does not carry them into the new one.
+      # Only main saves, right after the step that fills the caches, so a later step that fails or
+      # times out cannot lose them. A run that passed saves the exact key. A run whose Kotlin
+      # tests failed or timed out saves what it built under a partial key, which the next run
+      # restores through the prefix and then completes, instead of starting cold again. The
+      # compilers of older Kotlin versions go first, so an entry restored through a prefix does not
+      # carry them into the new one.
       - name: Drop older Kotlin Native compilers
-        if: github.ref == 'refs/heads/main' && steps.konan.outputs.cache-hit != 'true'
+        if: >-
+          !cancelled() && github.ref == 'refs/heads/main' && steps.konan.outputs.cache-hit != 'true'
+          && (steps.kotlin-tests.outcome == 'success' || steps.kotlin-tests.outcome == 'failure')
         env:
           KOTLIN: ${{ steps.konan-key.outputs.kotlin }}
         run: find ~/.konan -maxdepth 1 -name 'kotlin-native-prebuilt-*' ! -name "*-$KOTLIN" -exec rm -rf {} + 2>/dev/null || true
       - name: Save Kotlin Native toolchain
-        if: github.ref == 'refs/heads/main' && steps.konan.outputs.cache-hit != 'true'
+        if: >-
+          !cancelled() && github.ref == 'refs/heads/main' && steps.konan.outputs.cache-hit != 'true'
+          && (steps.kotlin-tests.outcome == 'success' || steps.kotlin-tests.outcome == 'failure')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.konan
-          key: ${{ steps.konan-key.outputs.key }}
+          key: >-
+            ${{ steps.konan-key.outputs.key }}${{ steps.kotlin-tests.outcome != 'success'
+            && format('-partial-{0}-{1}', github.run_id, github.run_attempt) || '' }}
+      - name: Save Gradle user home
+        if: >-
+          !cancelled() && github.ref == 'refs/heads/main' && steps.gradle-home.outputs.cache-hit != 'true'
+          && (steps.kotlin-tests.outcome == 'success' || steps.kotlin-tests.outcome == 'failure')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: >-
+            ${{ steps.gradle-home.outputs.cache-primary-key }}${{ steps.kotlin-tests.outcome != 'success'
+            && format('-partial-{0}-{1}', github.run_id, github.run_attempt) || '' }}
       # One Debug simulator build serves both the packaged app and the Swift tests, so the
       # shared Kotlin framework and the app compile once instead of twice.
       - name: Build unsigned simulator app and tests
+        timeout-minutes: 20
         run: |
           xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
             -configuration Debug -destination 'generic/platform=iOS Simulator' \
@@ -219,6 +261,7 @@ jobs:
             -resultBundlePath ios/build/ci/simulator.xcresult \
             CODE_SIGNING_ALLOWED=NO build-for-testing 2>&1 | tee ios/build/ci/simulator-build.log
       - name: Run Swift Testing target on simulator
+        timeout-minutes: 15
         run: |
           device="$(xcrun simctl list devices available -j \
             | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r,v in d.items() if "iOS" in r for x in v if x["name"].startswith("iPhone")))')"
@@ -288,22 +331,30 @@ jobs:
           java-version: ${{ steps.jdk.outputs.version }}
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
-          cache-provider: basic
-          # iOS native validation saves these caches. This job only reads them, so its smaller
-          # device build never wins the save and leaves validation without simulator outputs.
-          cache-read-only: true
+          cache-provider: external
+      # Restore only. iOS native validation saves these caches on main, so this smaller device
+      # build never writes an entry that leaves validation without simulator outputs.
+      - name: Restore Gradle user home
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-home-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', '**/*.gradle.kts', 'build-logic/src/**') }}-${{ github.sha }}
+          restore-keys: |
+            gradle-home-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', '**/*.gradle.kts', 'build-logic/src/**') }}-
+            gradle-home-${{ runner.os }}-${{ runner.arch }}-
       - id: konan-key
         uses: ./.github/actions/konan-cache-key
         with:
           xcode: ${{ env.XCODE_VERSION }}
-      # Restore only. iOS native validation saves this cache on main.
       - name: Restore Kotlin Native toolchain
         id: konan
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.konan
           key: ${{ steps.konan-key.outputs.key }}
-          restore-keys: ${{ steps.konan-key.outputs.restore-prefix }}
+          restore-keys: ${{ steps.konan-key.outputs.restore-keys }}
       - name: Check Apple toolchain
         run: |
           test "$(uname -m)" = arm64

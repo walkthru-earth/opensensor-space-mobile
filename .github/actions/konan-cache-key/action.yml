@@ -1,9 +1,13 @@
-# The cache key of ~/.konan, the Kotlin/Native compiler, its dependencies and its platform library
-# caches. They change with the Kotlin version, and on a Mac with the Xcode version, never with a build
-# script, so the key holds only those (docs/build-and-release.md, CI caches). Reads `kotlin` from
-# gradle/libs.versions.toml and fails with an annotation on that file when it is missing or repeated.
+# The cache key of ~/.konan, the Kotlin/Native compiler, its dependencies and its compiler caches.
+# The compiler changes with the Kotlin version. On a Mac ~/.konan also holds the compiler cache of
+# every library an iOS binary links (klib/cache/*-user-pl), and a library bump needs new ones. So the
+# macOS key also holds the Xcode version and a hash of gradle/libs.versions.toml. A catalog change
+# then saves a new entry on main instead of hitting the old key and rebuilding those caches on every
+# later run (docs/build-and-release.md, CI caches). Linux links no iOS binary, so its key holds only
+# the Kotlin version. Reads `kotlin` from gradle/libs.versions.toml and fails with an annotation on
+# that file when it is missing or repeated.
 name: Kotlin/Native cache key
-description: Outputs the ~/.konan cache key and its restore prefix for this runner, Kotlin and Xcode.
+description: Outputs the ~/.konan cache key and its restore keys for this runner, Kotlin, Xcode and libraries.
 inputs:
   xcode:
     description: The Xcode version of a macOS job. Leave empty on Linux.
@@ -16,9 +20,11 @@ outputs:
   key:
     description: The exact cache key.
     value: ${{ steps.read.outputs.key }}
-  restore-prefix:
-    description: The key without the Kotlin version, so a Kotlin bump starts from the previous cache.
-    value: ${{ steps.read.outputs.prefix }}
+  restore-keys:
+    description: >-
+      Key prefixes, one per line, newest match first. A library, Kotlin or Xcode bump starts from the
+      newest entry of the same Xcode, then from the newest entry of this runner.
+    value: ${{ steps.read.outputs.restore-keys }}
 runs:
   using: composite
   steps:
@@ -34,12 +40,20 @@ runs:
           echo "::error file=$file::kotlin must appear exactly once in [versions], found '${values//$'\n'/,}'"
           exit 1
         fi
-        prefix="konan-$RUNNER_OS-$RUNNER_ARCH-"
+        runner="konan-$RUNNER_OS-$RUNNER_ARCH-"
         if [[ -n "$XCODE" ]]; then
-          prefix="${prefix}xcode-$XCODE-"
+          prefix="${runner}xcode-$XCODE-"
+          libraries="$(shasum -a 256 "$file" | cut -c1-16)"
+          key="${prefix}kotlin-$values-libs-$libraries"
+          restore="$prefix"$'\n'"$runner"
+        else
+          key="${runner}kotlin-$values"
+          restore="$runner"
         fi
         {
           echo "kotlin=$values"
-          echo "prefix=$prefix"
-          echo "key=${prefix}kotlin-$values"
+          echo "key=$key"
+          echo "restore-keys<<KONAN_RESTORE_KEYS"
+          echo "$restore"
+          echo "KONAN_RESTORE_KEYS"
         } >> "$GITHUB_OUTPUT"

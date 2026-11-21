@@ -85,7 +85,7 @@ jobs:
         with:
           path: ~/.konan
           key: ${{ steps.konan-key.outputs.key }}
-          restore-keys: ${{ steps.konan-key.outputs.restore-prefix }}
+          restore-keys: ${{ steps.konan-key.outputs.restore-keys }}
 
       - name: Work out version and channel
         id: meta

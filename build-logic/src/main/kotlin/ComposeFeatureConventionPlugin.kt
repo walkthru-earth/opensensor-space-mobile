@@ -42,6 +42,7 @@ class ComposeFeatureConventionPlugin : Plugin<Project> {
                 compilerOptions { jvmTarget.set(OpenSensorConventions.jvmTarget) }
             }
             openSensorIosTargets()
+            alignIosLibraryVersions()
             compilerOptions { openSensorDefaults() }
 
             sourceSets.getByName("commonMain").dependencies {
