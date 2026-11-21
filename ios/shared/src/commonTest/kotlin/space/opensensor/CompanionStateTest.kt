@@ -7,13 +7,13 @@ import space.opensensor.permissions.AccessStep
 import space.opensensor.permissions.PermissionFlow
 import space.opensensor.strings.UiText
 import space.opensensor.strings.resources.Res
-import space.opensensor.strings.resources.companion_firmware_update
-import space.opensensor.strings.resources.companion_firmware_update_unknown
 import space.opensensor.strings.resources.companion_info_invalid
 import space.opensensor.strings.resources.companion_lan_denied
 import space.opensensor.strings.resources.companion_lan_waiting
 import space.opensensor.strings.resources.companion_live
 import space.opensensor.strings.resources.companion_live_unreadable
+import space.opensensor.strings.resources.msg_firmware_update_required
+import space.opensensor.strings.resources.msg_firmware_update_required_unknown
 import space.opensensor.strings.resources.now_waiting
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -246,10 +246,10 @@ class CompanionStateTest {
         state.connectionStarted("device")
         assertFalse(state.receiveInfo("{\"proto\":2,\"dev\":\"112233445566\"}"))
         assertFalse(state.connected)
-        assertEquals(UiText.of(Res.string.companion_firmware_update, 2, 3), state.message)
+        assertEquals(UiText.of(Res.string.msg_firmware_update_required, 2, 3), state.message)
         state.connectionStarted("device")
         assertFalse(state.receiveInfo("{\"dev\":\"112233445566\"}"))
-        assertEquals(UiText.of(Res.string.companion_firmware_update_unknown, 3), state.message)
+        assertEquals(UiText.of(Res.string.msg_firmware_update_required_unknown, 3), state.message)
         assertFalse(state.receiveInfo("{}"))
     }
 

@@ -4,9 +4,9 @@ import space.opensensor.collection.SyncEndReason
 import space.opensensor.link.UnavailableKind
 
 /**
- * What a device snackbar says, as a code with typed arguments. The data layer never builds
- * user-facing sentences. `ui/components/DeviceMessages.kt` maps every case to a string resource,
- * and raw technical detail (exception messages, GATT codes) goes to the log only.
+ * What a device message says, as a code with typed arguments. The data layer never builds
+ * user-facing sentences. `DeviceMessageText.kt` in `:ui:strings` maps every case to its words once
+ * for both phones, and raw technical detail (exception messages, GATT codes) goes to the log only.
  */
 sealed interface DeviceMessage {
     /** Device requests a message can name. */

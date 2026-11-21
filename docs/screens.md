@@ -138,9 +138,10 @@ paired phones, pairing mode none, finalize) with one or two short sentences. Cop
 in `cross-platform-guide.md` apply, and missing values print `NO_VALUE` ("n/a"), never a dash.
 `CopyLintTest` in `:ui:strings` fails on a dash, semicolon (Arabic ؛ included) or sentence colon in any
 `strings.xml`, every language included. The data layer
-never writes sentences. Its snackbars are `DeviceMessage` codes (`data/DeviceMessage.kt`) that
-`ui/components/DeviceMessages.kt` maps to resources, and exception detail stays in the log or a
-Developer-level line.
+never writes sentences. Its snackbars are `DeviceMessage` codes (`DeviceMessage.kt` in `:core:sync`)
+that `DeviceMessageText.kt` in `:ui:strings` maps once for both phones, Android snackbars and the iOS
+link notices and sync lines alike. Exception detail stays in the log or a Developer-level line. Every
+"N ago" line reads through `rememberAgoFormatter` in `:ui:strings`.
 
 | Screen | Behind the info button |
 | --- | --- |

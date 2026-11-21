@@ -1,6 +1,8 @@
 package space.opensensor
 
-import org.jetbrains.compose.resources.StringResource
+import space.opensensor.collection.SyncEndReason
+import space.opensensor.data.DeviceContinuityPolicy
+import space.opensensor.data.DeviceMessage
 import space.opensensor.data.protocol.DeviceGatt
 import space.opensensor.strings.UiText
 import space.opensensor.strings.resources.Res
@@ -18,7 +20,6 @@ import space.opensensor.strings.resources.companion_ble_service_missing
 import space.opensensor.strings.resources.companion_ble_starting
 import space.opensensor.strings.resources.companion_ble_timed_out
 import space.opensensor.strings.resources.companion_ble_unsupported
-import space.opensensor.strings.resources.companion_firmware_update_unknown
 import space.opensensor.strings.resources.companion_info_invalid
 import space.opensensor.strings.resources.companion_lan_connected
 import space.opensensor.strings.resources.companion_lan_connecting
@@ -28,13 +29,7 @@ import space.opensensor.strings.resources.companion_lan_listing
 import space.opensensor.strings.resources.companion_lan_sync_paused
 import space.opensensor.strings.resources.companion_lan_sync_queued
 import space.opensensor.strings.resources.companion_lan_syncing
-import space.opensensor.strings.resources.msg_busy
-import space.opensensor.strings.resources.msg_busy_before_sync
-import space.opensensor.strings.resources.msg_hardware_in_use
-import space.opensensor.strings.resources.msg_identity_hardware_changed
-import space.opensensor.strings.resources.msg_identity_thing_ble
-import space.opensensor.strings.resources.msg_sync_aborted
-import space.opensensor.strings.resources.msg_verification_failed
+import space.opensensor.strings.text
 
 /**
  * A link event the Swift adapters report by kind. The state picks the words, so
@@ -135,41 +130,39 @@ enum class CompanionNotice {
     LAN_DISCONNECTED,
     ;
 
+    /** A notice that is also a shared [DeviceMessage] reads through its mapping, so both phones word it once. */
     internal val text: UiText
-        get() = if (this == FIRMWARE_UPDATE) UiText.of(resource, DeviceGatt.PROTOCOL_VERSION) else UiText.of(resource)
-
-    private val resource: StringResource
         get() = when (this) {
-            THING_CHANGED -> Res.string.msg_identity_thing_ble
-            HARDWARE_CHANGED -> Res.string.msg_identity_hardware_changed
-            VERIFICATION_FAILED -> Res.string.msg_verification_failed
-            BUSY -> Res.string.msg_busy
-            BUSY_BEFORE_SYNC -> Res.string.msg_busy_before_sync
-            HARDWARE_IN_USE -> Res.string.msg_hardware_in_use
-            SYNC_ABORTED -> Res.string.msg_sync_aborted
-            INFO_INVALID -> Res.string.companion_info_invalid
-            FIRMWARE_UPDATE -> Res.string.companion_firmware_update_unknown
-            CONNECT_TIMED_OUT -> Res.string.companion_ble_timed_out
-            DISCONNECTED -> Res.string.companion_ble_disconnected
-            RESUME_LIVE -> Res.string.companion_ble_resume_live
-            BLUETOOTH_OFF -> Res.string.companion_ble_off
-            BLUETOOTH_DENIED -> Res.string.companion_ble_denied
-            BLUETOOTH_UNSUPPORTED -> Res.string.companion_ble_unsupported
-            BLUETOOTH_STARTING -> Res.string.companion_ble_starting
-            CONNECT_FAILED -> Res.string.companion_ble_connect_failed
-            SENSOR_DISCONNECTED -> Res.string.companion_ble_sensor_gone
-            SERVICE_MISSING -> Res.string.companion_ble_service_missing
-            CHARACTERISTICS_MISSING -> Res.string.companion_ble_characteristics_missing
-            NOTIFY_FAILED -> Res.string.companion_ble_notify_failed
-            READ_FAILED -> Res.string.companion_ble_read_failed
-            PAIRING_REMOVED -> Res.string.companion_ble_pairing_removed
-            LAN_SENSOR_GONE -> Res.string.companion_lan_gone
-            LAN_CONNECTING -> Res.string.companion_lan_connecting
-            LAN_CONNECTED -> Res.string.companion_lan_connected
-            LAN_SYNC_QUEUED -> Res.string.companion_lan_sync_queued
-            LAN_LISTING -> Res.string.companion_lan_listing
-            LAN_SYNCING -> Res.string.companion_lan_syncing
-            LAN_PAUSED -> Res.string.companion_lan_sync_paused
-            LAN_DISCONNECTED -> Res.string.companion_lan_disconnected
+            THING_CHANGED -> DeviceMessage.IdentityRejected(DeviceContinuityPolicy.Reason.THING_CHANGE_REQUIRES_BLE).text()
+            HARDWARE_CHANGED -> DeviceMessage.IdentityRejected(DeviceContinuityPolicy.Reason.HARDWARE_CHANGED).text()
+            VERIFICATION_FAILED -> DeviceMessage.VerificationFailed.text()
+            BUSY -> DeviceMessage.Busy.text()
+            BUSY_BEFORE_SYNC -> DeviceMessage.BusyBeforeSync.text()
+            HARDWARE_IN_USE -> DeviceMessage.HardwareInUse.text()
+            SYNC_ABORTED -> DeviceMessage.SyncEnded(SyncEndReason.OTHER).text()
+            INFO_INVALID -> UiText.of(Res.string.companion_info_invalid)
+            FIRMWARE_UPDATE -> DeviceMessage.FirmwareUpdateRequired(device = null, app = DeviceGatt.PROTOCOL_VERSION).text()
+            CONNECT_TIMED_OUT -> UiText.of(Res.string.companion_ble_timed_out)
+            DISCONNECTED -> UiText.of(Res.string.companion_ble_disconnected)
+            RESUME_LIVE -> UiText.of(Res.string.companion_ble_resume_live)
+            BLUETOOTH_OFF -> UiText.of(Res.string.companion_ble_off)
+            BLUETOOTH_DENIED -> UiText.of(Res.string.companion_ble_denied)
+            BLUETOOTH_UNSUPPORTED -> UiText.of(Res.string.companion_ble_unsupported)
+            BLUETOOTH_STARTING -> UiText.of(Res.string.companion_ble_starting)
+            CONNECT_FAILED -> UiText.of(Res.string.companion_ble_connect_failed)
+            SENSOR_DISCONNECTED -> UiText.of(Res.string.companion_ble_sensor_gone)
+            SERVICE_MISSING -> UiText.of(Res.string.companion_ble_service_missing)
+            CHARACTERISTICS_MISSING -> UiText.of(Res.string.companion_ble_characteristics_missing)
+            NOTIFY_FAILED -> UiText.of(Res.string.companion_ble_notify_failed)
+            READ_FAILED -> UiText.of(Res.string.companion_ble_read_failed)
+            PAIRING_REMOVED -> UiText.of(Res.string.companion_ble_pairing_removed)
+            LAN_SENSOR_GONE -> UiText.of(Res.string.companion_lan_gone)
+            LAN_CONNECTING -> UiText.of(Res.string.companion_lan_connecting)
+            LAN_CONNECTED -> UiText.of(Res.string.companion_lan_connected)
+            LAN_SYNC_QUEUED -> UiText.of(Res.string.companion_lan_sync_queued)
+            LAN_LISTING -> UiText.of(Res.string.companion_lan_listing)
+            LAN_SYNCING -> UiText.of(Res.string.companion_lan_syncing)
+            LAN_PAUSED -> UiText.of(Res.string.companion_lan_sync_paused)
+            LAN_DISCONNECTED -> UiText.of(Res.string.companion_lan_disconnected)
         }
 }

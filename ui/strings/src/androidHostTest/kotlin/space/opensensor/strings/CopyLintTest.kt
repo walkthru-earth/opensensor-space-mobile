@@ -60,6 +60,26 @@ class CopyLintTest {
         listOf("Status %1\$s", "At 12:30", "It\\'s", "Wi-Fi · Connected").forEach { assertEquals(false, violates(it, compose = false), it) }
     }
 
+    /**
+     * One catalogue for shared copy (#305). A key name in more than one English catalogue is a second
+     * copy of the same words. The ones left are listed in `ui/strings/repeated-keys.txt`, and the list may only
+     * shrink. A new repeat fails, and so does a listed key that is no longer repeated, so the list
+     * stays exact as copies move into `:ui:strings`.
+     */
+    @Test
+    fun repeatedKeysOnlyShrink() {
+        val owners = sortedMapOf<String, MutableSet<String>>()
+        for (file in Catalogues.all().filter { it.parentFile.name == "values" }) {
+            val module = Catalogues.relative(file).substringBefore("/src/")
+            for (key in Catalogues.parse(file).keys) owners.getOrPut(key.substringBefore('/')) { sortedSetOf() } += module
+        }
+        val now = owners.filterValues { it.size > 1 }.map { (key, modules) -> "$key ${modules.joinToString(" ")}" }.toSet()
+        val listed = java.io.File(Catalogues.root, "ui/strings/repeated-keys.txt").readText()
+            .lines().map(String::trim).filter { it.isNotEmpty() && !it.startsWith("#") }.toSet()
+        assertEquals(emptySet(), now - listed, "keys newly repeated across catalogues, keep one copy in :ui:strings")
+        assertEquals(emptySet(), listed - now, "repeated-keys.txt lists keys that are no longer repeated, remove those lines")
+    }
+
     private fun violates(text: String, compose: Boolean): Boolean {
         val sentence = text.replace(Regex("%\\d+\\$[a-z]"), "X").replace(Regex("\\d:\\d"), "0")
         return '—' in sentence || '–' in sentence || ';' in sentence || '؛' in sentence || ':' in sentence || (compose && "\\'" in sentence)

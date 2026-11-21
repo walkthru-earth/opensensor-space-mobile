@@ -80,6 +80,7 @@ import space.opensensor.family.air.pmState
 import space.opensensor.family.air.pmValid
 import space.opensensor.model.ThingDatastream
 import space.opensensor.settings.DetailLevel
+import space.opensensor.strings.rememberAgoFormatter
 import space.opensensor.today.resources.Res
 import space.opensensor.today.resources.batch_explain
 import space.opensensor.today.resources.batch_title
@@ -266,7 +267,7 @@ internal fun FreshnessLabel(receivedAtEpochMs: Long?, color: Color = MaterialThe
     val now = rememberNowMillis()
     val ageMs = receivedAtEpochMs?.let { now - it }
     val stale = ageMs == null || ageMs > STALE_AFTER_MS
-    val ago = agoFormatter()
+    val ago = rememberAgoFormatter()
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         StatusDot(if (stale) color.copy(alpha = 0.4f) else color, size = 8)
         Text(
@@ -860,7 +861,7 @@ internal fun StorageCard(
             Eyebrow(stringResource(Res.string.storage_title), modifier = Modifier.weight(1f), heading = true)
             if (receivedAtEpochMs != null) {
                 val template = stringResource(Res.string.storage_status_age)
-                val ago = agoFormatter()
+                val ago = rememberAgoFormatter()
                 TickingText({ now -> fill(template, ago(now - receivedAtEpochMs)) })
             }
         }
@@ -992,7 +993,7 @@ internal fun DeviceInfoCard(
             )
             if (configReadAtEpochMs != null) {
                 val label = stringResource(Res.string.device_config_read)
-                val ago = agoFormatter()
+                val ago = rememberAgoFormatter()
                 TickingText({ now -> "$label ${ago(now - configReadAtEpochMs)}" }, style = MaterialTheme.typography.bodyMedium)
             }
         }

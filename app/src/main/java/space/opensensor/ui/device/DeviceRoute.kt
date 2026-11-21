@@ -12,7 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,10 +54,9 @@ fun DeviceRoute(
     var stickerScan by remember { mutableStateOf<StickerScan?>(null) }
     val scanUnrecognized = stringResource(R.string.sensor_scan_unrecognized)
     val scanUnavailable = stringResource(R.string.sensor_scan_unavailable)
-    val res = LocalResources.current
 
     CollectEvents(viewModel.events) { ev ->
-        snackbar.showScreenMessage(res, ev)
+        snackbar.showScreenMessage(ev)
     }
     // The companion-device association is a system dialog launched from an IntentSender.
     val companionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->

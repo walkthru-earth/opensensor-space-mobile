@@ -20,6 +20,8 @@ kotlin {
             api(project(":core:settings"))
             api(project(":core:units"))
             api(project(":ui:designsystem"))
+            // The shared "N ago" formatter and its words.
+            implementation(project(":ui:strings"))
         }
         commonTest.dependencies {
             implementation(project(":core:model"))
