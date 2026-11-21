@@ -78,7 +78,7 @@ data class FilesState(
     /** The connected sensor's thing, from its INFO or enrolment. Null when there is none. */
     val owner: String? = null,
     val exporting: Boolean = false,
-    /** Daily files can be exported on this platform (Android derives them, iOS not yet). */
+    /** Share daily files is offered, true when the entry point gave [FilesController] a daily lister. */
     val dailyAvailable: Boolean = false,
 ) {
     val archivedBytes: Long get() = shown.sumOf { it.bytes }

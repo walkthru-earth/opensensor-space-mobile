@@ -17,6 +17,8 @@ kotlin {
             // MoodStrip and the mood words take the air family's WhoStep and MoodBlock in their public API.
             api(project(":family:air"))
             implementation(project(":core:history"))
+            // ThingTopBar and TransportChip take the link's TransportKind in their public API.
+            api(project(":core:sync"))
         }
         // Semantics tests render the shared components headless on the iOS simulator (verifyIos).
         iosTest.dependencies {

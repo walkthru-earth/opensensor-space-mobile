@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,7 +26,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -57,6 +55,7 @@ import space.opensensor.data.history.HistorySeries
 import space.opensensor.data.history.HistoryWindow
 import space.opensensor.data.history.MetricSpec
 import space.opensensor.data.history.localDateOf
+import space.opensensor.data.ble.TransportKind
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
 import space.opensensor.designsystem.Eyebrow
@@ -70,6 +69,7 @@ import space.opensensor.designsystem.PeacockIcon
 import space.opensensor.designsystem.QcFlagLine
 import space.opensensor.designsystem.SectionCard
 import space.opensensor.designsystem.StatLine
+import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.metricLabel
 import space.opensensor.designsystem.pm25CorrectionInfo
 import space.opensensor.designsystem.touchTarget
@@ -253,17 +253,17 @@ fun HistoryScreen(
     }
 }
 
-/** The header on both phones, a back arrow to the Station page, the title and optional [actions]. */
+/**
+ * The header on both phones, the shared [ThingTopBar] of every page of one sensor. A back arrow to the
+ * Station page, the title, and the [transport] chip when the caller passes one (Detailed and up).
+ */
 @Composable
-fun HistoryTopBar(onBack: (() -> Unit)?, actions: @Composable RowScope.() -> Unit = {}) {
-    TopAppBar(
-        actions = actions,
+fun HistoryTopBar(onBack: (() -> Unit)?, transport: TransportKind? = null) {
+    ThingTopBar(
         title = { Text(stringResource(Res.string.history_title), Modifier.semantics { heading() }) },
-        navigationIcon = {
-            if (onBack != null) {
-                IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.history_back)) }
-            }
-        },
+        onBack = onBack,
+        backLabel = stringResource(Res.string.history_back),
+        transport = transport,
     )
 }
 

@@ -534,7 +534,7 @@ private fun HistoryEntry(address: String, devices: DevicesBridge, units: UnitSys
         controller = controller,
         units = remember(units) { UnitFormatter(units) },
         level = level,
-        topBar = { HistoryTopBar(onBack = onBack) },
+        topBar = { HistoryTopBar(onBack = onBack, transport = devices.transportFor(address).takeIf { level.detailed }) },
     )
 }
 
