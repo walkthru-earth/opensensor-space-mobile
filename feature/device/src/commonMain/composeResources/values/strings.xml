@@ -188,6 +188,7 @@
     <string name="location_permission">Use approximate phone location to move the map near this sensor</string>
     <string name="location_permission_settings">Allow approximate location in Settings to move the map near this sensor</string>
     <string name="location_placement">Tap the area where the sensor stands</string>
+    <string name="location_choose_first">Choose an area on the map first</string>
     <string name="location_precision_info">Only the area is saved, never the exact place. Phone location only moves the map.</string>
     <string name="location_area_km2">About %1$s km²</string>
     <string name="location_area_m2">About %1$s m²</string>

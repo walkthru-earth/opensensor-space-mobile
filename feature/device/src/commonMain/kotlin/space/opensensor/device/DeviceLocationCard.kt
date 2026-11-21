@@ -48,12 +48,14 @@ import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.InfoNote
 import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.PillButton
+import space.opensensor.designsystem.WarningNote
 import space.opensensor.device.resources.Res
 import space.opensensor.device.resources.device_back
 import space.opensensor.device.resources.location_area_detail
 import space.opensensor.device.resources.location_area_km2
 import space.opensensor.device.resources.location_area_m2
 import space.opensensor.device.resources.location_cell_change
+import space.opensensor.device.resources.location_choose_first
 import space.opensensor.device.resources.location_clear
 import space.opensensor.device.resources.location_configure
 import space.opensensor.device.resources.location_country
@@ -198,17 +200,26 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
     val request = rememberDeviceLocationRequest()
     val countries = rememberCountryIndex()
     val h3 = remember { platformH3Grid() }
+    var needsCellWarning by remember { mutableStateOf(false) }
     val selectCell: (String) -> Unit = { cell ->
+        needsCellWarning = false
         onAction(DeviceConfigAction.LocationCell(cell, DeviceLocationDraft.RESOLUTION))
         countries?.let { onAction(DeviceConfigAction.LocationCountry(it.countryForCell(h3, cell).orEmpty())) }
     }
+    val latestSelectCell by rememberUpdatedState(selectCell)
+    val latestDraftCell by rememberUpdatedState(draft.cell)
     // The controller runs the fix (#315). The picker only draws its state.
     val fix = state.phoneFix
     val locating = fix.locating
     // The board's own fresh GNSS cell comes first. The map opens on it, and the owner still confirms it.
     var focus by remember { mutableStateOf(loc.gnssCell?.takeIf { draft.cell.isEmpty() }?.let { CellFocus(it, 1) }) }
-    // Each fix that found a cell moves the map once. It never drafts a cell by itself.
-    LaunchedEffect(fix.serial) { fix.cell?.let { focus = CellFocus(it, (focus?.serial ?: 0) + 1) } }
+    // Each fix that found a cell moves the map once and pre-selects it when no cell is chosen yet.
+    LaunchedEffect(fix.serial) {
+        fix.cell?.let { cell ->
+            focus = CellFocus(cell, (focus?.serial ?: 0) + 1)
+            if (latestDraftCell.isEmpty()) latestSelectCell(cell)
+        }
+    }
     val latestOnAction by rememberUpdatedState(onAction)
     val close = {
         latestOnAction(DeviceConfigAction.StopLocating)
@@ -240,8 +251,12 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
                     FitText(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
                     InfoButton(InfoContent(title, listOf(stringResource(Res.string.location_info), stringResource(Res.string.location_precision_info))))
                     TextButton(enabled = canSave, onClick = {
-                        onAction(DeviceConfigAction.SaveLocation)
-                        close()
+                        if (draft.cell.isEmpty() && loc.storedCell.isEmpty()) {
+                            needsCellWarning = true
+                        } else {
+                            onAction(DeviceConfigAction.SaveLocation)
+                            close()
+                        }
                     }) { Text(stringResource(Res.string.location_save)) }
                 }
                 CellPicker(
@@ -287,6 +302,11 @@ private fun LocationPickerDialog(state: DeviceConfigUiState, onAction: (DeviceCo
                             TextButton(enabled = canPick && !locating, onClick = { onAction(DeviceConfigAction.ClearLocation) }) {
                                 Text(stringResource(Res.string.location_clear))
                             }
+                        }
+                    }
+                    if (needsCellWarning && draft.cell.isEmpty()) {
+                        Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+                            WarningNote(stringResource(Res.string.location_choose_first))
                         }
                     }
                     if (loc.cellChanges) InfoNote(stringResource(Res.string.location_cell_change))
