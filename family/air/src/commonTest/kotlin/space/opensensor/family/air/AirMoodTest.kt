@@ -2,13 +2,13 @@ package space.opensensor.family.air
 
 import space.opensensor.data.history.DeviceCapabilities
 import space.opensensor.data.protocol.LiveSample
-import space.opensensor.model.BundledCatalog
+import space.opensensor.model.CodeClass
+import space.opensensor.model.SensorState
 import kotlin.math.nextUp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -76,7 +76,7 @@ class AirMoodTest {
         assertEquals(NowReading.Waiting, NowReading.of(null))
         val warming = LiveFixtures.waveshare("""{"seq":1,"mono":1,"pms":1,"pm25":40}""")
         val r = NowReading.of(warming)
-        assertTrue(r is NowReading.SensorNotReady && r.status == PmsStatus.WARMING)
+        assertTrue(r is NowReading.SensorNotReady && r.state.cls?.name == "warming")
         val valid = LiveFixtures.waveshare("""{"seq":2,"mono":2,"pms":4,"pm25":22}""")
         val v = NowReading.of(valid) as NowReading.Reading
         assertEquals(AirMood.FAIR, v.mood)
@@ -91,13 +91,26 @@ class AirMoodTest {
 
     @Test
     fun `pms_status 5 and 6 are known states that are not ready`() {
-        // mobile-migration step 3, the Waveshare template names classes 0 to 6.
-        val classes = assertNotNull(BundledCatalog.template(LiveFixtures.waveshareDict)?.datastream(AirMetrics.PMS_STATUS)).classes
-        assertEquals(classes.map { it.value.toInt() }, PmsStatus.entries.map { it.code })
-        for ((json, status) in listOf("""{"pms":5,"pm25":22}""" to PmsStatus.MODEL_MISMATCH, """{"pms":6,"pm25":22}""" to PmsStatus.SLEEPING)) {
+        // The Waveshare template names classes 0 to 6, the CoreS3 only 0 to 4.
+        for ((json, name) in listOf("""{"pms":5,"pm25":22}""" to "model-mismatch", """{"pms":6,"pm25":22}""" to "sleeping")) {
             val r = NowReading.of(LiveFixtures.waveshare(json))
-            assertTrue(r is NowReading.SensorNotReady && r.status == status && r.hint.isNotEmpty(), "$json gave $r")
+            assertTrue(r is NowReading.SensorNotReady && r.state.cls?.name == name && !r.state.valid, "$json gave $r")
+            assertEquals("pms_status", r.state.column)
         }
+        assertEquals("The fitted sensor is not the model this board expects, so its numbers are not shown.", (NowReading.of(LiveFixtures.waveshare("""{"pms":5}""")) as NowReading.SensorNotReady).hint)
+        val cores3 = NowReading.of(LiveFixtures.cores3("""{"pms":5,"pm25":22}""")) as NowReading.SensorNotReady
+        assertNull(cores3.state.cls)
+        assertEquals("The sensor is not ready, so its numbers are not shown.", cores3.hint)
+    }
+
+    @Test
+    fun `a state class this app does not know gets the generic hint and absent gets its own`() {
+        val other = SensorState("pms_status", 9, CodeClass(9, "self-test"), valid = false)
+        assertEquals("The sensor is not ready, so its numbers are not shown.", NowReading.hint(other))
+        assertEquals("self-test", other.label)
+        val absent = NowReading.of(LiveFixtures.waveshare("""{"pms":0,"pm25":null}""")) as NowReading.SensorNotReady
+        assertTrue(absent.state.absent)
+        assertEquals("No particle sensor is answering. Check its cable.", absent.hint)
     }
 
     @Test

@@ -7,8 +7,9 @@ object PlantowerBatchCandidate {
 
     private val eligibleSerial = Regex("PMS5003T-20260408[0-9]{1,9}")
 
-    fun estimate(serial: String?, enabled: Int?, pmsStatus: Int?, particlesGt03Per01l: Long?): Double? {
-        if (enabled != 1 || pmsStatus != PmsStatus.VALID.code ||
+    /** The estimate, only with the opt-in [enabled], a valid particle sensor ([pmValid]) and an eligible [serial]. */
+    fun estimate(serial: String?, enabled: Int?, pmValid: Boolean, particlesGt03Per01l: Long?): Double? {
+        if (enabled != 1 || !pmValid ||
             serial == null || !eligibleSerial.matches(serial) || particlesGt03Per01l == null || particlesGt03Per01l < 0
         ) {
             return null
