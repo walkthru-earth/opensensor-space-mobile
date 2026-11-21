@@ -536,7 +536,7 @@ info icon that lists the reasons (`QcFlagLine` in `:ui:designsystem`). Simple ch
 | Current thing | the known device's thing | the archived thing with the latest reading |
 | Chips | the device's authenticated thing epochs | every archived thing, oldest latest reading first |
 | Index repair | `HistoryStartup.start` from `OpenSensorApplication`. The engine indexes each file in the same upsert, so a record waits only after a migration reopens it | `HistoryStartup.start` from `IosArchive.startIndexRepair`. The engine adds records without index columns, so a back-fill follows each new file. On both phones changes during a pass are conflated, and passes repeat until no record is waiting |
-| Header | the shared `HistoryTopBar` with a back arrow to the Station page and the link chip | the shared `HistoryTopBar` with a back arrow, opened from the History button on My devices or the Station page More card |
+| Header | the shared `HistoryTopBar`, a `ThingTopBar` with a back arrow to the Station page and the link chip from Detailed | the same `HistoryTopBar` and chip, opened from the History button on My devices or the Station page More card |
 
 Repair writes only its own columns. It merges the index and estimate columns onto the latest
 record with `ArchiveIndex.update`, so a fingerprint the engine fills during a pass survives.

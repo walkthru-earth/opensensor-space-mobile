@@ -1,13 +1,9 @@
 package space.opensensor.ui.history
 
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import space.opensensor.designsystem.TransportChip
 import space.opensensor.history.HistoryTopBar
 import space.opensensor.ui.components.LocalUnits
 import space.opensensor.history.HistoryScreen as SharedHistoryScreen
@@ -29,7 +25,7 @@ fun HistoryScreen(
         units = LocalUnits.current,
         level = level,
         topBar = {
-            HistoryTopBar(onBack = onBack, actions = { if (level.detailed) TransportChip(transport, Modifier.padding(end = 12.dp)) })
+            HistoryTopBar(onBack = onBack, transport = transport.takeIf { level.detailed })
         },
     )
 }

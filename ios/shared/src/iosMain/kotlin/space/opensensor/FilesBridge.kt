@@ -42,6 +42,13 @@ internal class DeviceFilesActions(
 /** What the Files top bar and banner show for one sensor. [transport] is null while no link is up. */
 internal data class FilesChrome(val transport: TransportKind?, val status: ThingStatus)
 
+/** The pipe up to the sensor at [address] for a Thing page chip, LAN before Bluetooth, null while no link is up. */
+internal fun DevicesBridge.transportFor(address: String): TransportKind? = when {
+    state.connectedLanForThing(thingFor(address)) != null -> TransportKind.LAN
+    state.connected && state.selectedId.equals(address, ignoreCase = true) -> TransportKind.BLE
+    else -> null
+}
+
 /** One sensor's manifest and plan, independent of the whole-phone export controller. */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class IosDeviceFiles(
@@ -82,20 +89,15 @@ internal class IosDeviceFiles(
      */
     val chrome: StateFlow<FilesChrome> = snapshotFlow {
         val thing = devices.thingFor(address)
-        val lan = devices.state.connectedLanForThing(thing)
-        val ble = devices.state.connected && devices.state.selectedId.equals(address, ignoreCase = true)
+        val transport = devices.transportFor(address)
         val connection = when {
-            lan != null || ble -> ConnectionState.Ready(0)
+            transport != null -> ConnectionState.Ready(0)
             devices.state.reconnectingId.equals(address, ignoreCase = true) ||
                 devices.state.selectedId.equals(address, ignoreCase = true) -> ConnectionState.Connecting
             else -> ConnectionState.Disconnected
         }
         FilesChrome(
-            transport = when {
-                lan != null -> TransportKind.LAN
-                ble -> TransportKind.BLE
-                else -> null
-            },
+            transport = transport,
             status = ThingStatus(connection, heldInBackground = devices.state.heldInBackground(address, thing)),
         )
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, FilesChrome(null, ThingStatus(ConnectionState.Disconnected)))
