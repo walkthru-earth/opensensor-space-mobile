@@ -71,7 +71,7 @@ class SetupAckTest {
 
     @Test
     fun `the version is a fixed fingerprint`() {
-        // SHA-256 of the empty string starts e3 b0 c4 42, its first 31 bits are 0x63b0c442.
+        // SHA-256 of the empty string starts e3 b0 c4 42. Read big endian with the top bit cleared, that is 0x63b0c442.
         assertEquals(0x63b0c442, SetupAck.version(emptyList()))
     }
 

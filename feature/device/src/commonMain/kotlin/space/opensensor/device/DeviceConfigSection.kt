@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -150,6 +151,18 @@ sealed interface DeviceConfigAction {
     data object RequestForgetBonds : DeviceConfigAction
     data object ScanSticker : DeviceConfigAction
 
+    /**
+     * Starts one phone fix through [fix], after the platform granted the coarse permission. The
+     * controller owns the job and its timeout, so the picker only draws [PhoneFixState].
+     */
+    data class Locate(val fix: suspend (resolution: Int) -> String?) : DeviceConfigAction
+
+    /** Stops a running phone fix and forgets the last one. Closing the picker sends it too. */
+    data object StopLocating : DeviceConfigAction
+
+    /** The coarse location permission was declined, which reads as a failed fix. */
+    data object LocationDeclined : DeviceConfigAction
+
     /** Drafts one declared board value. Nothing is sent until the caller saves. */
     data class BoardValue(val key: String, val value: String) : DeviceConfigAction
 
@@ -171,6 +184,9 @@ fun DeviceConfigController.onAction(action: DeviceConfigAction): Boolean {
         is DeviceConfigAction.LocationCell -> acceptLocationCell(action.cell, action.resolution)
         DeviceConfigAction.SaveLocation -> saveLocation()
         DeviceConfigAction.ClearLocation -> clearLocation()
+        is DeviceConfigAction.Locate -> locate(action.fix)
+        DeviceConfigAction.StopLocating -> stopLocating()
+        DeviceConfigAction.LocationDeclined -> locationDeclined()
         is DeviceConfigAction.SetMobility -> saveMobility(action.mobility)
         is DeviceConfigAction.SiteValue -> editSite(action.field, action.value)
         DeviceConfigAction.SaveSite -> saveSite()
@@ -268,11 +284,12 @@ fun DeviceConfigEffects(
     reconnectOverBluetooth: () -> Unit = controller::reconnectOverBluetooth,
 ) {
     val dialog by controller.dialog.collectAsState()
+    val reconnect by rememberUpdatedState(reconnectOverBluetooth)
     LaunchedEffect(controller) {
         controller.notices.collect { notice ->
             if (notice == DeviceConfigNotice.SecretNeedsBluetooth) {
                 val result = snackbar.showSnackbar(deviceConfigNoticeText(notice), actionLabel = getString(Res.string.lan_reconnect_ble))
-                if (result == SnackbarResult.ActionPerformed) reconnectOverBluetooth()
+                if (result == SnackbarResult.ActionPerformed) reconnect()
             } else {
                 snackbar.showSnackbar(deviceConfigNoticeText(notice))
             }

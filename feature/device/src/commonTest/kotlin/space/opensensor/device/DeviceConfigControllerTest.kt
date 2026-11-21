@@ -1,7 +1,9 @@
 package space.opensensor.device
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -598,6 +600,83 @@ class DeviceConfigControllerTest {
         c.selectLocationCountry("CA")
         c.saveLocation()
         assertEquals(DeviceLocationResult.NOT_CONFIRMED, c.state.value.location.result)
+    }
+
+    @Test
+    fun aPhoneFixOnlyMovesTheMapAndSendsNothing() = runTest {
+        val source = FakeSource()
+        source.locationAnswer = LocationConfig(cell = "", resolution = 8, country = "")
+        val c = controller(source)
+        var asked = 0
+        c.locate { resolution ->
+            asked = resolution
+            CELL8
+        }
+        assertEquals(8, asked, "the fix is asked at the Thing's resolution")
+        assertEquals(PhoneFixState(cell = CELL8, serial = 1), c.state.value.phoneFix)
+        assertEquals("", c.state.value.location.draft.cell, "a fix never drafts a cell by itself")
+        c.locate { OTHER_CELL8 }
+        assertEquals(PhoneFixState(cell = OTHER_CELL8, serial = 2), c.state.value.phoneFix)
+        assertEquals(emptyList(), source.wire)
+    }
+
+    @Test
+    fun aSlowPhoneFixTimesOutAsFailed() = runTest {
+        val c = controller(FakeSource())
+        var cancelled = false
+        c.locate {
+            try {
+                awaitCancellation()
+            } finally {
+                cancelled = true
+            }
+        }
+        assertTrue(c.state.value.phoneFix.locating)
+        advanceTimeBy(DeviceConfigController.FIX_TIMEOUT_MS - 1)
+        assertTrue(c.state.value.phoneFix.locating)
+        advanceTimeBy(2)
+        assertEquals(PhoneFixState(failed = true), c.state.value.phoneFix)
+        assertTrue(cancelled, "the platform fix is stopped at the timeout")
+    }
+
+    @Test
+    fun stopCancelsTheFixAndKeepsNothingFromIt() = runTest {
+        val c = controller(FakeSource())
+        var cancelled = false
+        val answer = CompletableDeferred<String>()
+        c.locate {
+            try {
+                answer.await()
+            } finally {
+                cancelled = true
+            }
+        }
+        assertTrue(c.state.value.phoneFix.locating)
+        c.stopLocating()
+        assertTrue(cancelled)
+        answer.complete(CELL8)
+        advanceTimeBy(DeviceConfigController.FIX_TIMEOUT_MS + 1)
+        assertEquals(PhoneFixState(), c.state.value.phoneFix)
+        // A declined permission reads as a failed fix, and a new fix may start after a stop.
+        c.locationDeclined()
+        assertEquals(PhoneFixState(failed = true), c.state.value.phoneFix)
+        c.locate { CELL8 }
+        assertEquals(PhoneFixState(cell = CELL8, serial = 1), c.state.value.phoneFix)
+    }
+
+    @Test
+    fun aFixThatThrowsFailsAndANotReadyLinkStartsNone() = runTest {
+        val source = FakeSource()
+        val c = controller(source)
+        c.locate { error("no provider") }
+        assertEquals(PhoneFixState(failed = true), c.state.value.phoneFix)
+        source.snapshot.value = source.snapshot.value.copy(connection = ConnectionState.Disconnected)
+        var asked = false
+        c.locate {
+            asked = true
+            CELL8
+        }
+        assertFalse(asked, "the picker is read only without a ready link")
     }
 
     @Test

@@ -47,7 +47,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.datetime.TimeZone
 import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.pluralStringResource
@@ -186,7 +185,7 @@ fun FilesScreen(
 ) {
     val state by controller.state.collectAsState()
     val presenter = rememberExportPresenter()
-    val zone = remember { TimeZone.currentSystemDefault() }
+    val zone = rememberSystemTimeZone()
 
     LaunchedEffect(controller) {
         controller.messages.collect { m ->

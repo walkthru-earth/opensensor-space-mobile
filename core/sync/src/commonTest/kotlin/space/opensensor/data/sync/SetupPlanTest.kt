@@ -172,6 +172,7 @@ class SetupPlanTest {
             ConfigKeySpec(ConfigFields.BLE_PIN, ConfigKeyType.TEXT, applies = ConfigApplies.IMMEDIATELY, page = 7),
             ConfigKeySpec(ConfigFields.WIFI_SSID, ConfigKeyType.TEXT, applies = ConfigApplies.IMMEDIATELY, page = 7),
             ConfigKeySpec("lan.token", ConfigKeyType.TEXT, applies = ConfigApplies.IMMEDIATELY, page = 7),
+            ConfigKeySpec("ntp.server", ConfigKeyType.TEXT, applies = ConfigApplies.IMMEDIATELY, page = 7),
             ConfigKeySpec("thing.setup_ack", ConfigKeyType.INTEGER, ConfigValues.Range(0.0, 1.0), ConfigApplies.IMMEDIATELY, page = 7),
             ConfigKeySpec("panel.elsewhere", ConfigKeyType.TEXT, applies = ConfigApplies.IMMEDIATELY, page = 1),
             ConfigKeySpec("panel.ratio", ConfigKeyType.NUMBER, ConfigValues.Range(0.5, 1.5), ConfigApplies.IMMEDIATELY, page = 7),

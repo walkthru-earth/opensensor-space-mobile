@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -133,7 +134,8 @@ fun SetupScreen(
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val s by controller.state.collectAsState()
-    LaunchedEffect(s.closed) { if (s.closed) onClose() }
+    val latestOnClose by rememberUpdatedState(onClose)
+    LaunchedEffect(s.closed) { if (s.closed) latestOnClose() }
     // System back, the Android gesture or the iOS edge swipe, does what the toolbar arrow does. After
     // pairing it asks before leaving. It wins over the shell's NavDisplay, the newest handler runs first.
     NavigationBackHandler(
@@ -166,7 +168,7 @@ fun SetupScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 navigationIcon = {
                     IconButton(onClick = controller::requestClose) {
-                        Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.setup_close))
+                        Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.setup_back))
                     }
                 },
                 title = {

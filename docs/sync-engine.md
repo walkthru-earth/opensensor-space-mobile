@@ -560,7 +560,7 @@ through `SetupAck`) and the app floors into the ordered steps both wizards walk.
   Only location and mobility can be required, as only they have a fact on page 1.
 - A board id whose `config_keys` survive `SetupPlan.fieldsOf` is a generic form. Those keys are board
   keys on page 7 only. A secret, an app key, a key under a reserved prefix (`ble.`, `wifi.`, `lan.`,
-  `location.`, `thing.`, `owner.`, `sensor.`) and a type `ConfigFields.declared` cannot read are left
+  `location.`, `thing.`, `owner.`, `sensor.`, `ntp.`) and a type `ConfigFields.declared` cannot read are left
   out, and an action key always confirms. Without such keys an optional board id is dropped, and a
   required one is unsupported, so setup stays pending until the app is updated.
 - Location is required on a fixed Thing whatever the manifest says. A `fixed` Thing, or a page with
