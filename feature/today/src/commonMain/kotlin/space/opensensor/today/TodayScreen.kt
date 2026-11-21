@@ -28,14 +28,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
+import space.opensensor.designsystem.CardGap
 import space.opensensor.designsystem.FitText
+import space.opensensor.designsystem.MonoFamily
+import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.headingSemantics
 import space.opensensor.today.resources.Res
@@ -253,7 +255,7 @@ fun TodayContent(
                                 FitText(
                                     stringResource(Res.string.today_thing_short, it.take(8)),
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = MonoFamily,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                 )
@@ -292,8 +294,8 @@ fun TodayContent(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(CardGap),
                 ) {
                     state.cards.forEach { card ->
                         item(key = card.key) {

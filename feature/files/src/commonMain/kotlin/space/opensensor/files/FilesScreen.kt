@@ -26,7 +26,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,7 +41,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
@@ -58,16 +56,22 @@ import space.opensensor.data.sync.ManifestEntry
 import space.opensensor.data.sync.SyncPlan
 import space.opensensor.designsystem.AppIcons
 import space.opensensor.designsystem.BodyText
+import space.opensensor.designsystem.BrandCard
+import space.opensensor.designsystem.CardGap
+import space.opensensor.designsystem.CardTone
 import space.opensensor.designsystem.Eyebrow
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingTextButton
 import space.opensensor.designsystem.MascotGuide
+import space.opensensor.designsystem.MonoFamily
 import space.opensensor.designsystem.OutlinePillButton
 import space.opensensor.designsystem.PeacockExpression
 import space.opensensor.designsystem.PeacockIcon
+import space.opensensor.designsystem.ScreenPadding
 import space.opensensor.designsystem.ThingTopBar
 import space.opensensor.designsystem.headingSemantics
 import space.opensensor.designsystem.listSeparator
+import space.opensensor.designsystem.mono
 import space.opensensor.designsystem.rememberNowMillis
 import space.opensensor.designsystem.spokenList
 import space.opensensor.designsystem.touchTarget
@@ -293,8 +297,8 @@ fun FilesScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 4.dp, bottom = padding.calculateBottomPadding() + 96.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = padding.calculateTopPadding() + 4.dp, bottom = padding.calculateBottomPadding() + 96.dp),
+            verticalArrangement = Arrangement.spacedBy(CardGap),
         ) {
             if (banner != null) item(key = "banner") { banner() }
             if (sync.running || sync.outcomes.isNotEmpty()) {
@@ -439,7 +443,7 @@ private fun GroupHeader(group: PartitionGroup, level: DetailLevel) {
         }
         if (level.developer) {
             groupDetail(group.detail)?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(it, style = MaterialTheme.typography.labelSmall.mono(), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -453,52 +457,50 @@ private fun SyncProgressCard(progress: StateFlow<SyncProgress>, level: DetailLev
 
 @Composable
 private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
-    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(20.dp)) {
-            val on = MaterialTheme.colorScheme.onPrimaryContainer
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PeacockIcon(
-                    when {
-                        sync.running -> PeacockExpression.WORKING
-                        sync.failures.isNotEmpty() -> PeacockExpression.CONCERNED
-                        else -> PeacockExpression.HAPPY
-                    },
-                    Modifier.size(48.dp),
-                )
-                Spacer(Modifier.width(12.dp))
-                Eyebrow(stringResource(if (sync.running) Res.string.files_syncing else Res.string.files_last_sync), modifier = Modifier.weight(1f), color = on, heading = true)
-                Spacer(Modifier.width(8.dp))
-                if (sync.running) {
-                    if (level.detailed) Text(formatRate(sync.bytesPerSecond), style = MaterialTheme.typography.labelMedium, color = on)
-                } else {
-                    sync.finishedAtEpochMs?.let { done -> Text(ago(done), style = MaterialTheme.typography.labelMedium, color = on) }
-                }
+    BrandCard(tone = CardTone.HERO) {
+        val on = MaterialTheme.colorScheme.onPrimaryContainer
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PeacockIcon(
+                when {
+                    sync.running -> PeacockExpression.WORKING
+                    sync.failures.isNotEmpty() -> PeacockExpression.CONCERNED
+                    else -> PeacockExpression.HAPPY
+                },
+                Modifier.size(48.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Eyebrow(stringResource(if (sync.running) Res.string.files_syncing else Res.string.files_last_sync), modifier = Modifier.weight(1f), color = on, heading = true)
+            Spacer(Modifier.width(8.dp))
+            if (sync.running) {
+                if (level.detailed) Text(formatRate(sync.bytesPerSecond), style = MaterialTheme.typography.labelMedium, color = on)
+            } else {
+                sync.finishedAtEpochMs?.let { done -> Text(ago(done), style = MaterialTheme.typography.labelMedium, color = on) }
             }
-            Spacer(Modifier.height(6.dp))
-            // "3 of 12 files" as one element, announced politely while the sync runs.
-            Row(
-                Modifier.semantics(mergeDescendants = true) { if (sync.running) liveRegion = LiveRegionMode.Polite },
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                Text("${sync.filesDone}", style = MaterialTheme.typography.displayMedium, color = on)
-                Text(" " + pluralStringResource(Res.plurals.files_of_total, sync.filesTotal, sync.filesTotal), style = MaterialTheme.typography.titleMedium, color = on, modifier = Modifier.padding(bottom = 8.dp))
-            }
+        }
+        Spacer(Modifier.height(6.dp))
+        // "3 of 12 files" as one element, announced politely while the sync runs.
+        Row(
+            Modifier.semantics(mergeDescendants = true) { if (sync.running) liveRegion = LiveRegionMode.Polite },
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Text("${sync.filesDone}", style = MaterialTheme.typography.displayMedium, color = on)
+            Text(" " + pluralStringResource(Res.plurals.files_of_total, sync.filesTotal, sync.filesTotal), style = MaterialTheme.typography.titleMedium, color = on, modifier = Modifier.padding(bottom = 8.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        LinearProgressIndicator(progress = { sync.fraction }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        val recovered = if (level.developer && sync.windowsRecovered > 0) " · " + pluralStringResource(Res.plurals.files_recovered, sync.windowsRecovered, sync.windowsRecovered) else ""
+        Text(stringResource(Res.string.files_bytes_of, formatBytes(sync.bytesDone), formatBytes(sync.bytesTotal)) + recovered, style = MaterialTheme.typography.bodySmall, color = on)
+        sync.current?.takeIf { level.detailed }?.let { cur ->
             Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(progress = { sync.fraction }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(6.dp))
-            val recovered = if (level.developer && sync.windowsRecovered > 0) " · " + pluralStringResource(Res.plurals.files_recovered, sync.windowsRecovered, sync.windowsRecovered) else ""
-            Text(stringResource(Res.string.files_bytes_of, formatBytes(sync.bytesDone), formatBytes(sync.bytesTotal)) + recovered, style = MaterialTheme.typography.bodySmall, color = on)
-            sync.current?.takeIf { level.detailed }?.let { cur ->
-                Spacer(Modifier.height(8.dp))
-                if (level.developer) Text(cur.name.substringAfterLast('/'), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis, color = on)
-                LinearProgressIndicator(progress = { cur.fraction }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
-                val resumed = if (level.developer && cur.resumedFrom > 0) " · " + stringResource(Res.string.files_resumed, formatBytes(cur.resumedFrom)) else ""
-                Text(stringResource(Res.string.files_bytes_of, formatBytes(cur.bytesDone), formatBytes(cur.bytesTotal)) + resumed, style = MaterialTheme.typography.labelSmall, color = on)
-            }
-            if (!sync.running && sync.failures.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text(pluralStringResource(SharedRes.plurals.sync_some_failed, sync.failures.size, sync.failures.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
+            if (level.developer) Text(cur.name.substringAfterLast('/'), style = MaterialTheme.typography.bodySmall.mono(), maxLines = 1, overflow = TextOverflow.Ellipsis, color = on)
+            LinearProgressIndicator(progress = { cur.fraction }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+            val resumed = if (level.developer && cur.resumedFrom > 0) " · " + stringResource(Res.string.files_resumed, formatBytes(cur.resumedFrom)) else ""
+            Text(stringResource(Res.string.files_bytes_of, formatBytes(cur.bytesDone), formatBytes(cur.bytesTotal)) + resumed, style = MaterialTheme.typography.labelSmall, color = on)
+        }
+        if (!sync.running && sync.failures.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text(pluralStringResource(SharedRes.plurals.sync_some_failed, sync.failures.size, sync.failures.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -510,8 +512,8 @@ private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
  */
 @Composable
 internal fun ListFailedCard(message: String, level: DetailLevel, ready: Boolean, onDeviceAction: (DeviceFilesAction) -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    BrandCard(tone = CardTone.ALERT, contentPadding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PeacockIcon(PeacockExpression.CONCERNED, Modifier.size(48.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 BodyText(
@@ -540,53 +542,50 @@ internal fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean
     // Each action is its own 48 dp button that names the file it acts on, the row itself does nothing on tap.
     val which = localTime ?: entry.name.substringAfterLast('/')
     val syncable = canSync && entry.state in SYNCABLE
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = if (entry.state == FileSyncState.SYNCING) scheme.surfaceContainerHigh else scheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
+    BrandCard(
+        tone = if (entry.state == FileSyncState.SYNCING) CardTone.SOFT else CardTone.PLAIN,
+        contentPadding = PaddingValues(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
     ) {
-        Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (icon == null) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    // The state is spoken from the text line below, the icon only repeats it.
-                    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-                    FitText(
-                        if (showName) entry.name.substringAfterLast('/') else localTime.orEmpty(),
-                        style = if (showName) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleSmall,
-                        fontFamily = if (showName) FontFamily.Monospace else null,
-                        maxLines = 1,
-                    )
-                    // The name's HHMM is the UTC window start. The phone's local time goes first so the two never get confused.
-                    BodyText(
-                        (localTime?.takeIf { showName }?.let { "$it · " } ?: "") + "${formatBytes(entry.bytes)} · $label",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (entry.state == FileSyncState.MISMATCH || entry.state == FileSyncState.INVALID_NAME) scheme.error else scheme.onSurfaceVariant,
-                    )
-                }
-                if (entry.state == FileSyncState.SYNCED) {
-                    if (onInspect != null) {
-                        RowAction(AppIcons.TableChart, stringResource(Res.string.file_metrics_named, which), onInspect)
-                    }
-                    RowAction(AppIcons.IosShare, stringResource(Res.string.file_share_named, which), onShare)
-                }
-                if (syncable) {
-                    RowAction(AppIcons.Download, stringResource(Res.string.file_sync_named, which), onSync)
-                }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon == null) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                // The state is spoken from the text line below, the icon only repeats it.
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
             }
-            if (entry.state == FileSyncState.SYNCING) {
-                LinearProgressIndicator(
-                    progress = { if (entry.bytes == 0L) 0f else (entry.partialBytes.toFloat() / entry.bytes).coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                FitText(
+                    if (showName) entry.name.substringAfterLast('/') else localTime.orEmpty(),
+                    style = if (showName) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleSmall,
+                    fontFamily = if (showName) MonoFamily else null,
+                    maxLines = 1,
+                )
+                // The name's HHMM is the UTC window start. The phone's local time goes first so the two never get confused.
+                BodyText(
+                    (localTime?.takeIf { showName }?.let { "$it · " } ?: "") + "${formatBytes(entry.bytes)} · $label",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (entry.state == FileSyncState.MISMATCH || entry.state == FileSyncState.INVALID_NAME) scheme.error else scheme.onSurfaceVariant,
                 )
             }
-            entry.detail?.takeIf { showDetail }?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.error, modifier = Modifier.padding(top = 4.dp, end = 12.dp))
+            if (entry.state == FileSyncState.SYNCED) {
+                if (onInspect != null) {
+                    RowAction(AppIcons.TableChart, stringResource(Res.string.file_metrics_named, which), onInspect)
+                }
+                RowAction(AppIcons.IosShare, stringResource(Res.string.file_share_named, which), onShare)
             }
+            if (syncable) {
+                RowAction(AppIcons.Download, stringResource(Res.string.file_sync_named, which), onSync)
+            }
+        }
+        if (entry.state == FileSyncState.SYNCING) {
+            LinearProgressIndicator(
+                progress = { if (entry.bytes == 0L) 0f else (entry.partialBytes.toFloat() / entry.bytes).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+        }
+        entry.detail?.takeIf { showDetail }?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.error, modifier = Modifier.padding(top = 4.dp, end = 12.dp))
         }
     }
 }

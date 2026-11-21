@@ -1,10 +1,10 @@
 package space.opensensor.devices
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,13 +27,14 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import space.opensensor.data.history.LatestDay
 import space.opensensor.designsystem.AppIcons
+import space.opensensor.designsystem.BrandCard
+import space.opensensor.designsystem.CardTone
 import space.opensensor.designsystem.FitText
 import space.opensensor.designsystem.FloatingControl
 import space.opensensor.designsystem.InfoButton
@@ -41,6 +42,7 @@ import space.opensensor.designsystem.InfoContent
 import space.opensensor.designsystem.SignalBars
 import space.opensensor.designsystem.StatusDot
 import space.opensensor.designsystem.TickingText
+import space.opensensor.designsystem.mono
 import space.opensensor.designsystem.moodWord
 import space.opensensor.designsystem.pm25Label
 import space.opensensor.designsystem.touchTarget
@@ -128,14 +130,12 @@ internal fun ActiveRow(link: ActiveLink, onClick: () -> Unit) {
  */
 @Composable
 internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, onSetup: () -> Unit = {}) {
-    Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick),
+    BrandCard(
+        tone = CardTone.SOFT,
+        contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 16.dp),
+        modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
     ) {
-        Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(row.name ?: stringResource(Res.string.scan_unnamed), style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(2.dp))
@@ -160,15 +160,11 @@ internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, 
 /** A known row. When the sensor asks for setup it shows the compact [SetupChip], [onSetup]. */
 @Composable
 internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, onSetup: () -> Unit = {}) {
-    Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = knownCardColor(MaterialTheme.colorScheme),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick),
+    BrandCard(
+        contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+        modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
     ) {
-        Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                     Text(row.name ?: stringResource(Res.string.scan_unnamed), style = MaterialTheme.typography.titleMedium)
@@ -190,7 +186,7 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, o
     }
 }
 
-/** The known card surface. Its chevron is the card's only open cue, so [knownChevronTint] keeps 3.0 contrast on it (#117). */
+/** The known card surface, the plain [BrandCard] tone. Its chevron is the card's only open cue, so [knownChevronTint] keeps 3.0 contrast on it (#117). */
 internal fun knownCardColor(scheme: ColorScheme): Color = scheme.surfaceContainerLow
 
 /** The known card chevron, full strength so it reads as a control rather than a hint. */
@@ -229,14 +225,12 @@ internal fun SetupChip(text: String, onClick: () -> Unit) {
  */
 @Composable
 internal fun WifiOnlyRow(sensor: WifiSensor, level: DetailLevel) {
-    Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    BrandCard(
+        contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         // Not clickable, so merge it by hand to read as one sensor. The info button stays its own stop.
-        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
+        modifier = Modifier.semantics(mergeDescendants = true) {},
     ) {
-        Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(AppIcons.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -358,7 +352,7 @@ private val MONTHS = listOf(
 
 @Composable
 private fun Mono(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(text, style = MaterialTheme.typography.bodySmall.mono(), color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** A small tag on a card curve, like the website's `.brand-eyebrow`. */
