@@ -126,8 +126,8 @@ Rules that hold across modules.
     over 2 s plus uncertainty and up to 60 s plus uncertainty.
   - Otherwise set only an anchor 6 h old or more.
 - History derives each grouped day once with `DayPass`, producing tiers and daily Parquet
-  together. Android stamps each derived day with `HistoryDeriver.DERIVE_VERSION`, tiers carry
-  `TierCodec.VERSION`, and Android plans from projected thing archive identities.
+  together. Both phones sign each derived day with `DeriveSignature`, one derive version, saved tiers carry
+  their `TierCodec.VERSION` byte layout too, and Android plans from projected thing archive identities.
   iOS persists rebuildable tiers and enforces the derived quota after building.
   Preserve these paths and immutable raw archives. See [history pipeline](../docs/history-pipeline.md)
   and the [host benchmark](../docs/perf/history-2026-10-11.md), which does not qualify phone latency.

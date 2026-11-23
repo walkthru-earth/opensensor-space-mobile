@@ -1,5 +1,6 @@
 package space.opensensor.data.history
 
+import space.opensensor.data.protocol.sha256Hex
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -358,6 +359,19 @@ class HistorySourcesTest {
         assertEquals(ArchiveHistoryTiers.signature(listOf(a, b), FileTemplates.BUNDLED), ArchiveHistoryTiers.signature(listOf(b, a), FileTemplates.BUNDLED))
         val est = b.copy(indexedAtEpochMs = 1, rows = 1, utcRows = 0, estFirstUtcNs = 5, estLastUtcNs = 6, estAnchorFile = "a")
         assertTrue(ArchiveHistoryTiers.signature(listOf(a, b), FileTemplates.BUNDLED) != ArchiveHistoryTiers.signature(listOf(a, est), FileTemplates.BUNDLED))
+    }
+
+    /** #304. Both phones keep a day under one signature, the salted SHA-256 Android records in `derived_day`. */
+    @Test
+    fun bothPhonesSignADayWithTheSharedDeriveVersion() {
+        val a = record("a", 1)
+        val b = record("b", 2)
+        val lines = listOf(a, b).map { ArchiveHistoryTiers.sourceLine(it, FileTemplates.BUNDLED) }.sorted()
+        val text = "derive-v${DeriveSignature.VERSION}\n" + lines.joinToString("") { "$it\n" }
+        val expected = space.opensensor.data.protocol.ParquetVerify.sha256Hex(text.encodeToByteArray())
+        assertEquals(expected, DeriveSignature.of(listOf(b, a), FileTemplates.BUNDLED))
+        assertEquals(expected, ArchiveHistoryTiers.signature(listOf(a, b), FileTemplates.BUNDLED))
+        assertEquals(64, expected.length)
     }
 
     private val unbundledDict = "ab".repeat(32)

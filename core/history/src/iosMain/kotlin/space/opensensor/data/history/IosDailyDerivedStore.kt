@@ -176,7 +176,7 @@ class IosDailyDerivedStore(
     /** The identity of a day's build: the builder, completeness, and every source with the anchor that dates it, the template it resolves to and the check that reads it. */
     private fun signature(sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>, complete: Boolean): String {
         val text = buildString {
-            append("derive-cache-v3:${DailyParquetBuilder.BUILDER}:$complete\n")
+            append("${DeriveSignature.SALT}:${DailyParquetBuilder.BUILDER}:$complete\n")
             for (source in sources.sortedBy { it.name }) {
                 append("${source.name}:${source.bytes}:${source.crc32}:${source.sha256}")
                 if (source.hasEstimatedUtc) {

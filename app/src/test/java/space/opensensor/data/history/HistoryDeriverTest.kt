@@ -63,7 +63,7 @@ class HistoryDeriverTest {
     @Test
     fun `tiers and daily cache of the previous derive version rebuild without a source change`() = runBlocking {
         // Version 10 names each file's resolved template in the signature. Installed days must rebuild.
-        assertEquals(10, HistoryDeriver.DERIVE_VERSION)
+        assertEquals(10, DeriveSignature.VERSION)
         val tmp = java.nio.file.Files.createTempDirectory("aq-derive-upgrade").toFile()
         try {
             val archive = FileArchive(tmp)
@@ -85,10 +85,10 @@ class HistoryDeriverTest {
             val originalSources = files.rows.toList()
             val current = days.rows.single()
             val oldDigest = MessageDigest.getInstance("SHA-256").apply {
-                update("derive-v${HistoryDeriver.DERIVE_VERSION - 1}\n".toByteArray())
+                update("derive-v${DeriveSignature.VERSION - 1}\n".toByteArray())
                 update("$name:1\n".toByteArray())
             }
-            val oldSignature = HistoryDeriver.hex(oldDigest.digest())
+            val oldSignature = hex(oldDigest.digest())
             assertFalse(oldSignature == current.sourceSignature)
             // Model an installed cache of the previous version. Its pointer and unchanged source set are
             // present, but its tier values and daily payload predate this version.
@@ -106,7 +106,7 @@ class HistoryDeriverTest {
             assertEquals(1, upgraded.daysChecked)
             assertEquals(1, upgraded.daysRebuilt)
             assertEquals(expectedTiers, buckets.rows)
-            assertEquals(HistoryDeriver.signatureOf(originalSources.map { it.toRecord() }, CoreS3Files), days.rows.single().sourceSignature)
+            assertEquals(DeriveSignature.of(originalSources.map { it.toRecord() }, CoreS3Files), days.rows.single().sourceSignature)
             assertEquals(days.rows.single().sourceSignature, Json.decodeFromString<DailyManifest>(manifest.readText()).sourceSignature)
             space.opensensor.data.history.parquet.ParquetFile.open(daily).use { assertEquals(105L, it.numRows) }
             assertEquals(originalSources, files.rows)
@@ -140,12 +140,12 @@ class HistoryDeriverTest {
             assertTrue(sources.all { ArchiveHistoryTiers.sourceLine(it, CoreS3Files).endsWith(":q$checkId") })
             // The signature an install wrote before the check, the same source lines without their check id.
             val unchecked = MessageDigest.getInstance("SHA-256").run {
-                update("derive-v${HistoryDeriver.DERIVE_VERSION}\n".toByteArray())
+                update("derive-v${DeriveSignature.VERSION}\n".toByteArray())
                 sources.map { ArchiveHistoryTiers.sourceLine(it, CoreS3Files, RowChecks.NONE) }.sorted().forEach { update(it.toByteArray()); update('\n'.code.toByte()) }
-                HistoryDeriver.hex(digest())
+                hex(digest())
             }
             val current = days.rows.single()
-            assertEquals(HistoryDeriver.signatureOf(sources, CoreS3Files), current.sourceSignature)
+            assertEquals(DeriveSignature.of(sources, CoreS3Files), current.sourceSignature)
             assertFalse(unchecked == current.sourceSignature)
             days.upsert(current.copy(sourceSignature = unchecked))
             val manifest = store.manifestFile(thing, current.epochDay)
@@ -556,13 +556,6 @@ class HistoryDeriverTest {
     }
 
     @Test
-    fun `the signature hex is the lower-case two digits per byte it always was`() {
-        val bytes = ByteArray(256) { it.toByte() }
-        assertEquals(bytes.joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }, HistoryDeriver.hex(bytes))
-        assertEquals("", HistoryDeriver.hex(ByteArray(0)))
-    }
-
-    @Test
     fun `collection clock receipt persists without reconciling or deriving history`() = runBlocking {
         val tmp = java.nio.file.Files.createTempDirectory("aq-clock-persist").toFile()
         try {
@@ -671,4 +664,7 @@ class HistoryDeriverTest {
 
     /** The shared pass order over this test's index, as the app wires it. */
     private fun HistoryIndexer.passes(files: ArchivedFileDao) = HistoryOrchestrator(repair, RoomArchiveIndex(files))
+
+    /** Lower-case hex of a test digest, the form [DeriveSignature.of] records. */
+    private fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }
 }

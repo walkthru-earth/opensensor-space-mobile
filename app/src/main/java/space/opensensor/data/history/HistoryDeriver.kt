@@ -5,7 +5,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import space.opensensor.archive.ArchiveRecord
 import space.opensensor.data.archive.toRecord
 import space.opensensor.data.local.database.ArchivedFile
 import space.opensensor.data.local.database.ArchivedFileDao
@@ -15,7 +14,6 @@ import space.opensensor.data.local.database.MetricBucket
 import space.opensensor.data.local.database.MetricBucketDao
 import space.opensensor.data.sync.FileArchive
 import space.opensensor.storage.DerivedQuota
-import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -70,8 +68,8 @@ class HistoryDeriver @Inject constructor(
     /** Which thing-days a set of indexed files touches, by real UTC or by the estimated span (§4.6). */
     fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> = ThingDays.of(files.map { it.toRecord() })
 
-    /** [signatureOf] for Room rows, under the templates this deriver reads with. */
-    fun signature(files: List<ArchivedFile>): String = signatureOf(files.map { it.toRecord() }, indexer.templates)
+    /** The shared [DeriveSignature] of Room rows, under the templates this deriver reads with. */
+    fun signature(files: List<ArchivedFile>): String = DeriveSignature.of(files.map { it.toRecord() }, indexer.templates)
 
     /** Only the accepted receipt; collection reconciliation runs in its cancellable finalization. */
     override suspend fun persistClockAnchor(thing: String, boot: String, utcNs: Long, monotonicUs: Long) {
@@ -260,37 +258,9 @@ class HistoryDeriver @Inject constructor(
         /** Decode and aggregation are CPU work, two at most so a derive never takes every core from the UI. */
         private val cpu = Dispatchers.Default.limitedParallelism(2)
 
-        /**
-         * Deterministic identity of a day's source set: the sorted [ArchiveHistoryTiers.sourceLine]s of
-         * both phones, SHA-256 (a new anchor re-dates a file and a newly resolved template gives it
-         * metrics, so both are part of the identity). The Day view compares it to the recorded one
-         * before it reads a daily file ([RoomDerivedDayFiles]).
-         */
-        fun signatureOf(files: List<ArchiveRecord>, templates: FileTemplates): String {
-            val digest = MessageDigest.getInstance("SHA-256")
-            digest.update("derive-v$DERIVE_VERSION\n".toByteArray())
-            files.map { ArchiveHistoryTiers.sourceLine(it, templates) }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
-            return hex(digest.digest())
-        }
-
-        private val HEX = "0123456789abcdef".toCharArray()
-
-        /** Lower-case hex, a table lookup per nibble instead of a format call per byte. */
-        fun hex(bytes: ByteArray): String {
-            val out = CharArray(bytes.size * 2)
-            for (i in bytes.indices) {
-                val b = bytes[i].toInt()
-                out[2 * i] = HEX[(b ushr 4) and 0xF]
-                out[2 * i + 1] = HEX[b and 0xF]
-            }
-            return out.concatToString()
-        }
-
         /** Each day's sources from one thing listing, the same files and order as `withUtcBetween`. */
         fun sourcesByDay(files: List<ArchivedFile>): Map<Long, List<ArchivedFile>> = ThingDays.sourcesByDay(files) { it.toRecord() }
 
-        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order, 6 = MICROS UTC and field_id in the daily file, 7 = EPA corrected PM2.5 tier, 8 = template datastreams and the footer sample interval, 9 = the app_day entry in the daily file, 10 = the resolved template in the signature. */
-        const val DERIVE_VERSION = 10
         const val DAY_NS = ThingDays.DAY_NS
     }
 }

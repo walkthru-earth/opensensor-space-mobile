@@ -97,7 +97,7 @@ erDiagram
     long id PK "UNIQUE (thing,epochDay)"
     string thing
     long epochDay
-    string sourceSignature "SHA-256 of derive-v<DERIVE_VERSION> + sorted name:crc32 + anchors"
+    string sourceSignature "DeriveSignature, SHA-256 of derive-v<VERSION> + sorted source lines"
     int sourceFiles
     int rows
     long builtAtEpochMs
@@ -404,7 +404,7 @@ which is what Android 12 and newer read.
 | --- | --- |
 | any entity | a new explicit or auto migration, `core/database/schemas/<n+1>.json`, `exportSchema` check in CI |
 | `archived_file` index columns | `ArchivedFile.info()` → `IndexedFileInfo` (pure), `HistoryIndexer`, `withUtcBetween` (filters `purpose`) |
-| `metric_bucket` meaning | bump `HistoryDeriver.DERIVE_VERSION` (part of every day's signature) |
+| `metric_bucket` meaning | bump `DeriveSignature.VERSION` (part of every day's signature on both phones) |
 | `derived_day.sourceSignature` inputs | which days rebuild after a sync, keep `name:crc32` + anchor |
 | `known_device` columns | `insertIfAbsent` defaults and `recordConnection` in `openSession`; `KnownDevice.toString` redaction |
 | `thing_epoch` / continuity policy | History's generation picker, reset provenance, credential renewal; never archive path rewriting |

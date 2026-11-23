@@ -238,7 +238,7 @@ class IosDailyDerivedStoreTest {
         val manifest = path.removeSuffix(".parquet") + ".manifest.json"
         fun manifestJson() = LocalFileReader(manifest).use { reader -> kotlinx.serialization.json.Json.parseToJsonElement(reader.read(0, reader.size.toInt()).decodeToString()) as kotlinx.serialization.json.JsonObject }
         fun cached() = (manifestJson()["source_signature"] as kotlinx.serialization.json.JsonPrimitive).content
-        fun signatureOf(line: String) = space.opensensor.data.protocol.ParquetVerify.sha256Hex("derive-cache-v3:${DailyParquetBuilder.BUILDER}:true\n$line\n".encodeToByteArray())
+        fun signatureOf(line: String) = space.opensensor.data.protocol.ParquetVerify.sha256Hex("${DeriveSignature.SALT}:${DailyParquetBuilder.BUILDER}:true\n$line\n".encodeToByteArray())
         val checkId = assertNotNull(RowChecks.INSTALLED.of(record, CoreS3Files)).id
         val line = "${record.name}:${record.bytes}:${record.crc32}:${record.sha256}:t${CoreS3Files.digestOf(record)}"
         assertEquals(signatureOf("$line:q$checkId"), cached())

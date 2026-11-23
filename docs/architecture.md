@@ -318,7 +318,7 @@ These rules are covered by host tests (`AutoSyncRunnerTest`, `DeviceOwnershipTes
 the [CoreS3 bench record](../../opensensor-space-firmware/docs/boards/m5stack-cores3/bench-verified.md).
 
 History derives a grouped day once with `DayPass`, producing tiers and daily Parquet.
-Android stamps each derived day with `HistoryDeriver.DERIVE_VERSION`. Its collection plans use projected thing archive identities rather
+Both phones sign each derived day with the shared `DeriveSignature` and its one version. Its collection plans use projected thing archive identities rather
 than full history rows. iOS persists tiers and enforces the derived quota after building.
 The [host benchmark](perf/history-2026-10-11.md) measures allocation on a synthetic corpus,
 not phone cold-open latency or a qualified latency improvement.
@@ -330,7 +330,7 @@ not phone cold-open latency or a qualified latency improvement.
 | `core/protocol/Frames.kt` (opcodes, layouts) | `DeviceSession`, `FakeTransport`, `FrameRecorder`, `DebugScreen` raw box | the firmware contract first (owner), `FrameCodec*Test`, the fake |
 | `DeviceTransport` interface | `BleLinkDriver`, `TcpLinkDriver`, `FakeTransport` (through `TransportLink`), `DeviceSession`, `DeviceLinkOwner` | `TcpLinkDriverTest` loopback, `:core:sync` `SyncEngineTest` |
 | `Metrics` registry | `Aggregator`, `HistoryDeriver`, `DailyDerivedBuilder`, History picker, charts, Today cards | `AggregationTest`, `HistoryDeriverTest`, Room `metric_bucket` rows (id strings) |
-| Room entities | `SyncEngine`, `HistoryIndexer/Deriver/Repository`, ViewModels | a new migration + `core/database/schemas/<n>.json`, `DERIVE_VERSION` if tier meaning changed |
+| Room entities | `SyncEngine`, `HistoryIndexer/Deriver/Repository`, ViewModels | a new migration + `core/database/schemas/<n>.json`, `DeriveSignature.VERSION` if tier meaning changed |
 | `ParquetWriter` output | `DailyDerivedBuilder`, `tools/validate_parquet_samples.py` | PyArrow + DuckDB oracle run |
 | `CollectionState` / `SyncProgress` | facade UI projections, Files, service and worker | `CollectionControllerTest`, facade tests, lease accounting and notification text |
 | Manager/controller ownership, transfer budget | address-bound ViewModels, runner, worker, foreground service | `DeviceOwnershipTest`, `AutoSyncRunnerTest`, cancellation and per-device progress |
